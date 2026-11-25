@@ -472,6 +472,9 @@ export const make = (kit: Kit) => {
     "effect/Function:cast": ([value]) => Effect.succeed(value ?? Value.undef),
     "effect/Function:memoize": ([f], site) =>
       f ? Effect.succeed(f) : wrongArguments(site, "memoize"),
+    // A function of an object that gives the same for the same one, and for what it gave: the function itself, read each time.
+    "effect/Function:memoizeIdempotent": ([f], site) =>
+      f ? Effect.succeed(f) : wrongArguments(site, "memoizeIdempotent"),
     "effect/Function:absurd": (_, site) =>
       Effect.fail(
         Value.notTranslated(site, "reaches absurd, which the code says cannot be reached"),

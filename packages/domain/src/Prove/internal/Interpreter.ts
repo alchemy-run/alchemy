@@ -2405,6 +2405,8 @@ export const make = (given: Loader, run: Run): Interpreter => {
               isService(first.value) &&
               name !== "service" &&
               name !== "serviceOption" &&
+              // It is given the service itself, and gives an effect of its own.
+              name !== "updateServiceScoped" &&
               // Written to be given the effect by `pipe`, the service is what comes first.
               !(
                 ["provideService", "updateService", "provideServiceEffect"].includes(name ?? "") &&

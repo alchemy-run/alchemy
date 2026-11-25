@@ -364,6 +364,8 @@ export const make = (host: Host) => {
   interface Matcher {
     readonly subject: V | undefined;
     readonly cases: ReadonlyArray<Case>;
+    /** `Match.fn(select)`: the input is what it gives of the arguments, which each handler is given too. */
+    readonly select?: V;
   }
   const matcher = (state: Matcher): V => Value.obj({}, { kind: "Matcher", cls: state });
   const matcherOf = (value: V | undefined): Matcher | undefined =>
@@ -471,34 +473,41 @@ export const make = (host: Host) => {
   const matched = (
     state: Matcher,
     input: V,
-    otherwise: (input: V, site: Site) => Eval<V>,
+    otherwise: (input: V, site: Site, args: ReadonlyArray<V>) => Eval<V>,
     wrap: (result: V) => V,
     site: Site,
+    args: ReadonlyArray<V> = [],
   ): Eval<V> =>
     Effect.gen(function* () {
       for (const one of state.cases)
         if (yield* one.takes(input, site))
-          return wrap(yield* host.call(one.handler, [input], site));
-      return yield* otherwise(input, site);
+          return wrap(yield* host.call(one.handler, [input, ...args], site));
+      return yield* otherwise(input, site, args);
     });
 
   /** The end of a matcher's pipe: the result for `Match.value`, a function for `Match.type`. */
   const finished = (
     name: string,
     state: Matcher | undefined,
-    otherwise: (input: V, site: Site) => Eval<V>,
+    otherwise: (input: V, site: Site, args: ReadonlyArray<V>) => Eval<V>,
     wrap: (result: V) => V,
     site: Site,
-  ): Eval<V> =>
-    !state
-      ? wrongArguments(site, name)
-      : state.subject
-        ? matched(state, state.subject, otherwise, wrap, site)
-        : Effect.succeed(
-            native(name, ([input], at) =>
-              input ? matched(state, input, otherwise, wrap, at) : wrongArguments(at, name),
-            ),
-          );
+  ): Eval<V> => {
+    if (!state) return wrongArguments(site, name);
+    if (state.subject) return matched(state, state.subject, otherwise, wrap, site);
+    const select = state.select;
+    return Effect.succeed(
+      native(name, (args, at) =>
+        select
+          ? Effect.flatMap(host.call(select, args, at), (input) =>
+              matched(state, input, otherwise, wrap, at, args),
+            )
+          : args[0]
+            ? matched(state, args[0], otherwise, wrap, at)
+            : wrongArguments(at, name),
+      ),
+    );
+  };
 
   /** No case takes the value, where the code says one always does. */
   const fellThrough =
@@ -535,6 +544,11 @@ export const make = (host: Host) => {
         ? Effect.succeed(matcher({ subject, cases: [] }))
         : wrongArguments(site, "Match.value"),
     "effect/Match:type": () => Effect.succeed(matcher({ subject: undefined, cases: [] })),
+    // A matcher of a function's arguments: what `select` gives of them is matched.
+    "effect/Match:fn": ([select], site) =>
+      select
+        ? Effect.succeed(matcher({ subject: undefined, cases: [], select }))
+        : wrongArguments(site, "Match.fn"),
     // It only narrows the type of what the cases return.
     "effect/Match:withReturnType": () =>
       Effect.succeed(
@@ -769,7 +783,7 @@ export const make = (host: Host) => {
               finished(
                 "Match.orElse",
                 matcherOf(self),
-                (input, from) => host.call(otherwise, [input], from),
+                (input, from, args) => host.call(otherwise, [input, ...args], from),
                 same,
                 at,
               ),
@@ -1729,6 +1743,21 @@ export const make = (host: Host) => {
         ),
       );
     });
+  /** An effect with only these services provided while it runs: the ones before come back after. */
+  const replacing = <A>(provided: Provided, self: Eval<A>): Eval<A> =>
+    Effect.suspend(() => {
+      const before = [...host.provided.entries()];
+      host.provided.clear();
+      for (const [service, value] of provided) host.provided.set(service, value);
+      return self.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            host.provided.clear();
+            for (const [service, value] of before) host.provided.set(service, value);
+          }),
+        ),
+      );
+    });
   /** What a layer, a context or a list of layers provides, built now. */
   const built = (name: string, given: V | undefined, site: Site): Eval<Provided> => {
     const build = given ? builders.get(given) : undefined;
@@ -2149,6 +2178,22 @@ export const make = (host: Host) => {
       Effect.succeed(
         Kit.lazy(() => Effect.map(built("Layer.buildWithScope", self, site), contextOf)),
       ),
+    ),
+    // The effect runs with these services and no others.
+    "effect/Effect:setContext": onEffect("Effect.setContext", 1, (self, [given], site) =>
+      Effect.flatMap(holding("Effect.setContext", given ?? Value.undef, site), (provided) =>
+        replacing(provided, self),
+      ),
+    ),
+    // The services the function makes of the ones provided where the effect runs.
+    "effect/Effect:updateContext": onEffect("Effect.updateContext", 1, (self, [f], site) =>
+      f
+        ? Effect.flatMap(host.call(f, [contextOf([...host.provided.entries()])], site), (made) =>
+            Effect.flatMap(holding("Effect.updateContext", made, site), (provided) =>
+              replacing(provided, self),
+            ),
+          )
+        : wrongArguments(site, "Effect.updateContext"),
     ),
     // Every service that is provided where the effect runs.
     "effect/Effect:context": () =>

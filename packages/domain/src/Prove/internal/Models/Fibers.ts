@@ -5177,6 +5177,69 @@ export const make = (
         args,
         site,
       ),
+    // What the function gives for how the effect ended is run after it, where it gives an effect.
+    "effect/Effect:onExitPrimitive": ([self, f], site) =>
+      self?._tag === "Effect" && f
+        ? Effect.succeed(
+            timed(
+              "Effect.onExitPrimitive",
+              (timeline) =>
+                Timeline.back(
+                  timeline,
+                  Effect.onExit(Timeline.real(timeline, self.run), (exit) =>
+                    sure(
+                      Timeline.real(
+                        timeline,
+                        Effect.flatMap(exitOf(timeline, exit), (held) =>
+                          Effect.flatMap(host.call(f, [held], site), (made_) =>
+                            made_._tag === "Effect" ? made_.run : Effect.succeed(Value.undef),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  same,
+                ),
+              site,
+            ),
+          )
+        : wrongArguments(site, "Effect.onExitPrimitive"),
+    // The service is another value until the scope closes: then it is what it was, where nothing changed it since.
+    "effect/Effect:updateServiceScoped": ([tag, f, options_], site) => {
+      if (tag?._tag !== "Host" || !f || !(options_ === undefined || options_._tag === "Undef"))
+        return wrongArguments(site, "Effect.updateServiceScoped");
+      return Effect.succeed(
+        scoped(
+          "Effect.updateServiceScoped",
+          site,
+          (timeline) => {
+            const before = host.provided.get(tag.value);
+            if (!before)
+              return Timeline.real(
+                timeline,
+                unseen(
+                  site,
+                  `calls Effect.updateServiceScoped of ${tag.name}, which nothing provides`,
+                ),
+              );
+            return Effect.flatMap(
+              Timeline.real(timeline, host.call(f, [before], site)),
+              (updated) =>
+                Effect.andThen(
+                  Effect.sync(() => void host.provided.set(tag.value, updated)),
+                  Effect.addFinalizer(() =>
+                    Effect.sync(() => {
+                      if (host.provided.get(tag.value) === updated)
+                        host.provided.set(tag.value, before);
+                    }),
+                  ),
+                ),
+            );
+          },
+          none,
+        ),
+      );
+    },
     "effect/Effect:satisfiesSuccessType": itself("Effect.satisfiesSuccessType"),
     "effect/Effect:satisfiesErrorType": itself("Effect.satisfiesErrorType"),
     "effect/Effect:satisfiesServicesType": itself("Effect.satisfiesServicesType"),
@@ -5518,6 +5581,13 @@ export const make = (
       2,
       (held, [value]) => PubSub.endUnsafe(held, value ?? Value.undef),
       bool,
+    ),
+    "effect/Queue:flushUnsafe": now<Q, void>(
+      "Queue",
+      "flushUnsafe",
+      1,
+      (held) => Queue.flushUnsafe(held),
+      () => Value.undef,
     ),
     "effect/Queue:flush": on<Q, void>("Queue", "flush", 1, (held) => Queue.flush(held), none),
     "effect/Cache:keys": on<C, Iterable<Key>>(

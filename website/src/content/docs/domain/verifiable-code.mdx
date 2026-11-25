@@ -1063,6 +1063,7 @@ Match.literals({ on: () => 1 });
 Match.literalsExhaustive({ 1: () => "one", 2: (n) => "two" + n });
 Match.record({ n: a }); // an object that is not an array
 Match.date(a);
+Match.fn((x, y) => x - y).pipe(Match.when((n) => n > 0, (n, x, y) => [n, x, y]), Match.orElse((n, x) => [-n, x]))(a, b); // a matcher of the arguments: each handler is given them too
 Match.value(shape.kind).pipe(
   Match.tag("Gift", () => 1),
   Match.orElse(() => 0),
@@ -2058,6 +2059,7 @@ Queue.fail(line, new Odd({ n: b }));
 Queue.end(line);
 Queue.await(queue); // until the queue has ended
 Queue.flush(queue);
+Queue.flushUnsafe(queue);
 Queue.failCauseUnsafe(queue, Cause.fail(a));
 Queue.shutdown(line);
 Queue.takeAll(line);
@@ -2850,6 +2852,7 @@ Effect.catchReasons("Call", { Slow: (reason) => Effect.succeed(reason.ms), Lost:
 Effect.unwrapReason("Call"); // it fails with the reason
 Effect.failCauseSync(() => Cause.fail(new Odd({ n: a })));
 Effect.onExitIf(Exit.isFailure, () => log(seen, "failed"));
+Effect.onExitPrimitive(even(a), (exit) => (Exit.isSuccess(exit) ? log(seen, "even") : undefined)); // what the function gives is run, where it gives an effect
 Effect.awaitAllChildren(Effect.forkChild(Effect.andThen(Effect.sleep(1), log(seen, a))));
 Effect.uninterruptibleMask((restore) => Effect.map(restore(even(a)), (n) => n + b));
 Effect.interruptibleMask((restore) => Effect.andThen(restore(Effect.sleep(1)), Effect.succeed(a)));
@@ -3134,6 +3137,9 @@ Context.isKey(Rate);
 Context.isReference(Step);
 Effect.context(); // every service that is provided where the effect runs
 Effect.contextWith((context) => Effect.succeed(Context.getOption(context, Fee)));
+Effect.setContext(Context.make(Rate, { percent: a })); // these services and no others
+Effect.updateServiceScoped(Rate, (rate) => ({ percent: rate.percent + b })); // until the scope closes
+Effect.updateContext((context) => Context.add(context, Fee, { flat: Context.get(context, Rate).percent + b }));
 Effect.provideService(Step, Step, a); // a Context.Reference gives its own value where nothing provides one
 ```
 
@@ -3385,6 +3391,7 @@ flip((x) => (y) => x - y)(a)(b);
 flow(Number.increment, Number.multiply(2))(a);
 identity(a);
 memoize((pair) => pair.n + 1)({ n: a });
+memoizeIdempotent((pair) => ({ n: pair.n + 1 }))({ n: a });
 pipe(a, Number.sum(b));
 satisfies()(a);
 tupled((x, y) => x - y)([a, b]);

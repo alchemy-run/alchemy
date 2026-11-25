@@ -45,7 +45,7 @@ export const PRELUDE = [
     ...["PrimaryKey", "Reducer", "RegExp", "SemVer", "SemVerRange", "TextDiff", "Trie"],
   ].map((module) => `import * as ${module} from "effect/${module}";`),
   `import { absurd, hole, SK } from "effect/Function";`,
-  `import { apply, cast, compose, constant, constFalse, constNull, constTrue, constUndefined, constVoid, dual, flip, flow, identity, memoize, pipe, satisfies, tupled, untupled } from "effect/Function";`,
+  `import { apply, cast, compose, constant, constFalse, constNull, constTrue, constUndefined, constVoid, dual, flip, flow, identity, memoize, memoizeIdempotent, pipe, satisfies, tupled, untupled } from "effect/Function";`,
   `const Small = Schema.Int.check(Schema.isBetween({ minimum: -20, maximum: 20 }));`,
   `export class Done extends Domain.Event("Done", { results: Schema.Unknown }) {}`,
   `export class Odd extends Data.TaggedError("Odd")<{ readonly n: number }> {}`,
