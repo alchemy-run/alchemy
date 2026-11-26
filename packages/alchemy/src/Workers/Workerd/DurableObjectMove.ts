@@ -211,11 +211,7 @@ const tracked = (raw: cf.DurableObjectStorage, source: () => Source): cf.Durable
       const s = source();
       switch (prop) {
         case "put":
-          return (
-            keyOrEntries: string | Record<string, unknown>,
-            value?: unknown,
-            options?: any,
-          ) =>
+          return (keyOrEntries: string | Record<string, unknown>, value?: unknown, options?: any) =>
             typeof keyOrEntries === "string"
               ? withLog(target, s, [keyOrEntries], () => target.put(keyOrEntries, value, options))
               : withLog(target, s, Object.keys(keyOrEntries), () =>

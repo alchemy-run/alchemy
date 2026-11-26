@@ -166,7 +166,11 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
 
         // Once the move has settled, an upload deletes every old class, and
         // everything is still there.
-        yield* backdatePasses(scriptName, classes);
+        // (The deploy that moved them deletes the classes itself when its passes settle in time.)
+        const left = Object.keys(yield* boundClasses(scriptName)).filter((name) =>
+          classes.includes(name),
+        );
+        if (left.length > 0) yield* backdatePasses(scriptName, left);
         yield* stack.deploy(
           Effect.gen(function* () {
             return { worker: yield* MoveV1b };

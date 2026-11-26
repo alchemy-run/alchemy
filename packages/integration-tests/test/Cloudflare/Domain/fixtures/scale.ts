@@ -21,11 +21,15 @@ export const MODELS = 10;
  */
 const definitions = (n: number) => {
   class Opened extends Domain.Event(`Opened${n}`, { owner: Schema.String }) {}
-  class Open extends Domain.Command(`Open${n}`, {
-    input: { id: Schema.String, owner: Schema.String },
-    events: [Opened],
-  }) {}
-  const account = (name: string) =>
+  // A command belongs to one aggregate: each account has its own.
+  const open = (name: string) =>
+    Domain.Command(`Open${name}`, {
+      input: { id: Schema.String, owner: Schema.String },
+      events: [Opened],
+    });
+  class OpenChecking extends open(`Checking${n}`) {}
+  class OpenSavings extends open(`Savings${n}`) {}
+  const account = (name: string, Open: typeof OpenChecking) =>
     Domain.Aggregate(name, {
       id: Schema.String,
       state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
@@ -33,12 +37,12 @@ const definitions = (n: number) => {
       commands: [Open],
       keyOf: (command: { readonly id: string }) => command.id,
       decide: {
-        [`Open${n}`]: (_: unknown, { owner }: { owner: string }) => [new Opened({ owner })],
+        [`Open${name}`]: (_: unknown, { owner }: { owner: string }) => [new Opened({ owner })],
       },
       evolve: { [`Opened${n}`]: (_: unknown, { owner }: { owner: string }) => ({ owner }) },
     } as never);
-  class Checking extends account(`Checking${n}`) {}
-  class Savings extends account(`Savings${n}`) {}
+  class Checking extends account(`Checking${n}`, OpenChecking) {}
+  class Savings extends account(`Savings${n}`, OpenSavings) {}
   const owners = (name: string, from: typeof Checking) =>
     Domain.View(name, {
       from: [from],
@@ -53,7 +57,7 @@ const definitions = (n: number) => {
     aggregates: [Checking, Savings],
     views: [CheckingOwners, SavingsOwners],
   } as never) {}
-  return { Open, Checking, Savings, CheckingOwners, SavingsOwners, Bank };
+  return { OpenChecking, OpenSavings, Checking, Savings, CheckingOwners, SavingsOwners, Bank };
 };
 
 /** Every model's definitions, made once. */
@@ -102,7 +106,8 @@ export const scaleWorker = (version: number | undefined) =>
         const checking = route[2] === "checking";
         const accounts = checking ? model.checking : model.savings;
         if (route[3] === "open") {
-          const receipt = yield* accounts.send(new bank.Open({ id, owner: route[5]! } as never));
+          const Open = checking ? bank.OpenChecking : bank.OpenSavings;
+          const receipt = yield* accounts.send(new Open({ id, owner: route[5]! } as never));
           return yield* HttpServerResponse.json({ version: receipt.version });
         }
         if (route[3] === "owners") {
