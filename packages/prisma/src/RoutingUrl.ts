@@ -578,10 +578,6 @@ const updateRefusals = (hostname: string, logicalId: string, serviceId: string) 
 /** How long a deploy with `dns` waits for its published `CNAME` to reach every authoritative nameserver. */
 const RECORDS_WAIT = Duration.minutes(3);
 
-// TODO(sdk): compare `url.state` directly once the SDK lists `no_domain_ownership` (prisma/pdp-control-plane#6153).
-const hasNoDomainOwnership = ({ state }: { readonly state: string }) =>
-  state === "no_domain_ownership";
-
 /**
  * Prisma looks the hostname's DNS up only when the row is written or checked.
  * A check orders a certificate only by retrying a failed one, or by
@@ -884,14 +880,14 @@ const ProviderLive = () =>
           const { url, service, recordsSeen, hostnameWritten } = yield* save(fqn, news, output);
           const hostname = normalizeHostname(news.hostname);
           const current =
-            news.createDomainOwnership === true && hasNoDomainOwnership(url)
+            news.createDomainOwnership === true && url.state === "no_domain_ownership"
               ? (yield* updateUrl({ id: url.id, createDomainOwnership: true }).pipe(
                   Effect.catchTags(
                     updateRefusals(hostname, news.logicalId ?? defaultLogicalId(fqn), service.id),
                   ),
                 )).data
               : url;
-          if (hasNoDomainOwnership(current)) {
+          if (current.state === "no_domain_ownership") {
             yield* Effect.logWarning(noDomainOwnershipWarning(current.hostname));
           }
           if (!checksAfterSave(news, olds, hostnameWritten) || !needsCheck(current)) {
