@@ -244,10 +244,7 @@ export const MattersExportProvider = () =>
 
       if (current === undefined) {
         const created = yield* vault
-          .createMattersExports({
-            matterId,
-            body: desired,
-          })
+          .createMattersExports({ ...desired, matterId })
           .pipe(Effect.catchTag("Conflict", () => findExportByName(matterId, name)));
         current = created ?? undefined;
       }

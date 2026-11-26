@@ -3,6 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { Booking, BookingApi } from "./fixtures/Booking.model.ts";
+import { Booth, BoothApi } from "./fixtures/Booth.model.ts";
 import { Tally, TallyApi } from "./fixtures/Tally.model.ts";
 import { Tickets, TicketsApi } from "./fixtures/Ticket.model.ts";
 
@@ -84,6 +85,34 @@ it.effect(
       });
       expect(report.rules).toMatchObject([{ name: "AnOpenRoundScoresTwo", broken: undefined }]);
       expect(report.rules[0]?.states).toBeGreaterThan(0);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  60_000,
+);
+
+const booth = (faults: { readonly rerun: boolean }) =>
+  Explore.report(Booth, {
+    source: new URL("./fixtures/Booth.model.ts", import.meta.url),
+    apis: [BoothApi],
+    depth: 1,
+    faults: { redeliver: false, reorder: false, ...faults },
+  });
+
+it.effect(
+  "a saga's step written with the library's functions is searched as the plain one is",
+  () =>
+    Effect.gen(function* () {
+      // `Effect.all`, `Effect.forEach`, `Effect.result`, `filterOrFail`, `catch`, and a stream run to its head.
+      const once = yield* booth({ rerun: false });
+      expect(once.rules).toMatchObject([{ name: "OneTicketPerSeat", broken: undefined }]);
+      const twice = yield* booth({ rerun: true });
+      const story = twice.rules[0]?.broken;
+      expect(tags(story)).toEqual([
+        [undefined, "BookSeat"],
+        ["Stamping", "IssueTicket"],
+        ["Stamping", "IssueTicket"],
+      ]);
+      expect(twice.repeated).toEqual(["Numbers.next, by Stamping in its step issue"]);
+      expect(twice.disagreements).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
 );

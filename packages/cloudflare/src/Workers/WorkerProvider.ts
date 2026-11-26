@@ -1638,24 +1638,38 @@ export const LiveWorkerProvider = () =>
         /** user-provided `version.alias` attached to the uploaded version */
         uploadedVersionAlias?: string;
       }) {
-        const { workersDev, scriptName } = params;
         const urls = yield* computeStableWorkerUrls(params);
-        if (workersDev.previewsEnabled) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const accountSubdomain = yield* getAccountSubdomain(accountId);
-          if (params.uploadedVersionId !== undefined) {
-            if (params.uploadedVersionAlias !== undefined) {
-              urls.push(
-                `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
-              );
-            }
+        return [...urls, ...(yield* computePreviewUrls(params))];
+      });
+
+      /**
+       * The preview URLs a Worker serves at (step 4 of
+       * {@link computeWorkerUrls}). `read` uses it too, so a deploy's `urls`
+       * read back unchanged and don't report drift.
+       */
+      const computePreviewUrls = Effect.fn(function* (params: {
+        scriptName: string;
+        workersDev: Pick<ResolvedWorkersDev, "enabled" | "previewsEnabled">;
+        uploadedVersionId?: string;
+        uploadedVersionAlias?: string;
+      }) {
+        const { workersDev, scriptName } = params;
+        if (!workersDev.previewsEnabled) return [];
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const accountSubdomain = yield* getAccountSubdomain(accountId);
+        const urls: string[] = [];
+        if (params.uploadedVersionId !== undefined) {
+          if (params.uploadedVersionAlias !== undefined) {
             urls.push(
-              `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+              `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
             );
-          } else if (!workersDev.enabled) {
-            const previewUrl = yield* getPreviewUrl(scriptName, accountSubdomain);
-            if (previewUrl) urls.push(previewUrl);
           }
+          urls.push(
+            `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+          );
+        } else if (!workersDev.enabled) {
+          const previewUrl = yield* getPreviewUrl(scriptName, accountSubdomain);
+          if (previewUrl) urls.push(previewUrl);
         }
         return urls;
       });
@@ -1681,11 +1695,13 @@ export const LiveWorkerProvider = () =>
         matches: (existing: PhaseRule, rule: Rule) => boolean;
       }) {
         const { zoneId, phase } = params;
-        const entrypoint = yield* rulesets
-          .getPhasForZone({ zoneId, rulesetPhase: phase })
-          // Only a missing entrypoint means no rules yet. Any other failure
-          // stops here rather than treating the phase as empty.
-          .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
+        const entrypoint = yield* (
+          rulesets
+            .getPhasForZone({ zoneId, rulesetPhase: phase })
+            // Only a missing entrypoint means no rules yet. Any other failure
+            // stops here rather than treating the phase as empty.
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined))
+        );
         if (entrypoint === undefined) {
           if (params.desired.length === 0) return;
           yield* rulesets.putPhasForZone({
@@ -2329,7 +2345,10 @@ export const LiveWorkerProvider = () =>
               error._tag === "WorkerNotFound" ||
               error._tag === "DispatchNamespaceScriptNotFound" ||
               error._tag === "DispatchNamespaceNotFound",
-            schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
+            // Capped at 2s between attempts (~35s in all): an uncapped
+            // exponential over 20 attempts waits ~29 hours on the last one.
+            schedule: Schedule.min([Schedule.exponential(100), Schedule.spaced("2 seconds")]),
+            times: 20,
           }),
         );
       });
@@ -5140,15 +5159,48 @@ export const LiveWorkerProvider = () =>
             }),
           );
           let durableObjectNamespaces = getDurableObjects(existingSettings?.bindings);
+          // An existing script can be reused only when it already hosts every
+          // class: cycle peers need each namespace id now, and a class only
+          // gets a namespace when an upload declares it. An adopted Worker
+          // that never hosted these classes (#3590) gets the placeholder too.
+          const missingDoClasses = doClasses.filter(
+            (className) => !durableObjectNamespaces[className],
+          );
 
           let placeholder: { tag?: string | null } | undefined;
-          if (existingSettings) {
+          if (existingSettings && missingDoClasses.length === 0) {
             // Engine has already cleared this resource for write via
             // `observe` or `read` + AdoptPolicy. Either we own it (matching
             // tags) or the user opted in to a takeover (`--adopt` / `adopt(true)`).
             yield* Effect.logInfo(`Cloudflare Worker precreate: reusing existing ${name}`);
           } else {
             yield* session.note("Pre-creating worker...", { kind: "status" });
+            if (existingSettings) {
+              yield* Effect.logInfo(
+                `Cloudflare Worker precreate: declaring Durable Objects ${JSON.stringify(missingDoClasses)} on existing ${name}`,
+              );
+            }
+            // Classes the existing script already hosts stay declared with
+            // their observed storage: an upload that omits one is rejected.
+            const doExports = buildDurableObjectExports({
+              scriptName: name,
+              observedNamespaces: existingSettings
+                ? yield* listDurableObjectNamespaces(accountId, dispatchNamespace)
+                : [],
+              hostedClasses: doClasses,
+              // A fresh class gets the storage its binding declares
+              // (SQLite unless stated).
+              declaredStorage: new Map(
+                durableObjects.flatMap((binding) =>
+                  binding.storage === undefined
+                    ? []
+                    : [[binding.className, binding.storage] as const],
+                ),
+              ),
+              renamedClasses: [],
+              deletedClasses: [],
+              transferredClasses: [],
+            });
             const compatibility = getCompatibility(news);
             const mainModule = "main.js";
             const placeholderScript = makePlaceholderScript(doClasses);
@@ -5172,20 +5224,7 @@ export const LiveWorkerProvider = () =>
                 compatibilityDate: compatibility.date,
                 compatibilityFlags: compatibility.flags,
                 containers,
-                // A fresh script: every hosted class is new, with the storage
-                // its binding declares (SQLite unless stated).
-                exports:
-                  durableObjects.length > 0
-                    ? Object.fromEntries(
-                        durableObjects.map((binding) => [
-                          binding.className,
-                          {
-                            type: "durable-object",
-                            storage: binding.storage ?? "sqlite",
-                          },
-                        ]),
-                      )
-                    : undefined,
+                exports: nonEmptyExports(doExports),
                 observability: yield* resolveObservability(news, bindings),
                 tags,
               },
@@ -5215,14 +5254,6 @@ export const LiveWorkerProvider = () =>
                 dispatchNamespace,
               ));
             }
-          }
-
-          if (existingSettings && doClasses.length > 0) {
-            ({ durableObjectNamespaces } = yield* getWorkerSettingsWithDurableObjects(
-              name,
-              doClasses,
-              dispatchNamespace,
-            ));
           }
 
           /**
@@ -5433,11 +5464,20 @@ export const LiveWorkerProvider = () =>
             const drift = [...observed].filter((h) => !classified.has(h));
             const serving = [...(keptName ? [keptName] : []), ...keptAliases, ...drift];
             const observedDomain = resolveObservedWorkerDomain(serving, keptRedirects, declared);
+            // A self-rollout's version is the one its deploy uploaded, as
+            // when the deploy assembled `urls`.
+            const rollout = olds !== undefined && getSelfRolloutTraffic(olds) !== undefined;
             const urls = [
               ...serving.map((h) => `https://${h}`),
               ...(subdomain.enabled
                 ? [`https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`]
                 : []),
+              ...(yield* computePreviewUrls({
+                scriptName: workerName,
+                workersDev: subdomain,
+                uploadedVersionId: rollout ? uploadedVersionId : undefined,
+                uploadedVersionAlias: rollout ? olds?.version?.alias : undefined,
+              })),
             ];
             const crons = observeCrons ? yield* getWorkerCrons(workerName) : [];
             yield* Effect.logInfo(`Cloudflare Worker read: found ${workerName}`);
@@ -6125,7 +6165,6 @@ const commitDurableObjectTransfer = (params: {
   workers.patchScriptScriptAndVersionSetting({
     accountId: params.accountId,
     scriptName: params.fromScript,
-    // The settings part is sent verbatim, so entries use wire names.
     settings: {
       exports: Object.fromEntries(
         params.observedNamespaces
@@ -6133,7 +6172,7 @@ const commitDurableObjectTransfer = (params: {
           .map((ns) => [
             ns.class,
             params.classNames.includes(ns.class)
-              ? { type: "durable-object", state: "transferred", transferred_to: params.toScript }
+              ? { type: "durable-object", state: "transferred", transferredTo: params.toScript }
               : {
                   type: "durable-object",
                   storage: observedStorage(params.observedNamespaces, params.fromScript, ns.class),

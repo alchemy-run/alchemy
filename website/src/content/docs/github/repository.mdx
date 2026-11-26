@@ -85,10 +85,43 @@ const repo = yield* GitHub.Repository("internal-tools", {
 - **Merge policy** — `allowSquashMerge`, `allowMergeCommit`,
   `allowRebaseMerge` (default `true`), `allowAutoMerge` and
   `deleteBranchOnMerge` (default `false`).
+- **Squash commit text** — `squashMergeCommitTitle` and
+  `squashMergeCommitMessage` (see [below](#squash-merge-commit-text)).
 - **`isTemplate`** — mark the repository as a template.
 - **`defaultBranch`** — only applied once the branch actually exists;
   on an empty repository it's dropped for that deploy and applied on
   a later one.
+
+## Squash merge commit text
+
+`squashMergeCommitTitle` and `squashMergeCommitMessage` set the default
+text of a squash merge commit. This squash-only repository puts the pull
+request's title on the default branch with an empty body, so a
+conventional-commit PR title becomes the commit:
+
+```typescript
+yield* GitHub.Repository("app", {
+  owner: "my-org",
+  name: "app",
+  allowMergeCommit: false,
+  allowRebaseMerge: false,
+  allowSquashMerge: true,
+  squashMergeCommitTitle: "PR_TITLE",
+  squashMergeCommitMessage: "BLANK",
+});
+```
+
+GitHub requires `squashMergeCommitTitle` whenever
+`squashMergeCommitMessage` is set, and accepts only these pairs:
+
+| `squashMergeCommitTitle` | `squashMergeCommitMessage` |
+| --- | --- |
+| `PR_TITLE` | `PR_BODY`, `COMMIT_MESSAGES`, or `BLANK` |
+| `COMMIT_OR_PR_TITLE` | `COMMIT_MESSAGES` |
+
+GitHub rejects any other pair, and the deploy fails with
+`UnprocessableEntity`. GitHub's default for
+a new repository is `COMMIT_OR_PR_TITLE` with `COMMIT_MESSAGES`.
 
 ## Topics
 

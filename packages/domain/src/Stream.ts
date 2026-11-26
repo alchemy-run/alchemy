@@ -109,6 +109,13 @@ export interface Host<Key extends Key.Any, E> {
    * a replayed or redelivered input appends nothing twice.
    */
   readonly append: (origin: Origin<Key>, ...events: ReadonlyArray<E>) => Effect.Effect<void>;
+  /**
+   * In a projection's `rewrite` handler: replace what was appended for the
+   * input being rewritten with these entries. Each takes the place of one
+   * appended before, in order, and keeps its `seq`; passing fewer removes
+   * the rest, and passing none removes them all.
+   */
+  readonly rewrite: (origin: Origin<Key>, ...events: ReadonlyArray<E>) => Effect.Effect<void>;
 }
 
 /**

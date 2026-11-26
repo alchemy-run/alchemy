@@ -62,6 +62,14 @@ export const Default = RivetKubernetes.DeploymentPool("Default", { replicas: 3 }
 
 The pool runs on the control plane's cluster unless you pass `cluster`.
 
+## Reach a private control plane
+
+On a [`Rivet.ControlPlane`](/rivet/control-planes#reach-it-at-a-private-address) with a private address, `network` is the cluster that address is in and the namespace nodes run in. `DeploymentPool` and `ServicesPool` run their nodes there:
+
+```typescript
+network: RivetKubernetes.Network({ cluster: Eks, namespace: "rivet" }),
+```
+
 ## Rivet Services
 
 `ServicesPool` runs [Rivet Services](/rivet/durable-streams) as a Deployment on the control plane's cluster:

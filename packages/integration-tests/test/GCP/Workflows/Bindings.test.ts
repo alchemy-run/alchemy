@@ -79,8 +79,8 @@ describe(
             // Workflows has no per-workflow IAM policy: the binding grants
             // roles/workflows.invoker on the project.
             const policy = yield* crm.getIamPolicyProjects({
+              options: { requestedPolicyVersion: 3 },
               resource: `projects/${project}`,
-              body: { options: { requestedPolicyVersion: 3 } },
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>

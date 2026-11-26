@@ -34,7 +34,7 @@ import * as Value from "./Prove/internal/Value.ts";
 export type { Move, Outcome, Story } from "./Explore/internal/Search.ts";
 export type { Asked, Ending, Skipped, Step } from "./Explore/internal/ModelSearch.ts";
 
-export interface Options {
+export interface Options extends Source.Reading {
   /** The file the aggregate is declared in: `new URL("../src/Account.ts", import.meta.url)`, or a path. */
   readonly source: URL | string;
   /**
@@ -54,7 +54,7 @@ export interface Options {
   };
 }
 
-export interface ModelOptions {
+export interface ModelOptions extends Source.Reading {
   /** The file the model is declared in: `new URL("../src/Bank.model.ts", import.meta.url)`, or a path. */
   readonly source: URL | string;
   /** The Apis callers reach the model through: their commands are the ones a sequence is made of. */
@@ -158,6 +158,8 @@ export interface ModelReport extends ModelSearch.Found {
   readonly model: string;
   readonly apis: ReadonlyArray<string>;
   readonly depth: number;
+  /** The functions the explorer did not read, and took to be pure, by name. */
+  readonly opaque: ReadonlyArray<string>;
 }
 
 type Requirements = FileSystem.FileSystem | Path.Path;
@@ -224,7 +226,7 @@ const reportModel = (
                 (error) => new ExploreError({ message: `${String(source)}: ${error.message}` }),
               ),
             );
-    const loader = yield* Source.loader;
+    const loader = yield* Source.loader(options);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
     loader.adopt(model);
@@ -264,6 +266,7 @@ const reportModel = (
       apis: options.apis.map((api) => api.apiName),
       depth,
       ...found,
+      opaque: loader.opaques(),
     };
     return made;
   }).pipe(
@@ -278,7 +281,7 @@ const reportAggregate = (
   options: Options,
 ): Effect.Effect<Report, ExploreError, Requirements> =>
   Effect.gen(function* () {
-    const { loader, definition } = yield* Paths.load(aggregate, options.source);
+    const { loader, definition } = yield* Paths.load(aggregate, options.source, options);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
     const depth = options.depth ?? 3;
@@ -433,6 +436,12 @@ export const undone = (
       if (unruled.length > 0)
         out.push(
           `${unruled.map((rule) => `${report.model}.${rule.name}`).join(", ")} ${unruled.length === 1 ? "was" : "were"} not looked at: no sequence that changed a state came to rest`,
+        );
+      const unreached = report.sometimes.filter((rule) => !rule.reached);
+      // A search cut short says nothing of what it did not get to: that it was cut is said above.
+      if (unreached.length > 0 && !report.truncated)
+        out.push(
+          `${unreached.map((rule) => `${report.model}.${rule.name}`).join(", ")} ${unreached.length === 1 ? "is" : "are"} never reached: no sequence of up to ${report.depth} ${report.depth === 1 ? "command" : "commands"}${report.walks.count > 0 ? ", and no walk," : ""} gets there`,
         );
       const unended = report.eventually.filter((rule) => rule.states === 0);
       if (unended.length > 0)
@@ -621,6 +630,18 @@ const renderModel = (report: ModelReport): string => {
       ...modelLines(rule.broken, "    "),
     );
   }
+  for (const rule of report.sometimes) {
+    if (!rule.reached) {
+      out.push(`✗ ${report.model}.${rule.name} is never reached`);
+      continue;
+    }
+    out.push(
+      `✓ ${report.model}.${rule.name} is reached`,
+      ...(rule.reached.length === 0
+        ? ["    in a model with nothing in it"]
+        : modelLines(rule.reached, "    ")),
+    );
+  }
   const ended = report.endings.filter((ending) => ending.story);
   const open = report.endings.filter((ending) => !ending.story);
   if (ended.length > 0) out.push("", "How the sagas end", "");
@@ -669,7 +690,7 @@ const renderModel = (report: ModelReport): string => {
   if (report.unread.length > 0)
     out.push(
       "",
-      "Not read",
+      "Not supported",
       ...report.unread.map((error) => `  ${error.file}:${error.line}  ${error.reason}`),
     );
   if (report.disagreements.length > 0)
@@ -768,7 +789,7 @@ export const render = (report: Report | ModelReport): string => {
   if (report.unread.length > 0)
     out.push(
       "",
-      "Not read",
+      "Not supported",
       ...report.unread.map((error) => `  ${error.file}:${error.line}  ${error.reason}`),
     );
   if (report.disagreements.length > 0)

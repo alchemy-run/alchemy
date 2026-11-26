@@ -25,11 +25,13 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type { Self as SelfService } from "alchemy/Self";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import type { WebhookHost } from "alchemy/WebhookHost";
+import type { TcpSocket } from "alchemy/Workers/Workerd/Socket";
 import type { ConfigError } from "effect/Config";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import type * as Scope from "effect/Scope";
 import path from "pathe";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
@@ -139,7 +141,22 @@ export type WorkerServices =
   | Container.Application<any>
   | SelfService;
 
-export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
+/**
+ * The handler for inbound TCP connections: Spectrum (a Spectrum application
+ * whose origin is this Worker) or another Worker's `connect()` over a
+ * service binding. Runs once per connection; the connection stays open until
+ * the Effect settles.
+ */
+export type ConnectHandler<Req = never> = (
+  socket: TcpSocket,
+) => Effect.Effect<void, never, PlatformServices | RuntimeContext | Scope.Scope | Req>;
+
+export type WorkerShape<Req = never> = Main<WorkerServices | Req> & {
+  /**
+   * Accept inbound TCP connections. See {@link ConnectHandler}.
+   */
+  connect?: ConnectHandler<WorkerServices | Req>;
+} & MainRpc<WorkerServices | Req>;
 
 export type WorkerEnv = Record<
   string,
@@ -1019,8 +1036,11 @@ export interface WorkerProps<
    * When Alchemy bundles {@link main}, rules add to the built-in ones
    * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
    * imported file that matches is uploaded as a module instead of bundled.
-   * JavaScript, TypeScript and JSON are always bundled, and imports inside
-   * nested `?worker` modules don't use rules. For files outside the entry's
+   * JavaScript and TypeScript are always bundled, and imports inside
+   * nested `?worker` modules don't use rules. JSON is bundled unless a rule
+   * matches it: `{ type: "Text", globs: ["**\/openapi.json"] }` uploads a
+   * large document as a string module instead of an object literal the
+   * Worker builds at startup. For files outside the entry's
    * directory, globs may start with `../` or be absolute. `!` globs exclude
    * across your rules; an excluded `.txt` or `.wasm` still matches the
    * built-in rules.
@@ -1247,6 +1267,22 @@ export interface ViteOptions {
    * Defaults to the current working directory (`process.cwd()`).
    */
   rootDir?: string;
+  /**
+   * Vite [mode](https://vite.dev/guide/env-and-mode#modes), as passed to
+   * `vite build --mode`. It selects which `.env.[mode]` files load and
+   * sets `import.meta.env.MODE`. Changing it rebuilds the Worker, or
+   * restarts the dev server in `alchemy dev`.
+   *
+   * Edits to a gitignored `.env.[mode]` file don't trigger a rebuild on
+   * their own. Add the file to `memo.include` if they should.
+   *
+   * @default "production" on deploy, "development" in `alchemy dev`
+   * @example
+   * ```typescript
+   * vite: { mode: "staging" }
+   * ```
+   */
+  mode?: string;
   /**
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file in `cwd` is hashed, plus the nearest
@@ -2598,6 +2634,51 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * };
  * ```
  *
+ * ### TCP Connections
+ * Return a `connect` handler to accept raw TCP connections: from a
+ * Spectrum application whose origin is the Worker (`trafficType:
+ * "worker"`), or from another Worker's `connect()` over a service binding.
+ * The handler gets an Effect `Socket` (`socket.raw` is the native one) and
+ * the connection stays open until its Effect settles. See
+ * [Accept TCP connections](/cloudflare/compute/tcp).
+ *
+ * **Example:** Echo every line back in capitals
+ * ```typescript
+ * const decoder = new TextDecoder();
+ *
+ * export default class Echo extends Cloudflare.Worker<Echo>()(
+ *   "Echo",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return {
+ *       connect: (socket) =>
+ *         Effect.gen(function* () {
+ *           const { pull } = yield* socket.reader;
+ *           const writer = yield* socket.writer;
+ *           while (true) {
+ *             for (const chunk of yield* pull) {
+ *               const text = typeof chunk === "string" ? chunk : decoder.decode(chunk);
+ *               yield* writer.write(text.toUpperCase());
+ *             }
+ *           }
+ *         }).pipe(Effect.catch(() => Effect.void)),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Serve it on a public port with Spectrum
+ * ```typescript
+ * const echo = yield* Echo;
+ * yield* Cloudflare.Spectrum.Application("EchoTcp", {
+ *   zoneId: zone.zoneId,
+ *   dns: { type: "CNAME", name: "tcp.example.com" },
+ *   protocol: "tcp/9000",
+ *   trafficType: "worker",
+ *   originWorkerId: echo.workerId,
+ * });
+ * ```
+ *
  * ### Background Work & Scopes
  * Each incoming event (fetch, RPC call, scheduled run) gets its own Effect
  * `Scope`. When the handler finishes, the bridge closes that scope and
@@ -2909,10 +2990,14 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  */
 export const Worker: ResourceClassLike<Worker> & {
   /**
-   * Reference a deployed Worker — in the current stack/stage by default, or
-   * in another via `options`. Pass the Worker's declaration instead of its
-   * logical id to keep its type, including its RPC methods, for service
-   * bindings from another stack.
+   * Reference a Worker by its logical id, in the current stack/stage by
+   * default or in another via `options`. Another Worker this program
+   * declares in the same stack and stage is bound to that declaration (no
+   * earlier deploy needed), so a ref breaks a cycle between two Workers that
+   * bind each other; any other ref, including one to the Worker itself,
+   * reads the deployed Worker from state. Pass
+   * the Worker's declaration instead of its logical id to keep its type,
+   * including its RPC methods, for service bindings from another stack.
    */
   ref: WorkerRef;
   /**

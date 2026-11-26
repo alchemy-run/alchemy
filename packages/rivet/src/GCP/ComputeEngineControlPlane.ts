@@ -2,6 +2,7 @@ import * as Compute from "@alchemy.run/gcp/Compute";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as IAM from "@alchemy.run/gcp/IAM";
 import * as Run from "@alchemy.run/gcp/Run";
+import * as SecretManager from "@alchemy.run/gcp/SecretManager";
 import * as Storage from "@alchemy.run/gcp/Storage";
 import * as VpcAccess from "@alchemy.run/gcp/VpcAccess";
 import * as Output from "alchemy/Output";
@@ -12,9 +13,10 @@ import { Cluster } from "../Cluster.ts";
 import { adminToken } from "../internal/AdminToken.ts";
 import { stackDnsLabel } from "../internal/PoolHost.ts";
 import { Namespace } from "../Namespace.ts";
+import { Network } from "./Network.ts";
 
 /** The engine release `RivetGCP.ComputeEngineControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
 
 /** Container-Optimized OS: Docker preinstalled, a read-only root. */
 const COS_IMAGE = "projects/cos-cloud/global/images/family/cos-stable";
@@ -71,7 +73,7 @@ export interface ComputeEngineControlPlaneProps {
   zones?: string[];
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0"
+   * @default "rivetdev/engine:3.1.1"
    */
   image?: string;
   /**
@@ -87,13 +89,27 @@ export interface ComputeEngineControlPlaneProps {
   connectorCidrBlock?: string;
 }
 
-/** Boot one instance: mount its data disk, then run the engine on the host network. */
+/**
+ * Boot one instance: mount its data disk, read the admin token from Secret
+ * Manager as the instance's service account, then run the engine on the
+ * host network. The token never sits in metadata; the script names only
+ * the secret version holding it.
+ */
 const startupScript = (options: {
   readonly image: string;
-  readonly token: string;
+  readonly tokenVersion: string;
   readonly bucket: string;
 }) => `#!/bin/bash
 set -euo pipefail
+MD=http://metadata.google.internal/computeMetadata/v1
+# The grant on the token can take a minute to reach Secret Manager.
+for ATTEMPT in $(seq 1 60); do
+  ACCESS="$(curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/service-accounts/default/token" | sed -E 's/.*"access_token":"([^"]+)".*/\\1/')" \\
+    && BODY="$(curl -sf -H "Authorization: Bearer $ACCESS" "https://secretmanager.googleapis.com/v1/${options.tokenVersion}:access")" \\
+    && break
+  sleep 5
+done
+export RIVET__AUTH__ADMIN_TOKEN="$(printf '%s' "$BODY" | tr -d '\\n' | sed -E 's/.*"data": *"([^"]*)".*/\\1/' | base64 -d)"
 DEVICE=/dev/disk/by-id/google-${DISK_DEVICE}
 blkid "$DEVICE" >/dev/null || mkfs.ext4 -F "$DEVICE"
 mkdir -p ${MOUNT_PATH}
@@ -105,8 +121,9 @@ PRIVATE_IP="$(curl -sf -H 'Metadata-Flavor: Google' http://metadata.google.inter
 docker rm -f rivet-engine >/dev/null 2>&1 || true
 docker run -d --name rivet-engine --restart always --network host \\
   -v ${MOUNT_PATH}:${DATA_PATH} \\
-  -e RIVET__AUTH__ADMIN_TOKEN='${options.token}' \\
+  -e RIVET__AUTH__ADMIN_TOKEN \\
   -e RIVET__STORAGE__LOG_DIRECTORY=${DATA_PATH} \\
+  -e RIVET__STORAGE__AUTO_PROVISION_PARTITIONS=true \\
   -e RIVET__OBJECT_STORAGE__PRIMARY__GCS__BUCKET='${options.bucket}' \\
   -e RIVET__API_PEER__ADVERTISE_ADDRESS="$PRIVATE_IP:${PEER_PORT}" \\
   -e RIVET__TELEMETRY__ENABLED=false \\
@@ -206,9 +223,24 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
         member: Output.interpolate`serviceAccount:${account.email}`,
       });
 
-      const metadataScript = Output.all(token.text, bucket.bucketName).pipe(
-        Output.map(([text, bucketName]) =>
-          startupScript({ image, token: Redacted.value(text), bucket: bucketName }),
+      // The admin token lives in Secret Manager, read by the instances'
+      // own account: never in their metadata.
+      const tokenSecret = yield* SecretManager.Secret(`${id}AdminTokenSecret`, {
+        value: token.text,
+      });
+      const tokenGrant = yield* IAM.Member(`${id}TokenGrant`, {
+        kind: "secretmanager.secret",
+        name: tokenSecret.name,
+        role: "roles/secretmanager.secretAccessor",
+        member: Output.interpolate`serviceAccount:${account.email}`,
+      });
+      const metadataScript = Output.all(
+        tokenSecret.version,
+        bucket.bucketName,
+        tokenGrant.role,
+      ).pipe(
+        Output.map(([tokenVersion, bucketName]) =>
+          startupScript({ image, tokenVersion: tokenVersion ?? "", bucket: bucketName }),
         ),
       );
       const hosts = [];
@@ -291,12 +323,7 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
       });
       return {
         endpoint,
-        network: {
-          kind: "gcp",
-          network: network.networkName,
-          subnetwork: subnet.subnetworkName,
-          region,
-        },
+        network: Network(subnet),
         token: token.text,
         namespace: namespace.name,
       };

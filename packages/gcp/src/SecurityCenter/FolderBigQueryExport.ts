@@ -265,9 +265,11 @@ export const FolderBigQueryExportProvider = () =>
       if (current === undefined) {
         const created = yield* scc
           .createFoldersBigQueryExports({
+            dataset,
+            filter,
+            description,
             parent: folder,
             bigQueryExportId: exportId,
-            body: { dataset, filter, description },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -286,9 +288,11 @@ export const FolderBigQueryExportProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchFoldersBigQueryExports({
+          dataset,
+          filter,
+          description,
           name: currentName,
           updateMask,
-          body: { dataset, filter, description },
         });
       }
 

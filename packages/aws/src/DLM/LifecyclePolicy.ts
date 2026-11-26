@@ -8,6 +8,8 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { AWSEnvironment } from "../Environment.ts";
+import { managedPolicyArn, type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -408,12 +410,10 @@ export interface LifecyclePolicy extends Resource<
 export const LifecyclePolicy = Resource<LifecyclePolicy>("AWS.DLM.LifecyclePolicy");
 
 /** AWS managed policy granting DLM the permissions for snapshot policies. */
-const SNAPSHOT_MANAGED_POLICY_ARN =
-  "arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRole";
+const SNAPSHOT_MANAGED_POLICY = "service-role/AWSDataLifecycleManagerServiceRole";
 
 /** AWS managed policy granting DLM the permissions for AMI policies. */
-const AMI_MANAGED_POLICY_ARN =
-  "arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRoleForAMIManagement";
+const AMI_MANAGED_POLICY = "service-role/AWSDataLifecycleManagerServiceRoleForAMIManagement";
 
 /** Convert a tag record to the DLM wire tag list, sorted for stable diffs. */
 const toWireTagList = (tags: Record<string, string> | undefined): dlm.Tag[] | undefined =>
@@ -626,10 +626,13 @@ export const LifecyclePolicyProvider = () =>
 
       const createRoleName = (id: string) => createPhysicalName({ id, maxLength: 64 });
 
-      const managedPolicyArnFor = (details: LifecyclePolicyDetails) =>
-        (details.policyType ?? "EBS_SNAPSHOT_MANAGEMENT") === "IMAGE_MANAGEMENT"
-          ? AMI_MANAGED_POLICY_ARN
-          : SNAPSHOT_MANAGED_POLICY_ARN;
+      const managedPolicyArnFor = (partition: Partition, details: LifecyclePolicyDetails) =>
+        managedPolicyArn(
+          partition,
+          (details.policyType ?? "EBS_SNAPSHOT_MANAGEMENT") === "IMAGE_MANAGEMENT"
+            ? AMI_MANAGED_POLICY
+            : SNAPSHOT_MANAGED_POLICY,
+        );
 
       const getOrUndefined = Effect.fn(function* (policyId: string) {
         return yield* dlm.getLifecyclePolicy({ PolicyId: policyId }).pipe(
@@ -763,10 +766,11 @@ export const LifecyclePolicyProvider = () =>
           let roleName: string | undefined;
           if (executionRoleArn === undefined) {
             roleName = yield* createRoleName(id);
+            const { partition } = yield* AWSEnvironment.current;
             executionRoleArn = yield* ensureExecutionRole({
               id,
               roleName,
-              managedPolicyArn: managedPolicyArnFor(news.policyDetails ?? {}),
+              managedPolicyArn: managedPolicyArnFor(partition, news.policyDetails ?? {}),
             });
           }
 

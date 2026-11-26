@@ -34,6 +34,14 @@ export const Default = RivetDocker.SwarmPool("Default", { replicas: 2 }).pipe(La
 
 Each deploy builds a node image with every class on the pool.
 
+## Reach a private control plane
+
+On a [`Rivet.ControlPlane`](/rivet/control-planes#reach-it-at-a-private-address) with a private address, `network` is the Docker network that address is on. `SwarmPool` and `ServicesPool` join it:
+
+```typescript
+network: RivetDocker.Network(Docker.Network.lookup({ name: "rivet" })),
+```
+
 ## Rivet Services
 
 `ServicesPool` runs [Rivet Services](/rivet/durable-streams) as a swarm service on the control plane's network, with no published ports:

@@ -21,11 +21,12 @@ import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { durationToDays } from "../IAM/common.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { dnsSuffixOf, type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type BucketName = string;
-export type BucketArn = `arn:aws:s3:::${BucketName}`;
+export type BucketArn = `arn:${Partition}:s3:::${BucketName}`;
 
 /**
  * Server-side encryption configuration for a bucket.
@@ -238,11 +239,11 @@ export interface Bucket extends Resource<
     /**
      * Domain name of the bucket (e.g., bucket-name.s3.amazonaws.com).
      */
-    bucketDomainName: `${BucketName}.s3.amazonaws.com`;
+    bucketDomainName: `${BucketName}.s3.${string}`;
     /**
      * Regional domain name of the bucket.
      */
-    bucketRegionalDomainName: `${BucketName}.s3.${RegionID}.amazonaws.com`;
+    bucketRegionalDomainName: `${BucketName}.s3.${RegionID}.${string}`;
     /**
      * AWS region where the bucket is located.
      */
@@ -771,9 +772,9 @@ export const BucketProvider = () =>
 
         return {
           bucketName,
-          bucketArn: `arn:aws:s3:::${bucketName}` as const,
-          bucketDomainName: `${bucketName}.s3.amazonaws.com` as const,
-          bucketRegionalDomainName: `${bucketName}.s3.${region}.amazonaws.com` as const,
+          bucketArn: `arn:${partitionOf(region)}:s3:::${bucketName}` as const,
+          bucketDomainName: `${bucketName}.s3.${dnsSuffixOf(region)}` as const,
+          bucketRegionalDomainName: `${bucketName}.s3.${region}.${dnsSuffixOf(region)}` as const,
           region,
           accountId,
         };
@@ -1959,10 +1960,10 @@ export const BucketProvider = () =>
                       const bucketRegion = (b.BucketRegion ?? region) as RegionID;
                       return {
                         bucketName: b.Name,
-                        bucketArn: `arn:aws:s3:::${b.Name}` as const,
-                        bucketDomainName: `${b.Name}.s3.amazonaws.com` as const,
+                        bucketArn: `arn:${partitionOf(bucketRegion)}:s3:::${b.Name}` as const,
+                        bucketDomainName: `${b.Name}.s3.${dnsSuffixOf(bucketRegion)}` as const,
                         bucketRegionalDomainName:
-                          `${b.Name}.s3.${bucketRegion}.amazonaws.com` as const,
+                          `${b.Name}.s3.${bucketRegion}.${dnsSuffixOf(bucketRegion)}` as const,
                         region: bucketRegion,
                         accountId,
                       };
@@ -1985,9 +1986,9 @@ export const BucketProvider = () =>
           ) as RegionID;
           return {
             bucketName,
-            bucketArn: `arn:aws:s3:::${bucketName}` as const,
-            bucketDomainName: `${bucketName}.s3.amazonaws.com` as const,
-            bucketRegionalDomainName: `${bucketName}.s3.${region}.amazonaws.com` as const,
+            bucketArn: `arn:${partitionOf(region)}:s3:::${bucketName}` as const,
+            bucketDomainName: `${bucketName}.s3.${dnsSuffixOf(region)}` as const,
+            bucketRegionalDomainName: `${bucketName}.s3.${region}.${dnsSuffixOf(region)}` as const,
             region,
             accountId,
           };
@@ -2007,9 +2008,9 @@ export const BucketProvider = () =>
           if (!exists) return undefined;
           return {
             bucketName,
-            bucketArn: `arn:aws:s3:::${bucketName}` as const,
-            bucketDomainName: `${bucketName}.s3.amazonaws.com` as const,
-            bucketRegionalDomainName: `${bucketName}.s3.${region}.amazonaws.com` as const,
+            bucketArn: `arn:${partitionOf(region)}:s3:::${bucketName}` as const,
+            bucketDomainName: `${bucketName}.s3.${dnsSuffixOf(region)}` as const,
+            bucketRegionalDomainName: `${bucketName}.s3.${region}.${dnsSuffixOf(region)}` as const,
             region,
             accountId,
             managedNotificationConfiguration: yield* readManagedNotifications(
@@ -2406,6 +2407,15 @@ const readBucketEncryption = (bucket: string) =>
   s3
     .getBucketEncryption({ Bucket: bucket })
     .pipe(Effect.map((result) => result.ServerSideEncryptionConfiguration?.Rules?.[0]));
+
+/** Whether the bucket's default encryption already is `encryption`. */
+export const bucketEncryptionMatches = (bucket: string, encryption?: BucketEncryption) =>
+  readBucketEncryption(bucket).pipe(
+    Effect.map(
+      (rule) =>
+        encryptionFingerprint(rule) === encryptionFingerprint(desiredEncryptionRule(encryption)),
+    ),
+  );
 
 export const syncBucketEncryption = Effect.fn(function* (
   bucket: string,

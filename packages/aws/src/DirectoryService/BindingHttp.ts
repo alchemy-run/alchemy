@@ -2,6 +2,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Directory } from "./Directory.ts";
 
 /**
@@ -80,7 +81,7 @@ export const makeDirectoryHttpBinding = <I extends { DirectoryId?: string }, A, 
               Effect: "Allow",
               Action: [...options.actions],
               Resource: [
-                Output.interpolate`arn:aws:ds:${region}:${accountId}:directory/${directory.directoryId}`,
+                Output.interpolate`arn:${partitionOf(region)}:ds:${region}:${accountId}:directory/${directory.directoryId}`,
               ],
             },
           ],

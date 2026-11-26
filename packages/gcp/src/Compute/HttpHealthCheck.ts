@@ -399,15 +399,10 @@ export const HttpHealthCheckProvider = () =>
       let current = yield* getByName(env.project, httpHealthCheckName);
 
       if (current === undefined) {
-        yield* compute
-          .insertHttpHealthChecks({
-            project: env.project,
-            body: desired,
-          })
-          .pipe(
-            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertHttpHealthChecks({ ...desired, project: env.project }).pipe(
+          Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* awaitResource(env.project, httpHealthCheckName);
       }
 
@@ -418,9 +413,9 @@ export const HttpHealthCheckProvider = () =>
       if (needsUpdate(current, desired)) {
         yield* compute
           .patchHttpHealthChecks({
+            ...desired,
             project: env.project,
             httpHealthCheck: httpHealthCheckName,
-            body: desired,
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, httpHealthCheckName);

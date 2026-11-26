@@ -19,6 +19,7 @@ Work in this order. Each step has a reference file with templates.
 4. **Specify behavior with stories** before and while you implement it, and **state each rule that must always hold** as an invariant that `Verify` checks. See [references/testing.md](references/testing.md).
 5. **Host the model** on Cloudflare from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
 6. **Drive it from foldkit** in the web package. See [references/frontend.md](references/frontend.md).
+7. **Add agents**, if a language model does part of the work: follow the `alchemy-ai` skill, which builds on this model and returns here for the front end.
 
 More: [Tutorial, part 1](https://alchemy.run/domain/tutorial/part-1).
 
@@ -34,12 +35,19 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - A question someone asks (balance, statement, dashboard): a **View**, keyed by what it's about.
 - "Whenever X happens, do Y": a **Policy**.
 - A process with steps, waits and undo (move money: debit, credit, refund on failure): a **Saga**, started by a policy.
+- Events recorded by mistake (a deposit credited twice): a **Command** that records the fact reversing each one. Never a rewrite or a storage restore.
+- Events already recorded have to change (a person asks to be forgotten): a **Rewrite** per aggregate, run by a saga.
+- A record with periods the business names (months, statements, matches): an instance per period, with the period in the id. No new block.
+- An instance's log grows without end and has no periods (a chat room, a device): a **Compaction**.
 - Something outside the model you call (fraud scoring, payments): an **External System**.
+- Work a language model does (triage an issue, answer a customer): an **External System** the model calls, implemented by an AI process. Use the **`alchemy-ai` skill** (`packages/ai/skills/alchemy-ai`, or https://alchemy.run/ai) for the process, its tools and where it runs. The model never imports a process.
 - Writes to a store outside the model (a ledger table): a **Projection**. An ordered, readable log per key (account cards): a **Stream** that a projection appends to.
 - A question across keys, answered from that store (an account's ledger, paged; large withdrawals across all accounts, largest first): a **Query**. Never a hand-written route.
 - Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block authorizing itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
 
 A rule that spans aggregates needs an aggregate for each thing it's about. Give an invariant with no owner its own aggregate, keyed by what it protects (`UsernameClaim` keyed by username), and implement the command with a decision that reads every instance involved. A process that takes time, waits, or calls an external system is a saga, with a deadline for anything that waits.
+
+For history that grows or has to change, pick a pattern from [references/modeling.md](references/modeling.md#patterns-for-history-that-grows-or-has-to-change).
 
 More: [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd), [Domain Model](https://alchemy.run/domain/model), [Decision](https://alchemy.run/domain/decision).
 
@@ -64,7 +72,7 @@ More: [Project layout](https://alchemy.run/domain/project-layout).
 - Clients never read an aggregate. Read through a view (one key, live), a stream, or a query; a query's handler may read an aggregate's latest state with `yield* Account` then `accounts.get(ref)`.
 - Policies and projections run at least once. Make their effects idempotent: commands sent from a handler get deterministic ids, and stores key rows by `stream:seq`.
 - Don't wait for a saga in a policy. `start` it, keyed by the aggregate it's about, and react to the events its steps record.
-- A handler resolves its dependencies once in `toLayer` and requires nothing per call.
+- A handler resolves its dependencies once in `toLayer`. Per call it requires nothing but the runtime it runs in (`RuntimeContext`), which the platform provides.
 - Build one Layer and provide it once (`Layer.mergeAll`, `Layer.provide`). Never chain `Effect.provide`.
 - Never `throw`. Fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`).
 - Tracing is automatic. Record payload values only with `Effect.annotateCurrentSpan` in a handler: it lands on the engine's span for that handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
@@ -79,4 +87,4 @@ More: [Domain Model: The aggregate decides, and everything commits at once](http
 3. Update the views, policies and projections that care about the new events.
 4. Expose it through an Api, if a client sends or reads it, with the middleware it needs, and give it a `{ description }` as its last argument.
 5. Write stories for the happy path, every rejection, every policy reaction, and every query's authorization.
-6. Run the domain package's tests, with one that expects `Domain.verify(Model)` to be empty. Then type-check the monorepo (`tsc -b`) and run the server and web tests.
+6. Run the domain package's tests: building the model's Layer, which every story does, fails on any definition problem. Then type-check the monorepo (`tsc -b`) and run the server and web tests.

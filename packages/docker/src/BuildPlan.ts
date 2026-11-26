@@ -9,6 +9,11 @@ import type * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { selectDockerBuildContext } from "./BuildHash.ts";
+import {
+  type ContainerRuntimeSettings,
+  DEFAULT_CONTAINER_BASE_IMAGE,
+  resolveContainerRuntime,
+} from "./ContainerRuntime.ts";
 import { Docker } from "./Docker.ts";
 import { isInlineDockerfile } from "./Dockerfile.ts";
 import * as DockerfileParser from "./DockerfileParser.ts";
@@ -20,6 +25,7 @@ import type {
 } from "./DockerfileParser.ts";
 import {
   bundleMainProgram,
+  containerBundleLayout,
   type BundledImageSource,
   type DockerfileImageSource,
   type ImageSourceProps,
@@ -133,8 +139,8 @@ export class BuildPlanError extends Data.TaggedError("BuildPlanError")<{
 /** The context directory a plan's bundled `main` files live under. */
 export const BUNDLE_DIR = "__alchemy__";
 
-/** Default base for a `main` program with no environment: Docker Hub's bun image. */
-export const DEFAULT_MAIN_BASE = "oven/bun:1";
+/** Base of a bundled program in the default configuration. */
+export const DEFAULT_MAIN_BASE = DEFAULT_CONTAINER_BASE_IMAGE;
 
 export interface PlanOptions {
   readonly capabilities: Capabilities;
@@ -147,6 +153,8 @@ export interface PlanOptions {
    * entry). Omit it to bundle `main` as-is.
    */
   readonly bootstrap?: (importPath: string) => string;
+  /** Runtime for bundled programs. Defaults to the source's `runtime`. */
+  readonly runtime?: ContainerRuntimeSettings;
   /** Credentials for pulling a private base image. */
   readonly pull?: ImageRegistry;
   /**
@@ -445,12 +453,12 @@ export const check = (
 };
 
 /** The generated layer that runs a bundled `main`: shared by every builder. */
-const mainLayer = (port: number | undefined) =>
+const mainLayer = (runtime: ContainerRuntimeSettings, port: number | undefined) =>
   [
     `WORKDIR /app`,
     `COPY ${BUNDLE_DIR}/ /app/`,
     ...(port === undefined ? [] : [`ENV PORT=${String(port)}`]),
-    `ENTRYPOINT ["bun", "/app/index.mjs"]`,
+    containerBundleLayout(runtime).entrypoint,
   ].join("\n");
 
 /** Synthesized instructions carry line 0: they are not in the user's Dockerfile. */
@@ -516,6 +524,7 @@ export const plan = Effect.fn(function* (source: ImageSourceProps, options: Plan
   const path = yield* Path.Path;
   const platform = options.platform ?? "linux/amd64";
   const main = "main" in source ? (source as BundledImageSource) : undefined;
+  const runtime = options.runtime ?? (yield* resolveContainerRuntime(main?.runtime));
   const image = "image" in source ? source.image : undefined;
   const dockerfileProp = "dockerfile" in source ? source.dockerfile : undefined;
   const contextProp = "context" in source ? source.context : undefined;
@@ -548,7 +557,7 @@ export const plan = Effect.fn(function* (source: ImageSourceProps, options: Plan
   } else if (image !== undefined) {
     text = `FROM ${image}\n`;
   } else if (main !== undefined) {
-    text = `FROM ${DEFAULT_MAIN_BASE}\n`;
+    text = `FROM ${runtime.baseImage}\n`;
   } else {
     return yield* new BuildPlanError({
       message: "an image source needs `image`, `dockerfile`, `context`, or `main`",
@@ -566,6 +575,7 @@ export const plan = Effect.fn(function* (source: ImageSourceProps, options: Plan
   if (main !== undefined) {
     const bundled = yield* bundleMainProgram({
       source: main,
+      runtime,
       isExternal: options.bootstrap === undefined,
       bootstrap: options.bootstrap ?? ((importPath) => importPath),
     });
@@ -578,7 +588,7 @@ export const plan = Effect.fn(function* (source: ImageSourceProps, options: Plan
         source: { _tag: "Bytes", bytes: file.content },
       });
     }
-    dockerfile = yield* appendToFinalStage(dockerfile, mainLayer(options.port));
+    dockerfile = yield* appendToFinalStage(dockerfile, mainLayer(runtime, options.port));
   }
 
   // 3. Context files every COPY/ADD reaches.

@@ -34,6 +34,7 @@ import {
   UsernameClaimed,
   UsernameTaken,
 } from "./decision-model.ts";
+import { definitionProblems } from "./definition-problems.ts";
 
 const a = AccountId.make("a");
 const b = AccountId.make("b");
@@ -264,34 +265,41 @@ describe("Domain decision, definitions", { tags: ["unit"] }, () => {
     decide: ({ left }) => [left.record(new Opened())],
   }) {}
 
-  it("a model with one implementation per command is valid", () => {
-    class House extends Domain.Model("House", { aggregates: [Door], decisions: [Both] }) {}
-    expect(Domain.verify(House)).toEqual([]);
-    expect(House.commands.map((command) => command.tag)).toEqual(["Open", "OpenBoth"]);
-  });
+  it("a model with one implementation per command is valid", () =>
+    Effect.gen(function* () {
+      class House extends Domain.Model("House", { aggregates: [Door], decisions: [Both] }) {}
+      expect(yield* definitionProblems(House.layer(Layer.empty))).toEqual([]);
+      expect(House.commands.map((command) => command.tag)).toEqual(["Open", "OpenBoth"]);
+    }).pipe(Effect.runPromise));
 
-  it("two decisions for one command is a definition error", () => {
-    class House extends Domain.Model("House", {
-      aggregates: [Door],
-      // @ts-expect-error OpenBoth is already implemented by another decision
-      decisions: [Both, BothAgain],
-    }) {}
-    expect(Domain.verify(House).map((problem) => problem.reason._tag)).toEqual([
-      "ImplementedTwice",
-    ]);
-  });
+  it("two decisions for one command is a definition error", () =>
+    Effect.gen(function* () {
+      class House extends Domain.Model("House", {
+        aggregates: [Door],
+        // @ts-expect-error OpenBoth is already implemented by another decision
+        decisions: [Both, BothAgain],
+      }) {}
+      expect(yield* definitionProblems(House.layer(Layer.empty))).toMatchObject([
+        { reason: { _tag: "ImplementedTwice" } },
+      ]);
+    }).pipe(Effect.runPromise));
 
-  it("reading an aggregate the model doesn't host is a definition error", () => {
-    class House extends Domain.Model("House", {
-      aggregates: [Door],
-      // @ts-expect-error OpenBoth reads Window, which is not in the model's aggregates
-      decisions: [Stray],
-    }) {}
-    expect(Domain.verify(House).map((problem) => problem.reason._tag)).toEqual(["UnknownRead"]);
-    expect(Domain.verify(House).map((problem) => problem.reason.message)).toEqual([
-      "OpenBoth reads Window, which is not in the Domain",
-    ]);
-  });
+  it("reading an aggregate the model doesn't host is a definition error", () =>
+    Effect.gen(function* () {
+      class House extends Domain.Model("House", {
+        aggregates: [Door],
+        // @ts-expect-error OpenBoth reads Window, which is not in the model's aggregates
+        decisions: [Stray],
+      }) {}
+      expect(yield* definitionProblems(House.layer(Layer.empty))).toMatchObject([
+        {
+          reason: {
+            _tag: "UnknownRead",
+            message: "OpenBoth reads Window, which is not in the Domain",
+          },
+        },
+      ]);
+    }).pipe(Effect.runPromise));
 
   it("a decision's reads are known without a command", () => {
     expect(Both.reads).toEqual({ left: Door, right: Door });

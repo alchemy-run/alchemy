@@ -441,6 +441,29 @@ The canonical reference reconcilers cover the common shapes:
 
 Existence-only resources (Lambda Permission, EC2 Route, EC2 RouteTableAssociation, IAM AccessKey, etc.) have nothing mutable beyond their identity. Their reconciler is just observe → if missing, create. There is no sync step.
 
+# Container image sources
+
+Every resource that runs a container takes its image from the same three props, so moving a workload between clouds changes the resource, not its source. Exactly one source is set:
+
+```ts
+// a prebuilt image
+yield* AWS.ECS.Task("Api", { image: "ghcr.io/acme/api@sha256:…" });
+// your own Dockerfile, built by the platform
+yield* Cloudflare.Container("Api", { context: "./api", dockerfile: "./api/Dockerfile.prod" });
+// a bundled program, optionally on a base image
+yield* AWS.ECS.Task("Api", { main: import.meta.url, image: "oven/bun:1" }, impl);
+```
+
+Rules:
+
+- **Use the shared shapes** from `@alchemy.run/docker/ImageSource`: `RegistryImageSource` (`image`), `DockerfileImageSource` (`context`, `dockerfile`) and `BundledImageSource` (`main`). A package that has `@alchemy.run/docker` only as an optional peer declares the same keys structurally instead of importing them into its root types.
+- **Same semantics everywhere.** `context` defaults to `.` and is relative to where the deploy runs. `dockerfile` is a path relative to where the deploy runs (default `${context}/Dockerfile`), or inline content (`Dockerfile.inline`) built in an empty context. `image` beside `main` is the base the program runs on (`FROM`); alone, it runs as is.
+- **`image` is a reference, not a pull policy.** A tag is resolved once per reference (ECS and Kubernetes mirror content-addressed on the ref), so docs tell users to pin a digest. `Cloudflare.Container` is the one exception: it re-pulls `image` on every deploy.
+- **Accept Outputs.** `image: someImage.imageRef` from a `Docker.Image` in the same stack must work, with the dependency ordering that implies. Resource props get this for free; a constructor taking plain props declares `Input<string>`.
+- **Align names, not options.** Build options (`build.args`, `secrets`, cache) are offered only where the platform's builder supports them. A platform-specific source (Rivet's `crate`) sits beside the three, never instead of one.
+
+References: [AWS.ECS.Task](./packages/aws/src/ECS/Task.ts), [Cloudflare.Container](./packages/cloudflare/src/Containers/ContainerApplication.ts), [Kubernetes.Deployment](./packages/kubernetes/src/Deployment.ts), [Rivet.DurableObject](./packages/rivet/src/DurableObject.ts).
+
 # SQL database migrations
 
 Every SQL database resource applies schema migrations at deploy time through a `migrations` prop. A database resource without it is a gap to fill. Users get the same DX on every cloud:
@@ -842,6 +865,7 @@ Choose the deployment-based pattern that fits the behavior under test:
 Keep regression cases in the relevant existing resource or binding suite. A Worker lifecycle feature belongs in `test/Cloudflare/Workers/Worker.test.ts`; binding fixtures belong beside their owning suite in `fixtures/`.
 
 - Assume Docker is installed. Never `skipIf`-gate a test on Docker availability; a missing daemon fails the test.
+- Never bind a fixed host port, cluster name, or other machine-wide name in a local test: two worktrees, or two suites in one run, collide on it. Publish on a port the platform picks (`ports: [{ internal: 3000 }]`, `port: 0`, `registryPort: 0`, `hostPort: 0`), read it back from the deployed resource's attributes, and let the engine name the resource from the stack and stage.
 - Tag every test with its kind — `unit` (no I/O beyond the machine), `local` (runs on this machine: emulators, `dev: true`, Docker) or `live` (touches a real cloud, including `stack.plan`, which reads) — on the test or an enclosing `describe`, alongside `provider:<cloud>` / `provider:<cloud>:<service>`. `pnpm lint:tests` enforces it.
 - Start and end `test.provider` cases with `stack.destroy()`. Fixture suites deploy in `beforeAll` and destroy in `afterAll`. Use deterministic resource identities and verify deletion through the cloud API.
 - Exercise create, update, redeploy, and removal through the stack. **Do not mock HTTP or SDK responses, invoke provider lifecycle methods directly, or call extracted reconciliation helpers as a substitute for a deployment.**
@@ -1367,6 +1391,20 @@ A package can ship an agent skill under `packages/{package}/skills/{name}/` (e.g
 When you automatically open a PR, it MUST follow this structure:
 
 - **Title**: Use conventional commit format (e.g. `fix(website): mobile theme metas`, `feat(aws/s3): add bucket lifecycle rules`).
+- **Breaking changes**: When a PR removes, renames or reshapes a public API, or changes behavior users rely on, mark the title with `!` (`feat(effect-cluster)!: …`) and put a `> [!CAUTION]` callout right after the opening summary. The callout must show how to adapt, as a ` ```diff ` of the old and new usage, and list what to look out for: behavior that changes without a type error, and defaults that differ from before. Say which usages are unaffected.
+
+  ````md
+  > [!CAUTION]
+  > **Breaking:** `EcsPool`'s `securityGroupId` became `securityGroup`. To keep the same group, look it up by id:
+  >
+  > ```diff
+  > -  securityGroupId,
+  > +  securityGroup: EC2.SecurityGroup.lookup({ groupId: securityGroupId }),
+  > ```
+  >
+  > Look out for:
+  > - **Leaving `securityGroup` out** creates a new group, which your database doesn't admit yet.
+  ````
 - **Description heading levels**: NEVER use `#` or `##` in the PR description. The smallest heading allowed is `###`. The PR description must NOT begin with its own title heading — GitHub already renders the PR title above it.
 - **Content**: Aim for the minimal content needed to convey the idea.
   - Use simple sentences. If there are multiple discrete changes, use bullet points.

@@ -352,15 +352,13 @@ export const BindingProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           registry.createProjectsLocationsBindings({
+            source,
+            target,
+            displayName,
+            description,
+            authProviderBinding,
             parent,
             bindingId,
-            body: {
-              source,
-              target,
-              displayName,
-              description,
-              authProviderBinding,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -400,16 +398,13 @@ export const BindingProvider = () =>
       if (mask.length > 0) {
         const operation = yield* retryTransient(
           registry.patchProjectsLocationsBindings({
+            displayName,
+            description,
+            source,
+            target,
+            authProviderBinding,
             name: currentName,
             updateMask: mask,
-            body: {
-              name: currentName,
-              displayName,
-              description,
-              source,
-              target,
-              authProviderBinding,
-            },
           }),
         );
         yield* waitForOperation(operation);

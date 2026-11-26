@@ -314,15 +314,13 @@ export const NetworkPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsNetworkPolicies({
+            edgeServicesCidr,
+            vmwareEngineNetwork,
+            internetAccess: { enabled: internetEnabled },
+            externalIp: { enabled: externalIpEnabled },
+            description: desiredDescription,
             parent: parentOf(env.project, location),
             networkPolicyId,
-            body: {
-              edgeServicesCidr,
-              vmwareEngineNetwork,
-              internetAccess: { enabled: internetEnabled },
-              externalIp: { enabled: externalIpEnabled },
-              description: desiredDescription,
-            },
           })
           .pipe(
             Effect.retry({
@@ -355,15 +353,12 @@ export const NetworkPolicyProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* vmwareengine.patchProjectsLocationsNetworkPolicies({
+          description: desiredDescription,
+          edgeServicesCidr,
+          internetAccess: { enabled: internetEnabled },
+          externalIp: { enabled: externalIpEnabled },
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            description: desiredDescription,
-            edgeServicesCidr,
-            internetAccess: { enabled: internetEnabled },
-            externalIp: { enabled: externalIpEnabled },
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

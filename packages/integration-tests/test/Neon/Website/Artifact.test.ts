@@ -3,6 +3,7 @@ import { gzipSync } from "node:zlib";
 import { packageWebsiteArtifact, stageWebsiteArtifact } from "@alchemy.run/neon/Website/Artifact";
 import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -83,7 +84,13 @@ for (const kind of [
   );
 }
 
-for (const sensitive of [".env.production", ".alchemy/state file.json", "private.pem"])
+// `.alchemy-ci` is the runtime directory `ALCHEMY_DIR` moved it to.
+for (const sensitive of [
+  ".env.production",
+  ".alchemy/state file.json",
+  ".alchemy-ci/state file.json",
+  "private.pem",
+])
   for (const alias of [false, true])
     it.effect(
       `rejects traced ${JSON.stringify(sensitive)}${alias ? " through a symlink" : ""} with a sanitized filename`,
@@ -103,6 +110,11 @@ const value = readFileSync(new URL(${JSON.stringify(`../${dependency}`)}, import
 export default { fetch: () => new Response(value) };`,
           );
           const result = yield* stageWebsiteArtifact({ root, distDir: dist, serverEntry }).pipe(
+            Effect.provideService(AlchemyContext, {
+              dotAlchemy: path.join(root, ".alchemy-ci"),
+              dev: false,
+              adopt: false,
+            }),
             Effect.result,
           );
           expect(Result.isFailure(result)).toBe(true);

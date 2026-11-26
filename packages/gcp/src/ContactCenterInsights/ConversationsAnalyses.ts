@@ -222,10 +222,8 @@ export const ConversationsAnalysesProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsConversationsAnalyses({
+            annotatorSelector: news.annotatorSelector,
             parent: news.parent,
-            body: {
-              annotatorSelector: news.annotatorSelector,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

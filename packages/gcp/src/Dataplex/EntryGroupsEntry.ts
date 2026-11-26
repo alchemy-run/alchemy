@@ -439,15 +439,13 @@ export const EntryGroupsEntryProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsEntryGroupsEntries({
+            entryType: news.entryType,
+            parentEntry: news.parentEntry,
+            fullyQualifiedName: news.fullyQualifiedName,
+            aspects: news.aspects,
+            entrySource: desiredSource,
             parent: resolved.parent,
             entryId,
-            body: {
-              entryType: news.entryType,
-              parentEntry: news.parentEntry,
-              fullyQualifiedName: news.fullyQualifiedName,
-              aspects: news.aspects,
-              entrySource: desiredSource,
-            },
           })
           .pipe(
             retryQuota,
@@ -479,6 +477,9 @@ export const EntryGroupsEntryProvider = () =>
       if (labelsChanged || fqnChanged || aspectsChanged || sourceChanged) {
         current = yield* retryQuota(
           dataplex.patchProjectsLocationsEntryGroupsEntries({
+            fullyQualifiedName: news.fullyQualifiedName,
+            aspects: news.aspects ?? current.aspects,
+            entrySource: desiredSource,
             name: current.name ?? name,
             updateMask: [
               fqnChanged ? "fullyQualifiedName" : undefined,
@@ -487,12 +488,6 @@ export const EntryGroupsEntryProvider = () =>
             ]
               .filter((field): field is string => field !== undefined)
               .join(","),
-            body: {
-              name: current.name ?? name,
-              fullyQualifiedName: news.fullyQualifiedName,
-              aspects: news.aspects ?? current.aspects,
-              entrySource: desiredSource,
-            },
           }),
         );
       }

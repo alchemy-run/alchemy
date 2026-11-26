@@ -391,9 +391,9 @@ export const InstancesDatabasesBackupScheduleProvider = () =>
       if (current === undefined) {
         current = yield* spanner
           .createProjectsInstancesDatabasesBackupSchedules({
+            ...toBody(news),
             parent,
             backupScheduleId,
-            body: toBody(news),
           })
           .pipe(
             Effect.catchTag("Conflict", () => getByName(name)),
@@ -434,9 +434,9 @@ export const InstancesDatabasesBackupScheduleProvider = () =>
         }
         current = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesDatabasesBackupSchedules({
+            ...patchBody,
             name,
             updateMask: fieldMask.join(","),
-            body: patchBody,
           }),
         );
       }

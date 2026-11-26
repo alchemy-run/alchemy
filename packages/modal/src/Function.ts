@@ -161,7 +161,7 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  * ```
  *
  * ### Async program
- * **Example:** A plain HTTP server, no Effect (it runs on Bun)
+ * **Example:** A plain HTTP server, no Effect
  * ```typescript
  * // src/Embed.ts
  * import * as Modal from "@alchemy.run/modal";
@@ -177,17 +177,17 @@ export type FunctionRuntimeContext = HostRuntimeContext;
  *
  * ```typescript
  * // src/embed-server.ts
+ * import { createServer } from "node:http";
+ * import { text } from "node:stream/consumers";
  * import type { EmbedEnv } from "./Embed.ts";
  *
  * const env = process.env as unknown as EmbedEnv;
  *
- * Bun.serve({
- *   port: Number(process.env.PORT),
- *   async fetch(request) {
- *     const { args } = (await request.json()) as { args: [string] };
- *     return Response.json({ model: env.MODEL, tokens: args[0].split(/\s+/).length });
- *   },
- * });
+ * createServer(async (request, response) => {
+ *   const { args } = JSON.parse(await text(request)) as { args: [string] };
+ *   response.setHeader("content-type", "application/json");
+ *   response.end(JSON.stringify({ model: env.MODEL, tokens: args[0].split(/\s+/).length }));
+ * }).listen(Number(process.env.PORT));
  * ```
  *
  * ### Web endpoints

@@ -25,6 +25,11 @@ export interface ServicesPoolOptions extends ServicesPoolSettings {
  * out: callers reach every stream through the control plane's gateway, with
  * its token. Works with any control plane it can reach.
  *
+ * Railway's API has no way to keep a variable's value out of the
+ * Service's configuration: a variable can only be sealed in the dashboard.
+ * So the control plane's token is a service variable, readable by
+ * anyone who can read the project's variables.
+ *
  * ### Running Rivet Services on Railway
  * **Example:** Services for a control plane elsewhere
  * ```typescript
@@ -39,7 +44,9 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
     id,
     settings: options,
     expected: "a reachable control plane",
-    network: (cluster) => cluster.network ?? { kind: "none" as const },
+    // The nodes join no network of the control plane's, so they connect to its
+    // public endpoint, never a private address they can't reach.
+    network: () => ({ kind: "none" as const }),
     nodes: Effect.fn(function* (nodes) {
       const project = options.project ?? (yield* Railway.Project(`${id}Project`, {}));
       yield* Railway.Service(`${id}Nodes`, {

@@ -15,7 +15,6 @@ import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import {
   imageSourceKind,
-  makeBunBootstrap,
   makeImageSource,
   type BundledImageSource,
   type ImageSourceLike,
@@ -46,7 +45,6 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
     const plan = yield* imageSource.watchMain({
       source: source as BundledImageSource,
       isExternal: options.isExternal,
-      bootstrap: makeBunBootstrap(source.handler ?? "default"),
     });
     // Rolldown's first build runs when the watcher starts, before any file
     // changed; the deploy already built that exact graph. Only a build that

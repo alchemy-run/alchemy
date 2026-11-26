@@ -333,8 +333,8 @@ export const AppgroupsAppProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsAppgroupsApps({
+            ...body,
             parent: groupParent(organizationId, appgroupId),
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -351,10 +351,7 @@ export const AppgroupsAppProvider = () =>
         !sameJson(current.attributes ?? [], desiredAttributes);
 
       if (needsUpdate) {
-        current = yield* apigee.updateOrganizationsAppgroupsApps({
-          name,
-          body,
-        });
+        current = yield* apigee.updateOrganizationsAppgroupsApps({ ...body, name });
       }
 
       if ((current.status ?? "approved") !== desiredStatus) {

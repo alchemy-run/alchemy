@@ -66,3 +66,40 @@ export class InstanceStorage extends Context.Service<
     transaction<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
   }
 >()("Cluster.InstanceStorage") {}
+
+/**
+ * The header a call carries the id of a WebSocket under, when a caller
+ * opened one to the instance's object with `EntityNamespace.connect`. The
+ * call's handler takes the socket with {@link InstanceSockets}'s `accept`.
+ */
+export const SOCKET_HEADER = "x-cluster-socket";
+
+/** A WebSocket held by the object an entity instance runs on. */
+export interface InstanceSocket {
+  send(message: string): Effect.Effect<void>;
+  close(code: number, reason: string): Effect.Effect<void>;
+  /** Keep a value with the socket: it outlives the instance in memory, as the socket does. */
+  serializeAttachment(value: unknown): void;
+  deserializeAttachment<T>(): T | null;
+}
+
+/**
+ * The WebSockets of the object an entity instance runs on, on pools whose
+ * instances each have an object that holds them
+ * (`ClusterCloudflare.DurableObjectPool`: hibernatable WebSockets of the
+ * instance's Durable Object). A socket stays open while the object is
+ * evicted, and `all` finds it again once the instance runs. Messages from
+ * the client are ignored. On other pools, the service is absent.
+ */
+export class InstanceSockets extends Context.Service<
+  InstanceSockets,
+  {
+    /**
+     * Take the socket a call carries the id of under {@link SOCKET_HEADER}.
+     * A socket no handler takes is closed once its call ends.
+     */
+    readonly accept: (id: string) => Effect.Effect<InstanceSocket | undefined>;
+    /** Every socket the object holds. */
+    readonly all: Effect.Effect<ReadonlyArray<InstanceSocket>>;
+  }
+>()("Cluster.InstanceSockets") {}

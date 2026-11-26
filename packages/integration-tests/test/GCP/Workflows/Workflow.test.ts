@@ -103,7 +103,6 @@ test.provider(
 
       const execution = yield* workflowexecutions.createProjectsLocationsWorkflowsExecutions({
         parent: created.name,
-        body: {},
       });
       expect(execution.name).toEqual(expect.any(String));
       const finished = yield* waitUntilSucceeded(execution.name!);

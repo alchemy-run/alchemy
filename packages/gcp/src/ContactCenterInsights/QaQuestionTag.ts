@@ -227,12 +227,10 @@ export const QaQuestionTagProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsQaQuestionTags({
+            displayName,
+            qaQuestionIds: qaQuestionIds.length > 0 ? qaQuestionIds : undefined,
             parent,
             qaQuestionTagId,
-            body: {
-              displayName,
-              qaQuestionIds: qaQuestionIds.length > 0 ? qaQuestionIds : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? (yield* findByDisplayName(parent, displayName));
@@ -248,16 +246,13 @@ export const QaQuestionTagProvider = () =>
 
       if (displayChanged || questionsChanged) {
         const operation = yield* cci.patchProjectsLocationsQaQuestionTags({
+          displayName,
+          qaQuestionIds,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "qa_question_tag_name" : undefined,
             questionsChanged ? "qa_question_ids" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            qaQuestionIds,
-          },
         });
         current = (yield* waitAndGet(currentName, operation)) ?? current;
       }
