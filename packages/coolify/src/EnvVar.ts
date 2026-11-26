@@ -27,7 +27,8 @@ export interface EnvVarProps {
    */
   value: string | Redacted.Redacted<string>;
   /**
-   * Set the variable on preview deployments instead of the main one.
+   * Set the variable on preview deployments instead of the main one. Only
+   * applications have preview deployments; databases and services ignore it.
    * Changing it replaces the variable.
    * @default false
    */
@@ -204,17 +205,19 @@ export const EnvVarProvider = () =>
       const create = (kind: Kind, uuid: string, input: Write) => {
         const exists = () => Effect.succeed(false);
         const created = () => true;
+        // Only applications have preview deployments.
+        const { is_preview: _preview, ...rest } = input;
         return kind === "application"
           ? createApp({ uuid, ...input }).pipe(
               Effect.map(created),
               Effect.catchTag("EnvironmentVariableAlreadyExists", exists),
             )
           : kind === "database"
-            ? createDb({ uuid, ...input }).pipe(
+            ? createDb({ uuid, ...rest }).pipe(
                 Effect.map(created),
                 Effect.catchTag("EnvironmentVariableAlreadyExists", exists),
               )
-            : createSvc({ uuid, ...input }).pipe(
+            : createSvc({ uuid, ...rest }).pipe(
                 Effect.map(created),
                 Effect.catchTag("EnvironmentVariableAlreadyExists", exists),
               );
@@ -222,10 +225,10 @@ export const EnvVarProvider = () =>
 
       const update = (kind: Kind, uuid: string, input: Write) => {
         if (kind === "application") return updateApp({ uuid, ...input }).pipe(Effect.asVoid);
-        // Databases have no preview deployments.
-        const { is_preview, ...rest } = input;
+        // Only applications have preview deployments.
+        const { is_preview: _preview, ...rest } = input;
         if (kind === "database") return updateDb({ uuid, ...rest }).pipe(Effect.asVoid);
-        return updateSvc({ uuid, is_preview, ...rest }).pipe(Effect.asVoid);
+        return updateSvc({ uuid, ...rest }).pipe(Effect.asVoid);
       };
 
       const remove = (kind: Kind, uuid: string, envUuid: string) =>
