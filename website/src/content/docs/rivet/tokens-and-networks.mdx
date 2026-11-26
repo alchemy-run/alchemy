@@ -19,6 +19,10 @@ Everything that talks to the control plane holds it:
 
 The token can do anything on the control plane, in every namespace. Keep a runtime's environment as secret as the token itself. Calls send it in the `x-rivet-token` header, never in the URL, so it stays out of proxy and load balancer logs.
 
+The engine can also issue a token for one namespace, but such a token lasts a day at most. Nodes and callers hold their token for as long as they run, so they hold the admin token. To keep two apps apart, give each a [control plane of its own](/rivet/namespaces#a-control-plane-per-environment).
+
+The token is not a cloud credential. It reaches the engines' API and nothing else: not the machines, disks or bucket the control plane runs on.
+
 ## An HTTPS address without a domain
 
 Every control plane you run serves its gateway over HTTPS, at an address its cloud provides. You don't need a domain of your own.
@@ -61,9 +65,62 @@ A node inside the control plane's own network, like an `EcsPool` in the VPC of a
 
 A [Rivet Services](/rivet/durable-streams) node also serves Durable Streams on a port of its own, and that port checks no token. Services pools publish no port, and callers reach every stream through the gateway, with the token. Don't open that port to anyone.
 
+## Keep app deploys away from the control plane
+
+A stack that declares a control plane creates its machines, disks, bucket and network, so the identity that deploys it needs rights over all of them. Put the control plane and the app in one stack, and the identity that ships app code every day holds those rights too.
+
+Deploy the control plane from a stack of its own, in a cloud account or project of its own. It changes rarely, so a person or a protected pipeline deploys it:
+
+```typescript title="control-plane/alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as GCP from "@alchemy.run/gcp";
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetGCP from "@alchemy.run/rivet/GCP";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet");
+
+export default Alchemy.Stack(
+  "RivetControlPlane",
+  {
+    providers: Layer.mergeAll(GCP.providers(), Rivet.providers()),
+    state: GCP.state(),
+  },
+  Effect.gen(function* () {
+    const cluster = yield* Rivet.Cluster;
+    return { endpoint: cluster.endpoint };
+  }).pipe(Effect.provide(Cluster)),
+);
+```
+
+The app's stack joins it by address and token, with [`Rivet.ControlPlane`](/rivet/control-planes#use-one-you-already-run):
+
+```typescript title="app/src/cluster.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetGCP from "@alchemy.run/rivet/GCP";
+import * as Config from "effect/Config";
+import * as Layer from "effect/Layer";
+
+export const Cluster = Rivet.ControlPlane("Rivet", {
+  endpoint: "https://rivet-proxy-abc123-uc.a.run.app",
+  token: Config.Redacted("RIVET_TOKEN"),
+});
+
+export const Default = RivetGCP.CloudRunPool("Default").pipe(Layer.provide(Cluster));
+```
+
+The app deploy creates its namespace, its pools and its callers, and none of the control plane's resources. Its identity needs rights only where the app runs. Its nodes connect out to the control plane's HTTPS address, so the two share no network.
+
+The app deploy still holds the admin token, and so do its nodes and callers. A leaked deploy can read and change every namespace on that control plane. It cannot stop the engines, read their disks or bucket, or change their network: those take the cloud's credentials, which it doesn't have.
+
+[GCP](/rivet/gcp#deploy-the-control-plane-on-its-own) shows the projects, the identities and where the token is kept.
+
 ## In CI
 
-A deploy needs the credentials of the cloud the control plane runs on, read the way that provider reads them in CI: `AWS_*` for AWS, `HCLOUD_TOKEN` for Hetzner, and so on. A control plane you run creates its own admin token, so it needs nothing from Rivet.
+A deploy that declares a control plane needs the credentials of the cloud it runs on, read the way that provider reads them in CI: `AWS_*` for AWS, `HCLOUD_TOKEN` for Hetzner, and so on. A control plane you run creates its own admin token, so it needs nothing from Rivet.
+
+A deploy that [joins a control plane](#keep-app-deploys-away-from-the-control-plane) needs its address and admin token, and the credentials of the cloud its own pools and callers run on.
 
 A Rivet Cloud control plane needs a cluster token from the Rivet dashboard and the cluster's name. `RivetCloud.ControlPlane` reads them from the environment:
 

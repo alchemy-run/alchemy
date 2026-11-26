@@ -80,6 +80,72 @@ On a [`Rivet.ControlPlane`](/rivet/control-planes#reach-it-at-a-private-address)
 network: RivetGCP.Network(GCP.Compute.Subnetwork.lookup({ subnetworkName: "rivet" })),
 ```
 
+## Deploy the control plane on its own
+
+The identity that deploys a `ComputeEngineControlPlane` manages its instances, disks, bucket, firewall rules, connector and proxy. Keep those rights away from the identity that deploys your app: give the control plane a project and a stack of its own.
+
+```typescript title="control-plane/alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as GCP from "@alchemy.run/gcp";
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetGCP from "@alchemy.run/rivet/GCP";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet");
+
+export default Alchemy.Stack(
+  "RivetControlPlane",
+  {
+    providers: Layer.mergeAll(GCP.providers(), Rivet.providers()),
+    state: GCP.state(),
+  },
+  Effect.gen(function* () {
+    const cluster = yield* Rivet.Cluster;
+    // The one thing the app deploy may read in this project.
+    const token = yield* GCP.SecretManager.Secret("AppDeployToken", {
+      secretId: "rivet-admin-token",
+      value: cluster.token,
+    });
+    yield* GCP.IAM.Member("AppDeployTokenAccess", {
+      kind: "secretmanager.secret",
+      name: token.name,
+      role: "roles/secretmanager.secretAccessor",
+      member: "serviceAccount:app-deploy@acme-app.iam.gserviceaccount.com",
+    });
+    return { endpoint: cluster.endpoint };
+  }).pipe(Effect.provide(Cluster)),
+);
+```
+
+Deploy it with a [profile](/environments/profiles) that signs in to the control plane's project, as an identity only that pipeline uses. The deploy prints `endpoint`, the proxy's `run.app` address.
+
+The app's stack declares no control plane. It joins the one that runs, and its pools and callers go in the app's project:
+
+```typescript title="app/src/cluster.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetGCP from "@alchemy.run/rivet/GCP";
+import * as Config from "effect/Config";
+import * as Layer from "effect/Layer";
+
+export const Cluster = Rivet.ControlPlane("Rivet", {
+  endpoint: "https://rivet-proxy-abc123-uc.a.run.app",
+  token: Config.Redacted("RIVET_TOKEN"),
+});
+
+export const Default = RivetGCP.CloudRunPool("Default").pipe(Layer.provide(Cluster));
+```
+
+In CI, the app deploy reads the token as itself:
+
+```sh
+export RIVET_TOKEN="$(gcloud secrets versions access latest --secret rivet-admin-token --project acme-rivet)"
+```
+
+The app deploy's identity holds roles in the app's project only, and one secret in the control plane's. Roles like `roles/run.admin` in the app's project don't reach the proxy or the engines' service account, because those live in another project.
+
+When both must share a project, a [conditional grant](/providers/gcp/iam#member) can keep a role off some resources, on the services that support IAM Conditions. A project of its own is the simpler wall. See [Tokens and networks](/rivet/tokens-and-networks#keep-app-deploys-away-from-the-control-plane) for what the admin token can and cannot reach.
+
 ## Rivet Services
 
 `ServicesPool` runs [Rivet Services](/rivet/durable-streams) on a Cloud Run worker pool:
