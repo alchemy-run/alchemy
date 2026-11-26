@@ -1,6 +1,6 @@
 import { Docker } from "@alchemy.run/docker/Docker";
 import { buildImageArchive, hashImageArchive } from "@alchemy.run/docker/ImageArchive";
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as Servers from "@distilled.cloud/hetzner/servers";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -71,7 +71,10 @@ export interface ServiceProps extends PlatformProps {
   /**
    * Additional environment variables for the hosted process. Merged after
    * binding-injected `env`. systemd loads them, so keys must be shell-style
-   * names (`[A-Za-z_][A-Za-z0-9_]*`); another fails the deploy.
+   * names (`[A-Za-z_][A-Za-z0-9_]*`); another fails the deploy. The values
+   * are copied over SSH into a file only root on the Server can read, never
+   * into the Server's user data, which every process on it can read from
+   * the metadata service.
    */
   env?: Record<string, any>;
   /**
@@ -296,7 +299,7 @@ export const ServiceProvider = () =>
           const serverId =
             output.serverId ?? (olds !== undefined ? serverIdOf(olds.server) : undefined);
           if (serverId === undefined) return undefined;
-          const live = yield* Hetzner.servers.getServer({ id: serverId }).pipe(
+          const live = yield* Servers.getServer({ id: serverId }).pipe(
             Effect.map(({ server }) => server),
             Effect.catchTag("NotFound", () => Effect.undefined),
           );

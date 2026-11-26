@@ -13,15 +13,16 @@ import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Sink from "effect/Sink";
-import type * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import {
   fromCloudflareFetcher,
   type Fetcher,
   type SocketAddress,
   type SocketOptions,
+  type TcpSocket,
 } from "../Fetcher.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
 import {
   ContainerCrashedError,
   ContainerError,
@@ -67,7 +68,7 @@ export interface ContainerPort {
     ContainerPortError | HttpServerError,
     RuntimeContext
   >;
-  connect(address: SocketAddress | string, options?: SocketOptions): Socket.Socket;
+  connect(address: SocketAddress | string, options?: SocketOptions): TcpSocket;
 }
 
 /** A native process, owned by the scope that called {@link ContainerClient.exec}. */
@@ -172,6 +173,26 @@ export interface ContainerClient {
     binding: Fetcher,
   ): Effect.Effect<void, ContainerError, RuntimeContext>;
 }
+
+/**
+ * The Worker binding that carries a Durable Object-managed Container's
+ * environment (JSON, as one `secret_text`) to the handle that starts it.
+ */
+export const containerEnvBindingName = (id: string) =>
+  `ALCHEMY_CONTAINER_ENV_${id.replaceAll(/[^a-zA-Z0-9]/g, "_")}`;
+
+/** Parse the JSON env a Worker binding carries; anything else carries none. */
+const parseContainerEnv = (raw: unknown): Record<string, string> | undefined => {
+  if (typeof raw !== "string") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, string>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 /**
  * Names the container handle reserves. A container's RPC shape cannot
@@ -320,6 +341,8 @@ export const fromContainer = (
   getContainer: () => cf.Container | undefined,
   /** The key of this Container's image in `ctx.container.images`. */
   imageKey?: string,
+  /** The environment every start of this Container's image receives. */
+  getEnv: () => Record<string, string> | undefined = () => undefined,
 ): ContainerClient => {
   const attached = Effect.suspend(() => {
     const container = getContainer();
@@ -356,14 +379,22 @@ export const fromContainer = (
       : Effect.succeed(ref);
   });
 
-  /** Default `image` to this Container's own image. */
+  /**
+   * Default `image` to this Container's own image, and give the process this
+   * Container's environment. A caller's `env` entries win by name.
+   */
   const withOwnImage = (
     container: cf.Container,
     options: ContainerStartupOptions | undefined,
   ): ContainerStartupOptions | undefined => {
-    if (options?.image !== undefined || options?.containerSnapshot !== undefined) return options;
+    const env = getEnv();
+    const withEnv =
+      env === undefined
+        ? options
+        : ({ ...options, env: { ...env, ...options?.env } } as ContainerStartupOptions);
+    if (options?.image !== undefined || options?.containerSnapshot !== undefined) return withEnv;
     const ref = ownImage(container);
-    return ref === undefined ? options : ({ ...options, image: ref } as ContainerStartupOptions);
+    return ref === undefined ? withEnv : ({ ...withEnv, image: ref } as ContainerStartupOptions);
   };
 
   const start = (options?: ContainerStartupOptions) =>
@@ -538,7 +569,13 @@ export const makeContainerHandle = Effect.fnUntraced(function* <R>(
 ) {
   yield* binding;
   const state = yield* DurableObjectState;
-  const client = fromContainer(() => state.container, id);
+  const env = yield* WorkerEnvironment;
+  // Read per start: the env is a deploy-time binding, absent while planning.
+  const client = fromContainer(
+    () => state.container,
+    id,
+    () => parseContainerEnv((env as Record<string, unknown>)[containerEnvBindingName(id)]),
+  );
   const rpcPort = client.getTcpPort(3000);
   return makeFetchRpcStub<ContainerClient>({
     // RPC methods only run inside the Durable Object, where RuntimeContext is

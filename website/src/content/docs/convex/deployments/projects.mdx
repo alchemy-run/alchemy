@@ -1,0 +1,38 @@
+---
+title: Projects
+description: Create a Convex project, name it, tag it, and decide what happens on destroy.
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+A **project** is one app in your team. It holds the app's deployments, the default environment variables new deployments start with, and the tags you give it. Deleting a project deletes every deployment in it, and their data.
+
+## Create a project
+
+```typescript
+const project = yield* Convex.Project("App");
+```
+
+Alchemy generates a name from your stack, stage and resource. Set your own with `name`:
+
+```typescript
+const project = yield* Convex.Project("App", { name: "my-app", tags: ["web"] });
+```
+
+Alchemy adds its own tag beside yours. Changing `name` renames the project in place.
+
+## Remove a project on destroy
+
+A project stays when you run `alchemy destroy`, because deleting it deletes its deployments and data. Pipe it through `RemovalPolicy.destroy()` to remove it:
+
+```typescript
+const project = yield* Convex.Project("App").pipe(RemovalPolicy.destroy());
+```
+
+A project with a prod deployment refuses to delete until that deployment is gone.
+
+## Take over an existing project
+
+A project with the same name and no Alchemy tag fails with `OwnedBySomeoneElse`. Deploy with `--adopt` to take it over:
+
+<PackageManagers run="alchemy deploy --adopt" />

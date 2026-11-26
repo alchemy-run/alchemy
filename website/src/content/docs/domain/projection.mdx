@@ -218,6 +218,38 @@ A policy is the opposite. It acts on the world, through commands and external sy
   caption="The same event, consumed twice: once into a store that can be rebuilt, once into an action that can't be undone."
 />
 
+## Follow a rewrite
+
+A [rewrite](/domain/rewrite) changes events a projection may already have written to its store. Return `write` and `rewrite` from the Layer: `write` is the handler, and `rewrite` is given each event the key was given earlier that has since changed, as it was (`before`) and as it is now (`after`, or `undefined` when it was removed).
+
+```typescript title="src/Directory.live.ts"
+import * as Effect from "effect/Effect";
+import { Directory } from "./Directory.projection.ts";
+import { DirectoryStore } from "./DirectoryStore.ts";
+
+/** Customers by name, in a search table: a rewritten name is overwritten, a removed one deleted. */
+export const DirectoryLive = Directory.toLayer(
+  Effect.gen(function* () {
+    const store = yield* DirectoryStore;
+    return {
+      write: Effect.fn(function* (batch) {
+        yield* store.put(batch.map(({ key, event }) => ({ id: key.id, name: event.name })));
+      }),
+      rewrite: Effect.fn(function* (batch) {
+        for (const { key, after } of batch) {
+          if (after === undefined) yield* store.remove(key.id);
+          else yield* store.put([{ id: key.id, name: after.name }]);
+        }
+      }),
+    };
+  }),
+);
+```
+
+What a changed event means for your store is yours to say: overwrite a row, remove it, adjust a total by the difference between `before` and `after`, or keep it. The handler runs in order with the key's other inputs, at least once per input, so make it idempotent like `write`.
+
+A model that lists a rewrite won't build until every projection the rewrite reaches has a `rewrite` handler. One that does nothing still has to be written.
+
 ## Read your own write
 
 Your store is eventually consistent with the model. A caller who has just sent a command and wants to read the result from your store waits for the projection first.

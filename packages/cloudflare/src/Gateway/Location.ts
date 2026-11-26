@@ -291,29 +291,31 @@ export const LocationProvider = () =>
       //    are not unique on Cloudflare's side, so there is no
       //    AlreadyExists race to tolerate.
       if (!observed) {
-        const created = yield* zeroTrust
-          .createGatewayLocation({
-            accountId,
-            name,
-            clientDefault: news.clientDefault,
-            ecsSupport: news.ecsSupport,
-            dnsDestinationIpsId: news.dnsDestinationIpsId,
-            endpoints: news.endpoints,
-            networks: news.networks,
-          })
-          // See `isTransientFeatureAccessBlip` — ride out the transient
-          // 401 "does not have access to this feature" edge blip.
-          .pipe(
-            Effect.retry({
-              while: isTransientFeatureAccessBlip,
-              // Capped so the bounded retry stays under ~25s in total.
-              schedule: Schedule.min([
-                Schedule.exponential("500 millis"),
-                Schedule.spaced("4 seconds"),
-              ]),
-              times: 8,
-            }),
-          );
+        const created = yield* (
+          zeroTrust
+            .createGatewayLocation({
+              accountId,
+              name,
+              clientDefault: news.clientDefault,
+              ecsSupport: news.ecsSupport,
+              dnsDestinationIpsId: news.dnsDestinationIpsId,
+              endpoints: news.endpoints,
+              networks: news.networks,
+            })
+            // See `isTransientFeatureAccessBlip` — ride out the transient
+            // 401 "does not have access to this feature" edge blip.
+            .pipe(
+              Effect.retry({
+                while: isTransientFeatureAccessBlip,
+                // Capped so the bounded retry stays under ~25s in total.
+                schedule: Schedule.min([
+                  Schedule.exponential("500 millis"),
+                  Schedule.spaced("4 seconds"),
+                ]),
+                times: 8,
+              }),
+            )
+        );
         return toAttributes(created, accountId);
       }
 
@@ -338,30 +340,32 @@ export const LocationProvider = () =>
         (news.networks !== undefined && !sameNetworks(observed.networks ?? [], news.networks)) ||
         (news.endpoints !== undefined && !sameEndpoints(observed.endpoints, news.endpoints));
       if (dirty) {
-        const updated = yield* zeroTrust
-          .updateGatewayLocation({
-            accountId,
-            locationId: observed.id!,
-            name: desired.name,
-            clientDefault: desired.clientDefault,
-            ecsSupport: desired.ecsSupport,
-            dnsDestinationIpsId: desired.dnsDestinationIpsId,
-            endpoints: desired.endpoints,
-            networks: desired.networks,
-          })
-          // See `isTransientFeatureAccessBlip` — ride out the transient
-          // 401 "does not have access to this feature" edge blip.
-          .pipe(
-            Effect.retry({
-              while: isTransientFeatureAccessBlip,
-              // Capped so the bounded retry stays under ~25s in total.
-              schedule: Schedule.min([
-                Schedule.exponential("500 millis"),
-                Schedule.spaced("4 seconds"),
-              ]),
-              times: 8,
-            }),
-          );
+        const updated = yield* (
+          zeroTrust
+            .updateGatewayLocation({
+              accountId,
+              locationId: observed.id!,
+              name: desired.name,
+              clientDefault: desired.clientDefault,
+              ecsSupport: desired.ecsSupport,
+              dnsDestinationIpsId: desired.dnsDestinationIpsId,
+              endpoints: desired.endpoints,
+              networks: desired.networks,
+            })
+            // See `isTransientFeatureAccessBlip` — ride out the transient
+            // 401 "does not have access to this feature" edge blip.
+            .pipe(
+              Effect.retry({
+                while: isTransientFeatureAccessBlip,
+                // Capped so the bounded retry stays under ~25s in total.
+                schedule: Schedule.min([
+                  Schedule.exponential("500 millis"),
+                  Schedule.spaced("4 seconds"),
+                ]),
+                times: 8,
+              }),
+            )
+        );
         return toAttributes(updated, accountId);
       }
 

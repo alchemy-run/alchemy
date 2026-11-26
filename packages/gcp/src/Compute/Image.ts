@@ -488,10 +488,7 @@ export const ImageProvider = () =>
           return yield* new ImageSourceRequired({ imageName });
         }
         const inserted = yield* compute
-          .insertImages({
-            project: env.project,
-            body: insertBody(imageName, news, desiredLabels),
-          })
+          .insertImages({ ...insertBody(imageName, news, desiredLabels), project: env.project })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitGlobalOperation(env.project, inserted, {
@@ -518,12 +515,10 @@ export const ImageProvider = () =>
       if (familyChanged || descriptionChanged) {
         yield* compute
           .patchImages({
+            family: news.family,
+            description: news.description,
             project: env.project,
             image: imageName,
-            body: {
-              family: news.family,
-              description: news.description,
-            },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = (yield* getByName(env.project, imageName)) ?? current;
@@ -534,12 +529,10 @@ export const ImageProvider = () =>
       if (upsert.length > 0 || removed.length > 0) {
         yield* compute
           .setLabelsImages({
+            labels: desiredLabels,
+            labelFingerprint: current.labelFingerprint,
             project: env.project,
             resource: imageName,
-            body: {
-              labels: desiredLabels,
-              labelFingerprint: current.labelFingerprint,
-            },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         // A read right after setLabels can still return the old labels.

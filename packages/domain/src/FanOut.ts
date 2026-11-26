@@ -419,7 +419,7 @@ export interface RunState<Plan> {
 const RUN_WINDOW = 16;
 
 /** Calls a run's root keeps out at once: one object runs at most six. */
-const RUN_CALLS = 6;
+export const RUN_CALLS = 6;
 
 /** How a run turns its state into passes. */
 export interface RunWork<Plan, P extends Pass, Item> {
@@ -443,6 +443,11 @@ export interface RunWork<Plan, P extends Pass, Item> {
    * it leaves stays one entry: a subtree the relays list and split.
    */
   readonly expand?: (path: string) => boolean;
+  /**
+   * Run first by every pass once the run is past its first phase, `complete`
+   * included: `false` runs it again later.
+   */
+  readonly past?: (target: string) => Effect.Effect<boolean>;
   /** Whether a run already started with `started` serves one asked for with `asked`. */
   readonly samePlan: (started: Plan, asked: Plan) => boolean;
 }
@@ -483,7 +488,10 @@ export const makeRun = <Plan, P extends Pass, Item>(
   const drive = (target: string): Effect.Effect<void> =>
     Effect.gen(function* () {
       const state = yield* getState(target);
-      if (state === undefined || state.phase === "complete") return;
+      if (state === undefined) return;
+      if (run.past !== undefined && state.phase !== run.firstPhase && !(yield* run.past(target)))
+        yield* jobs.schedule(`drive:${target}`, options.againMillis);
+      if (state.phase === "complete") return;
       const started = yield* Clock.currentTimeMillis;
       const deadline = started + options.waitMillis;
       // One try at everything: every round runs in this pass, whatever the clock says.
@@ -600,16 +608,19 @@ export const makeRun = <Plan, P extends Pass, Item>(
         );
       }
       const phase = run.nextPhase(state);
-      yield* storage.put({
-        [stateKey(target)]: { plan: state.plan, phase, window } satisfies RunState<Plan>,
-        [progressKey(target)]: {
-          ...progress,
-          phase,
-          updatedAt: yield* Clock.currentTimeMillis,
-        } satisfies Progress,
-      });
-      if (phase !== "complete") yield* jobs.schedule(`drive:${target}`, 0);
-      else yield* clearPrefix(`rd:${enc(target)}:`);
+      const updatedAt = yield* Clock.currentTimeMillis;
+      // Exclusive, so a caller that reads the phase in its own exclusive section
+      // sees it either before this or after it.
+      yield* storage.exclusive(
+        storage.put({
+          [stateKey(target)]: { plan: state.plan, phase, window } satisfies RunState<Plan>,
+          [progressKey(target)]: { ...progress, phase, updatedAt } satisfies Progress,
+        }),
+      );
+      if (phase === "complete") yield* clearPrefix(`rd:${enc(target)}:`);
+      // The next pass, or (complete) only what `past` still has to do.
+      if (phase !== "complete" || run.past !== undefined)
+        yield* jobs.schedule(`drive:${target}`, 0);
     });
 
   const clearPrefix = (prefix: string) =>

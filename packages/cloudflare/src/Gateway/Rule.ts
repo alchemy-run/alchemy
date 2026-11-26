@@ -429,9 +429,7 @@ interface ObservedRule {
 
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
-const undefArr = <T>(
-  v: ReadonlyArray<T | null> | null | undefined,
-): ReadonlyArray<T> | undefined =>
+const undefArr = <T>(v: ReadonlyArray<T | null> | null | undefined): ReadonlyArray<T> | undefined =>
   v == null ? undefined : (v.filter((x) => x != null) as ReadonlyArray<T>);
 
 const narrowRule = (raw: {

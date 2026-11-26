@@ -123,6 +123,33 @@ writes: [AccountCard],
 
 The model checks this when it's built: a stream listed in two projections' `writes`, or written by a projection keyed differently, is a definition error.
 
+## Rewrite what was appended
+
+A [rewrite](/domain/rewrite) can change an event a stream's entries were made from. In the writer's `rewrite` handler, `rewrite` replaces what was appended for that input: each entry passed takes the place of one appended before and keeps its `seq`, and passing none removes them.
+
+```typescript title="packages/domain/src/Account/AccountCards.projection.ts"
+rewrite: Effect.fn(function* (batch) {
+  for (const input of batch) {
+    const summary = input.state;
+    if (input.after === undefined || !summary?.customerId || !summary.owner) {
+      yield* cards.rewrite(input);
+      continue;
+    }
+    yield* cards.rewrite(
+      input,
+      new CardChanged({
+        customerId: summary.customerId,
+        owner: summary.owner,
+        balance: summary.balance,
+        frozen: summary.frozen,
+      }),
+    );
+  }
+}),
+```
+
+The whole projection is in [Erasing personal data](/domain/erasing-personal-data#say-what-a-rewrite-means-for-each-projection).
+
 ## Read it
 
 Exposed on an Api, a stream offers four reads for a key.
@@ -145,7 +172,7 @@ export const cardReads = Effect.fn(function* (bank: CustomerClient, accountId: A
 });
 ```
 
-Over `Domain.protocolWebSocket`, `watch` and `events` are WebSockets to the Durable Object that owns the key, which pushes each new entry as it's appended.
+Over `Domain.protocolWebSocket`, `watch` and `events` are WebSockets to the instance that owns the key (on Cloudflare, its Durable Object), which pushes each new entry as it's appended.
 
 `peek` also takes `atLeast`, a `stream` and `version`, and waits until the stream's writer has handled that commit. It only covers sources the writer consumes directly. `AccountCards` reads accounts through the `AccountSummary` view, so an account command's receipt is not one its stream can wait for.
 

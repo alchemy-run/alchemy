@@ -1,4 +1,7 @@
-import { DurableObjectCallbacks } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
+import {
+  DurableObjectCallbacks,
+  outsideAlarmPass,
+} from "@alchemy.run/cloudflare/Workers/AlarmCallback";
 import {
   type DurableObjectJurisdiction,
   type DurableObjectLocationHint,
@@ -7,7 +10,11 @@ import {
 import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { makeRpcStub } from "@alchemy.run/cloudflare/Workers/Rpc";
 import { Worker as CloudflareWorker, type Worker } from "@alchemy.run/cloudflare/Workers/Worker";
-import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import {
+  deferredExecutionContext,
+  WorkerEnvironment,
+  WorkerExecutionContext,
+} from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import {
   sleep,
   task,
@@ -38,6 +45,8 @@ import {
   type Host,
   makePlatform,
   type ModelLayout,
+  type Retention,
+  retentionWindows,
   type Namespace,
   ObjectState,
   RUN_ROOT,
@@ -62,8 +71,12 @@ import type { RetiringDomainClass } from "./Migration.ts";
 import type { Providers } from "./Providers.ts";
 import { DeployVersion } from "./Version.ts";
 
+export type { Retention } from "../DurableObjects.ts";
+
 export { Backfill, BackfillFailed, BackfillStillRunning } from "./Backfill.ts";
+export { D1KeyStore, type D1KeyStoreOptions } from "./D1KeyStore.ts";
 export { providers, Providers, type ProviderRequirements } from "./Providers.ts";
+export { SecretKeyWrap } from "./SecretKeyWrap.ts";
 
 /** Where the platform keeps the model's Durable Objects. */
 interface Placement {
@@ -94,6 +107,27 @@ const hinted = (
   jurisdiction: (inside) => hinted(namespace.jurisdiction(inside), locationHint),
 });
 
+/**
+ * Hand `effect` to the current invocation's `waitUntil`: the Durable Object's
+ * inside one, otherwise the Worker event's. A Workflow step, or code outside
+ * any handler, has neither.
+ */
+const handToInvocation = (effect: Effect.Effect<void>): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const runtime = yield* Effect.serviceOption(RuntimeContext);
+    if (Option.isNone(runtime)) return false;
+    const state = yield* Effect.serviceOption(DurableObjectState);
+    // The reference's default is no event: its methods would die.
+    const execution = yield* WorkerExecutionContext;
+    if (Option.isNone(state) && execution === deferredExecutionContext) return false;
+    yield* (
+      Option.isSome(state)
+        ? // Outside the alarm pass, so a callback's alarm isn't held open by it.
+          state.value.waitUntil(outsideAlarmPass(effect))
+        : execution.waitUntil(effect)
+    ).pipe(Effect.provideService(RuntimeContext, runtime.value));
+    return true;
+  });
 /**
  * Forward a WebSocket upgrade (the current request) to the instance that owns
  * `key`, carrying the subscription. The Worker sets the header, overwriting
@@ -261,6 +295,7 @@ const cloudflareHost = (
   sagaRenames: Map<string, InlineDurableObjectProps>,
   /** Version 1: every object of a model in one class, `Billing.Domain` (see `DomainClass.ts`). */
   oneClass: OneClass | undefined,
+  retention: Retention | undefined,
 ): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -388,6 +423,7 @@ const cloudflareHost = (
           }),
         connect: connectTo,
         claimKey: CloudflareWorker,
+        background: handToInvocation,
         // A deploy's backfill: a Workflow starts each new consumer's run, then
         // waits until every one is complete. Reconciliation starts it and waits.
         backfill: ({ modelName }, plansOf) =>
@@ -485,7 +521,7 @@ const cloudflareHost = (
               });
           }),
       };
-      return makePlatform(host);
+      return makePlatform(host, { retention: retention ?? {} });
     }),
   );
 
@@ -586,6 +622,26 @@ const cloudflareHost = (
  * const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));
  * ```
  *
+ * ### Keeping dedupe rows for a while
+ * Receipts, policy delivery marks and cancelled scheduled commands exist only
+ * to drop repeats. Each Durable Object deletes a few that are past their
+ * window every time it commits.
+ *
+ * **Example:** Receipts for a year, delivery marks forever
+ * ```typescript
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ *
+ * const BankLive = Bank.layer(BankPolicies).pipe(
+ *   Layer.provide(
+ *     DomainCloudflare.layerDurableObjects({
+ *       retention: { receipts: "365 days", deliveries: "forever" },
+ *     }),
+ *   ),
+ * );
+ * ```
+ *
  * @layer
  * @provides Domain.Platform
  * @provides WorkflowEngine
@@ -594,6 +650,7 @@ export function layerDurableObjects({
   jurisdiction,
   locationHint,
   backfillTimeout,
+  retention,
 }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
@@ -603,7 +660,8 @@ export function layerDurableObjects({
     backfillTimeout === undefined ? undefined : Duration.toSeconds(backfillTimeout);
   // The same options return the same Layer, so models that each provide it
   // share one platform and one workflow engine.
-  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}`;
+  const windows = retentionWindows(retention);
+  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}|${windows.receipts}|${windows.deliveries}|${windows.cancelled}`;
   const placement: Placement = { jurisdiction, locationHint };
   let platform = platforms.get(key);
   if (platform === undefined)
@@ -625,7 +683,15 @@ export function layerDurableObjects({
           const engine = sagaEngine(placement, sagaRenames, oneClass, timeoutSeconds);
           const legacySagas = new Map<string, string>();
           return Layer.merge(
-            cloudflareHost(placement, timeoutSeconds, version, legacySagas, sagaRenames, oneClass),
+            cloudflareHost(
+              placement,
+              timeoutSeconds,
+              version,
+              legacySagas,
+              sagaRenames,
+              oneClass,
+              retention,
+            ),
             version === undefined ? legacyEngine(legacySagas).pipe(Layer.provide(engine)) : engine,
           );
         }),
@@ -757,6 +823,16 @@ export interface DurableObjectsOptions {
    * @default "30 minutes"
    */
   readonly backfillTimeout?: Duration.Input;
+  /**
+   * How long each Durable Object keeps the rows that only dedupe needs:
+   * command and decision receipts, policy delivery marks, and cancelled
+   * scheduled commands. An object deletes a few rows past their window each
+   * time it commits, so an instance stops growing with its traffic.
+   * `"forever"` keeps a kind of row.
+   *
+   * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days" }
+   */
+  readonly retention?: Retention;
 }
 
 const platforms = new Map<

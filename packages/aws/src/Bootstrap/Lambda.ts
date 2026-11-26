@@ -19,6 +19,7 @@ import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
 import { registerLambdaExtension } from "../Lambda/RuntimeExtension.ts";
+import { SecretEnvLive } from "../Lambda/SecretEnv.ts";
 
 /**
  * Build the sandbox-lifetime layer stack and return the Lambda handler the
@@ -56,6 +57,9 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
     Layer.provideMerge(Endpoint.fromEnv()),
     Layer.provideMerge(platform),
     Layer.provideMerge(RuntimeConfigProviderLive),
+    // Secrets the function's configuration only names, read into
+    // `process.env` first: the runtime ConfigProvider snapshots it.
+    Layer.provideMerge(SecretEnvLive),
     Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
   );
 

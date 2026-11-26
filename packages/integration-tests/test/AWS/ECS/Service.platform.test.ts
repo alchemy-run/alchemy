@@ -502,3 +502,57 @@ test.provider(
     timeout: 420_000,
   },
 );
+
+// `mirror: false` runs a registry image as is: the task definition names the
+// registry image, and no ECR repository is created. Turning mirror on moves
+// the task to the mirrored copy, and destroy removes that repository.
+test.provider(
+  "mirror: false runs a registry image without an ECR copy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const image = "busybox:stable";
+      const deploy = (mirror: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const cluster = yield* Cluster("UnmirroredCluster", {});
+            return yield* Service("Unmirrored", {
+              cluster,
+              image,
+              mirror,
+              command: ["sh", "-c", "while true; do sleep 30; done"],
+              desiredCount: 0,
+            });
+          }),
+        );
+      const imageOf = (taskDefinition: string) =>
+        ecs
+          .describeTaskDefinition({ taskDefinition })
+          .pipe(Effect.map((r) => r.taskDefinition?.containerDefinitions?.[0]?.image));
+      const repositoryMissing = (repositoryName: string) =>
+        ecr.describeRepositories({ repositoryNames: [repositoryName] }).pipe(
+          Effect.as(false),
+          Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(true)),
+        );
+
+      // Unmirrored: the registry image, and no repository to delete on destroy.
+      const direct = yield* deploy(false);
+      expect(yield* imageOf(direct.taskDefinitionArn)).toBe(image);
+      expect(yield* repositoryMissing(direct.repositoryName!)).toBe(true);
+      yield* stack.destroy();
+
+      // Mirroring later switches the task to the ECR copy.
+      yield* deploy(false);
+      const mirrored = yield* deploy(true);
+      expect(mirrored.imageUri).toContain(mirrored.repositoryName!);
+      expect(yield* imageOf(mirrored.taskDefinitionArn)).toBe(mirrored.imageUri);
+      expect(yield* repositoryMissing(mirrored.repositoryName!)).toBe(false);
+
+      yield* stack.destroy();
+      expect(yield* repositoryMissing(mirrored.repositoryName!)).toBe(true);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ecr", "provider:aws:ecs", "live"],
+    timeout: 420_000,
+  },
+);

@@ -208,7 +208,7 @@ export default await bootstrap(entrypoint);
         cwd,
         external: externalOption,
         platform: "node",
-        // The zip runtime is Node (`nodejs22.x` | `nodejs24.x`): resolve with
+        // The zip runtime is Node (`nodejs22.x` | `nodejs24.x` | `nodejs26.x`): resolve with
         // the node conditions and let rolldown supply the import kind. A
         // `bun` condition here would hand a Node function any package's
         // bun-specific entry. (Container-image functions are built by the

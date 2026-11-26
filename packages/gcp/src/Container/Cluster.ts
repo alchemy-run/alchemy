@@ -1073,10 +1073,8 @@ export const ClusterProvider = () =>
         const create = Effect.gen(function* () {
           const created = yield* container
             .createProjectsLocationsClusters({
+              cluster: toCreateBody(news, clusterId, desiredLabels, autopilot, env.project),
               parent: `projects/${env.project}/locations/${location}`,
-              body: {
-                cluster: toCreateBody(news, clusterId, desiredLabels, autopilot, env.project),
-              },
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
@@ -1134,11 +1132,9 @@ export const ClusterProvider = () =>
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       if (labelsChanged) {
         const labeled = yield* container.setResourceLabelsProjectsLocationsClusters({
+          resourceLabels: desiredLabels,
+          labelFingerprint: live.labelFingerprint,
           name,
-          body: {
-            resourceLabels: desiredLabels,
-            labelFingerprint: live.labelFingerprint,
-          },
         });
         yield* waitForOperation(env.project, location, labeled);
         live = yield* waitUntilReady(name);
@@ -1153,13 +1149,11 @@ export const ClusterProvider = () =>
         (live.monitoringService ?? "") !== (desiredMonitoring ?? "")
       ) {
         const serviced = yield* container.updateProjectsLocationsClusters({
-          name,
-          body: {
-            update: {
-              desiredLoggingService: desiredLogging,
-              desiredMonitoringService: desiredMonitoring,
-            },
+          update: {
+            desiredLoggingService: desiredLogging,
+            desiredMonitoringService: desiredMonitoring,
           },
+          name,
         });
         yield* waitForOperation(env.project, location, serviced);
         live = yield* waitUntilReady(name);
@@ -1175,10 +1169,7 @@ export const ClusterProvider = () =>
       // GKE applies exactly one `desired*` field per update request.
       const applyUpdate = (update: container.ClusterUpdate) =>
         Effect.gen(function* () {
-          const updated = yield* container.updateProjectsLocationsClusters({
-            name,
-            body: { update },
-          });
+          const updated = yield* container.updateProjectsLocationsClusters({ update, name });
           yield* waitForOperation(env.project, location, updated);
           return yield* waitUntilReady(name);
         });
@@ -1283,12 +1274,10 @@ export const ClusterProvider = () =>
       const observedPool = live.workloadIdentityConfig?.workloadPool ?? "";
       if (observedPool !== desiredPool) {
         const identified = yield* container.updateProjectsLocationsClusters({
-          name,
-          body: {
-            update: {
-              desiredWorkloadIdentityConfig: { workloadPool: desiredPool },
-            },
+          update: {
+            desiredWorkloadIdentityConfig: { workloadPool: desiredPool },
           },
+          name,
         });
         yield* waitForOperation(env.project, location, identified);
         live = yield* waitUntilReady(name);

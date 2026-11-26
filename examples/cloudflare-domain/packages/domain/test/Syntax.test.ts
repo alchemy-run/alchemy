@@ -143,7 +143,7 @@ it.effect(
       expect(report.unkept).toEqual([
         "Rename writes state.code, which has to be a string matching the RegExp ^[A-Z]+$: the prover does not read that check, so it is not proved kept",
       ]);
-      expect(Prove.render(report)).toContain("Schema checks not read");
+      expect(Prove.render(report)).toContain("Schema checks not supported");
       // Verifying the aggregate passes, and its report says what was not proved kept.
       const verified = yield* Verify.aggregate(Label, source("Label"));
       expect(Verify.render(verified)).toContain("Rename writes state.code");

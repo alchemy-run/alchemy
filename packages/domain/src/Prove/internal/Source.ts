@@ -2,7 +2,25 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Resolve from "./Resolve.ts";
 import type { Declaration, Import, Module, Node } from "./Value.ts";
+
+/** What the prover is told not to read. */
+export interface Reading {
+  /**
+   * Pure functions the prover does not read. A call gives a value it does
+   * not look inside, and the same value for the same arguments. The prover
+   * does this by itself for an exported function whose body it cannot read;
+   * name one here that it would read, or that it will not take to be pure.
+   */
+  readonly opaque?: ReadonlyArray<(...args: ReadonlyArray<never>) => unknown> | undefined;
+}
+
+/** A function the prover does not read, as the real code calls it. */
+export interface OpaqueFunction {
+  readonly name: string;
+  readonly call: (...args: ReadonlyArray<unknown>) => unknown;
+}
 
 /** A source file could not be read, parsed or loaded. */
 export class LoadError extends Data.TaggedError("LoadError")<{
@@ -20,6 +38,40 @@ export interface Loader {
    * those, the loader gives the caller's class in its place.
    */
   readonly adopt: (root: unknown) => void;
+  /**
+   * An expression written as text, as a node of a file's syntax: a rule kept
+   * from an earlier version of the file, to be read where the file's own
+   * names mean what they mean now.
+   */
+  readonly parse: (file: string, text: string) => Effect.Effect<Node, LoadError>;
+  /**
+   * Whether a value is a function the caller named as opaque. A test runner
+   * may load a file a second time, as functions that are not the caller's:
+   * one a file exports under the name of a function the caller gave stands
+   * for it.
+   */
+  readonly opaque: (value: unknown, exported?: string) => OpaqueFunction | undefined;
+  /**
+   * The functions the proof takes to be pure, by name: the ones the caller
+   * named as opaque, and each one the prover met and could not read.
+   */
+  readonly opaques: () => ReadonlyArray<string>;
+  /** Record a function the prover could not read, and took to be pure. */
+  readonly assume: (name: string) => void;
+  /**
+   * The file a package specifier names, from the file that imports it:
+   * `undefined` when the package is not found.
+   */
+  readonly resolve: (from: Module, specifier: string) => Effect.Effect<string | undefined>;
+  /**
+   * What a package gives the file that imports it, as the runtime loads it:
+   * `undefined` when it is not found or does not load. Only a package of
+   * Node's is loaded, unless the caller named an opaque function.
+   */
+  readonly runtime: (
+    from: Module,
+    specifier: string,
+  ) => Effect.Effect<Readonly<Record<string, unknown>> | undefined>;
 }
 
 /** What a domain class is and its name: two loads of one file give classes that agree on it. */
@@ -81,19 +133,47 @@ const nameOf = (node: Node | undefined): string | undefined =>
         ? node.value
         : undefined;
 
+/** The names a pattern binds, wherever in it they are. */
+const boundBy = (pattern: Node | null | undefined): ReadonlyArray<string> => {
+  if (!pattern) return [];
+  switch (pattern.type) {
+    case "Identifier":
+      return [pattern.name as string];
+    case "ObjectPattern":
+      return (pattern.properties as ReadonlyArray<Node>).flatMap((property) =>
+        boundBy(property.type === "RestElement" ? property.argument : property.value),
+      );
+    case "ArrayPattern":
+      return (pattern.elements as ReadonlyArray<Node | null>).flatMap(boundBy);
+    case "AssignmentPattern":
+      return boundBy(pattern.left);
+    case "RestElement":
+      return boundBy(pattern.argument);
+    default:
+      return [];
+  }
+};
+
 const declare = (declarations: Map<string, Declaration>, node: Node): void => {
   if (node.type === "VariableDeclaration") {
     for (const declarator of node.declarations as ReadonlyArray<Node>) {
       const name = nameOf(declarator.id);
       if (name !== undefined)
         declarations.set(name, { _tag: "Const", init: declarator.init ?? undefined });
+      else if (declarator.init)
+        for (const bound of boundBy(declarator.id))
+          declarations.set(bound, {
+            _tag: "Pattern",
+            pattern: declarator.id,
+            init: declarator.init,
+          });
     }
   } else if (node.type === "FunctionDeclaration") {
     const name = nameOf(node.id);
     if (name !== undefined) declarations.set(name, { _tag: "Function", node });
   } else if (node.type === "ClassDeclaration") {
     const name = nameOf(node.id);
-    if (name !== undefined) declarations.set(name, { _tag: "Class" });
+    if (name !== undefined) declarations.set(name, { _tag: "Class", node });
   }
 };
 
@@ -102,10 +182,54 @@ const declare = (declarations: Map<string, Declaration>, node: Node): void => {
  * bodies, and the loaded module for the classes, schemas and constants the
  * code refers to.
  */
-export const loader: Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Path.Path> =
+export const loader = (
+  reading: Reading = {},
+): Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const resolver = yield* Resolve.make;
+    const given = new Set<unknown>(reading.opaque ?? []);
+    /** The opaque functions by name: what a second load of a file exports one under. */
+    const named = new Map<string, (...args: ReadonlyArray<unknown>) => unknown>();
+    for (const fn of reading.opaque ?? [])
+      if (fn.name !== "") named.set(fn.name, fn as (...args: ReadonlyArray<unknown>) => unknown);
+    const opaque: Loader["opaque"] = (value, exported) => {
+      if (typeof value !== "function") return undefined;
+      const call = value as (...args: ReadonlyArray<unknown>) => unknown;
+      if (given.has(value)) return { name: call.name || exported || "a function", call };
+      const twin = exported === undefined ? undefined : named.get(exported);
+      return twin !== undefined && call.name === exported && twin.length === call.length
+        ? { name: exported!, call: twin }
+        : undefined;
+    };
+    const assumed = new Set(named.keys());
+    const found = new Map<string, string | undefined>();
+    const resolve: Loader["resolve"] = Effect.fn(function* (from: Module, specifier: string) {
+      if (specifier.startsWith("node:")) return undefined;
+      const key = `${from.path}\n${specifier}`;
+      if (!found.has(key)) found.set(key, yield* resolver.bare(from.path, specifier));
+      return found.get(key);
+    });
+    const runtimes = new Map<string, Readonly<Record<string, unknown>> | undefined>();
+    const runtime: Loader["runtime"] = Effect.fn(function* (from: Module, specifier: string) {
+      const builtin = specifier.startsWith("node:");
+      if (given.size === 0 && !builtin) return undefined;
+      const file = builtin ? specifier : yield* resolve(from, specifier);
+      if (file === undefined) return undefined;
+      if (runtimes.has(file)) return runtimes.get(file);
+      const href = builtin
+        ? Effect.succeed(specifier)
+        : path.toFileUrl(file).pipe(Effect.map((url) => url.href));
+      const namespace = yield* href.pipe(
+        Effect.flatMap((href) =>
+          Effect.tryPromise(() => import(href) as Promise<Readonly<Record<string, unknown>>>),
+        ),
+        Effect.orElseSucceed(() => undefined),
+      );
+      runtimes.set(file, namespace);
+      return namespace;
+    });
     const oxc = yield* Effect.tryPromise({
       try: () => import("oxc-parser"),
       catch: (cause) =>
@@ -149,15 +273,6 @@ export const loader: Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Pa
       if (!twins.has(value) && known?.size === 1) pair(value, [...known][0]);
       return twins.get(value) ?? value;
     };
-
-    const resolve = Effect.fn(function* (from: string, specifier: string) {
-      const base = path.resolve(path.dirname(from), specifier);
-      if (/\.[cm]?[jt]sx?$/.test(base)) return base;
-      for (const candidate of [`${base}.ts`, `${base}.tsx`, path.resolve(base, "index.ts")]) {
-        if (yield* fs.exists(candidate).pipe(Effect.orElseSucceed(() => false))) return candidate;
-      }
-      return base;
-    });
 
     const load: Loader["load"] = Effect.fn(function* (file: string) {
       const known = loaded.get(file);
@@ -219,17 +334,35 @@ export const loader: Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Pa
             }
           }
         } else if (statement.type === "ExportAllDeclaration") {
-          if (statement.exportKind === "type" || statement.exported) continue;
-          stars.push(statement.source.value as string);
-          specifiers.add(statement.source.value as string);
+          if (statement.exportKind === "type") continue;
+          const specifier = statement.source.value as string;
+          specifiers.add(specifier);
+          // `export * as packed from "./more"`: the other file, under a name.
+          const exported = nameOf(statement.exported);
+          if (exported === undefined) stars.push(specifier);
+          else imports.set(exported, { specifier, imported: "*" });
+        } else if (statement.type === "ExportDefaultDeclaration") {
+          // What a file exports by default is declared under `default`, and under its own name where it has one.
+          const made = statement.declaration as Node;
+          if (made.type === "FunctionDeclaration" || made.type === "ClassDeclaration") {
+            declare(declarations, made);
+            declarations.set(
+              "default",
+              made.type === "FunctionDeclaration"
+                ? { _tag: "Function", node: made }
+                : { _tag: "Class", node: made },
+            );
+          } else if (!made.type.startsWith("TS") || made.type === "TSAsExpression")
+            declarations.set("default", { _tag: "Const", init: made });
         } else declare(declarations, statement);
       }
       const resolved = new Map<string, string>();
-      for (const specifier of specifiers) {
-        if (specifier.startsWith(".")) resolved.set(specifier, yield* resolve(file, specifier));
-      }
+      for (const specifier of specifiers)
+        if (specifier.startsWith("."))
+          resolved.set(specifier, yield* resolver.relative(file, specifier));
       const module: Module = {
         path: file,
+        source,
         lineStarts: lineStartsOf(source),
         program,
         declarations,
@@ -242,5 +375,30 @@ export const loader: Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Pa
       return module;
     });
 
-    return { load, adopt };
+    const parse: Loader["parse"] = Effect.fn(function* (file: string, text: string) {
+      const parsed = yield* Effect.try({
+        try: () => oxc.parseSync(file, `(${text}\n)`),
+        catch: (cause) => new LoadError({ file, message: `cannot parse: ${String(cause)}` }),
+      });
+      const statement = (parsed.program as unknown as Node).body[0] as Node | undefined;
+      if (parsed.errors.length > 0 || statement?.type !== "ExpressionStatement")
+        return yield* new LoadError({
+          file,
+          message: `cannot parse: ${parsed.errors[0]?.message ?? "not an expression"}`,
+        });
+      let expression = statement.expression as Node;
+      while (expression.type === "ParenthesizedExpression") expression = expression.expression;
+      return expression;
+    });
+
+    return {
+      load,
+      adopt,
+      parse,
+      opaque,
+      opaques: () => [...assumed],
+      assume: (name) => void assumed.add(name),
+      resolve,
+      runtime,
+    };
   });

@@ -121,7 +121,7 @@ export const defaultComputeServiceAccount = (project: string) =>
   );
 
 /** 64-bit FNV-1a, hex. Deterministic and dependency-free. */
-const fnv1a64 = (input: string): string => {
+export const fnv1a64 = (input: string): string => {
   let hash = 0xcbf29ce484222325n;
   for (let index = 0; index < input.length; index++) {
     hash ^= BigInt(input.charCodeAt(index));
@@ -235,11 +235,9 @@ export const ensureHostServiceAccount = (options: {
     if (existing?.email === undefined || existing.email.length === 0) {
       created = yield* iam
         .createProjectsServiceAccounts({
+          accountId,
+          serviceAccount: { displayName: ALCHEMY_HOST_SA_DISPLAY_NAME },
           name: `projects/${options.project}`,
-          body: {
-            accountId,
-            serviceAccount: { displayName: ALCHEMY_HOST_SA_DISPLAY_NAME },
-          },
         })
         .pipe(
           Effect.as(true),

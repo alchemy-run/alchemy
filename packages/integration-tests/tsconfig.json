@@ -72,7 +72,10 @@
     "test/Cloudflare/Workers/fixtures/ambient-types",
     // Foldkit mode overlays are copied over a clone of the SSR fixture;
     // their imports resolve only inside that clone.
-    "test/Website/fixtures/foldkit-modes"
+    "test/Website/fixtures/foldkit-modes",
+    // Written against a released alchemy, which the roll-forward test
+    // installs into its own project; this workspace no longer has its API.
+    "test/Cloudflare/Domain/fixtures/scheduled-upgrade/released"
   ],
   "compilerOptions": {
     "composite": true,
@@ -103,6 +106,7 @@
     { "path": "../acme/tsconfig.json" },
     { "path": "../drizzle/tsconfig.json" },
     { "path": "../axiom/tsconfig.json" },
+    { "path": "../convex/tsconfig.json" },
     { "path": "../rivet/tsconfig.json" },
     {
       "path": "../effect-cluster/tsconfig.json"
@@ -112,6 +116,7 @@
     { "path": "../daytona/tsconfig.json" },
     { "path": "../archil/tsconfig.json" },
     { "path": "../boat/tsconfig.json" },
+    { "path": "../pi/tsconfig.json" },
     { "path": "../modal/tsconfig.json" },
     { "path": "../planetscale/tsconfig.json" },
     { "path": "../neon/tsconfig.json" },

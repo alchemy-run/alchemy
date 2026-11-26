@@ -1,7 +1,10 @@
+import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Region from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { AWSEnvironment } from "./Environment.ts";
+import { globalRegionOf } from "./Partition.ts";
 
 export { AWS_REGION, type RegionID } from "./Environment.ts";
 export { Region } from "@distilled.cloud/aws/Region";
@@ -36,3 +39,39 @@ export const fromEnvironment = Layer.effect(
     return Effect.map(env, (env) => env.region);
   }),
 );
+
+/**
+ * Run `effect` in the global region of the ambient region's partition, where
+ * global services such as Cost Explorer or Route 53 Domains serve their
+ * control plane: `us-east-1` in `aws`, `eusc-de-east-1` in `aws-eusc`.
+ *
+ * The ambient region is the provided `Region`, else the credentials' region,
+ * as distilled resolves it. With neither, `effect` runs as-is, so a client
+ * captured under `withGlobalRegion` keeps the region it was captured with.
+ */
+export const withGlobalRegion = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.gen(function* () {
+    const region = yield* Effect.serviceOption(Region.Region);
+    const credentials = yield* Effect.serviceOption(Credentials);
+    const current = Option.isSome(region)
+      ? region.value
+      : Option.isSome(credentials)
+        ? credentials.value.pipe(
+            Effect.map(({ region }) => region),
+            Effect.mapError(
+              (cause) =>
+                new Region.MissingRegion({
+                  message: `Could not read the region from the credentials: ${cause.message}`,
+                }),
+            ),
+          )
+        : undefined;
+    return yield* current === undefined
+      ? effect
+      : effect.pipe(
+          Effect.provideService(
+            Region.Region,
+            Effect.map(current, (region) => globalRegionOf(region) as Region.RegionName),
+          ),
+        );
+  });

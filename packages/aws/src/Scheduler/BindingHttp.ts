@@ -37,6 +37,7 @@ import { Role, type RoleProps } from "../IAM/Role.ts";
 import type { Key } from "../KMS/Key.ts";
 import type { Function as LambdaFunction } from "../Lambda/Function.ts";
 import { qualifiedArnOf } from "../Lambda/QualifiedArn.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 import type {
@@ -60,8 +61,8 @@ export const scheduleArnPattern = Effect.fn(function* (group: ScheduleGroup | un
     region: string;
   }>;
   return group
-    ? Output.interpolate`arn:aws:scheduler:${region}:${accountId}:schedule/${group.scheduleGroupName}/*`
-    : (`arn:aws:scheduler:${region}:${accountId}:schedule/default/*` as const);
+    ? Output.interpolate`arn:${partitionOf(region)}:scheduler:${region}:${accountId}:schedule/${group.scheduleGroupName}/*`
+    : (`arn:${partitionOf(region)}:scheduler:${region}:${accountId}:schedule/default/*` as const);
 });
 
 /**
@@ -74,7 +75,7 @@ const allSchedulesArnPattern = Effect.gen(function* () {
     accountId: string;
     region: string;
   }>;
-  return `arn:aws:scheduler:${region}:${accountId}:schedule/*/*` as const;
+  return `arn:${partitionOf(region)}:scheduler:${region}:${accountId}:schedule/*/*` as const;
 });
 
 /**
@@ -271,7 +272,9 @@ export const hostRoleName = Effect.fn(function* (host: ResourceLike, kind: strin
  */
 export const selfFunctionArn = Effect.fn(function* (fn: ResourceLike) {
   const prefix = yield* bindAccountArn(
-    accountArn((accountId, region) => `arn:aws:lambda:${region}:${accountId}:function:`),
+    accountArn(
+      (accountId, region) => `arn:${partitionOf(region)}:lambda:${region}:${accountId}:function:`,
+    ),
     `${fn.LogicalId}.functionArnPrefix`,
   );
   return Effect.gen(function* () {

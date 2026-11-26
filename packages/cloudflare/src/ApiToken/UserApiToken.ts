@@ -16,7 +16,7 @@ import {
   type ApiTokenBinding,
   type Props,
 } from "./Common.ts";
-import { uniqueTokens } from "./internal.ts";
+import { redactTokenValue, uniqueTokens } from "./internal.ts";
 
 export type UserApiToken = Resource<
   "Cloudflare.ApiToken.UserApiToken",
@@ -167,7 +167,7 @@ export const UserApiTokenProvider = () =>
         if (!result.value) {
           return yield* Effect.die(`Cloudflare did not return a value for token "${name}".`);
         }
-        return buildAttributes(result, Redacted.make(result.value));
+        return buildAttributes(result, redactTokenValue(result.value));
       }
 
       // Sync — the update API replaces all mutable fields. Cloudflare

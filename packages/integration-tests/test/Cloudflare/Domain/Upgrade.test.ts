@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
@@ -14,6 +15,15 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import {
+  current,
+  deployArgs,
+  MAIN,
+  released,
+  succeeds,
+  workdir,
+  type Fixture,
+} from "../../StateUpgrade/Harness.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import SharedBillingWorker from "./fixtures/shared-billing-worker.ts";
 import SharedNoneWorker from "./fixtures/shared-none-worker.ts";
@@ -572,4 +582,64 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 1_200_000 },
+);
+
+/** The Feeds Worker as 2.0.0-beta.85 deploys it, then as this workspace does. */
+const SCHEDULED_RELEASE = "2.0.0-beta.85";
+const scheduledUpgrade: Fixture = {
+  name: "domain-scheduled",
+  released: fileURLToPath(new URL("./fixtures/scheduled-upgrade/released", import.meta.url)),
+  current: fileURLToPath(new URL("./fixtures/scheduled-upgrade/current", import.meta.url)),
+  dependencies: ["@alchemy.run/domain"],
+};
+
+/**
+ * Before 2.0.0-beta.86 a schedule's command id was also the id its command
+ * committed with, and nothing else recorded the arming. Scheduling the same
+ * id again after an upgrade (a policy whose delivery is redelivered) must not
+ * run the command a second time (#3508).
+ */
+test.provider(
+  `a command scheduled and run on ${SCHEDULED_RELEASE} does not run again after an upgrade`,
+  () =>
+    Effect.gen(function* () {
+      const cwd = yield* workdir("domain-scheduled", { keep: true });
+      const old = yield* released(SCHEDULED_RELEASE, scheduledUpgrade);
+      const next = yield* current(scheduledUpgrade);
+      const stage = `sched-${Test.defaultStage().replaceAll("_", "-")}`;
+      const options = { cwd, env: {} };
+      const urlOf = (output: string) => {
+        const url = output.match(/url: '(https:[^']+)'/)?.[1];
+        expect(url).toBeDefined();
+        return url!;
+      };
+      const destroy = succeeds(next, ["destroy", MAIN, "--stage", stage, "--yes"], options);
+      yield* destroy;
+
+      yield* Effect.gen(function* () {
+        const url = urlOf((yield* succeeds(old, deployArgs(stage), options)).output);
+        yield* poll(url, "/version", (body) => (body as any)?.release === "released");
+        expect(yield* call(url, "/schedule/f-1", "POST")).toEqual({ outcome: "Scheduled" });
+        yield* poll(url, "/state/f-1", (body) => (body as any)?.refreshes === 1);
+
+        yield* succeeds(next, deployArgs(stage), options);
+        yield* poll(url, "/version", (body) => (body as any)?.release === "current");
+        // A busy Durable Object keeps the code it started with until it is
+        // idle for about ten seconds: leave the feed alone until it runs this one.
+        yield* Effect.sleep("15 seconds");
+
+        // the same schedule again: it ran on the old release, so nothing is armed
+        expect(yield* call(url, "/schedule/f-1", "POST")).toEqual({ outcome: "Scheduled" });
+        yield* Effect.sleep("8 seconds");
+        expect(yield* call(url, "/state/f-1")).toEqual({ refreshes: 1 });
+
+        // a later trigger still arms the name again (#2806)
+        yield* call(url, "/schedule/f-1", "POST");
+        yield* poll(url, "/state/f-1", (body) => (body as any)?.refreshes === 2);
+      }).pipe(Effect.ensuring(destroy.pipe(Effect.ignore)));
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+    timeout: 600_000,
+  },
 );

@@ -109,22 +109,20 @@ describe("gcp-pubsub-fanout", () => {
     Effect.gen(function* () {
       const { projectId, datasetId, tableId } = tableRefOf(tableName);
       const result = yield* bigquery.queryJobs({
-        projectId,
-        body: {
-          query: `SELECT eventId, type, orderId FROM \`${datasetId}.${tableId}\` WHERE eventId IN UNNEST(@ids)`,
-          useLegacySql: false,
-          parameterMode: "NAMED",
-          queryParameters: [
-            {
-              name: "ids",
-              parameterType: { type: "ARRAY", arrayType: { type: "STRING" } },
-              parameterValue: {
-                arrayValues: eventIds.map((value) => ({ value })),
-              },
+        query: `SELECT eventId, type, orderId FROM \`${datasetId}.${tableId}\` WHERE eventId IN UNNEST(@ids)`,
+        useLegacySql: false,
+        parameterMode: "NAMED",
+        queryParameters: [
+          {
+            name: "ids",
+            parameterType: { type: "ARRAY", arrayType: { type: "STRING" } },
+            parameterValue: {
+              arrayValues: eventIds.map((value) => ({ value })),
             },
-          ],
-          timeoutMs: 20_000,
-        },
+          },
+        ],
+        timeoutMs: 20_000,
+        projectId,
       });
       return (result.rows ?? []).map((row): AnalyticsRow => ({
         eventId: String(row.f?.[0]?.v),
@@ -295,8 +293,9 @@ describe("gcp-pubsub-fanout", () => {
 
       const pullDeadLetters = pubsub
         .pullProjectsSubscriptions({
+          maxMessages: 10,
+          returnImmediately: true,
           subscription: deadLetterSubscription,
-          body: { maxMessages: 10, returnImmediately: true },
         })
         .pipe(Effect.provide(GcpHttp));
 
@@ -308,10 +307,7 @@ describe("gcp-pubsub-fanout", () => {
             const ackIds = receivedMessages.flatMap((m) => (m.ackId ? [m.ackId] : []));
             if (ackIds.length > 0) {
               yield* pubsub
-                .acknowledgeProjectsSubscriptions({
-                  subscription: deadLetterSubscription,
-                  body: { ackIds },
-                })
+                .acknowledgeProjectsSubscriptions({ ackIds, subscription: deadLetterSubscription })
                 .pipe(Effect.provide(GcpHttp));
             }
           }),

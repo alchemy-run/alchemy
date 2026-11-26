@@ -19,6 +19,7 @@ import * as Paths from "../../Prove/internal/Paths.ts";
 import * as Relations from "../../Prove/internal/Relations.ts";
 import * as Smt from "../../Prove/internal/Smt.ts";
 import type * as Source from "../../Prove/internal/Source.ts";
+import * as Suggest from "../../Prove/internal/Suggest.ts";
 import * as Symbolic from "../../Prove/internal/Symbolic.ts";
 import type { Eval, Module, Node, Site, V } from "../../Prove/internal/Value.ts";
 import * as Value from "../../Prove/internal/Value.ts";
@@ -132,6 +133,13 @@ export interface Found {
     readonly proved: boolean;
     /** The states reached in which it was looked at. */
     readonly states: number;
+    /** For a rule that is not proved: the command the proof fails on, and why. */
+    readonly unproved: { readonly by: string; readonly verdict: Check.Verdict } | undefined;
+    /**
+     * Where the proof fails from a state the rules allow: an invariant every
+     * command keeps, that makes this one proved once it is written down.
+     */
+    readonly suggested: Suggest.Suggestion | undefined;
   }>;
   /**
    * The model's own invariants, looked at whenever a sequence has nothing left
@@ -158,6 +166,16 @@ export interface Found {
   readonly eventually: ReadonlyArray<{
     readonly name: string;
     readonly broken: Story | undefined;
+    readonly states: number;
+  }>;
+  /**
+   * What the model says can happen, looked at whenever a sequence has nothing
+   * left to react: `reached` is the shortest sequence found that gets there,
+   * run on the real code, and `states` is how many times one was looked at.
+   */
+  readonly sometimes: ReadonlyArray<{
+    readonly name: string;
+    readonly reached: Story | undefined;
     readonly states: number;
   }>;
   /**
@@ -237,6 +255,12 @@ export interface Found {
   readonly unsettled: number;
   readonly unread: ReadonlyArray<Value.NotTranslated>;
   readonly disagreements: ReadonlyArray<string>;
+  /**
+   * How far the proofs' reading of each command was held against the real
+   * code: the paths inputs were picked and run for, and the ones that could not be run.
+   * A path where the real code did something else is in `disagreements`.
+   */
+  readonly agreement: { readonly compared: number; readonly uncompared: number };
   readonly undecided: ReadonlyArray<{ readonly reason: string; readonly times: number }>;
 }
 
@@ -273,6 +297,7 @@ export interface ModelLike {
   readonly queries?: ReadonlyArray<unknown>;
   readonly invariants?: { readonly [name: string]: (model: never) => boolean };
   readonly eventually?: { readonly [name: string]: (model: never) => boolean };
+  readonly sometimes?: { readonly [name: string]: (model: never) => boolean };
   readonly relations?: {
     readonly [name: string]: {
       readonly over: Readonly<Record<string, Aggregate.Any>>;
@@ -575,6 +600,8 @@ interface Sequence {
   rules: ReadonlyArray<Paths.Check>;
   /** What the model says holds in the end, on what the sequence left with nothing scheduled. */
   later: ReadonlyArray<Paths.Check>;
+  /** What the model says can happen, on what the sequence left once nothing more reacts. */
+  possible: ReadonlyArray<Paths.Check>;
 }
 
 /**
@@ -794,7 +821,9 @@ export const locate = Effect.fn(function* (
     for (const property of declared.node.properties as ReadonlyArray<Node>)
       if (
         property.type === "Property" &&
-        ["invariants", "eventually"].includes(String(property.key.name ?? property.key.value))
+        ["invariants", "eventually", "sometimes"].includes(
+          String(property.key.name ?? property.key.value),
+        )
       )
         walk(property.value, (node) => {
           if (node.type === "Identifier" && typeof node.name === "string") named.add(node.name);
@@ -993,10 +1022,15 @@ export const locate = Effect.fn(function* (
     },
     later: declared ? Paths.namesOf(declared, "eventually") : [],
     realLater: (model.eventually ?? {}) as unknown as Record<string, (model: unknown) => boolean>,
+    possible: declared ? Paths.namesOf(declared, "sometimes") : [],
+    realPossible: (model.sometimes ?? {}) as unknown as Record<string, (model: unknown) => boolean>,
   };
   unread.push(
     ...Object.keys(model.eventually ?? {})
       .filter((name) => !rules.later.includes(name))
+      .map((name) => `${model.modelName}.${name}`),
+    ...Object.keys(model.sometimes ?? {})
+      .filter((name) => !rules.possible.includes(name))
       .map((name) => `${model.modelName}.${name}`),
   );
   // Only what something depends on is followed: a policy reacts to it, an invariant reads
@@ -1111,6 +1145,31 @@ export const search = Effect.fn(function* (
     )
       closed.add(agg);
   }
+  // A proof that fails on a real step, from a state the rules allow: an invariant
+  // that rules the state out is looked for, where only the aggregate's own commands write it.
+  const suggested = new Map<string, Suggest.Suggestion | undefined>();
+  for (const agg of aggs) {
+    if (readers(agg).length > 0) continue;
+    const rows = ownRows.get(agg)!;
+    for (const name of agg.invariants)
+      if (
+        rows.some((row) => row.verdicts.get(name)?._tag === "Violated") &&
+        rows.every((row) => row.verdicts.get(name)?._tag !== "Misread")
+      )
+        suggested.set(
+          `${agg.name}.${name}`,
+          yield* Suggest.suggest(solver, interpreter, agg.cls, agg.definition, name),
+        );
+  }
+  /** The command a rule's proof fails on, and what it fails with. */
+  const failing = (aggregate: string, name: string) => {
+    const agg = aggs.find((agg) => agg.name === aggregate);
+    for (const row of (agg && ownRows.get(agg)) ?? []) {
+      const verdict = row.verdicts.get(name);
+      if (verdict && verdict._tag !== "Proved") return { by: row.command, verdict };
+    }
+    return undefined;
+  };
   for (const agg of aggs) {
     if (!closed.has(agg)) continue;
     for (const row of ownRows.get(agg)!)
@@ -1254,6 +1313,10 @@ export const search = Effect.fn(function* (
     const ended = new Map<string, Story | undefined>(
       located.rules.later.map((name) => [name, undefined]),
     );
+    /** The shortest sequence found that reaches each thing the model says can happen. */
+    const got = new Map<string, Story | undefined>(
+      located.rules.possible.map((name) => [name, undefined]),
+    );
     const failures = new Map<string, { policy: string; tag: string; story: Story }>();
     const endings = new Map<string, { saga: string; ending: string; story: Story | undefined }>();
     for (const saga of sagas)
@@ -1264,7 +1327,9 @@ export const search = Effect.fn(function* (
     const repeated = new Set<string>();
     const started = new Set<string>();
     const unread = new Map<string, Value.NotTranslated>();
-    const disagreements = new Set<string>();
+    const disagreements = new Set<string>(
+      [...ownRows.values()].flatMap((rows) => rows.flatMap((row) => row.differs)),
+    );
     const undecided = new Map<string, number>();
     const gaveUp = (reason: string) => undecided.set(reason, (undecided.get(reason) ?? 0) + 1);
     let states = 0;
@@ -1324,6 +1389,7 @@ export const search = Effect.fn(function* (
       ran: { policies: new Set(), sagas: new Set(), systems: new Set(), repeated: new Set() },
       rules: [],
       later: [],
+      possible: [],
     });
     const nothing: Open = {
       run: new Value.Run([]),
@@ -2444,7 +2510,8 @@ export const search = Effect.fn(function* (
           const value = frame.signals.get(name);
           if (value) return Effect.succeed(value);
           frame.waiting = name;
-          return Effect.fail(new Value.Rejected({ rejection: SUSPENDED }));
+          // Nothing that handles a failure handles a saga that is waiting.
+          return Effect.fail(new Value.Rejected({ rejection: SUSPENDED, defect: true }));
         }),
       );
     });
@@ -2714,6 +2781,8 @@ export const search = Effect.fn(function* (
         readonly at: number;
         readonly rule?: "invariant" | "eventually";
       }> = [];
+      /** What the model says can happen that the real code reached at the end. */
+      const reaches: Array<string> = [];
       /** Each view's real state, by view and key. */
       const seen = new Map<number, Map<string, unknown>>();
       /** What each projection was really given, by projection. */
@@ -3063,7 +3132,7 @@ export const search = Effect.fn(function* (
             });
         }
       }
-      if (played.rules.length > 0 || played.later.length > 0) {
+      if (played.rules.length > 0 || played.later.length > 0 || played.possible.length > 0) {
         // The same sequence on the real code, and the model's real invariants on what it left.
         const model = {
           ...Object.fromEntries(
@@ -3103,8 +3172,18 @@ export const search = Effect.fn(function* (
             });
             if (holds === false) breaks.push({ name, at: played.trail.length - 1, rule });
           }
+        for (const check of played.possible) {
+          const holds = yield* Effect.try({
+            try: () => located.rules.realPossible[check.name]?.(model),
+            catch: (cause) =>
+              new Disagreement({
+                reason: `the model's rule ${check.name} fails on the real code: ${String(cause)}`,
+              }),
+          });
+          if (holds === true) reaches.push(check.name);
+        }
       }
-      return { story, breaks };
+      return { story, breaks, reaches };
     });
 
     /**
@@ -3335,6 +3414,28 @@ export const search = Effect.fn(function* (
           }
         }
       }
+      // What can happen: one sequence that gets there is enough, and the shortest is kept.
+      for (const check of played.possible) {
+        if (Result.isFailure(check.condition)) {
+          const error = check.condition.failure;
+          unread.set(`${error.file}:${error.line}`, error);
+          continue;
+        }
+        look(`+${check.name}`);
+        const condition = check.condition.success;
+        if (condition === "false" || !shorter(got.get(check.name), played.trail.length)) continue;
+        const answer = yield* values(played, run, Smt.not(condition));
+        if (answer._tag === "Unknown") gaveUp(answer.reason);
+        if (answer._tag !== "Sat") continue;
+        const replayed = yield* attempt(played, run, answer.model);
+        if (!replayed) continue;
+        if (replayed.reaches.includes(check.name))
+          got.set(check.name, cut(replayed.story, played.trail.length));
+        else
+          disagreements.add(
+            `the solver found a sequence that reaches ${check.name}, but the real code does not reach it on that sequence`,
+          );
+      }
       return true;
     });
 
@@ -3513,13 +3614,29 @@ export const search = Effect.fn(function* (
                 "eventually",
               ).pipe(Effect.result)
             : Result.succeed([]);
+        // What can happen is looked at wherever the invariants are.
+        const possible =
+          changed &&
+          !played.unsettled &&
+          located.rules.definition &&
+          located.rules.possible.length > 0
+            ? yield* Paths.checks(
+                interpreter,
+                located.rules.definition,
+                world(played),
+                undefined,
+                undefined,
+                "sometimes",
+              ).pipe(Effect.result)
+            : Result.succeed([]);
         prefix = Value.nextPrefix(run.taken);
-        if (Result.isFailure(rules) || Result.isFailure(later)) {
+        if (Result.isFailure(rules) || Result.isFailure(later) || Result.isFailure(possible)) {
           sequences++;
           continue;
         }
         played.rules = rules.success;
         played.later = later.success;
+        played.possible = possible.success;
         // A walk takes one way through its move, then goes on from wherever that left it.
         if (pick) prefix = undefined;
         const canGoOn = ending
@@ -3692,6 +3809,20 @@ export const search = Effect.fn(function* (
       walks.longest = Math.max(walks.longest, sent);
     }
 
+    /** What the model says can happen that is already so of a model with nothing in it. */
+    const empty = Object.fromEntries([
+      ...located.views.map((view) => [view.name, []] as const),
+      ...aggs.map((agg) => [agg.name, []] as const),
+    ]);
+    const atStart = new Set<string>();
+    for (const name of got.keys())
+      if (
+        yield* Effect.try(() => located.rules.realPossible[name]?.(empty) === true).pipe(
+          Effect.orElseSucceed(() => false),
+        )
+      )
+        atStart.add(name);
+
     const found: Found = {
       sequences,
       states,
@@ -3707,6 +3838,11 @@ export const search = Effect.fn(function* (
         broken: entry.story,
         proved: !entry.story && byClass.size > 0 && provedBy(entry.aggregate, entry.name),
         states: looked.get(`${entry.aggregate}.${entry.name}`) ?? 0,
+        unproved:
+          entry.story || (byClass.size > 0 && provedBy(entry.aggregate, entry.name))
+            ? undefined
+            : failing(entry.aggregate, entry.name),
+        suggested: entry.story ? undefined : suggested.get(`${entry.aggregate}.${entry.name}`),
       })),
       dead,
       decisions: decisions.map((decision) => decision.name),
@@ -3739,6 +3875,11 @@ export const search = Effect.fn(function* (
         broken: story,
         states: looked.get(`~${name}`) ?? 0,
       })),
+      sometimes: [...got].map(([name, story]) => ({
+        name,
+        reached: story ?? (atStart.has(name) ? [] : undefined),
+        states: looked.get(`+${name}`) ?? 0,
+      })),
       outcomes: [...outcomes.values()],
       reached: [...reached.values()],
       followed: [...followed],
@@ -3759,6 +3900,16 @@ export const search = Effect.fn(function* (
       unsettled,
       unread: [...unread.values()],
       disagreements: [...disagreements],
+      agreement: {
+        compared: [...ownRows.values()].reduce(
+          (sum, rows) => sum + rows.reduce((sum, row) => sum + row.compared, 0),
+          0,
+        ),
+        uncompared: [...ownRows.values()].reduce(
+          (sum, rows) => sum + rows.reduce((sum, row) => sum + row.uncompared, 0),
+          0,
+        ),
+      },
       undecided: [...undecided].map(([reason, times]) => ({ reason, times })),
     };
     return found;

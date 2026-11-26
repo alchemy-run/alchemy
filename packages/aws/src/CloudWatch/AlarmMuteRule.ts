@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { createManagedTags, createName, retryConcurrent } from "./common.ts";
@@ -19,7 +20,7 @@ export class AlarmMuteRuleUnexpectedResponse extends Data.TaggedError(
 
 export type AlarmMuteRuleName = string;
 export type AlarmMuteRuleArn =
-  `arn:aws:cloudwatch:${RegionID}:${AccountID}:alarm-mute-rule:${string}`;
+  `arn:${Partition}:cloudwatch:${RegionID}:${AccountID}:alarm-mute-rule:${string}`;
 
 export interface AlarmMuteRuleProps extends Omit<
   cloudwatch.PutAlarmMuteRuleInput,
@@ -99,7 +100,7 @@ export const AlarmMuteRuleProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:cloudwatch:${env.region}:${env.accountId}:alarm-mute-rule:${name}` as AlarmMuteRuleArn,
+              `arn:${partitionOf(env.region)}:cloudwatch:${env.region}:${env.accountId}:alarm-mute-rule:${name}` as AlarmMuteRuleArn,
           ),
         );
 

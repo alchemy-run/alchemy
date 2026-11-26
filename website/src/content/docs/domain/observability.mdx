@@ -78,6 +78,12 @@ Some work starts later, or has many causes. A saga can run for days, a projectio
 
 Every span carries `domain.correlation_id`, the id of the first command in the flow. One query on it finds a whole business flow, across every trace it took.
 
+A projection batch can serve several flows at once. Its span lists every one in `domain.correlation_ids`, and each of its links carries the `domain.correlation_id`, `domain.stream` and `domain.seq` of the event it stands for. On Tempo, this query finds every trace of a flow:
+
+```
+{ span.domain.correlation_id = "c-1" || span.domain.correlation_ids = "c-1" || link.domain.correlation_id = "c-1" }
+```
+
 ## Record what matters to you
 
 Nothing from a command, an event or a query's input is recorded unless a handler asks for it. Every handler runs inside the engine's span for it, already named (`Domain.decide Account.WithdrawMoney`, `Domain.query AccountLedger`, `Domain.projection Ledger`), so plain Effect annotates that span:

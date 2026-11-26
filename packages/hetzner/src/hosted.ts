@@ -1,5 +1,6 @@
 import { loadImageArchiveScript } from "@alchemy.run/docker/ImageArchive";
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as VolumeActions from "@distilled.cloud/hetzner/volume_actions";
+import * as Volumes from "@distilled.cloud/hetzner/volumes";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import {
   matchesPackageRoot,
@@ -366,7 +367,7 @@ WantedBy=multi-user.target
     volumes: Array<{ volumeId: number; path: string }>;
   }) {
     for (const { volumeId, path } of input.volumes) {
-      let volume = yield* Hetzner.volumes.getVolume({ id: volumeId }).pipe(
+      let volume = yield* Volumes.getVolume({ id: volumeId }).pipe(
         Effect.map(({ volume }) => volume),
         Effect.retry({
           while: hetznerTransient,
@@ -382,7 +383,7 @@ WantedBy=multi-user.target
 
       if (volume.server !== input.serverId) {
         if (volume.server !== null) {
-          yield* Hetzner.volumeActions.detachVolume({ id: volumeId }).pipe(
+          yield* VolumeActions.detachVolume({ id: volumeId }).pipe(
             Effect.tap(({ action }) =>
               waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
             ),
@@ -392,35 +393,33 @@ WantedBy=multi-user.target
             ),
           );
         }
-        yield* Hetzner.volumeActions
-          .attachVolume({
-            id: volumeId,
-            assignee: { id: input.serverId, type: "server" },
-            // No automount: Hetzner would mount the device at
-            // `/mnt/HC_Volume_{id}`, and a device mounted elsewhere makes
-            // our own `mount` at the service path fail with
-            // "already mounted". We own the mount + fstab below.
-            automount: false,
-          })
-          .pipe(
-            Effect.retry({
-              while: hetznerTransient,
-              times: 8,
-              schedule: Schedule.min([
-                Schedule.exponential(Duration.millis(500), 1.5),
-                Schedule.spaced(Duration.seconds(5)),
-              ]),
-            }),
-            Effect.tap(({ action }) =>
-              waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
-            ),
-            Effect.catchTag(["UnprocessableEntity", "Locked", "Conflict"], () => Effect.void),
-          );
-        const readVolume = Hetzner.volumes.getVolume({ id: volumeId }).pipe(
+        yield* VolumeActions.attachVolume({
+          id: volumeId,
+          assignee: { id: input.serverId, type: "server" },
+          // No automount: Hetzner would mount the device at
+          // `/mnt/HC_Volume_{id}`, and a device mounted elsewhere makes
+          // our own `mount` at the service path fail with
+          // "already mounted". We own the mount + fstab below.
+          automount: false,
+        }).pipe(
+          Effect.retry({
+            while: hetznerTransient,
+            times: 8,
+            schedule: Schedule.min([
+              Schedule.exponential(Duration.millis(500), 1.5),
+              Schedule.spaced(Duration.seconds(5)),
+            ]),
+          }),
+          Effect.tap(({ action }) =>
+            waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
+          ),
+          Effect.catchTag(["UnprocessableEntity", "Locked", "Conflict"], () => Effect.void),
+        );
+        const readVolume = Volumes.getVolume({ id: volumeId }).pipe(
           Effect.map(({ volume }) => volume),
           Effect.catchTag("NotFound", () => Effect.undefined),
         );
-        volume = yield* Hetzner.volumes.getVolume({ id: volumeId }).pipe(
+        volume = yield* Volumes.getVolume({ id: volumeId }).pipe(
           Effect.flatMap(({ volume }) =>
             volume.server === input.serverId
               ? Effect.succeed(volume)
@@ -512,6 +511,10 @@ WantedBy=multi-user.target
         `set -uo pipefail`,
         `export HOME=/root`,
         `mkdir -p ${JSON.stringify(appDir)}`,
+        // The env file can hold secrets: only root may read it. scp keeps
+        // the mode of the file it overwrites.
+        `touch ${JSON.stringify(`${appDir}/env`)}`,
+        `chmod 600 ${JSON.stringify(`${appDir}/env`)}`,
         // A fresh server's cloud-init bootstrap (`ALCHEMY_BOOTSTRAP` in
         // `Server.ts`) installs these same packages and holds the dpkg lock
         // while it runs; let it finish instead of racing it.
@@ -616,6 +619,10 @@ WantedBy=multi-user.target
         `set -uo pipefail`,
         `export HOME=/root`,
         `mkdir -p ${JSON.stringify(appDir)}`,
+        // The env file can hold secrets: only root may read it. scp keeps
+        // the mode of the file it overwrites.
+        `touch ${JSON.stringify(`${appDir}/env`)}`,
+        `chmod 600 ${JSON.stringify(`${appDir}/env`)}`,
         `if command -v cloud-init >/dev/null 2>&1; then cloud-init status --wait >/dev/null 2>&1 || true; fi`,
         `if ! command -v docker >/dev/null 2>&1; then`,
         `  for attempt in 1 2 3 4 5; do`,

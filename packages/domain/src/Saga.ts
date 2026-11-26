@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeRun, StorageName } from "alchemy/Workflows";
 import * as EffectCause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -326,8 +327,12 @@ export const make = <
 /** What a saga's implementation runs for each run: its key and input. */
 export type Handler<Payload, A, E, Req> = (payload: Payload) => Effect.Effect<A, E, Req>;
 
-/** The services Effect workflows provide to a run, which a handler may use freely. */
+/**
+ * The services a run has, which a handler may use freely: what Effect
+ * workflows provide, and the context of the runtime the run happens in.
+ */
 type RunServices =
+  | RuntimeContext
   | WorkflowEngine.WorkflowEngine
   | WorkflowEngine.WorkflowInstance
   | Workflow.Execution<string>

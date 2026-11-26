@@ -1,0 +1,8 @@
+{
+  "name": "convex-self-hosted-test-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "convex": "1.49.0"
+  }
+}

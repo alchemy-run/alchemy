@@ -208,11 +208,9 @@ export const ProjectsLocationsFolderProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           dataform.createProjectsLocationsFolders({
+            displayName,
+            containingFolder,
             parent: locationParent(env.project, location),
-            body: {
-              displayName,
-              containingFolder,
-            },
           }),
         ).pipe(
           Effect.catchTag("Conflict", () => findOwned(env.project, location, id, news.displayName)),
@@ -234,9 +232,9 @@ export const ProjectsLocationsFolderProvider = () =>
       if (displayChanged) {
         current = yield* retryTransient(
           dataform.patchProjectsLocationsFolders({
+            displayName,
             name: currentName,
             updateMask: updateMaskOf("displayName"),
-            body: { displayName },
           }),
         );
       }
@@ -246,8 +244,8 @@ export const ProjectsLocationsFolderProvider = () =>
       if (desiredFolder !== observedFolder) {
         yield* retryTransient(
           dataform.moveProjectsLocationsFolders({
+            destinationContainingFolder: desiredFolder,
             name: currentName,
-            body: { destinationContainingFolder: desiredFolder },
           }),
         );
         current = (yield* getByName(currentName)) ?? current;

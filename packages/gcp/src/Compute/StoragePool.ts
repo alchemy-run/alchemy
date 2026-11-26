@@ -435,19 +435,17 @@ export const StoragePoolProvider = () =>
       if (current === undefined) {
         const inserted = yield* compute
           .insertStoragePools({
+            name: storagePoolName,
+            description: news.description,
+            labels: desiredLabels,
+            storagePoolType: poolTypeUrl(env.project, zone, storagePoolType),
+            poolProvisionedCapacityGb: capacity,
+            poolProvisionedIops: iops,
+            poolProvisionedThroughput: throughput,
+            capacityProvisioningType: news.capacityProvisioningType,
+            performanceProvisioningType: news.performanceProvisioningType,
             project: env.project,
             zone,
-            body: {
-              name: storagePoolName,
-              description: news.description,
-              labels: desiredLabels,
-              storagePoolType: poolTypeUrl(env.project, zone, storagePoolType),
-              poolProvisionedCapacityGb: capacity,
-              poolProvisionedIops: iops,
-              poolProvisionedThroughput: throughput,
-              capacityProvisioningType: news.capacityProvisioningType,
-              performanceProvisioningType: news.performanceProvisioningType,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
@@ -494,6 +492,12 @@ export const StoragePoolProvider = () =>
         labelsChanged
       ) {
         const patched = yield* compute.updateStoragePools({
+          description: news.description,
+          poolProvisionedCapacityGb: capacity,
+          poolProvisionedIops: iops,
+          poolProvisionedThroughput: throughput,
+          labels: desiredLabels,
+          labelFingerprint: current.labelFingerprint,
           project: env.project,
           zone,
           storagePool: storagePoolName,
@@ -506,14 +510,6 @@ export const StoragePoolProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            description: news.description,
-            poolProvisionedCapacityGb: capacity,
-            poolProvisionedIops: iops,
-            poolProvisionedThroughput: throughput,
-            labels: desiredLabels,
-            labelFingerprint: current.labelFingerprint,
-          },
         });
         yield* waitZoneOperation(env.project, zone, patched);
         current =

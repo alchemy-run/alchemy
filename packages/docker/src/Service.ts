@@ -1,5 +1,5 @@
 import { Unowned } from "alchemy/AdoptPolicy";
-import { deepEqual, isResolved } from "alchemy/Diff";
+import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
@@ -18,6 +18,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import type { ContainerRuntime } from "./ContainerRuntime.ts";
 import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
 import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import type { Providers } from "./Providers.ts";
@@ -109,7 +110,7 @@ export interface ImageServiceProps extends ServicePropsBase {
 /**
  * Bundle an inline Effect program (`main`) into a generated image built
  * against the service's Docker context. The optional `image` is the
- * environment base (`FROM`) and must be able to run the bun runtime.
+ * environment base (`FROM`) and must support the selected container runtime.
  */
 export interface BundledServiceProps extends ServicePropsBase {
   /**
@@ -120,11 +121,17 @@ export interface BundledServiceProps extends ServicePropsBase {
   main: string;
   /**
    * Environment image used as the generated Dockerfile's `FROM`. Must be
-   * able to run the bun runtime.
+   * able to run the {@link runtime}.
    *
-   * @default "oven/bun:1"
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /**
    * Container port the bundled HTTP server listens on. Baked into the image
    * as `ENV PORT` + `EXPOSE`; publish it to the swarm ingress with `ports`.
@@ -151,7 +158,11 @@ export interface BundledServiceProps extends ServicePropsBase {
 export type ServiceProps = ImageServiceProps | BundledServiceProps;
 
 export declare namespace Service {
-  type Image = string | { imageRef: string };
+  /**
+   * A reference, or a `Docker.Image`. A `Docker.Image` also brings its
+   * `imageId`, so a rebuild under the same tag rolls the service.
+   */
+  type Image = string | { imageRef: string; imageId?: string };
 
   interface PortMapping {
     /** Published port on the swarm node. Omit to let Swarm assign one dynamically. */
@@ -581,6 +592,15 @@ type ServiceInspect = {
       }>;
     };
   };
+  /** What Swarm applied, including the published ports it assigned. */
+  Endpoint?: {
+    Ports?: Array<{
+      PublishedPort?: number;
+      TargetPort?: number;
+      Protocol?: "tcp" | "udp";
+      PublishMode?: "ingress" | "host";
+    }>;
+  };
 };
 
 export const ServiceProvider = () =>
@@ -646,7 +666,16 @@ export const ServiceProvider = () =>
           const owned = yield* hasAlchemyTags(id, live.Spec.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
+        diff: Effect.fn(function* ({ id, instanceId, news: desired, olds, output }) {
+          // A bundled program's runtime exports stay unevaluated while
+          // planning. The content hash below stands for them, so they must
+          // not stop a code change from reaching it.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? (Object.assign({}, desired, {
+                  exports: stripEffects(desired.exports),
+                }) as typeof desired)
+              : desired;
           if (!isResolved(news)) return undefined;
 
           const oldDesired = yield* normalizeDesired(id, olds, instanceId);
@@ -740,6 +769,13 @@ export const ServiceProvider = () =>
                     ]
                   : [],
               );
+              // Swarm keeps tasks whose spec names the same tag, so a
+              // rebuilt image under that tag is rolled out by force.
+              const previousImageId =
+                olds !== undefined && !isBundledService(olds)
+                  ? normalizeImageId(olds.image)
+                  : undefined;
+              const rebuilt = desired.imageId !== undefined && desired.imageId !== previousImageId;
               // A rollback exits 0 but a paused rollout exits 1, so the
               // outcome is read from `UpdateStatus` either way.
               const updateError = yield* docker.service
@@ -747,6 +783,7 @@ export const ServiceProvider = () =>
                   context: desired.context,
                   id: output.id,
                   image,
+                  force: rebuilt,
                   replicas: desired.replicas,
                   "endpoint-mode": desired.endpointMode,
                   // Attaching a network the service is already on fails, so
@@ -953,6 +990,8 @@ const normalizeDesired = (id: string, props: ServiceProps, instanceId: string) =
       // separately in diff) — the `image` prop is only the environment base
       // there, and it participates in the hash.
       image: isBundledService(props) ? undefined : normalizeImageRef(props.image),
+      // A rebuilt image can keep its tag: its id tells the builds apart.
+      imageId: isBundledService(props) ? undefined : normalizeImageId(props.image),
       command: props.command ?? [],
       args: props.args ?? [],
       environment: {
@@ -988,6 +1027,7 @@ type DesiredService = Effect.Success<ReturnType<typeof normalizeDesired>>;
  */
 const inPlaceFields = new Set<keyof DesiredService>([
   "image",
+  "imageId",
   "replicas",
   "environment",
   "labels",
@@ -1050,6 +1090,9 @@ const requiresReplacement = (olds: DesiredService, news: DesiredService): boolea
 
 const normalizeImageRef = (image: Service.Image): string =>
   typeof image === "string" ? image : image.imageRef;
+
+const normalizeImageId = (image: Service.Image): string | undefined =>
+  typeof image === "string" ? undefined : image.imageId;
 
 const normalizeEnvironment = (
   environment: Record<string, string | Redacted.Redacted<string>> | undefined,
@@ -1128,7 +1171,11 @@ const toServiceAttributes = (
   networks: (service.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
     n.Target ? [n.Target] : [],
   ),
-  ports: (service.Spec.EndpointSpec?.Ports ?? []).flatMap((port) => {
+  // The spec omits a port Swarm assigns; `Endpoint` has it once applied.
+  ports: (service.Endpoint?.Ports?.length
+    ? service.Endpoint.Ports
+    : (service.Spec.EndpointSpec?.Ports ?? [])
+  ).flatMap((port) => {
     if (port.PublishedPort === undefined || port.TargetPort === undefined) {
       return [];
     }

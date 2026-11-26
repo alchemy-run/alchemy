@@ -1,9 +1,13 @@
 import { generateKeyPairSync } from "node:crypto";
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as FirewallActions from "@distilled.cloud/hetzner/firewall_actions";
+import * as ServerActions from "@distilled.cloud/hetzner/server_actions";
+import * as Servers from "@distilled.cloud/hetzner/servers";
 import type {
   GetServerResponseServer,
   ListServersResponseServersItem,
 } from "@distilled.cloud/hetzner/servers";
+import * as SshKeys from "@distilled.cloud/hetzner/ssh_keys";
+import * as VolumeActions from "@distilled.cloud/hetzner/volume_actions";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -459,7 +463,7 @@ const backoff = Schedule.min([
 const deleteDeployKey = (id: number | undefined) =>
   id === undefined
     ? Effect.void
-    : Hetzner.sshKeys.deleteSshKey({ id }).pipe(
+    : SshKeys.deleteSshKey({ id }).pipe(
         Effect.retry({
           while: (e) => retryable(e) || e._tag === "UnprocessableEntity" || e._tag === "Conflict",
           times: 8,
@@ -652,7 +656,7 @@ const deployKeyName = (name: string) => `${name.slice(0, 55)}-d`;
 
 const findDeployKeyId = Effect.fn(function* (id: string, name: string) {
   const keyName = deployKeyName(name);
-  const { ssh_keys } = yield* Hetzner.sshKeys.listSshKeys({ name: keyName, per_page: 50 });
+  const { ssh_keys } = yield* SshKeys.listSshKeys({ name: keyName, per_page: 50 });
   const key = ssh_keys.find((item) => item.name === keyName);
   return key !== undefined && (yield* hasAlchemyLabels(id, tagRecord(key.labels)))
     ? key.id
@@ -675,37 +679,39 @@ const ensureDeployKey = Effect.fn(function* (input: {
   }
   const generated = yield* generateDeployKey;
   const keyName = deployKeyName(input.name);
-  const created = yield* Hetzner.sshKeys
-    .createSshKey({ name: keyName, public_key: generated.publicKey, labels: input.labels })
-    .pipe(
-      Effect.catchTag("Conflict", () =>
-        Hetzner.sshKeys.listSshKeys({ name: keyName, per_page: 50 }).pipe(
-          Effect.map(({ ssh_keys }) => ssh_keys.find((item) => item.name === keyName)),
-          Effect.flatMap((hit) =>
-            hit !== undefined
-              ? Effect.succeed({ ssh_key: hit })
-              : Hetzner.sshKeys.createSshKey({
-                  name: keyName,
-                  public_key: generated.publicKey,
-                  labels: input.labels,
-                }),
-          ),
+  const created = yield* SshKeys.createSshKey({
+    name: keyName,
+    public_key: generated.publicKey,
+    labels: input.labels,
+  }).pipe(
+    Effect.catchTag("Conflict", () =>
+      SshKeys.listSshKeys({ name: keyName, per_page: 50 }).pipe(
+        Effect.map(({ ssh_keys }) => ssh_keys.find((item) => item.name === keyName)),
+        Effect.flatMap((hit) =>
+          hit !== undefined
+            ? Effect.succeed({ ssh_key: hit })
+            : SshKeys.createSshKey({
+                name: keyName,
+                public_key: generated.publicKey,
+                labels: input.labels,
+              }),
         ),
       ),
-    );
+    ),
+  );
   return { privateKey: Redacted.make(generated.privateKey), deploySshKeyId: created.ssh_key.id };
 });
 
 const getById = (id: number) =>
-  Hetzner.servers.getServer({ id }).pipe(
+  Servers.getServer({ id }).pipe(
     Effect.map(({ server }) => server),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
-  Hetzner.servers
-    .listServers({ name, per_page: 50 })
-    .pipe(Effect.map(({ servers }) => servers.find((item) => item.name === name)));
+  Servers.listServers({ name, per_page: 50 }).pipe(
+    Effect.map(({ servers }) => servers.find((item) => item.name === name)),
+  );
 
 const observe = Effect.fn(function* ({
   name,
@@ -728,7 +734,7 @@ const observe = Effect.fn(function* ({
 const READY = new Set<string>(["running", "off"]);
 
 const waitUntilReady = (serverId: number) =>
-  Hetzner.servers.getServer({ id: serverId }).pipe(
+  Servers.getServer({ id: serverId }).pipe(
     Effect.flatMap(({ server }) =>
       server !== undefined && READY.has(server.status)
         ? Effect.succeed(server)
@@ -742,7 +748,7 @@ const waitUntilReady = (serverId: number) =>
   );
 
 const waitUntilGone = (serverId: number) =>
-  Hetzner.servers.getServer({ id: serverId }).pipe(
+  Servers.getServer({ id: serverId }).pipe(
     Effect.map(() => false),
     Effect.catchTag("NotFound", () => Effect.succeed(true)),
     Effect.repeat({
@@ -798,7 +804,7 @@ const syncNetworks = Effect.fn(function* (input: {
   const desired = new Set(input.desired);
   for (const networkId of input.observed) {
     if (desired.has(networkId)) continue;
-    const { action } = yield* Hetzner.serverActions.detachServerFromNetwork({
+    const { action } = yield* ServerActions.detachServerFromNetwork({
       id: input.serverId,
       network: networkId,
     });
@@ -806,7 +812,7 @@ const syncNetworks = Effect.fn(function* (input: {
   }
   for (const networkId of input.desired) {
     if (observed.has(networkId)) continue;
-    const { action } = yield* Hetzner.serverActions.attachServerToNetwork({
+    const { action } = yield* ServerActions.attachServerToNetwork({
       id: input.serverId,
       network: networkId,
     });
@@ -823,12 +829,12 @@ const syncVolumes = Effect.fn(function* (input: {
   const desired = new Set(input.desired);
   for (const volumeId of input.observed) {
     if (desired.has(volumeId)) continue;
-    const { action } = yield* Hetzner.volumeActions.detachVolume({ id: volumeId });
+    const { action } = yield* VolumeActions.detachVolume({ id: volumeId });
     yield* waitForAction(action);
   }
   for (const volumeId of input.desired) {
     if (observed.has(volumeId)) continue;
-    const { action } = yield* Hetzner.volumeActions.attachVolume({
+    const { action } = yield* VolumeActions.attachVolume({
       id: volumeId,
       assignee: { id: input.serverId, type: "server" },
     });
@@ -849,7 +855,7 @@ const syncFirewalls = Effect.fn(function* (input: {
   const desired = new Set(input.desired);
   for (const firewallId of input.observed) {
     if (desired.has(firewallId)) continue;
-    const { actions } = yield* Hetzner.firewallActions.removeFirewallFromResources({
+    const { actions } = yield* FirewallActions.removeFirewallFromResources({
       id: firewallId,
       remove_from: firewallApplyItems(input.serverId),
     });
@@ -857,7 +863,7 @@ const syncFirewalls = Effect.fn(function* (input: {
   }
   for (const firewallId of input.desired) {
     if (observed.has(firewallId)) continue;
-    const { actions } = yield* Hetzner.firewallActions.applyFirewallToResources({
+    const { actions } = yield* FirewallActions.applyFirewallToResources({
       id: firewallId,
       apply_to: firewallApplyItems(input.serverId),
     });
@@ -872,13 +878,13 @@ const syncPlacementGroup = Effect.fn(function* (input: {
 }) {
   if (input.desired === input.observed) return;
   if (input.observed !== undefined) {
-    const { action } = yield* Hetzner.serverActions.removeServerFromPlacementGroup({
+    const { action } = yield* ServerActions.removeServerFromPlacementGroup({
       id: input.serverId,
     });
     yield* waitForAction(action);
   }
   if (input.desired !== undefined) {
-    const { action } = yield* Hetzner.serverActions.addServerToPlacementGroup({
+    const { action } = yield* ServerActions.addServerToPlacementGroup({
       id: input.serverId,
       placement_group: input.desired,
     });
@@ -900,7 +906,7 @@ export const ServerProvider = () =>
       "deploySshKeyId",
     ],
     list: Effect.fn(function* () {
-      const items = yield* Hetzner.servers.listServers
+      const items = yield* Servers.listServers
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -1002,38 +1008,36 @@ export const ServerProvider = () =>
       // Ensure — create only when missing. A Conflict is a race with a
       // peer reconciler or a name that just became visible; re-observe.
       if (current === undefined) {
-        const created = yield* Hetzner.servers
-          .createServer({
-            name,
-            server_type: news.serverType,
-            image: news.image,
-            location,
-            labels: desiredLabels,
-            start_after_create: startAfterCreate,
-            ssh_keys: sshKeyIds.length > 0 ? sshKeyIds : undefined,
-            networks: networkIds.length > 0 ? networkIds : undefined,
-            firewalls:
-              firewallIds.length > 0 ? firewallIds.map((firewall) => ({ firewall })) : undefined,
-            volumes: volumeIds.length > 0 ? volumeIds : undefined,
-            placement_group: placementGroupId,
-            user_data: userData,
-            public_net:
-              news.enableIpv4 !== undefined || news.enableIpv6 !== undefined
-                ? { enable_ipv4: news.enableIpv4 ?? true, enable_ipv6: news.enableIpv6 ?? true }
-                : undefined,
-          })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "ServerLimitExceeded" || e._tag === "ServerPlacementError",
-              schedule: Schedule.spaced("5 seconds"),
-              times: 8,
-            }),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-            // The deploy key is a side-effect, not a stack resource. If
-            // createServer fails after minting it (quota skip, timeout),
-            // nothing is persisted for Server.delete to clean up.
-            Effect.tapError(() => deleteDeployKey(deployKey.deploySshKeyId).pipe(Effect.ignore)),
-          );
+        const created = yield* Servers.createServer({
+          name,
+          server_type: news.serverType,
+          image: news.image,
+          location,
+          labels: desiredLabels,
+          start_after_create: startAfterCreate,
+          ssh_keys: sshKeyIds.length > 0 ? sshKeyIds : undefined,
+          networks: networkIds.length > 0 ? networkIds : undefined,
+          firewalls:
+            firewallIds.length > 0 ? firewallIds.map((firewall) => ({ firewall })) : undefined,
+          volumes: volumeIds.length > 0 ? volumeIds : undefined,
+          placement_group: placementGroupId,
+          user_data: userData,
+          public_net:
+            news.enableIpv4 !== undefined || news.enableIpv6 !== undefined
+              ? { enable_ipv4: news.enableIpv4 ?? true, enable_ipv6: news.enableIpv6 ?? true }
+              : undefined,
+        }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "ServerLimitExceeded" || e._tag === "ServerPlacementError",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 8,
+          }),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+          // The deploy key is a side-effect, not a stack resource. If
+          // createServer fails after minting it (quota skip, timeout),
+          // nothing is persisted for Server.delete to clean up.
+          Effect.tapError(() => deleteDeployKey(deployKey.deploySshKeyId).pipe(Effect.ignore)),
+        );
         if (created !== undefined) {
           if (created.action) {
             yield* waitForActions([created.action, ...created.next_actions]);
@@ -1054,12 +1058,12 @@ export const ServerProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       const needsMeta = current.name !== name || upsert.length > 0 || removed.length > 0;
       if (needsMeta) {
-        yield* Hetzner.servers.updateServer({ id: current.id, name, labels: desiredLabels });
+        yield* Servers.updateServer({ id: current.id, name, labels: desiredLabels });
         current = yield* refresh(current.id);
       }
 
       if (current.protection.delete !== desiredProtection) {
-        const { action } = yield* Hetzner.serverActions.changeServerProtection({
+        const { action } = yield* ServerActions.changeServerProtection({
           id: current.id,
           delete: desiredProtection,
           rebuild: desiredProtection,
@@ -1128,7 +1132,7 @@ export const ServerProvider = () =>
       const current = yield* getById(output.id);
       if (current !== undefined) {
         if (current.protection.delete) {
-          const { action } = yield* Hetzner.serverActions.changeServerProtection({
+          const { action } = yield* ServerActions.changeServerProtection({
             id: current.id,
             delete: false,
             rebuild: false,
@@ -1136,7 +1140,7 @@ export const ServerProvider = () =>
           yield* waitForAction(action);
         }
 
-        const deleted = yield* Hetzner.servers.deleteServer({ id: current.id }).pipe(
+        const deleted = yield* Servers.deleteServer({ id: current.id }).pipe(
           Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({ while: retryable, times: 8, schedule: backoff }),
         );

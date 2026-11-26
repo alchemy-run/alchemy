@@ -294,14 +294,12 @@ export const GlossariesTermProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsGlossariesTerms({
-            parent: glossary,
+            displayName: news.displayName,
+            description: news.description,
+            labels: desiredLabels,
+            glossary,
+            parent: immediateParent,
             termId,
-            body: {
-              parent: immediateParent,
-              displayName: news.displayName,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -326,14 +324,12 @@ export const GlossariesTermProvider = () =>
           parentChanged ? "parent" : undefined,
         ].filter((field): field is string => field !== undefined);
         current = yield* dataplex.patchProjectsLocationsGlossariesTerms({
+          parent: immediateParent,
+          displayName: news.displayName,
+          description: news.description,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            parent: immediateParent,
-            displayName: news.displayName,
-            description: news.description,
-            labels: desiredLabels,
-          },
         });
       }
 

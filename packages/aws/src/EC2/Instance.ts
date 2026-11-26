@@ -23,6 +23,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
@@ -45,7 +46,7 @@ export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
   `i-${id}` as ID & InstanceId<ID>;
 
 export type InstanceArn<ID extends InstanceId = InstanceId> =
-  `arn:aws:ec2:${RegionID}:${AccountID}:instance/${ID}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:instance/${ID}`;
 
 export const isInstance = (value: any): value is Instance =>
   typeof value === "object" &&
@@ -161,6 +162,18 @@ export interface InstanceProps extends PlatformProps {
    * another fails the deploy.
    */
   env?: Record<string, any>;
+  /**
+   * Environment variables the hosted process reads from a secret store:
+   * env-var name → Secrets Manager secret ARN or SSM Parameter Store
+   * parameter ARN. A secret ARN may pin a version
+   * (`arn:…:secret:name-AbCdEf:::versionId`), so a new version restarts the
+   * process with it. Each time the process starts, the instance reads the
+   * values with its own role, which is granted exactly these ARNs, into a
+   * file only root can read: unlike {@link env}, they never reach the
+   * assets bucket or user data. Setting it on an instance launched before
+   * `secrets` existed replaces the instance.
+   */
+  secrets?: Record<string, string>;
   /**
    * Bundler configuration for the hosted process entrypoint. Unused
    * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
@@ -313,6 +326,11 @@ export interface Instance extends Resource<
        * Version of the systemd unit a container instance was launched with.
        */
       unit?: number;
+      /**
+       * Version of the setup step that reads `secrets`, if the instance's
+       * unit has one.
+       */
+      secrets?: number;
     };
   },
   {
@@ -442,6 +460,24 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * });
  * ```
  *
+ * ### Reading secrets from Secrets Manager
+ * `env` values land in the assets bucket. `secrets` names where a value
+ * is instead, and the instance reads it with its own role each time the
+ * process starts.
+ *
+ * **Example:** An API key from Secrets Manager
+ * ```typescript
+ * const apiKey = yield* AWS.SecretsManager.Secret("ApiKey", {
+ *   secretString: Redacted.make("sk_live_…"),
+ * });
+ * const worker = yield* AWS.EC2.Instance("Worker", {
+ *   main: "./src/worker.ts",
+ *   imageId: AWS.EC2.amazonLinux2023(),
+ *   instanceType: "t3.small",
+ *   secrets: { API_KEY: apiKey.secretArn },
+ * });
+ * ```
+ *
  * ### Looking up an existing instance
  * `Instance.lookup` references an instance Alchemy doesn't manage (created in the
  * console or by another stack), found by `instanceId` or its `Name` tag. It is read during
@@ -473,7 +509,7 @@ export const InstanceProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:ec2:${env.region}:${env.accountId}:instance/${instanceId}` as InstanceArn,
+              `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:instance/${instanceId}` as InstanceArn,
           ),
         );
 
@@ -800,9 +836,16 @@ export const InstanceProvider = () =>
           const containerUnitChanged =
             output?.code !== undefined &&
             output.code.unit !== (raw.context !== undefined ? CONTAINER_UNIT_VERSION : undefined);
+          // A unit installed before `secrets` existed can't read them.
+          const secretsUnitMissing =
+            output?.code !== undefined &&
+            output.code.secrets === undefined &&
+            (!isResolved(raw.secrets) ||
+              Object.keys((raw.secrets as Record<string, string> | undefined) ?? {}).length > 0);
           if (
             hostModeChanged ||
             containerUnitChanged ||
+            secretsUnitMissing ||
             launchConfigChanged(raw.imageId, olds.imageId) ||
             launchConfigChanged(raw.subnetId, olds.subnetId) ||
             launchConfigChanged(raw.keyName, olds.keyName) ||
@@ -871,6 +914,7 @@ export const InstanceProvider = () =>
             olds.handler !== news.handler ||
             olds.port !== news.port ||
             !deepEqual(olds.env ?? {}, news.env ?? {}) ||
+            !deepEqual(olds.secrets ?? {}, news.secrets ?? {}) ||
             !deepEqual(olds.build ?? {}, news.build ?? {}) ||
             !deepEqual(olds.roleManagedPolicyArns ?? [], news.roleManagedPolicyArns ?? []) ||
             !deepEqual(
@@ -988,6 +1032,9 @@ export const InstanceProvider = () =>
           // last instance it launched, so a launch retried after a lost reply
           // returns the first instance, and a relaunch after the instance was
           // terminated sends a new token.
+          // A fresh launch already boots the current bundle and env, so the
+          // hosted-runtime reboot below is only for an instance that existed.
+          const launchedNow = instance === undefined;
           if (instance === undefined) {
             const launch = (previous: string) =>
               ec2
@@ -1035,7 +1082,7 @@ export const InstanceProvider = () =>
           }
 
           const instanceId = instance.InstanceId as InstanceId;
-          let restarted = false;
+          let restarted = launchedNow;
 
           // Sync security groups — observed primary-ENI groups vs desired.
           const observedSecurityGroups = (instance.SecurityGroups ?? [])

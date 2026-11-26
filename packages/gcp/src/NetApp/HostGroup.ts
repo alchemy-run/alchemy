@@ -300,15 +300,13 @@ export const HostGroupProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsHostGroups({
+            hosts: news.hosts,
+            type,
+            osType,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             hostGroupId,
-            body: {
-              hosts: news.hosts,
-              type,
-              osType,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -337,14 +335,11 @@ export const HostGroupProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsHostGroups({
+          labels: desiredLabels,
+          description: news.description,
+          hosts: news.hosts,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            hosts: news.hosts,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

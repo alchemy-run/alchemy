@@ -259,6 +259,12 @@ export interface RunRpc {
    */
   readonly begin: (target: string, plan: Plan) => Effect.Effect<Begin>;
   readonly phase: (target: string) => Effect.Effect<Phase>;
+  /**
+   * The run's phase, for a key holding live deliveries that no scanner pushed
+   * history to. Before `ready`, the run notes the key and tells it
+   * (`ConsumerRpc.ready`) once every source's history is in.
+   */
+  readonly whenReady: (target: string, key: string) => Effect.Effect<Phase>;
   readonly progress: (target: string) => Effect.Effect<Progress>;
 }
 
@@ -346,8 +352,6 @@ export interface Limits {
    * right after a deploy its new code may not have reached the object yet.
    */
   readonly firstRetryMillis: number;
-  /** How long a key without sources waits before asking whether discovery is complete again. */
-  readonly pollMillis: number;
   /**
    * Instances a directory node lists before it splits into 16 children, so every
    * node's share of a listing stays bounded and the tree grows as log16 of the instances.
@@ -372,7 +376,6 @@ export const defaultLimits: Limits = {
   apply: 200,
   staleRetryMillis: 30_000,
   firstRetryMillis: 1_000,
-  pollMillis: 5_000,
   leafSize: 256,
   depth: DEPTH,
 };
@@ -1351,14 +1354,15 @@ export const makeConsumer = (
       if (!backfill) return false;
       if (!backfill.ready) {
         // A key with history is told it is ready by the scanners that pushed it. One
-        // fed only live (no history) has no one to tell it: it asks the run.
+        // fed only live (no history) asks the run, which tells it if it isn't there yet.
         if (backfill.pushed) return false;
-        const phase = yield* net.run.phase(target).pipe(Effect.catchCause(() => Effect.void));
+        const phase = yield* net.run
+          .whenReady(target, host.key)
+          .pipe(Effect.catchCause(() => Effect.void));
         if (phase === undefined)
           return yield* Effect.as(retry.later(jobId(target), RETRY_MS), true);
         yield* trace("waiting", { key: host.key, target, phase });
-        if (phase !== "ready" && phase !== "complete")
-          return yield* Effect.as(jobs.schedule(jobId(target), limits.pollMillis), false);
+        if (phase !== "ready" && phase !== "complete") return false;
         yield* storage.exclusive(
           Effect.gen(function* () {
             const current = yield* storage.get<Backfill>(backfillKey(target));
@@ -1738,6 +1742,36 @@ export const makeRun = (
     readonly againMillis: number;
   },
 ) => {
+  /** `rw:<target>:<key>`: a key that asked before the barrier, to tell once the run is past it. */
+  const waitingPrefix = (target: string) => `rw:${enc(target)}:`;
+
+  /** Tell the keys that asked before the barrier that the run is past it: `false` if one couldn't be told. */
+  const tellWaiting = Effect.fn(function* (target: string) {
+    const prefix = waitingPrefix(target);
+    let after: string | undefined;
+    let all = true;
+    while (true) {
+      const rows = yield* storage.list({
+        prefix,
+        ...(after === undefined ? {} : { startAfter: after }),
+        limit: 128,
+      });
+      if (rows.length === 0) return all;
+      const told = yield* Effect.forEach(
+        rows,
+        ([row]) =>
+          bounded(net.consumer.ready(target, decodeURIComponent(row.slice(prefix.length)), 0)).pipe(
+            Effect.as([row]),
+            Effect.catchCause(() => Effect.succeed([])),
+          ),
+        { concurrency: FanOut.RUN_CALLS },
+      );
+      yield* storage.delete(told.flat());
+      all = all && told.flat().length === rows.length;
+      after = rows[rows.length - 1]![0];
+    }
+  });
+
   const run = FanOut.makeRun<Plan, RelayRun, SourceRef>(
     storage,
     jobs,
@@ -1748,6 +1782,8 @@ export const makeRun = (
       firstPhase: "discover",
       nextPhase: (state) =>
         state.plan.singleSource || state.phase === "ready" ? "complete" : "ready",
+      // Past the barrier: the keys that asked before it are told first.
+      past: tellWaiting,
       pass: (target, state, deadline) => ({
         target,
         plan: state.plan,
@@ -1762,6 +1798,15 @@ export const makeRun = (
   return {
     begin: (target: string, plan: Plan): Effect.Effect<Begin> => run.begin(target, plan),
     phase: (target: string) => Effect.map(run.phase(target), (phase) => phase as Phase),
+    whenReady: (target: string, key: string) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          const phase = (yield* run.phase(target)) as Phase;
+          if (phase !== "ready" && phase !== "complete")
+            yield* storage.put({ [`${waitingPrefix(target)}${enc(key)}`]: true });
+          return phase;
+        }),
+      ),
     progress: (target: string) =>
       Effect.map(run.progress(target), (progress) => progress as Progress),
     run: run.run,

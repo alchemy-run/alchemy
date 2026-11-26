@@ -295,14 +295,12 @@ export const TensorboardProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsTensorboards({
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            encryptionSpec,
+            isDefault: desiredDefault ? true : undefined,
             parent,
-            body: {
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              encryptionSpec,
-              isDefault: desiredDefault ? true : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -344,15 +342,12 @@ export const TensorboardProvider = () =>
           defaultChanged ? "isDefault" : undefined,
         ].filter((field): field is string => field !== undefined);
         const patched = yield* aiplatform.patchProjectsLocationsTensorboards({
+          displayName,
+          description: news.description,
+          labels: desiredLabels,
+          isDefault: desiredDefault,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            displayName,
-            description: news.description,
-            labels: desiredLabels,
-            isDefault: desiredDefault,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);

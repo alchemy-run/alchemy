@@ -7,3 +7,4 @@ export * from "./ComputeEngineControlPlane.ts";
 export * from "./ComputeEnginePool.ts";
 export * from "./CloudRunPool.ts";
 export * from "./ServicesPool.ts";
+export * from "./Network.ts";

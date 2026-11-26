@@ -1,11 +1,11 @@
 ---
 title: AWS
-description: Run an Effect Cluster's database on RDS and its runners on ECS Fargate, called from Lambda or anywhere through a load balancer.
+description: Run an Effect Cluster's database on RDS and its runners on ECS Fargate, in a VPC of its own or yours, called through a load balancer or CloudFront.
 ---
 
 import Tree from "../../../components/diagrams/Tree.astro";
 
-Host your cluster in your AWS account: Postgres runs on RDS, in a VPC of its own, and runners run on ECS Fargate in the same VPC. A load balancer serves each pool's gateway, so a Lambda function, a container or a Worker calls the rooms by id.
+Host your cluster in your AWS account: Postgres runs on RDS, in a VPC of its own or one you give it, and runners run on ECS Fargate in the same VPC. A load balancer, or CloudFront in front of one, serves each pool's gateway, so a Lambda function, a container or a Worker calls the rooms by id.
 
 ```typescript title="src/Cluster.ts"
 import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
@@ -27,9 +27,9 @@ Install `@alchemy.run/aws` and finish [AWS setup](/aws/setup).
     { id: "db", label: "Database", type: "RDS Postgres", parent: "vpc", specs: [["class", "db.m7g.large"]] },
     { id: "sg", label: "runners", type: "security group", parent: "vpc", dashed: true },
     { id: "pool", label: "Default", type: "ECS service · Fargate", parent: "sg", specs: [["replicas", "3"]] },
-    { id: "alb", label: "Load Balancer", type: "internet-facing", parent: "vpc", side: true },
+    { id: "alb", label: "Load Balancer", type: "internet-facing or internal", parent: "vpc", side: true },
   ]}
-  caption="The runners' security group is the only way to Postgres and to the other runners. The pool's Application Load Balancer is the only way in from outside."
+  caption="The runners' security group is the only way to Postgres and to the other runners. The pool's Application Load Balancer, or CloudFront in front of it, is the only way in from outside."
 />
 
 ## The database
@@ -47,6 +47,85 @@ export const Database = ClusterAWS.Database("Cluster", {
 ```
 
 A new RDS instance takes 10 to 15 minutes to create.
+
+## Run in your own VPC
+
+Give the database a `network` by id, and the database, the runners and their gateways run in its subnets. A VPC nobody manages is a `lookup`, whose attributes you pass directly:
+
+```typescript title="src/Database.ts"
+import * as EC2 from "@alchemy.run/aws/EC2";
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+
+const vpc = EC2.Vpc.lookup({ name: "shared" });
+const a = EC2.Subnet.lookup({ name: "private-a" });
+const b = EC2.Subnet.lookup({ name: "private-b" });
+
+export const Database = ClusterAWS.Database("Cluster", {
+  network: {
+    vpcId: vpc.vpcId,
+    subnetIds: [a.subnetId, b.subnetId],
+    cidrBlock: vpc.cidrBlock,
+    assignPublicIp: false,
+  },
+});
+```
+
+Runners take a public IP unless `assignPublicIp` is `false`. Set it in private subnets, where the runners reach the internet through a NAT gateway. `cidrBlock` is the range an internal gateway admits.
+
+A network declared in your stack, or one another stack owns through `ref`, is an Effect. The `network` can be an Effect too: yield the resources in it and return their ids.
+
+```typescript title="src/Network.ts"
+import * as EC2 from "@alchemy.run/aws/EC2";
+
+export const AppNetwork = EC2.Network("App", {
+  cidrBlock: "10.42.0.0/16",
+  availabilityZones: 2,
+  nat: "single",
+});
+```
+
+```typescript title="src/Database.ts"
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Effect from "effect/Effect";
+import { AppNetwork } from "./Network.ts";
+
+export const Database = ClusterAWS.Database("Cluster", {
+  network: Effect.gen(function* () {
+    const network = yield* AppNetwork;
+    return {
+      vpcId: network.vpcId,
+      subnetIds: network.privateSubnetIds,
+      publicSubnetIds: network.publicSubnetIds,
+      cidrBlock: network.vpc.cidrBlock,
+      assignPublicIp: false,
+    };
+  }),
+});
+```
+
+An internet-facing gateway's load balancer goes in `publicSubnetIds`, which default to `subnetIds`.
+
+Another stack's VPC works the same way, through `EC2.Vpc.ref` and `EC2.Subnet.ref`:
+
+```typescript title="src/Database.ts"
+import * as EC2 from "@alchemy.run/aws/EC2";
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Effect from "effect/Effect";
+
+export const Database = ClusterAWS.Database("Cluster", {
+  network: Effect.gen(function* () {
+    const vpc = yield* EC2.Vpc.ref("AppVpc", { stack: "network" });
+    const a = yield* EC2.Subnet.ref("PrivateSubnetA", { stack: "network" });
+    const b = yield* EC2.Subnet.ref("PrivateSubnetB", { stack: "network" });
+    return {
+      vpcId: vpc.vpcId,
+      subnetIds: [a.subnetId, b.subnetId],
+      cidrBlock: vpc.cidrBlock,
+      assignPublicIp: false,
+    };
+  }),
+});
+```
 
 ## The pool
 
@@ -66,7 +145,69 @@ export const Default = ClusterAWS.EcsPool("Default", {
 }).pipe(Layer.provide(Database));
 ```
 
-Each pool gets an internet-facing Application Load Balancer in front of its gateway. The runners only take gateway traffic from it, and the gateway checks every call's token.
+Each pool gets a load balancer in front of its gateway. The runners only take gateway traffic from it, and the gateway checks every call's token.
+
+## Choose the gateway
+
+Without a `gateway`, an internet-facing Application Load Balancer serves the pool's gateway over plain HTTP, and the token crosses the internet unencrypted. Give it a domain and it serves HTTPS on port 443, with an ACM certificate validated in the domain's Route 53 hosted zone:
+
+```typescript title="src/Cluster.ts"
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterAWS.Database("Cluster");
+
+export const Default = ClusterAWS.EcsPool("Default", {
+  replicas: 2,
+  gateway: ClusterAWS.LoadBalancerGateway({ domain: "cluster.example.com" }),
+}).pipe(Layer.provide(Database));
+```
+
+A domain whose DNS lives elsewhere takes that host's [DNS adapter](/infrastructure-as-code/dns-adapters):
+
+```typescript title="src/Cluster.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterAWS.Database("Cluster");
+
+export const Default = ClusterAWS.EcsPool("Default", {
+  replicas: 2,
+  gateway: ClusterAWS.LoadBalancerGateway({
+    domain: { name: "cluster.example.com", dns: Cloudflare.DNS.Adapter() },
+  }),
+}).pipe(Layer.provide(Database));
+```
+
+Without a domain, `CloudFrontGateway` serves HTTPS on a `*.cloudfront.net` name. The load balancer behind it is internal, and CloudFront reaches it through a VPC origin, so nothing on the internet reaches the load balancer itself:
+
+```typescript title="src/Cluster.ts"
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterAWS.Database("Cluster");
+
+export const Default = ClusterAWS.EcsPool("Default", {
+  replicas: 2,
+  gateway: ClusterAWS.CloudFrontGateway(),
+}).pipe(Layer.provide(Database));
+```
+
+CloudFront cuts a connection that sends nothing for its origin read timeout, 60 seconds here. The gateway writes a keep-alive line every 15 seconds while a call waits or a stream is quiet, so long calls stay open.
+
+When only callers in the VPC call the pool, make the load balancer internal. It admits the network's `cidrBlock` unless you give it an `ingress`:
+
+```typescript title="src/Cluster.ts"
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Layer from "effect/Layer";
+import { Database } from "./Database.ts";
+
+export const Default = ClusterAWS.EcsPool("Default", {
+  replicas: 2,
+  gateway: ClusterAWS.LoadBalancerGateway({ scheme: "internal" }),
+}).pipe(Layer.provide(Database));
+```
 
 ## Call it from a Lambda
 
@@ -91,4 +232,44 @@ export default class Api extends Lambda.Function<Api>()(
 ) {}
 ```
 
-Every option, with its default, is in the reference: [Database](/providers/cluster/aws#database) and [EcsPool](/providers/cluster/aws#ecspool).
+## Call an internal gateway from a Lambda
+
+A Lambda function only reaches an internal gateway from inside the VPC. Join it to the same network: a function's props may be an Effect, so it yields the network and a security group of its own.
+
+```typescript title="src/Api.ts"
+import * as EC2 from "@alchemy.run/aws/EC2";
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { AppNetwork } from "./Network.ts";
+import { Room } from "./Room.ts";
+
+export default class Api extends Lambda.Function<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const network = yield* AppNetwork;
+    const group = yield* EC2.SecurityGroup("ApiGroup", {
+      vpcId: network.vpcId,
+      egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
+    });
+    return {
+      main: import.meta.url,
+      functionUrl: true,
+      vpc: { subnetIds: network.privateSubnetIds, securityGroupIds: [group.groupId] },
+    };
+  }),
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        return yield* HttpServerResponse.json({ members: yield* lobby.Join({ name: "sam" }) });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+The function reaches the internet through the network's NAT gateway. Nothing joins a caller to the VPC for you: a function that calls pools in two VPCs can only be in one.
+
+Every option, with its default, is in the reference: [Database](/providers/cluster/aws#database), [EcsPool](/providers/cluster/aws#ecspool), [LoadBalancerGateway](/providers/cluster/aws#loadbalancergateway) and [CloudFrontGateway](/providers/cluster/aws#cloudfrontgateway).
