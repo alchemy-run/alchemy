@@ -1,10 +1,10 @@
-import { ConfigError } from "@distilled.cloud/core/errors";
 import {
   Credentials,
   DEFAULT_ANALYTICS_BASE_URL,
   DEFAULT_TOOLBOX_BASE_URL,
 } from "@distilled.cloud/daytona/Credentials";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { DAYTONA_AUTH_PROVIDER_NAME, type DaytonaResolvedCredentials } from "./AuthProvider.ts";
 
@@ -23,7 +23,9 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    lazyCredentials<DaytonaResolvedCredentials, ConfigError>()(
+    // `Credentials` has no error channel: a failed resolution dies, and the
+    // engine reports it as `CredentialsRequired`.
+    lazyCredentials<DaytonaResolvedCredentials>()(
       DAYTONA_AUTH_PROVIDER_NAME,
       (creds) => ({
         apiKey: creds.token,
@@ -33,5 +35,5 @@ export const fromAuthProvider = () =>
         organizationId: creds.organizationId,
       }),
       { expiresAt: (creds) => creds.expires },
-    ),
+    ).pipe(Effect.map(Effect.orDie)),
   );
