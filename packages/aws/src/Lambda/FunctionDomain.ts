@@ -85,13 +85,17 @@ export const functionDomainUrl = (domain: FunctionDomain | undefined): string | 
   return config === undefined ? undefined : `https://${config.name}`;
 };
 
-/** The Function outputs the front door references. */
+/**
+ * The Function outputs the front door references. `Req` is pinned to `never`
+ * (resource attributes are `Output<string, never>`): the default
+ * `Output<string>` widens the composed Effect's requirements to `any`.
+ */
 interface FunctionDomainHost {
   readonly LogicalId: string;
   readonly Mode: ProviderMode | undefined;
-  readonly functionArn: Output.Output<string>;
-  readonly functionName: Output.Output<string>;
-  readonly qualifiedArn: Output.Output<string>;
+  readonly functionArn: Output.Output<string, never>;
+  readonly functionName: Output.Output<string, never>;
+  readonly qualifiedArn: Output.Output<string, never>;
 }
 
 /**
