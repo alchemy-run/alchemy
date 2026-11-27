@@ -40,12 +40,7 @@ test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        vault.createMatters({
-          body: {
-            name: "Alchemy Vault Probe",
-            description: "alchemy probe",
-          },
-        }),
+        vault.createMatters({ name: "Alchemy Vault Probe", description: "alchemy probe" }),
       );
       expect(error._tag).toEqual("VaultScopeInsufficient");
 

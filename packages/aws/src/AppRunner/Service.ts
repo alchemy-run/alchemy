@@ -18,6 +18,7 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "alchemy/Runtime/Process";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
 import { toSeconds } from "alchemy/Util/Duration";
@@ -34,6 +35,7 @@ import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { managedPolicyArn } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
@@ -1297,6 +1299,7 @@ await bootstrap(entrypoint);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
+          const { partition } = yield* AWSEnvironment.current;
           const name = output?.serviceName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -1341,7 +1344,7 @@ await bootstrap(entrypoint);
                 roleName: accessRoleName,
                 principal: "build.apprunner.amazonaws.com",
                 managedPolicyArns: [
-                  "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess",
+                  managedPolicyArn(partition, "service-role/AWSAppRunnerServicePolicyForECRAccess"),
                 ],
               }));
 
@@ -1370,17 +1373,11 @@ await bootstrap(entrypoint);
               port,
             });
 
-            // App Runner env values must be strings — JSON-encode the rest.
-            const runtimeEnvironmentVariables = Object.fromEntries(
-              Object.entries({
-                ...bindingEnv,
-                ...alchemyEnv,
-                ...news.env,
-              }).map(([key, value]) => [
-                key,
-                typeof value === "string" ? value : JSON.stringify(value),
-              ]),
-            );
+            const runtimeEnvironmentVariables = envStrings({
+              ...bindingEnv,
+              ...alchemyEnv,
+              ...news.env,
+            });
 
             effective = {
               ...news,

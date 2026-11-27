@@ -1,6 +1,6 @@
 # Hosting on Cloudflare with alchemy
 
-The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.layerDurableObjects()` declares one Durable Object class per aggregate, view, policy, projection and stream while the Worker builds. It also runs sagas on `Cloudflare.Workflows.layerDurableObjectEngine()`. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
+The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.layerDurableObjects()` hosts every aggregate, view, policy, projection, stream and saga run of a model in one Durable Object class named after the model, `Bank.Domain`, declared while the Worker builds. It runs sagas on the same engine as `Cloudflare.Workflows.layerDurableObjectEngine()`, in that class too. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
 
 ```ts
 // packages/server/src/BankWorker.ts
@@ -69,7 +69,7 @@ export default Bank.layer(BankHandlers).pipe(
 
 - Make the model's Layer the default export of `main`; set `handler` only when another export holds it.
 - Callers build the same model Layer, so they need the handlers' services too.
-- Neither platform holds WebSockets: serve Apis with `Domain.protocolHttp`.
+- Both platforms push live reads over `Domain.protocolWebSocket`: the runtime that serves the Api holds the caller's socket, and the owner of the key pushes each commit. Over `Domain.protocolHttp`, live reads poll instead.
 - A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.
 
 More: [Rivet](https://alchemy.run/domain/rivet), [Effect Cluster](https://alchemy.run/domain/effect-cluster).
@@ -86,10 +86,11 @@ const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem)); 
 yield* bank.DepositMoney({ accountId, amount });
 ```
 
+- A command answers at the commit; a view read that must include it passes the receipt as `atLeast`. `{ consistency: "strong" }` answers once the model's views have applied it, and `Effect.provideService(Domain.DefaultConsistency, "strong")` on a client sets that for all its commands. Projection stores are never waited for: a query takes `atLeast`.
 - Build `clientInProcess` per request in a Worker. `layerClientInProcess` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
 - Do not send a request to the Worker's own URL, and do not pass a verified secret through a header to `clientInProcess` to be checked again.
 
-More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [In memory](https://alchemy.run/domain/in-memory).
+More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [Command: Choose when it answers](https://alchemy.run/domain/command#choose-when-it-answers), [In memory](https://alchemy.run/domain/in-memory).
 
 ## Queries
 
@@ -162,9 +163,9 @@ More: [Observability](https://alchemy.run/domain/observability).
 - Durable Object calls right after a fresh deploy can briefly hit alchemy's placeholder script. The Domain platform retries its own calls, so make test readiness probes retry the first real request.
 - Never keep per-request objects (sockets, promises) across events in a Durable Object or Worker. Resolve services at init, and do I/O per request.
 - Handlers may require `RuntimeContext` (for bindings); every platform provides it when it runs them.
-- Models never share data. Two models that list the same aggregate each get their own instances: on Cloudflare, Durable Object classes named after the model (`Billing.AccountAggregate`). Two models with the same name on one platform fail.
+- Models never share data. Two models that list the same aggregate each get their own instances: on Cloudflare, objects named after the model (`Billing.AccountAggregate/a-1`) in one class per model (`Billing.Domain`). Two models with the same name on one platform fail.
 - A Stack that deploys a model on Cloudflare registers `DomainCloudflare.providers()` next to `Cloudflare.providers()`; without it the deploy fails with no provider for `Cloudflare.Domain.Backfill`.
-- Deploys keep data from before Domain version 0 by renaming each class with `renamedFrom`. Upgrading models that shared a class fails with `DurableObjectRenameConflict` until all but one set `legacyData: false` on their `layer`.
+- Deploys keep data across Domain layout changes: a Worker from before one class per model keeps its old classes while the deploy moves their objects in, and deletes each once it is empty. Before that one upgrade, schedule no command on a new aggregate for ten minutes: one with no events yet isn't found, and is deleted with its class. Classes from before Domain version 0 keep their names while their objects move; upgrading models that shared one fails with `AmbiguousDomainLegacyData` until all but one set `legacyData: false` on their `layer`.
 
 More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#know-what-runs-where), [Cloudflare: Host several models in one Worker](https://alchemy.run/domain/cloudflare#host-several-models-in-one-worker), [Cloudflare: Upgrade without losing data](https://alchemy.run/domain/cloudflare#upgrade-without-losing-data).
 

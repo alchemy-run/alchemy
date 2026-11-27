@@ -1,22 +1,18 @@
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-
-// CloudFront KeyValueStore APIs are only available from us-east-1, even when
-// the distribution using the store lives elsewhere.
-export const KVS_REGION = "us-east-1" as const;
+import { withGlobalRegion } from "../Region.ts";
 
 export const extractValue = (v: string | Redacted.Redacted<string>): string =>
   typeof v === "string" ? v : Redacted.value(v);
 
-export const withKvsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  // The distilled Region service value is `Effect<RegionName>`, not a raw
-  // string — providing a bare string makes the client `yield*` a string and
-  // crash. Wrap in Effect.succeed (same as ACM/ECRPublic/WAFv2/GlobalAccelerator).
-  effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(KVS_REGION)));
+// CloudFront KeyValueStore APIs are only available from the partition's
+// global region (us-east-1 in `aws`), even when the distribution using the
+// store lives elsewhere. In partitions without CloudFront the endpoint rules
+// reject the store's ARN before any request is sent.
+export const withKvsRegion = withGlobalRegion;
 
 export const withKvsRegionFn =
   <Args extends any[], A, E, R>(fn: (...args: Args) => Effect.Effect<A, E, R>) =>

@@ -1,0 +1,123 @@
+---
+title: What is Pi?
+description: The concepts behind Pi Durable — the harness and its storage, conversations and submissions, tools, extensions, code mode and sandboxes — and how @alchemy.run/pi models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Pi is a coding agent, and Pi Durable is the engine that runs its agent loop. The engine writes every step to storage before it acts on it: an input that was submitted, a model request, a tool call and its result. A **harness** is one copy of that engine with its storage. Only one process may own a storage at a time, so a harness fits a Durable Object exactly: one object, one SQLite database, one owner.
+
+Take one small app: a `Session` Durable Object for the user `sam`, with two conversations. `pr-142` is fixing a test, and `notes` is a chat. Both live in the object's SQLite. `pr-142` uses the coding tools, so it has a sandbox on Boat. A Worker reaches the object by name and submits inputs to it.
+
+<Tree
+  nodes={[
+    { id: "api", label: "Api", type: "Worker", icon: "square-function" },
+    {
+      id: "object", label: "sam", type: "Session · Durable Object", icon: "box",
+      areas: ["storage", "harness"], phoneAreas: ["storage", "harness"],
+    },
+    {
+      id: "harness", label: "harness", type: "Pi Durable", parent: "object", tone: "accent", icon: "refresh-cw",
+      specs: [["models", "Fast"], ["tools", "add · bash"]],
+    },
+    {
+      id: "storage", label: "SQLite", type: "storage", parent: "object", icon: "database",
+      areas: ["pr notes"], phoneAreas: ["pr notes"],
+    },
+    { id: "pr", label: "pr-142", type: "running", parent: "storage", icon: "messages-square" },
+    { id: "notes", label: "notes", type: "idle", parent: "storage", tone: "muted", icon: "messages-square" },
+    { id: "sandbox", label: "pr-142", type: "sandbox · Boat", icon: "box", specs: [["files", "/home/user/repo"]] },
+  ]}
+  areas={["api object", "api sandbox"]}
+  phoneAreas={["api", "object", "sandbox"]}
+  colGap={5.5}
+  links={[
+    { from: "api", to: "object", label: "submits" },
+    { from: "harness", to: "storage", label: "checkpoints" },
+    { from: "harness", to: "sandbox", label: "runs tools in" },
+  ]}
+  caption="The Session object for sam owns one harness and its SQLite, which holds both conversations: pr-142 is running and notes is idle. The harness writes each step there before acting on it. The coding tools of pr-142 run in that conversation's own sandbox on Boat."
+/>
+
+## The harness
+
+The **harness** is the engine: the models conversations may run on, the tools they may use, and the storage they are kept in. You yield it in a Durable Object's outer Effect and list what it has.
+
+```typescript
+const harness = yield* Pi.Harness({ models: [Fast], tools: [Add, AI.CodingTools] });
+```
+
+Every model and tool listed becomes a requirement of the harness, so a Layer left out is a compile error.
+
+## Storage
+
+The harness's **storage** holds everything it knows. `PiCloudflare.DurableObjectStorage` keeps it in the SQLite of the Durable Object that yields the harness, so each object has its own conversations and no other object can read them.
+
+```typescript
+const HarnessLive = Layer.mergeAll(FastLive, AddLive, PiCloudflare.DurableObjectStorage);
+```
+
+On a long-lived machine the storage is a SQLite file instead. See [Other hosts](/pi/other-hosts).
+
+## Conversations
+
+A **conversation** is a transcript and what it runs with: a model, tools, instructions, extensions. You create it with a name of your choosing and reach it by that name from any later call.
+
+```typescript
+const conversation = yield* harness.createConversation({ name: "pr-142", tools: [Add] });
+```
+
+See [Conversations](/pi/conversations).
+
+## Submissions
+
+A **submission** is one input to a conversation. Submitting stores the input and returns; the run that answers it goes on in the object. You can wait for the answer, or come back later and read the conversation.
+
+```typescript
+const submission = yield* conversation.submit({ type: "input", content: "Fix the login test." });
+const settled = yield* submission.wait;
+```
+
+A `requestId` makes a submission exactly-once, so a retried call never starts a second run.
+
+## Tools
+
+A conversation's **tools** are the ones the harness lists: your own, an MCP server's, and the coding tools. Each call runs in the Durable Object, as an Effect.
+
+See [Tools](/pi/tools).
+
+## Sandboxes
+
+A Durable Object can't run a process, so the coding tools work in a **sandbox**. The harness opens one for each conversation, the first time a tool needs it, and runs Pi's own daemon there.
+
+See [Sandboxes](/pi/sandboxes).
+
+## Extensions
+
+An **extension** adds prompt sections, tools and hooks that a conversation selects by name.
+
+See [Extensions](/pi/extensions).
+
+## Processes
+
+An [`AI.Process`](/ai/processes) describes work as prose and names no harness. `Pi.HarnessLive` runs its sessions as Pi conversations.
+
+See [Processes on Pi](/pi/processes).
+
+## Code mode
+
+In **code mode** the model writes a JavaScript program that calls tools, and only the program's output goes back to the model. The tools listed inside `AI.CodeMode(...)` are the ones a program may call.
+
+See [Code mode](/pi/code-mode).
+
+## Durability
+
+Because every step is stored first, a harness that stops mid-run knows what was in flight. A Durable Object can be evicted at any time. The harness keeps the object's alarm set while there is work, and the alarm wakes a fresh instance that continues every unfinished run.
+
+See [Surviving a crash](/pi/durability).
+
+## How @alchemy.run/pi models these concepts
+
+`Pi.Harness` is an Effect you yield where its Layers are provided. Models, tools, MCP servers and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `Pi.HarnessLive` is the same harness as a Layer, for [processes](/pi/processes). `Pi.Extension` is Pi's own. The storage, the coding tools and the code mode runtime are Layers, so the same harness moves from a Durable Object to a machine by changing them.
+
+Next: [Setup](/pi/setup), then the [tutorial](/pi/tutorial/part-1).

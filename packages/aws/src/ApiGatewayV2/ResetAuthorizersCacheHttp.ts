@@ -3,6 +3,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
+import { partitionOf } from "../Partition.ts";
 import { RegisterApiGatewayV2Binding } from "./BindingHttp.ts";
 import { ResetAuthorizersCache } from "./ResetAuthorizersCache.ts";
 import type { ApiGatewayV2Stage } from "./Stage.ts";
@@ -25,7 +26,7 @@ export const ResetAuthorizersCacheHttp = Layer.effect(
         target: stage,
         verb: "DELETE",
         paths: (region) => [
-          Output.interpolate`arn:aws:apigateway:${region}::/apis/${stage.apiId}/stages/${stage.stageName}/cache/authorizers`,
+          Output.interpolate`arn:${partitionOf(region)}:apigateway:${region}::/apis/${stage.apiId}/stages/${stage.stageName}/cache/authorizers`,
         ],
       });
       return Effect.fn(`AWS.ApiGatewayV2.ResetAuthorizersCache(${stage.LogicalId})`)(function* () {

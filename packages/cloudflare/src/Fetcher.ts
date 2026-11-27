@@ -1,4 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
+import { fromWorkerdSocket, type TcpSocket } from "alchemy/Workers/Workerd/Socket";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
@@ -7,11 +8,12 @@ import * as HttpClient from "effect/http/HttpClient";
 import { HttpClientError, TransportError } from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
-import type { HttpServerError } from "effect/http/HttpServerError";
+import { HttpServerError, InternalError } from "effect/http/HttpServerError";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Schedule from "effect/Schedule";
-import * as Socket from "effect/socket/Socket";
+
+export type { TcpSocket } from "alchemy/Workers/Workerd/Socket";
 
 export type SocketAddress = cf.SocketAddress;
 
@@ -48,7 +50,7 @@ export interface Fetcher {
     request: HttpServerRequest.HttpServerRequest,
   ): Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError>;
 
-  connect(address: SocketAddress | string, options?: SocketOptions): Socket.Socket;
+  connect(address: SocketAddress | string, options?: SocketOptions): TcpSocket;
 }
 
 export const toCloudflareFetcher = Effect.fn(function* (fetcher: Fetcher) {
@@ -78,37 +80,21 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher):
       // the failed attempt already consumed makes workerd reject with
       // "TypeError: Cannot reconstruct a Request with a used body".
       const attempt = request.clone() as Request;
-      return Effect.promise((signal) =>
-        (fetcher as globalThis.Fetcher).fetch(attempt, { signal: signal }),
-      );
+      return Effect.tryPromise({
+        try: (signal) => (fetcher as globalThis.Fetcher).fetch(attempt, { signal }),
+        catch: (cause) =>
+          isHandlerNotReady(cause) ? new HandlerNotReady(cause) : new FetcherFailure(cause),
+      });
     }).pipe(
-      // The "Handler does not export a fetch()" window is a property of
-      // invoking a freshly-deployed Cloudflare binding, so it is ridden out
-      // HERE — the one adapter every binding flows through — rather than in any
-      // single higher-level wrapper (`toHttpClient`, the client/server
-      // overloads, the RPC DO transport all go through this). `Effect.promise`
-      // surfaces the rejection as a defect; lift it to a typed retryable error
-      // and back off until the new version propagates. The request never
-      // reached a handler, so nothing committed — safe to retry. This wraps
-      // only the promise, leaving the response (and its streaming body)
-      // untouched, so RPC/stream decoding is unaffected. After the budget is
-      // exhausted, re-raise the original defect unchanged.
-      Effect.catchCause((cause) => {
-        const squashed = Cause.squash(cause);
-        return isHandlerNotReady(squashed)
-          ? Effect.fail(new HandlerNotReady(squashed))
-          : Effect.failCause(cause);
-      }),
+      // Retry only freshly deployed handlers that haven't propagated. The
+      // budget and backoff apply to both overloads; an exhausted retry stays
+      // typed until the overload decides how to surface the original cause.
+      // Streaming responses and interruption are left untouched.
       Effect.retry({
         while: (error) => error instanceof HandlerNotReady,
         schedule: Schedule.exponential("100 millis"),
         times: 8,
       }),
-      Effect.catch((error) =>
-        error instanceof HandlerNotReady
-          ? Effect.die(error.cause)
-          : Effect.failCause(Cause.fail(error)),
-      ),
     );
 
   return {
@@ -122,6 +108,11 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher):
             HttpServerRequest.fromClientRequest,
             HttpServerRequest.toWeb,
             Effect.flatMap(fetch),
+            // A client-shaped fetch still treats native fetcher rejections
+            // as defects, rather than manufacturing a server error response.
+            Effect.catchTag(["HandlerNotReady", "FetcherFailure"], (error) =>
+              Effect.die(error.cause),
+            ),
             Effect.map((response) =>
               HttpClientResponse.fromWeb(request, response as any as Response),
             ),
@@ -161,6 +152,17 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher | globalThis.Fetcher):
                 : new Request(webRequest, { headers: request.headers as Record<string, string> }),
             ),
             Effect.flatMap(fetch),
+            Effect.catchTag(["HandlerNotReady", "FetcherFailure"], (error) =>
+              Effect.fail(
+                new HttpServerError({
+                  reason: new InternalError({
+                    request,
+                    cause: error.cause,
+                    description: "Cloudflare Fetcher request failed",
+                  }),
+                }),
+              ),
+            ),
             Effect.map((response) => {
               if ((response as any).status === 101) {
                 return HttpServerResponse.setBody(
@@ -203,6 +205,11 @@ class HandlerNotReady {
   constructor(readonly cause: unknown) {}
 }
 
+class FetcherFailure {
+  readonly _tag = "FetcherFailure";
+  constructor(readonly cause: unknown) {}
+}
+
 export const toHttpClient = (fetcher: {
   fetch: (
     request: HttpServerRequest.HttpServerRequest,
@@ -222,10 +229,9 @@ export const toHttpClient = (fetcher: {
     ).pipe(
       // The handler-not-ready window is already ridden out at the lowest level
       // (the `fromCloudflareFetcher` promise retries `HandlerNotReady` before
-      // it ever reaches here). A `HandlerNotReady` still surfacing means the
-      // budget was exhausted — it arrives as a defect (re-raised rejected
-      // promise), so convert it (and any other failure cause) into a typed
-      // transport error rather than retrying again.
+      // it ever reaches here). An exhausted `HandlerNotReady` arrives
+      // wrapped in `HttpServerError`, so convert it (and other failure
+      // causes) into a typed transport error rather than retrying again.
       Effect.catchCause((cause) => {
         const squashed = Cause.squash(cause);
         return Effect.fail(
@@ -241,21 +247,9 @@ export const toHttpClient = (fetcher: {
     ),
   );
 
-export const fromCloudflareSocket = (cfSocket: globalThis.Socket | cf.Socket): Socket.Socket =>
-  // `fromTransformStream` snapshots fiber context, then waits to acquire
-  // the streams until a consumer opens the reader. `runSync` is only that
-  // snapshot — connection still happens on first `socket.reader`.
-  Effect.tryPromise({
-    try: () =>
-      Promise.resolve(cfSocket.opened).then(
-        () =>
-          ({
-            readable: cfSocket.readable,
-            writable: cfSocket.writable,
-          }) as Socket.InputTransformStream,
-      ),
-    catch: (cause) =>
-      Socket.SocketError.make({
-        reason: Socket.SocketOpenError.make({ kind: "Unknown", cause }),
-      }),
-  }).pipe(Socket.fromTransformStream, Effect.runSync);
+/**
+ * Wrap a workerd `Socket` as an Effect socket that keeps the native one on
+ * `raw`. See {@link TcpSocket}.
+ */
+export const fromCloudflareSocket = (cfSocket: globalThis.Socket | cf.Socket): TcpSocket =>
+  fromWorkerdSocket(cfSocket as cf.Socket);

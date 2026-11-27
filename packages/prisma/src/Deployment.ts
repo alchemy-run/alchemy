@@ -3,7 +3,7 @@ import {
   type GetServiceDeploymentsResponse,
   getServiceDeployments,
   createServiceDeployment,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";

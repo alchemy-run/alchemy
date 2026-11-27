@@ -21,18 +21,29 @@
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
 import * as CommandModule from "./Command.ts";
+import * as CompactionModule from "./Compaction.ts";
 import * as DecisionModule from "./Decision.ts";
 import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
+import { HostKeyStore as HostKeyStoreLayer } from "./HostKeyStore.ts";
 import type * as KeyModule from "./Key.ts";
+import * as KeyStoreModule from "./KeyStore.ts";
+import * as KeyWrapModule from "./KeyWrap.ts";
+import { MemoryKeyStore as MemoryKeyStoreLayer } from "./MemoryKeyStore.ts";
 import * as ModelModule from "./Model.ts";
+import { NoKeyWrap as NoKeyWrapLayer } from "./NoKeyWrap.ts";
 import * as PolicyModule from "./Policy.ts";
 import * as ProjectionModule from "./Projection.ts";
 import * as QueryModule from "./Query.ts";
 import * as RejectionModule from "./Rejection.ts";
+import * as RelationModule from "./Relation.ts";
 import * as RequestContextModule from "./RequestContext.ts";
+import * as RewriteModule from "./Rewrite.ts";
+import { RootKeyWrap as RootKeyWrapLayer } from "./RootKeyWrap.ts";
 import * as SagaModule from "./Saga.ts";
 import * as StreamModule from "./Stream.ts";
+import * as VaultModule from "./Vault.ts";
+import { VaultLive as VaultLiveLayer } from "./VaultLive.ts";
 import * as ViewModule from "./View.ts";
 
 export declare namespace Event {
@@ -59,6 +70,8 @@ export declare namespace Command {
 }
 /** A request to change one aggregate. See {@link CommandModule.make}. */
 export const Command = CommandModule.make;
+/** When the commands of a client answer, unless a call says otherwise. See {@link CommandModule.DefaultConsistency}. */
+export const DefaultConsistency = CommandModule.DefaultConsistency;
 
 export declare namespace Rejection {
   /** Any Rejection class. */
@@ -87,6 +100,10 @@ export declare namespace Aggregate {
   export type Envelope<Id = string> = AggregateModule.Envelope<Id>;
   export type SendOptions = AggregateModule.SendOptions;
   export type ScheduleOptions = AggregateModule.ScheduleOptions;
+  /** Options for `client.import`: the import's command id and the version it expects. */
+  export type ImportOptions = AggregateModule.ImportOptions;
+  /** One event for `client.import`: the event, or `{ event, at }` to keep its original commit time. */
+  export type Imported<Ev> = AggregateModule.Imported<Ev>;
   /** The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`. */
   export type InstanceOf<C> = AggregateModule.InstanceOf<C>;
   /** Options for `MyAggregate.predict`. */
@@ -110,6 +127,12 @@ export type AlreadyCancelled = AggregateModule.AlreadyCancelled;
 /** No command was scheduled with that id. */
 export const NotScheduled = AggregateModule.NotScheduled;
 export type NotScheduled = AggregateModule.NotScheduled;
+/** An import found the instance at another version than it expected. */
+export const UnexpectedVersion = AggregateModule.UnexpectedVersion;
+export type UnexpectedVersion = AggregateModule.UnexpectedVersion;
+/** An import's commit times went back, or past the platform's clock. */
+export const ImportOutOfOrder = AggregateModule.ImportOutOfOrder;
+export type ImportOutOfOrder = AggregateModule.ImportOutOfOrder;
 
 export declare namespace Decision {
   /** Any Decision class. */
@@ -191,9 +214,43 @@ export declare namespace Projection {
   export type Input<K extends KeyModule.Any, S, E> = ProjectionModule.Input<K, S, E>;
   /** How a projection's Layer tunes it. */
   export type Options = ProjectionModule.Options;
+  /** One event a projection's `rewrite` handler receives: what it was, and what it is now. */
+  export type Rewritten<K extends KeyModule.Any, S, E> = ProjectionModule.Rewritten<K, S, E>;
 }
 /** Consumes events into a store you own, in order per key; replayable, never sends commands. See {@link ProjectionModule.make}. */
 export const Projection = ProjectionModule.make;
+
+export declare namespace Rewrite {
+  /** Any Rewrite class. */
+  export type Any = RewriteModule.Any;
+  /** What accepting a rewrite returns: pass it to `rewritten` to wait for what is built from it. */
+  export type Receipt = RewriteModule.Receipt;
+  /** Options for `client.rewrite`: the id that names the run. */
+  export type Options = RewriteModule.Options;
+}
+/** A change to the events an instance has already recorded: keep, replace or remove each. See {@link RewriteModule.make}. */
+export const Rewrite = RewriteModule.make;
+/** The schema of a rewrite's receipt, for a saga step that returns one. */
+export const RewriteReceipt = RewriteModule.Receipt;
+export const InvariantBroken = RewriteModule.InvariantBroken;
+export type InvariantBroken = RewriteModule.InvariantBroken;
+
+export declare namespace Compaction {
+  /** Any Compaction class. */
+  export type Any = CompactionModule.Any;
+  /** One run of events a compaction's handler is given before they are removed. */
+  export type Batch<A extends AggregateModule.Any> = CompactionModule.Batch<A>;
+  /** What accepting a compaction returns. */
+  export type Receipt = CompactionModule.Receipt;
+  /** How a compaction's Layer tunes it: when an instance compacts by itself. */
+  export type Options = CompactionModule.Options;
+}
+/** Replaces an instance's history with a roll-up of its state; its Layer keeps what it removes. See {@link CompactionModule.make}. */
+export const Compaction = CompactionModule.make;
+/** The schema of a compaction's receipt, for a saga step that returns one. */
+export const CompactionReceipt = CompactionModule.Receipt;
+export const CompactionLossy = CompactionModule.CompactionLossy;
+export type CompactionLossy = CompactionModule.CompactionLossy;
 
 export declare namespace Query {
   /** Any Query class. */
@@ -207,6 +264,15 @@ export declare namespace Query {
   /** How a query's Layer runs it: page size limits. */
   export type LayerOptions = QueryModule.LayerOptions;
 }
+export declare namespace Relation {
+  /** Any relation. */
+  export type Any = RelationModule.Any;
+  /** One instance a relation is about: its id and its state. */
+  export type Instance<A extends AggregateModule.Any> = RelationModule.Instance<A>;
+}
+/** A rule that relates a few instances at all times. See {@link RelationModule.make}. */
+export const Relation = RelationModule.make;
+
 /** A question asked across keys, answered from a store a projection writes. See {@link QueryModule.make}. */
 export const Query = QueryModule.make;
 
@@ -297,14 +363,50 @@ export declare namespace Model {
 /** The aggregates, views, policies, projections, streams and queries hosted together. See {@link ModelModule.make}. */
 export const Model = ModelModule.make;
 
-/** Every definition problem in a Model, without hosting it. See {@link ModelModule.verify}. */
-export const verify = ModelModule.verify;
-/** A problem in a Model's definitions, found by {@link verify} or when its Layer is built. */
 export type { Annotations } from "./Annotations.ts";
+/** A problem in a Model's definitions. Building its Layer dies with every one. */
 export { DefinitionError } from "./Kernel.ts";
+
+export declare namespace Sealed {
+  /** A value encrypted under one subject's key. */
+  export type Value<A> = VaultModule.Sealed<A>;
+  /** Any sealed field. */
+  export type Any = VaultModule.AnySealed;
+}
+/** A field encrypted under a key kept per subject. See {@link VaultModule.make}. */
+export const Sealed = VaultModule.make;
+/** Seals, opens and shreds. See {@link VaultModule.Vault}. */
+export const Vault = VaultModule.Vault;
+export type Vault = VaultModule.Vault;
+/** Where a Vault keeps one key per subject. See {@link KeyStoreModule.KeyStore}. */
+export const KeyStore = KeyStoreModule.KeyStore;
+export type KeyStore = KeyStoreModule.KeyStore;
+/** Makes each subject's key and what is stored of it. See {@link KeyWrapModule.KeyWrap}. */
+export const KeyWrap = KeyWrapModule.KeyWrap;
+export type KeyWrap = KeyWrapModule.KeyWrap;
+/** A Vault that encrypts with AES-256-GCM. See {@link VaultLiveLayer}. */
+export const VaultLive = VaultLiveLayer;
+/** Keys kept in memory. See {@link MemoryKeyStoreLayer}. */
+export const MemoryKeyStore = MemoryKeyStoreLayer;
+/** Keys kept on the model's own host. See {@link HostKeyStoreLayer}. */
+export const HostKeyStore = HostKeyStoreLayer;
+/** Keys stored as they are. See {@link NoKeyWrapLayer}. */
+export const NoKeyWrap = NoKeyWrapLayer;
+/** Keys wrapped under a root key you supply. See {@link RootKeyWrapLayer}. */
+export const RootKeyWrap = RootKeyWrapLayer;
+/** A Vault for stories. See {@link VaultModule.VaultTest}. */
+export const VaultTest = VaultModule.VaultTest;
+/** A sealed value as the test Vault seals it. See {@link VaultModule.sealedInTest}. */
+export const sealedInTest = VaultModule.sealedInTest;
+/** The Vault or its key store failed. See {@link VaultModule.VaultError}. */
+export const VaultError = VaultModule.VaultError;
+export type VaultError = VaultModule.VaultError;
 
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */
 export const RequestContext = RequestContextModule.make;
+
+/** When a middleware's verdict expires; a live read is judged again then. See {@link RequestContextModule.setExpiry}. */
+export const setExpiry = RequestContextModule.setExpiry;
 
 export type { Filter, OrderBy } from "./Filter.ts";
 export { InMemory } from "./InMemory.ts";

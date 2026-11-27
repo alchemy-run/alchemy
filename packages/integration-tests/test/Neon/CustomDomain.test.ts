@@ -9,6 +9,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Api from "@distilled.cloud/neon";
+import * as ApiUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as AlchemyOutput from "alchemy/Output";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -77,7 +78,7 @@ test.provider(
       expect(liveRecord.content).toBe(deployed.domain.cnameTarget);
       expect(liveRecord.proxied).toBe(false);
       expect(liveRecord.ttl).toBe(60);
-      const observeDomain = Api.listProjectBranchCustomDomains({
+      const observeDomain = ApiUnstable.listProjectBranchCustomDomains({
         project_id: deployed.api.projectId,
         branch_id: deployed.api.branchId,
       }).pipe(

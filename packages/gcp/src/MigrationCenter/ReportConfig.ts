@@ -319,13 +319,11 @@ export const ReportConfigProvider = () =>
       if (current === undefined) {
         const created = yield* mc
           .createProjectsLocationsReportConfigs({
+            displayName,
+            description,
+            groupPreferencesetAssignments,
             parent: locationParent(env.project, location),
             reportConfigId,
-            body: {
-              displayName,
-              description,
-              groupPreferencesetAssignments,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

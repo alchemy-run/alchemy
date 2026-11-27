@@ -418,20 +418,14 @@ export const RegionUrlMapProvider = () =>
       let current = yield* getByName(env.project, region, urlMapName);
 
       if (current === undefined) {
-        yield* compute
-          .insertRegionUrlMaps({
-            project: env.project,
-            region,
-            body: desired,
-          })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation, {
-                ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }),
-            ),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertRegionUrlMaps({ ...desired, project: env.project, region }).pipe(
+          Effect.flatMap((operation) =>
+            waitRegionOperation(env.project, region, operation, {
+              ignore: ["RESOURCE_ALREADY_EXISTS"],
+            }),
+          ),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* getByName(env.project, region, urlMapName);
       }
 
@@ -442,10 +436,10 @@ export const RegionUrlMapProvider = () =>
       if (needsUpdate(current, desired)) {
         yield* compute
           .updateRegionUrlMaps({
+            ...toBody(urlMapName, news, ownership, current.fingerprint),
             project: env.project,
             region,
             urlMap: urlMapName,
-            body: toBody(urlMapName, news, ownership, current.fingerprint),
           })
           .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, urlMapName);

@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -281,7 +282,7 @@ const toAttrs = (channel: eventarc.Channel, project: string, region: string) => 
     labels: userLabels(channel.labels),
     pubsubTopic: channel.pubsubTopic,
     state: channel.state,
-    activationToken: channel.activationToken,
+    activationToken: revealOptional(channel.activationToken),
     uid: channel.uid,
     createTime: channel.createTime,
     updateTime: channel.updateTime,
@@ -418,14 +419,14 @@ export const ChannelProvider = () =>
       if (current === undefined) {
         const created = yield* eventarc
           .createProjectsLocationsChannels({
-            parent: `projects/${env.project}/locations/${location}`,
-            channelId,
-            body: compact({
+            ...compact({
               name,
               labels: desiredLabels,
               provider: desiredProvider,
               cryptoKeyName: desiredCryptoKey,
             }),
+            parent: `projects/${env.project}/locations/${location}`,
+            channelId,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -451,13 +452,10 @@ export const ChannelProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const patched = yield* eventarc.patchProjectsLocationsChannels({
+          labels: desiredLabels,
+          cryptoKeyName: desiredCryptoKey,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            cryptoKeyName: desiredCryptoKey,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);

@@ -1,4 +1,5 @@
 import * as BuildPlan from "@alchemy.run/docker/BuildPlan";
+import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as image from "@distilled.cloud/modal/image";
 import * as secret from "@distilled.cloud/modal/secret";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -12,10 +13,10 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "alchemy/Runtime/Process";
+import { envString } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import type { App } from "./App.ts";
 import { buildImage, ImageBuildOps } from "./ImageBuild.ts";
 import { checkCommands, lowerPlan, MODAL_CAPABILITIES } from "./ImagePlan.ts";
@@ -47,10 +48,17 @@ export interface SandboxProps extends PlatformProps {
   /** The App sandboxes run in. */
   app: Ref<App>;
   /**
-   * Base image the bundle runs on. It needs Bun on the `PATH`.
-   * @default "oven/bun:1"
+   * Base image the bundle runs on. It needs the {@link runtime}'s
+   * executable on the `PATH`.
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /** Dockerfile lines run on the base before the bundle is added. */
   commands?: string[];
   /**
@@ -147,7 +155,7 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * ```
  *
  * ### Async program
- * **Example:** A plain HTTP server, no Effect (it runs on Bun)
+ * **Example:** A plain HTTP server, no Effect
  * ```typescript
  * // src/Agent.ts
  * import * as Modal from "@alchemy.run/modal";
@@ -279,12 +287,7 @@ const appOf = (value: unknown) => {
 };
 
 /** An env value as a string, as the program's `process.env` sees it. */
-const envText = (value: unknown): string =>
-  typeof value === "string"
-    ? value
-    : Redacted.isRedacted(value)
-      ? String(Redacted.value(value))
-      : JSON.stringify(value ?? null);
+const envText = (value: unknown): string => envString(value) ?? "";
 
 export const SandboxProvider = () =>
   Provider.effect(
@@ -306,6 +309,7 @@ export const SandboxProvider = () =>
           {
             main: news.main,
             image: news.image,
+            runtime: news.runtime,
             handler: news.handler,
             build: news.build,
           },

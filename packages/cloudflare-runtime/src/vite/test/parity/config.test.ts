@@ -3,7 +3,7 @@ import * as NodeOs from "node:os";
 import * as NodePath from "node:path";
 import { cloudflare as officialCloudflare } from "@cloudflare/vite-plugin";
 import * as vite from "vite";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import cloudflareVitePlugin from "../../plugin.ts";
 import { AHEAD_OF_RELEASE_BUILT_IN_MODULES } from "./ahead-of-release.ts";
 
@@ -43,15 +43,19 @@ const resolve = (
 
 const official = (flags: Array<string>) =>
   officialCloudflare({
-    viteEnvironment: { name: "ssr" },
     inspectorPort: false,
     persistState: false,
-    config: {
-      name: "worker",
-      main: "./src/index.ts",
-      compatibility_date: COMPATIBILITY_DATE,
-      compatibility_flags: flags,
-    },
+    types: { generate: false },
+    config: (loaded) => ({
+      ...loaded,
+      worker: {
+        ...loaded.worker,
+        name: "worker",
+        entrypoint: "./src/index.ts",
+        compatibilityDate: COMPATIBILITY_DATE,
+        compatibilityFlags: flags,
+      },
+    }),
   });
 
 const alchemy = (flags: Array<string>) =>
@@ -67,6 +71,11 @@ const sorted = (values: ReadonlyArray<unknown> | undefined) =>
     .map((value) => String(value))
     .filter((value) => !AHEAD_OF_RELEASE_BUILT_IN_MODULES.includes(value))
     .sort();
+
+// Not compared: `build.outDir`. v2 builds every environment into Build Output
+// under `.cloudflare/output/v1` for `cf deploy` and ignores the user's
+// `build.outDir`. Alchemy deploys from Vite's own layout, so it keeps
+// `<outDir>/<environment>`; "keeps Vite's output directories" pins that.
 
 /** What a framework can observe of a Worker environment's resolved options. */
 const workerEnvironment = (config: vite.ResolvedConfig) => {
@@ -93,7 +102,6 @@ const workerEnvironment = (config: vite.ResolvedConfig) => {
       cssTarget: build.cssTarget,
       emitAssets: build.emitAssets,
       manifest: build.manifest,
-      outDir: build.outDir,
       sourcemap: build.sourcemap,
       copyPublicDir: build.copyPublicDir,
       ssr: build.ssr,
@@ -116,7 +124,6 @@ const workerEnvironment = (config: vite.ResolvedConfig) => {
 };
 
 const clientEnvironment = (config: vite.ResolvedConfig) => ({
-  outDir: config.environments.client!.build.outDir,
   exclude: sorted(config.environments.client!.optimizeDeps.exclude),
 });
 
@@ -146,12 +153,41 @@ describe.each([
   });
 });
 
+describe("ALCHEMY_DIR", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("denies the moved runtime directory", async () => {
+    vi.stubEnv("ALCHEMY_DIR", NodePath.join(root, ".alchemy-ci"));
+    const actual = await resolve(alchemy([]), "serve");
+    // Vite matches posix paths, Windows included.
+    const posixRoot = root.replaceAll("\\", "/");
+    expect(actual.server.fs.deny).toContain(`${posixRoot}/.alchemy-ci/**`);
+    // Vite's own matcher, as the dev server checks each request.
+    const denied = (actual as unknown as { fsDenyGlob: (file: string) => boolean }).fsDenyGlob;
+    expect(denied(`${posixRoot}/.alchemy-ci/state/test/stage/Api.json`)).toBe(true);
+    expect(denied(`${posixRoot}/.alchemy-ci-sibling/file.txt`)).toBe(false);
+  });
+
+  it("adds nothing when unset", async () => {
+    vi.stubEnv("ALCHEMY_DIR", "");
+    const actual = await resolve(alchemy([]), "serve");
+    const posixRoot = root.replaceAll("\\", "/");
+    expect(actual.server.fs.deny.filter((pattern) => pattern.startsWith(posixRoot))).toEqual([]);
+  });
+});
+
 describe.each([
-  { name: "a custom build.outDir", userConfig: { build: { outDir: "out" } } },
   { name: "source maps turned off", userConfig: { build: { sourcemap: false } } },
   {
     name: "the Worker's own source map setting",
     userConfig: { environments: { ssr: { build: { sourcemap: "hidden" as const } } } },
+  },
+  { name: "a CSS target", userConfig: { build: { cssTarget: ["chrome100", "safari15"] } } },
+  {
+    name: "the Worker's own CSS target",
+    userConfig: { environments: { ssr: { build: { cssTarget: "chrome100" } } } },
   },
 ])("resolved config matches @cloudflare/vite-plugin with $name", ({ userConfig }) => {
   it.each(["serve", "build"] as const)("%s", async (command) => {
@@ -159,6 +195,25 @@ describe.each([
     const actual = await resolve(alchemy(["nodejs_compat"]), command, userConfig);
     expect(workerEnvironment(actual)).toEqual(workerEnvironment(expected));
     expect(clientEnvironment(actual)).toEqual(clientEnvironment(expected));
+  });
+});
+
+describe("keeps Vite's output directories", () => {
+  it.each([
+    {
+      outDir: undefined,
+      ssr: NodePath.join("dist", "ssr"),
+      client: NodePath.join("dist", "client"),
+    },
+    { outDir: "out", ssr: NodePath.join("out", "ssr"), client: NodePath.join("out", "client") },
+  ])("with build.outDir $outDir", async ({ outDir, ssr, client }) => {
+    const config = await resolve(
+      alchemy(["nodejs_compat"]),
+      "build",
+      outDir === undefined ? {} : { build: { outDir } },
+    );
+    expect(config.environments.ssr!.build.outDir).toBe(ssr);
+    expect(config.environments.client!.build.outDir).toBe(client);
   });
 });
 

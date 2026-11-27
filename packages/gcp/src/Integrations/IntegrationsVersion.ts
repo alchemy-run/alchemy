@@ -338,11 +338,9 @@ export const IntegrationsVersionProvider = () =>
           integrations.createProjectsLocationsIntegrationsVersions({
             parent,
             newIntegration: createNew,
-            body: {
-              description,
-              userLabel: news.userLabel,
-              triggerConfigs,
-            },
+            description,
+            userLabel: news.userLabel,
+            triggerConfigs,
           });
         const created = yield* tryCreate(newIntegration).pipe(
           Effect.catchTag(["Conflict", "BadRequest"], () =>
@@ -374,12 +372,9 @@ export const IntegrationsVersionProvider = () =>
             labelChanged ? "user_label" : undefined,
             triggersChanged ? "trigger_configs" : undefined,
           ),
-          body: {
-            name: currentName,
-            description,
-            userLabel: news.userLabel,
-            triggerConfigs,
-          },
+          description,
+          userLabel: news.userLabel,
+          triggerConfigs,
         });
       }
 

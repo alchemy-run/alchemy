@@ -315,16 +315,14 @@ export const ApisConfigProvider = () =>
       if (current === undefined) {
         const created = yield* apigateway
           .createProjectsLocationsApisConfigs({
+            displayName,
+            labels: desiredLabels,
+            gatewayServiceAccount: news.gatewayServiceAccount,
+            openapiDocuments,
+            grpcServices,
+            managedServiceConfigs,
             parent: api,
             apiConfigId,
-            body: {
-              displayName,
-              labels: desiredLabels,
-              gatewayServiceAccount: news.gatewayServiceAccount,
-              openapiDocuments,
-              grpcServices,
-              managedServiceConfigs,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -348,13 +346,10 @@ export const ApisConfigProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* apigateway.patchProjectsLocationsApisConfigs({
+          displayName,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

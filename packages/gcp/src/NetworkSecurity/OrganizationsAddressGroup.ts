@@ -365,16 +365,14 @@ export const OrganizationsAddressGroupProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createOrganizationsLocationsAddressGroups({
+            type,
+            capacity,
+            items,
+            purpose,
+            description: news.description,
+            labels: desiredLabels,
             parent: organizationParent(organization, location),
             addressGroupId,
-            body: {
-              type,
-              capacity,
-              items,
-              purpose,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -408,14 +406,11 @@ export const OrganizationsAddressGroupProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networksecurity.patchOrganizationsLocationsAddressGroups({
+          labels: desiredLabels,
+          description: news.description,
+          items,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            items,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

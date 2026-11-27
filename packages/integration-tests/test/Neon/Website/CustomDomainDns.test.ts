@@ -14,6 +14,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Api from "@distilled.cloud/neon";
+import * as ApiUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -100,7 +101,7 @@ const waitForAuthoritativeCname = (target: string) =>
   });
 
 const observeDomain = (fn: { projectId: string; branchId: string }) =>
-  Api.listProjectBranchCustomDomains({
+  ApiUnstable.listProjectBranchCustomDomains({
     project_id: fn.projectId,
     branch_id: fn.branchId,
   }).pipe(

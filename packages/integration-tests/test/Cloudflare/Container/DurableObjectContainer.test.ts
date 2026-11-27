@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe, expect } from "@alchemy.run/test";
+import { assert, describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Workers from "@distilled.cloud/cloudflare/workers";
@@ -7,12 +7,18 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import {
   BuildInputs,
   type BuildInputSet,
   buildSecretsStack,
 } from "./fixtures/buildsecrets/stack.ts";
+import MyContainerLive, {
+  MyContainer,
+  MyFleetContainerLive,
+} from "./fixtures/effectful/container.ts";
+import EffectfulWorker from "./fixtures/effectful/worker.ts";
 import { GuardWorker } from "./fixtures/native/guard-worker.ts";
 import { policyStack, settingsStack, TEST_SSH_PUBLIC_KEY } from "./fixtures/native/settings.ts";
 import {
@@ -21,6 +27,8 @@ import {
   NativeImages,
   nativeStack,
 } from "./fixtures/native/stack.ts";
+import type { BoxName, Identity } from "./fixtures/selectable/containers.ts";
+import { selectableStack } from "./fixtures/selectable/stack.ts";
 
 /** What `/probe` reports about the running container (fixtures/native). */
 interface Probe {
@@ -35,6 +43,17 @@ interface Probe {
   file: string;
   /** The Durable Object storage marker, null when absent. */
   stored: string | null;
+}
+
+/** What `/run` reports (fixtures/selectable). */
+interface RunResult {
+  identity: Identity;
+  /** The container program's answer to an RPC with an argument. */
+  echo: string;
+  /** The image reference the selected Container started. */
+  image: string;
+  /** Sorted keys of `ctx.container.images`. */
+  images: string[];
 }
 
 interface Metadata {
@@ -78,6 +97,19 @@ const getText = (baseUrl: string, path: string) =>
       return yield* Effect.fail(new Error(`GET ${path} failed (${response.status}): ${body}`));
     }
     return body;
+  });
+
+/** PUT a text body to a route; a non-2xx response fails with its status and body. */
+const putText = (baseUrl: string, path: string, body: string) =>
+  Effect.gen(function* () {
+    const response = yield* HttpClient.execute(
+      HttpClientRequest.put(new URL(path, baseUrl)).pipe(HttpClientRequest.bodyText(body)),
+    );
+    if (response.status < 200 || response.status >= 300) {
+      return yield* Effect.fail(
+        new Error(`PUT ${path} failed (${response.status}): ${yield* response.text}`),
+      );
+    }
   });
 
 const getJson = <A>(baseUrl: string, path: string) =>
@@ -134,12 +166,24 @@ const uploadedImageKeys = Effect.fn(function* (
   accountId: string,
   scriptName: string,
   className: string,
+  expected: ReadonlyArray<string>,
 ) {
-  const containers = yield* uploadedContainers(accountId, scriptName);
-  const entries = containers?.filter((container) => container.className === className) ?? [];
-  // One class has exactly one merged entry.
-  expect(entries).toHaveLength(1);
-  return Object.keys(entries[0]?.images ?? {}).sort();
+  // The version list can trail a fresh upload, so the newest listed version
+  // may still be the previous deploy's. Wait until it carries the expected
+  // keys; the caller's assertion reports what it last saw.
+  return yield* Effect.gen(function* () {
+    const containers = yield* uploadedContainers(accountId, scriptName);
+    const entries = containers?.filter((container) => container.className === className) ?? [];
+    // One class has exactly one merged entry.
+    expect(entries).toHaveLength(1);
+    return Object.keys(entries[0]?.images ?? {}).sort();
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (keys) => JSON.stringify(keys) === JSON.stringify([...expected].sort()),
+      times: 15,
+    }),
+  );
 });
 
 /** The `containers` metadata of a Worker's most recently uploaded version. */
@@ -462,28 +506,88 @@ for (const dev of [true, false]) {
         );
 
         test.provider(
-          "rejects switching an application between fleet and Durable Object scheduling",
+          "upgrades a fleet application to Durable Object scheduling in place, and refuses the way back",
           (stack) =>
             Effect.gen(function* () {
               yield* stack.destroy();
               yield* Effect.gen(function* () {
                 const fleet = yield* stack.deploy(policyStack("default"));
-                const switched = yield* stack
-                  .deploy(policyStack("durable_object"))
-                  .pipe(Effect.exit);
-                expect(Exit.isFailure(switched)).toBe(true);
-                if (Exit.isFailure(switched)) {
-                  expect(Cause.pretty(switched.cause)).toContain(
-                    "cannot switch between fleet and Durable Object scheduling",
+                expect((yield* observe(fleet)).schedulingPolicy).toBe("default");
+
+                // Cloudflare cannot change a policy in place: the Container
+                // deletes its fleet application, and Durable Object
+                // scheduling needs none of its own.
+                const upgraded = yield* stack.deploy(policyStack("durable_object"));
+                expect(upgraded.applicationId).toBe("");
+                expect(upgraded.schedulingPolicy).toBe("durable_object");
+                expect(yield* waitForApplicationDeleted(fleet.accountId, fleet.applicationId)).toBe(
+                  undefined,
+                );
+
+                const back = yield* stack.deploy(policyStack("default")).pipe(Effect.exit);
+                expect(Exit.isFailure(back)).toBe(true);
+                if (Exit.isFailure(back)) {
+                  expect(Cause.pretty(back.cause)).toContain(
+                    "cannot move back to fleet scheduling in place",
                   );
                 }
-                // The rejected deploy did not touch the deployed application.
-                const observed = yield* observe(fleet);
-                expect(observed.id).toBe(fleet.applicationId);
-                expect(observed.schedulingPolicy).toBe("default");
               }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
             }),
-          { timeout: 120_000, retry: 0 },
+          { timeout: 180_000, retry: 0 },
+        );
+
+        test.provider(
+          "upgrades a fleet Effect-native Container to Durable Object scheduling, keeping its Durable Objects' storage",
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              const program = (live: typeof MyContainerLive) =>
+                Effect.gen(function* () {
+                  const worker = yield* EffectfulWorker;
+                  const app: Cloudflare.ContainerApplication = yield* MyContainer.Application;
+                  return { app, url: worker.url.as<string>() };
+                }).pipe(Effect.provide(live));
+              // A cold container start, then the program's port, can take a while.
+              const ping = (url: string) =>
+                getText(url, "/ping").pipe(
+                  within("/ping", "90 seconds"),
+                  Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 6 }),
+                );
+
+              yield* Effect.gen(function* () {
+                const fleet = yield* stack.deploy(program(MyFleetContainerLive));
+                const namespaceId = fleet.app.durableObjects?.namespaceId;
+                assert(namespaceId);
+                expect(fleet.app.schedulingPolicy).toBe("default");
+                yield* waitUntilReady(fleet.url);
+                expect(yield* ping(fleet.url)).toBe("pong");
+                yield* putText(fleet.url, "/remember", "kept across the upgrade");
+
+                // The default Effect-native Container is Durable Object-managed.
+                const upgraded = yield* stack.deploy(program(MyContainerLive));
+                expect(upgraded.app.schedulingPolicy).toBe("durable_object");
+                expect(
+                  yield* waitForApplicationDeleted(fleet.app.accountId, fleet.app.applicationId),
+                ).toBe(undefined);
+                // The class's application takes the same namespace, so the
+                // Durable Objects and their storage stay.
+                const application = yield* Containers.getContainerApplication({
+                  accountId: fleet.app.accountId,
+                  applicationId: namespaceId,
+                });
+                expect(application.schedulingPolicy).toBe("durable_object");
+                expect(application.durableObjects?.namespaceId).toBe(namespaceId);
+
+                expect(yield* getJson<{ value: string | null }>(upgraded.url, "/recall")).toEqual({
+                  value: "kept across the upgrade",
+                });
+                expect(yield* ping(upgraded.url)).toBe("pong");
+
+                const unchanged = yield* stack.plan(program(MyContainerLive));
+                expect(unchanged.resources.EffectfulContainer?.action).toBe("noop");
+              }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+            }),
+          { timeout: 600_000, retry: 0 },
         );
       }
 
@@ -713,6 +817,7 @@ for (const dev of [true, false]) {
                           application.accountId,
                           worker.workerName,
                           className,
+                          images,
                         ),
                       ).toEqual(images);
                     }
@@ -753,6 +858,7 @@ for (const dev of [true, false]) {
                         removed.asyncApplication.accountId,
                         removed.asyncWorker.workerName,
                         "NativeAsyncObject",
+                        ["AsyncShell"],
                       ),
                     ).toEqual(["AsyncShell"]);
                     expect(
@@ -760,6 +866,7 @@ for (const dev of [true, false]) {
                         removed.application.accountId,
                         removed.worker.workerName,
                         "NativeObject",
+                        ["NativeShell"],
                       ),
                     ).toEqual(["NativeShell"]);
                   }
@@ -799,6 +906,7 @@ for (const dev of [true, false]) {
                         added.asyncApplication.accountId,
                         added.asyncWorker.workerName,
                         "NativeAsyncObject",
+                        ASYNC_IMAGES,
                       ),
                     ).toEqual(ASYNC_IMAGES);
                   } else {
@@ -834,6 +942,94 @@ for (const dev of [true, false]) {
           { timeout: 300_000, retry: 0 },
         );
       }
+
+      test.provider(
+        "starts the Effect-native Container a request selects and calls it over RPC",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const deployed = yield* Effect.gen(function* () {
+              const deployed = yield* stack.deploy(selectableStack);
+              const url = deployed.worker.url!;
+              yield* waitUntilReady(url);
+              // A cold image start, then the program's port, can take a while,
+              // after the object waits out the placeholder of a fresh deploy.
+              const run = (box: BoxName) =>
+                getJson<RunResult>(url, `/run?box=${box}`).pipe(
+                  // A Durable Object can run the deploy's placeholder for
+                  // minutes after its Worker serves the new code. The
+                  // placeholder runs none of the real code, so retry it.
+                  Effect.retry({
+                    while: (error) => String(error).includes("Alchemy worker is being deployed"),
+                    schedule: Schedule.spaced("10 seconds"),
+                    times: 18,
+                  }),
+                  within(`/run?box=${box}`, "360 seconds"),
+                );
+
+              // Both programs are images of the one class application.
+              const bun = yield* run("bun");
+              expect(bun.images).toEqual(["BunBox", "NodeBox"]);
+              expect(bun.echo).toBe("bun:hi");
+              expect(bun.identity).toEqual({
+                container: "BunBox",
+                runtime: "bun",
+                greeting: "hello from bun",
+                secret: "bun-secret",
+                boundEnv: deployed.storage.bucketName,
+                caller: "selector",
+                hasAccountId: true,
+              });
+
+              // Selecting the other Container stops the first and starts its image.
+              const node = yield* run("node");
+              expect(node.echo).toBe("node:hi");
+              expect(node.image).not.toBe(bun.image);
+              expect(node.identity).toMatchObject({
+                container: "NodeBox",
+                runtime: "node",
+                greeting: "hello from node",
+                caller: "selector",
+                hasAccountId: true,
+              });
+              // One Container's env never reaches another's process.
+              expect(node.identity.secret).toBeUndefined();
+
+              expect((yield* run("bun")).identity.container).toBe("BunBox");
+
+              if (!dev) {
+                expect(deployed.bun.image).toMatch(/@sha256:/);
+                expect(deployed.node.image).toMatch(/@sha256:/);
+                expect(
+                  yield* uploadedImageKeys(
+                    deployed.application.accountId,
+                    deployed.worker.workerName,
+                    "Selector",
+                    ["BunBox", "NodeBox"],
+                  ),
+                ).toEqual(["BunBox", "NodeBox"]);
+              }
+
+              // An unchanged program plans nothing.
+              const unchanged = yield* stack.plan(selectableStack);
+              expect(unchanged.resources.BunBox?.action).toBe("noop");
+              expect(unchanged.resources.NodeBox?.action).toBe("noop");
+              expect(unchanged.resources.SelectableWorker?.action).toBe("noop");
+              return deployed;
+            }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+
+            if (!dev) {
+              expect(
+                yield* waitForApplicationDeleted(
+                  deployed.application.accountId,
+                  deployed.application.applicationId,
+                ),
+              ).toBeUndefined();
+            }
+          }),
+        { timeout: 600_000, retry: 0 },
+      );
 
       test.provider(
         "builds a Container's Dockerfile with build args and BuildKit secrets",

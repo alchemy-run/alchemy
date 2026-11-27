@@ -5,6 +5,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
+import { Artifacts } from "alchemy/Artifacts";
 import { havePropsChanged, isResolved, stripEffects } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
@@ -44,6 +45,11 @@ import {
 import { resolveBuildEnv } from "./BuildEnv.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
+import {
+  DurableObjectRetirement,
+  MissingDurableObjectRetirement,
+  type RetiringClass,
+} from "./DurableObjectRetirement.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { placeholderResetReason } from "./Placeholder.ts";
 import { routePatternUrl } from "./RoutePattern.ts";
@@ -138,6 +144,25 @@ export class DurableObjectRenameConflict extends Data.TaggedError("DurableObject
     return (
       `Durable Object classes ${this.classNames.map((className) => `'${className}'`).join(", ")} on Worker '${this.scriptName}' are all renamed from '${this.renamedFrom}', which the Worker still hosts. ` +
       `Only one class can take over its objects: keep renamedFrom on that one, and remove it from the others.`
+    );
+  }
+}
+
+/**
+ * An in-place Worker update would remove inline Durable Object storage while
+ * protected. Deleting a class can destroy its namespace and every stored
+ * object, even though the Worker resource itself survives the update.
+ *
+ * Drop `RemovalPolicy.protect()` to delete the class on purpose. A declared
+ * rename preserves its identity.
+ */
+export class ProtectedDurableObjectClassDeletion extends Data.TaggedError(
+  "ProtectedDurableObjectClassDeletion",
+)<{ scriptName: string; classNames: string[] }> {
+  override get message() {
+    return (
+      `Refusing to delete Durable Object class(es) ${this.classNames.map((name) => `'${name}'`).join(", ")} from protected Worker '${this.scriptName}'. ` +
+      "Drop RemovalPolicy.protect() from the Worker to delete them on purpose."
     );
   }
 }
@@ -1638,24 +1663,38 @@ export const LiveWorkerProvider = () =>
         /** user-provided `version.alias` attached to the uploaded version */
         uploadedVersionAlias?: string;
       }) {
-        const { workersDev, scriptName } = params;
         const urls = yield* computeStableWorkerUrls(params);
-        if (workersDev.previewsEnabled) {
-          const { accountId } = yield* yield* CloudflareEnvironment;
-          const accountSubdomain = yield* getAccountSubdomain(accountId);
-          if (params.uploadedVersionId !== undefined) {
-            if (params.uploadedVersionAlias !== undefined) {
-              urls.push(
-                `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
-              );
-            }
+        return [...urls, ...(yield* computePreviewUrls(params))];
+      });
+
+      /**
+       * The preview URLs a Worker serves at (step 4 of
+       * {@link computeWorkerUrls}). `read` uses it too, so a deploy's `urls`
+       * read back unchanged and don't report drift.
+       */
+      const computePreviewUrls = Effect.fn(function* (params: {
+        scriptName: string;
+        workersDev: Pick<ResolvedWorkersDev, "enabled" | "previewsEnabled">;
+        uploadedVersionId?: string;
+        uploadedVersionAlias?: string;
+      }) {
+        const { workersDev, scriptName } = params;
+        if (!workersDev.previewsEnabled) return [];
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const accountSubdomain = yield* getAccountSubdomain(accountId);
+        const urls: string[] = [];
+        if (params.uploadedVersionId !== undefined) {
+          if (params.uploadedVersionAlias !== undefined) {
             urls.push(
-              `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+              `https://${params.uploadedVersionAlias}-${scriptName}.${accountSubdomain}.workers.dev`,
             );
-          } else if (!workersDev.enabled) {
-            const previewUrl = yield* getPreviewUrl(scriptName, accountSubdomain);
-            if (previewUrl) urls.push(previewUrl);
           }
+          urls.push(
+            `https://${params.uploadedVersionId.split("-")[0]}-${scriptName}.${accountSubdomain}.workers.dev`,
+          );
+        } else if (!workersDev.enabled) {
+          const previewUrl = yield* getPreviewUrl(scriptName, accountSubdomain);
+          if (previewUrl) urls.push(previewUrl);
         }
         return urls;
       });
@@ -1681,11 +1720,13 @@ export const LiveWorkerProvider = () =>
         matches: (existing: PhaseRule, rule: Rule) => boolean;
       }) {
         const { zoneId, phase } = params;
-        const entrypoint = yield* rulesets
-          .getPhasForZone({ zoneId, rulesetPhase: phase })
-          // Only a missing entrypoint means no rules yet. Any other failure
-          // stops here rather than treating the phase as empty.
-          .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
+        const entrypoint = yield* (
+          rulesets
+            .getPhasForZone({ zoneId, rulesetPhase: phase })
+            // Only a missing entrypoint means no rules yet. Any other failure
+            // stops here rather than treating the phase as empty.
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined))
+        );
         if (entrypoint === undefined) {
           if (params.desired.length === 0) return;
           yield* rulesets.putPhasForZone({
@@ -2329,7 +2370,10 @@ export const LiveWorkerProvider = () =>
               error._tag === "WorkerNotFound" ||
               error._tag === "DispatchNamespaceScriptNotFound" ||
               error._tag === "DispatchNamespaceNotFound",
-            schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(20)]),
+            // Capped at 2s between attempts (~35s in all): an uncapped
+            // exponential over 20 attempts waits ~29 hours on the last one.
+            schedule: Schedule.min([Schedule.exponential(100), Schedule.spaced("2 seconds")]),
+            times: 20,
           }),
         );
       });
@@ -2999,6 +3043,7 @@ export const LiveWorkerProvider = () =>
         bindings: ResourceBinding<Worker["Binding"]>[],
         session: ScopedPlanStatusSession,
         output: Worker["Attributes"] | undefined,
+        protectedFromDeletion = false,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         const preview = news.preview!;
@@ -3203,15 +3248,6 @@ export const LiveWorkerProvider = () =>
                 : item,
           ),
         );
-        let metadataAssets: workers.CreatePreviewDeploymentMetadata["assets"] | undefined;
-        if (assets) {
-          yield* Effect.logInfo(`Cloudflare Worker Preview: uploading assets for ${parentName}`);
-          const { jwt } = yield* uploadAssets(accountId, parentName, assets, session);
-          metadataAssets = { jwt, config: mergeAssetsConfigFiles(assets.config, assets) };
-          metadataBindings.push({ type: "assets", name: "ASSETS" });
-        }
-        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, parentName);
-
         const hostedClasses = getDurableObjectBindings(bindings, parentName);
         const classNames = [...new Set(hostedClasses.map((c) => c.className))];
         let migrations: unknown = undefined;
@@ -3236,6 +3272,13 @@ export const LiveWorkerProvider = () =>
           } else {
             const added = classNames.filter((c) => !previous.includes(c));
             const deleted = previous.filter((c) => !classNames.includes(c));
+            // Classes are deleted only by the deployment below; refuse first.
+            if (protectedFromDeletion && deleted.length > 0) {
+              return yield* new ProtectedDurableObjectClassDeletion({
+                scriptName: previewResource.name ?? parentName,
+                classNames: [...deleted].sort(),
+              });
+            }
             if (added.length > 0 || deleted.length > 0) {
               migrations = {
                 old_tag: oldTag,
@@ -3246,6 +3289,15 @@ export const LiveWorkerProvider = () =>
             }
           }
         }
+
+        let metadataAssets: workers.CreatePreviewDeploymentMetadata["assets"] | undefined;
+        if (assets) {
+          yield* Effect.logInfo(`Cloudflare Worker Preview: uploading assets for ${parentName}`);
+          const { jwt } = yield* uploadAssets(accountId, parentName, assets, session);
+          metadataAssets = { jwt, config: mergeAssetsConfigFiles(assets.config, assets) };
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        }
+        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, parentName);
 
         // A container-backed class carries its images as the parent's does,
         // without the parent's application name: the Preview's namespace gets
@@ -3345,6 +3397,17 @@ export const LiveWorkerProvider = () =>
         output: Worker["Attributes"] | undefined,
         session: ScopedPlanStatusSession,
         existingSettings?: workers.GetScriptScriptAndVersionSettingResponse,
+        /**
+         * Classes of this script an earlier upload deleted: the account's namespace
+         * listing can still show them for a while, and they must not be kept as exports.
+         */
+        gone?: ReadonlySet<string>,
+        /**
+         * Set when the Worker is protected: deleting a class outside `except`
+         * fails with `ProtectedDurableObjectClassDeletion`. `except` lists the
+         * classes a retirement emptied first, so deleting them loses nothing.
+         */
+        protection?: { readonly except: ReadonlySet<string> },
       ) {
         news = newsWithBoundEnv(news, bindings).news;
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -3461,78 +3524,6 @@ export const LiveWorkerProvider = () =>
           metadataBindings,
           name,
         );
-        let metadataAssets: workers.PutScriptRequest["metadata"]["assets"] | undefined;
-        let keepAssets = false;
-        if (prebuiltAssets?.skip) {
-          // Hash matched what's already on Cloudflare: keep the
-          // existing asset manifest and skip the upload session.
-          yield* Effect.logInfo(
-            `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
-          );
-          keepAssets = true;
-          // `keepAssets` only preserves the uploaded files — the PUT
-          // replaces the asset config wholesale. The skip path never
-          // walked the directory, so read just `_headers`/`_redirects`
-          // here or a no-op deploy would wipe their rules.
-          metadataAssets = {
-            config: mergeAssetsConfigFiles(
-              prebuiltAssets.config,
-              yield* readAssetsConfigFiles(prebuiltAssets.directory),
-            ),
-          };
-          metadataBindings.push({ type: "assets", name: "ASSETS" });
-        } else if (assets) {
-          // We had to read the directory. Even after the read, the
-          // computed hash may match what's already deployed (e.g.
-          // legacy `string` / `AssetsProps` shapes that don't carry a
-          // precomputed hash, or a precomputed hash that disagreed with
-          // disk). In that case still keep the existing manifest and
-          // skip the upload session — Cloudflare's content-addressed
-          // session would no-op on every byte anyway.
-          if (assets.hash === prebuiltAssets?.hash) {
-            yield* Effect.logInfo(
-              `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
-            );
-            keepAssets = true;
-            // Fold the build-emitted `_headers`/`_redirects` into the PUT
-            // config: source providers (Astro/SvelteKit/Waku/Nuxt) hash the
-            // files and carry them on the read result, but only `readAssets`
-            // pre-merges them — without this, framework header/redirect
-            // rules never reach Cloudflare. Idempotent for pre-merged
-            // configs (explicit config wins).
-            metadataAssets = { config: mergeAssetsConfigFiles(assets.config, assets) };
-          } else {
-            yield* Effect.logInfo(
-              `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
-            );
-            const { jwt } = yield* uploadAssets(
-              accountId,
-              name,
-              assets,
-              session,
-              dispatchNamespace,
-            );
-            metadataAssets = {
-              jwt,
-              // Same `_headers`/`_redirects` fold as the keep path above.
-              config: mergeAssetsConfigFiles(assets.config, assets),
-            };
-          }
-          metadataBindings.push({ type: "assets", name: "ASSETS" });
-        }
-        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, name);
-        yield* Effect.logInfo(
-          `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
-        );
-        const size =
-          bundle.files
-            ?.filter((file) => !file.name.endsWith(".map"))
-            .reduce((acc, file) => acc + file.size, 0) ?? 0;
-        const sizeKB = size / 1024;
-        const sizeMB = sizeKB / 1024;
-        const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
-        yield* session.note(`Uploading worker (${bundleSize}) ...`, { kind: "status" });
-
         // Read existing worker settings for migration tracking
         const oldSettings =
           existingSettings ??
@@ -3674,13 +3665,14 @@ export const LiveWorkerProvider = () =>
               binding.scriptName === undefined ||
               binding.scriptName === name),
         );
-        const observedNamespaces =
+        const observedNamespaces = (
           deletedClassCandidates.length > 0 ||
           mayTransferIn ||
           currentDoBindings.length > 0 ||
           hostedDurableObjectsBefore
             ? yield* listDurableObjectNamespaces(accountId, dispatchNamespace)
-            : [];
+            : []
+        ).filter((ns) => !(ns.script === name && gone?.has(ns.class)));
         const hosts = (
           namespaces: readonly { script: string; class: string }[],
           scriptName: string,
@@ -3780,6 +3772,92 @@ export const LiveWorkerProvider = () =>
             targetScriptName,
           });
         }
+
+        // A regular Worker update can destroy inline DO data through the
+        // deleted_classes migration without deleting the Worker resource.
+        // Check the *actual* deletions after renames and transfers have been
+        // reconciled, before any upload or asset session is started.
+        const refusedClasses = protection
+          ? deletedClasses.filter((className) => !protection.except.has(className))
+          : [];
+        if (refusedClasses.length > 0) {
+          return yield* new ProtectedDurableObjectClassDeletion({
+            scriptName: name,
+            classNames: refusedClasses.sort(),
+          });
+        }
+
+        let metadataAssets: workers.PutScriptRequest["metadata"]["assets"] | undefined;
+        let keepAssets = false;
+        if (prebuiltAssets?.skip) {
+          // Hash matched what's already on Cloudflare: keep the
+          // existing asset manifest and skip the upload session.
+          yield* Effect.logInfo(
+            `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
+          );
+          keepAssets = true;
+          // `keepAssets` only preserves the uploaded files — the PUT
+          // replaces the asset config wholesale. The skip path never
+          // walked the directory, so read just `_headers`/`_redirects`
+          // here or a no-op deploy would wipe their rules.
+          metadataAssets = {
+            config: mergeAssetsConfigFiles(
+              prebuiltAssets.config,
+              yield* readAssetsConfigFiles(prebuiltAssets.directory),
+            ),
+          };
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        } else if (assets) {
+          // We had to read the directory. Even after the read, the
+          // computed hash may match what's already deployed (e.g.
+          // legacy `string` / `AssetsProps` shapes that don't carry a
+          // precomputed hash, or a precomputed hash that disagreed with
+          // disk). In that case still keep the existing manifest and
+          // skip the upload session — Cloudflare's content-addressed
+          // session would no-op on every byte anyway.
+          if (assets.hash === prebuiltAssets?.hash) {
+            yield* Effect.logInfo(
+              `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
+            );
+            keepAssets = true;
+            // Fold the build-emitted `_headers`/`_redirects` into the PUT
+            // config: source providers (Astro/SvelteKit/Waku/Nuxt) hash the
+            // files and carry them on the read result, but only `readAssets`
+            // pre-merges them — without this, framework header/redirect
+            // rules never reach Cloudflare. Idempotent for pre-merged
+            // configs (explicit config wins).
+            metadataAssets = { config: mergeAssetsConfigFiles(assets.config, assets) };
+          } else {
+            yield* Effect.logInfo(
+              `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
+            );
+            const { jwt } = yield* uploadAssets(
+              accountId,
+              name,
+              assets,
+              session,
+              dispatchNamespace,
+            );
+            metadataAssets = {
+              jwt,
+              // Same `_headers`/`_redirects` fold as the keep path above.
+              config: mergeAssetsConfigFiles(assets.config, assets),
+            };
+          }
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        }
+        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, name);
+        yield* Effect.logInfo(
+          `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
+        );
+        const size =
+          bundle.files
+            ?.filter((file) => !file.name.endsWith(".map"))
+            .reduce((acc, file) => acc + file.size, 0) ?? 0;
+        const sizeKB = size / 1024;
+        const sizeMB = sizeKB / 1024;
+        const bundleSize = `${sizeKB > 1024 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(2)} KB`}`;
+        yield* session.note(`Uploading worker (${bundleSize}) ...`, { kind: "status" });
 
         // Collect container-backed classes so we can send container metadata.
         // A Durable Object-managed class merges the images of every bound
@@ -3952,6 +4030,16 @@ export const LiveWorkerProvider = () =>
           exportsMap,
           yield* workerEntrypointExports(name, news.entrypoints, Object.keys(exportsMap)),
         );
+        // Cloudflare rejects the whole upload over the limit, so fail before
+        // anything is uploaded (#2976).
+        const exportCount = Object.keys(exportsMap).length;
+        if (exportCount > MAX_SCRIPT_EXPORTS) {
+          return yield* new TooManyWorkerExports({
+            scriptName: name,
+            count: exportCount,
+            tombstones: renamedClasses.length + deletedClasses.length,
+          });
+        }
         const transferringIn = new Set(transferredClasses.map((transfer) => transfer.to));
 
         const metadataContainers = containerClasses;
@@ -4239,6 +4327,13 @@ export const LiveWorkerProvider = () =>
               scriptName: name,
               observability: {
                 ...observed,
+                agents: observed?.agents
+                  ? {
+                      enabled: observed.agents.enabled ?? undefined,
+                      headSamplingRate: observed.agents.headSamplingRate ?? undefined,
+                      persist: observed.agents.persist ?? undefined,
+                    }
+                  : undefined,
                 headSamplingRate: observed?.headSamplingRate ?? undefined,
                 redactQueryString: observed?.redactQueryString ?? undefined,
                 logs: observed?.logs
@@ -4998,9 +5093,9 @@ export const LiveWorkerProvider = () =>
           const observed = { workerName: name };
           return hasAlchemyWorkerTags(id, settings.tags ?? []) ? observed : Unowned(observed);
         }),
-        precreate: Effect.fn(function* ({ id, news, session, bindings }) {
+        precreate: Effect.fn(function* ({ id, news, session, bindings: declared }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
-          yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, bindings);
+          yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, declared);
           const name = yield* createWorkerName(id, news.name);
           // A version worker uploads to its parent's script during
           // reconcile; pre-creating a placeholder script under this
@@ -5066,7 +5161,31 @@ export const LiveWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
           const dispatchNamespace = resolveNamespaceName(news.namespace);
-          const exportMap = news.exports ?? {};
+          // Retiring classes the script doesn't have are left out, as reconcile
+          // leaves them out: a placeholder that declared them would create them.
+          const retiring = declared.flatMap((binding) => binding.data.retiringClasses ?? []);
+          const hosted =
+            retiring.length === 0
+              ? undefined
+              : hostedClasses(
+                  (yield* getScriptSettings(accountId, name, dispatchNamespace).pipe(
+                    Effect.catchTags({
+                      WorkerNotFound: () => Effect.undefined,
+                      WorkerHasNoVersions: () => Effect.undefined,
+                      DispatchNamespaceScriptNotFound: () => Effect.undefined,
+                      DispatchNamespaceNotFound: () => Effect.undefined,
+                    }),
+                  ))?.bindings,
+                  declared,
+                  name,
+                );
+          const unknownRetiring = new Set(
+            retiring
+              .filter(({ className }) => !hosted?.has(className))
+              .map(({ className }) => className),
+          );
+          const bindings = withoutClasses(declared, name, unknownRetiring);
+          const exportMap = withoutExports(news, unknownRetiring).exports ?? {};
           // A worker hosts Durable Object classes from two independent sources:
           // Effect-native DO *exports* (classes defined in the worker entry) and
           // DO *bindings* declared in `env` — e.g. a bare `Cloudflare.DurableObject`
@@ -5130,15 +5249,48 @@ export const LiveWorkerProvider = () =>
             }),
           );
           let durableObjectNamespaces = getDurableObjects(existingSettings?.bindings);
+          // An existing script can be reused only when it already hosts every
+          // class: cycle peers need each namespace id now, and a class only
+          // gets a namespace when an upload declares it. An adopted Worker
+          // that never hosted these classes (#3590) gets the placeholder too.
+          const missingDoClasses = doClasses.filter(
+            (className) => !durableObjectNamespaces[className],
+          );
 
           let placeholder: { tag?: string | null } | undefined;
-          if (existingSettings) {
+          if (existingSettings && missingDoClasses.length === 0) {
             // Engine has already cleared this resource for write via
             // `observe` or `read` + AdoptPolicy. Either we own it (matching
             // tags) or the user opted in to a takeover (`--adopt` / `adopt(true)`).
             yield* Effect.logInfo(`Cloudflare Worker precreate: reusing existing ${name}`);
           } else {
             yield* session.note("Pre-creating worker...", { kind: "status" });
+            if (existingSettings) {
+              yield* Effect.logInfo(
+                `Cloudflare Worker precreate: declaring Durable Objects ${JSON.stringify(missingDoClasses)} on existing ${name}`,
+              );
+            }
+            // Classes the existing script already hosts stay declared with
+            // their observed storage: an upload that omits one is rejected.
+            const doExports = buildDurableObjectExports({
+              scriptName: name,
+              observedNamespaces: existingSettings
+                ? yield* listDurableObjectNamespaces(accountId, dispatchNamespace)
+                : [],
+              hostedClasses: doClasses,
+              // A fresh class gets the storage its binding declares
+              // (SQLite unless stated).
+              declaredStorage: new Map(
+                durableObjects.flatMap((binding) =>
+                  binding.storage === undefined
+                    ? []
+                    : [[binding.className, binding.storage] as const],
+                ),
+              ),
+              renamedClasses: [],
+              deletedClasses: [],
+              transferredClasses: [],
+            });
             const compatibility = getCompatibility(news);
             const mainModule = "main.js";
             const placeholderScript = makePlaceholderScript(doClasses);
@@ -5162,20 +5314,7 @@ export const LiveWorkerProvider = () =>
                 compatibilityDate: compatibility.date,
                 compatibilityFlags: compatibility.flags,
                 containers,
-                // A fresh script: every hosted class is new, with the storage
-                // its binding declares (SQLite unless stated).
-                exports:
-                  durableObjects.length > 0
-                    ? Object.fromEntries(
-                        durableObjects.map((binding) => [
-                          binding.className,
-                          {
-                            type: "durable-object",
-                            storage: binding.storage ?? "sqlite",
-                          },
-                        ]),
-                      )
-                    : undefined,
+                exports: nonEmptyExports(doExports),
                 observability: yield* resolveObservability(news, bindings),
                 tags,
               },
@@ -5205,14 +5344,6 @@ export const LiveWorkerProvider = () =>
                 dispatchNamespace,
               ));
             }
-          }
-
-          if (existingSettings && doClasses.length > 0) {
-            ({ durableObjectNamespaces } = yield* getWorkerSettingsWithDurableObjects(
-              name,
-              doClasses,
-              dispatchNamespace,
-            ));
           }
 
           /**
@@ -5423,11 +5554,20 @@ export const LiveWorkerProvider = () =>
             const drift = [...observed].filter((h) => !classified.has(h));
             const serving = [...(keptName ? [keptName] : []), ...keptAliases, ...drift];
             const observedDomain = resolveObservedWorkerDomain(serving, keptRedirects, declared);
+            // A self-rollout's version is the one its deploy uploaded, as
+            // when the deploy assembled `urls`.
+            const rollout = olds !== undefined && getSelfRolloutTraffic(olds) !== undefined;
             const urls = [
               ...serving.map((h) => `https://${h}`),
               ...(subdomain.enabled
                 ? [`https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`]
                 : []),
+              ...(yield* computePreviewUrls({
+                scriptName: workerName,
+                workersDev: subdomain,
+                uploadedVersionId: rollout ? uploadedVersionId : undefined,
+                uploadedVersionAlias: rollout ? olds?.version?.alias : undefined,
+              })),
             ];
             const crons = observeCrons ? yield* getWorkerCrons(workerName) : [];
             yield* Effect.logInfo(`Cloudflare Worker read: found ${workerName}`);
@@ -5532,7 +5672,16 @@ export const LiveWorkerProvider = () =>
               }),
             ),
         ),
-        reconcile: Effect.fn(function* ({ id, fqn, news, olds, bindings, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          fqn,
+          news,
+          olds,
+          bindings,
+          output,
+          session,
+          protected: protectedFromDeletion,
+        }) {
           yield* assertCloudflareTelemetryCompatibility(news, bindings);
           if (news.preview?.of != null && news.version?.parent != null) {
             return yield* new WorkerPreviewConfigError({
@@ -5546,7 +5695,15 @@ export const LiveWorkerProvider = () =>
             return yield* putWorkerVersion(id, fqn, news, bindings, session, output);
           }
           if (news.preview?.of != null) {
-            return yield* putWorkerPreview(id, fqn, news, bindings, session, output);
+            return yield* putWorkerPreview(
+              id,
+              fqn,
+              news,
+              bindings,
+              session,
+              output,
+              protectedFromDeletion,
+            );
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = output?.workerName ?? (yield* createWorkerName(id, news.name));
@@ -5606,7 +5763,141 @@ export const LiveWorkerProvider = () =>
             )}`,
           );
 
-          return yield* putWorker(id, fqn, news, bindings, olds, output, session, existingSettings);
+          const protection = (except: ReadonlySet<string>) =>
+            protectedFromDeletion ? { except } : undefined;
+          const retiring = bindings.flatMap((binding) => binding.data.retiringClasses ?? []);
+          if (retiring.length === 0)
+            return yield* putWorker(
+              id,
+              fqn,
+              news,
+              bindings,
+              olds,
+              output,
+              session,
+              existingSettings,
+              undefined,
+              protection(new Set()),
+            );
+
+          /** The classes the script has, as its settings read before any upload. */
+          const had = hostedClasses(existingSettings?.bindings, [], name);
+          /** Upload the Worker without the Durable Object classes in `dropped`. */
+          const upload = (dropped: ReadonlySet<string>, settings: typeof existingSettings) =>
+            Effect.gen(function* () {
+              // The build planned with every class: build again without the ones this upload
+              // deletes, which Cloudflare refuses while the code still exports them. A class
+              // the Worker never had stays in the build as an export nothing binds, so a
+              // Worker with nothing left to retire builds once.
+              if ([...dropped].some((className) => had.has(className))) {
+                const artifacts = yield* Effect.serviceOption(Artifacts);
+                if (Option.isSome(artifacts)) yield* artifacts.value.delete("build");
+              }
+              return yield* putWorker(
+                id,
+                fqn,
+                withoutExports(news, dropped),
+                withoutClasses(bindings, name, dropped),
+                olds,
+                output,
+                session,
+                settings,
+                // Dropped, and not on the script: deleted before, or never created.
+                new Set(
+                  [...dropped].filter(
+                    (className) => !hostedClasses(settings?.bindings, [], name).has(className),
+                  ),
+                ),
+                // Only a class whose objects a retirement moved out is safe to
+                // delete. An "unknown" class is one the settings don't show, which
+                // doesn't prove its namespace is gone.
+                protection(new Set([...dropped].filter((className) => !unknown.has(className)))),
+              );
+            });
+          // Retiring classes: their objects move out between two uploads (see `DurableObjectRetirement`).
+          // Right after the upload that deleted them, the settings can still answer for
+          // the version before it: this Worker's last deploy left none of them, so read
+          // again until they are gone, a few times.
+          const kept = output?.durableObjectNamespaces;
+          const stale = (settings: typeof existingSettings) =>
+            kept !== undefined &&
+            retiring.some(
+              ({ className }) =>
+                !(className in kept) && hostedClasses(settings?.bindings, [], name).has(className),
+            );
+          const observed = stale(existingSettings)
+            ? yield* getScriptSettings(accountId, name, dispatchNamespace).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("2 seconds"),
+                  until: (settings) => !stale(settings),
+                  times: 15,
+                }),
+              )
+            : existingSettings;
+          const deployedClasses = hostedClasses(observed?.bindings, bindings, name);
+          // A class the Worker doesn't have yet is never created just to retire it.
+          const unknown = new Set(
+            retiring
+              .filter(({ className }) => !deployedClasses.has(className))
+              .map(({ className }) => className),
+          );
+          const live = retiring.filter(({ className }) => deployedClasses.has(className));
+          if (live.length === 0) return yield* upload(unknown, observed);
+          const retirement = yield* Effect.serviceOption(DurableObjectRetirement);
+          if (Option.isNone(retirement))
+            return yield* new MissingDurableObjectRetirement({
+              message: `Worker '${name}' retires the Durable Object classes ${live.map(({ className }) => `'${className}'`).join(", ")}, and nothing in the Stack's providers moves their objects. Register the providers of the package that hosts them.`,
+            });
+          const workerBindings = bindings.flatMap((binding) => binding.data.bindings ?? []);
+          const groups = groupRetiring(live);
+          const request = (
+            group: string,
+            classes: ReadonlyArray<RetiringClass>,
+            namespaces: Record<string, string>,
+          ) => ({
+            scriptName: name,
+            group,
+            classes,
+            bindings: workerBindings,
+            deployedClasses,
+            namespaces,
+            session,
+          });
+          const before = getDurableObjects(observed?.bindings);
+          const settled = new Set(
+            (yield* Effect.forEach(
+              [...groups],
+              ([group, classes]) => retirement.value.settled(request(group, classes, before)),
+              { concurrency: "unbounded" },
+            )).flatMap((classes) => [...classes]),
+          );
+          const dropped = new Set([...unknown, ...settled]);
+          const uploaded = yield* upload(dropped, observed);
+          const moving = [...groups]
+            .map(
+              ([group, classes]) =>
+                [group, classes.filter(({ className }) => !settled.has(className))] as const,
+            )
+            .filter(([, classes]) => classes.length > 0);
+          if (moving.length === 0) return uploaded;
+          const empty = new Set(
+            (yield* Effect.forEach(
+              moving,
+              ([group, classes]) =>
+                retirement.value.retire(request(group, classes, uploaded.durableObjectNamespaces)),
+              { concurrency: "unbounded" },
+            )).flatMap((classes) => [...classes]),
+          );
+          if (empty.size === 0) return uploaded;
+          yield* session.note(
+            `Deleting ${empty.size} Durable Object classes: every object of theirs has moved.`,
+            { kind: "status" },
+          );
+          const settings = yield* getScriptSettings(accountId, name, dispatchNamespace);
+          return yield* upload(
+            new Set([...dropped, ...empty]),
+            settings as typeof existingSettings,
+          );
         }),
         delete: Effect.fn(function* ({ output }) {
           // Version workers own a version, not the script — `workerName` is
@@ -5979,6 +6270,111 @@ const buildDurableObjectExports = (params: {
 };
 
 /**
+ * Cloudflare rejects a script upload whose `exports` map has more than 100
+ * entries (`BadRequest: \`exports\` has 129 entries; the maximum allowed is
+ * 100.`). Live classes, `renamed`/`deleted` tombstones and Worker entrypoints
+ * all count.
+ */
+const MAX_SCRIPT_EXPORTS = 100;
+
+/** `bindings` without the Durable Object bindings of `classes` on this script. */
+const withoutClasses = (
+  bindings: ResourceBinding<Worker["Binding"]>[],
+  scriptName: string,
+  classes: ReadonlySet<string>,
+) =>
+  classes.size === 0
+    ? bindings
+    : bindings.map((binding) => ({
+        ...binding,
+        data: {
+          ...binding.data,
+          ...(binding.data.bindings === undefined
+            ? {}
+            : {
+                bindings: binding.data.bindings.filter(
+                  (item: WorkerBinding) =>
+                    !(
+                      item.type === "durable_object_namespace" &&
+                      "className" in item &&
+                      item.className !== undefined &&
+                      classes.has(item.className) &&
+                      (item.scriptName === undefined || item.scriptName === scriptName)
+                    ),
+                ),
+              }),
+          ...(binding.data.retiringClasses === undefined
+            ? {}
+            : {
+                retiringClasses: binding.data.retiringClasses.filter(
+                  ({ className }) => !classes.has(className),
+                ),
+              }),
+        },
+      }));
+
+/** `news` without the exports of `classes`. */
+const withoutExports = <P extends { readonly exports?: Record<string, unknown> }>(
+  news: P,
+  classes: ReadonlySet<string>,
+): P =>
+  classes.size === 0 || news.exports === undefined
+    ? news
+    : {
+        ...news,
+        exports: Object.fromEntries(
+          Object.entries(news.exports).filter(([className]) => !classes.has(className)),
+        ),
+      };
+
+/**
+ * The Durable Object classes the script has (from its settings), and those
+ * this upload renames from one it has: a renamed class keeps its objects.
+ */
+const hostedClasses = (
+  settingsBindings: ReadonlyArray<unknown> | null | undefined,
+  bindings: ResourceBinding<Worker["Binding"]>[],
+  scriptName: string,
+) => {
+  const hosted = new Set(
+    (settingsBindings ?? []).flatMap((binding) =>
+      typeof binding === "object" &&
+      binding !== null &&
+      "type" in binding &&
+      binding.type === "durable_object_namespace" &&
+      "className" in binding &&
+      typeof binding.className === "string" &&
+      !("scriptName" in binding && binding.scriptName && binding.scriptName !== scriptName)
+        ? [binding.className]
+        : [],
+    ),
+  );
+  for (const item of bindings.flatMap((binding) => binding.data.bindings ?? []))
+    if (
+      item.type === "durable_object_namespace" &&
+      "renamedFrom" in item &&
+      typeof item.renamedFrom === "string" &&
+      hosted.has(item.renamedFrom) &&
+      "className" in item &&
+      typeof item.className === "string"
+    )
+      hosted.add(item.className);
+  return hosted;
+};
+
+/** Retiring classes by group, each class once. */
+const groupRetiring = (retiring: ReadonlyArray<RetiringClass>) => {
+  const groups = new Map<string, Array<RetiringClass>>();
+  for (const retiringClass of retiring) {
+    const group = groups.get(retiringClass.group) ?? [];
+    if (!group.some(({ className }) => className === retiringClass.className))
+      group.push(retiringClass);
+    groups.set(retiringClass.group, group);
+  }
+  return groups;
+};
+
+/**
  * The `{ type: "worker", cache }` export entries for a Worker's configured
  * entrypoints. Fails when a name is also a Durable Object class: one export
  * name has exactly one type.
@@ -6107,7 +6503,6 @@ const commitDurableObjectTransfer = (params: {
   workers.patchScriptScriptAndVersionSetting({
     accountId: params.accountId,
     scriptName: params.fromScript,
-    // The settings part is sent verbatim, so entries use wire names.
     settings: {
       exports: Object.fromEntries(
         params.observedNamespaces
@@ -6115,7 +6510,7 @@ const commitDurableObjectTransfer = (params: {
           .map((ns) => [
             ns.class,
             params.classNames.includes(ns.class)
-              ? { type: "durable-object", state: "transferred", transferred_to: params.toScript }
+              ? { type: "durable-object", state: "transferred", transferredTo: params.toScript }
               : {
                   type: "durable-object",
                   storage: observedStorage(params.observedNamespaces, params.fromScript, ns.class),
@@ -6281,6 +6676,28 @@ class InvalidWorkerTags extends Data.TaggedError("InvalidWorkerTags")<{
   scriptName: string;
   reason: string;
 }> {}
+
+/**
+ * A Worker upload would declare more `exports` (Durable Object classes, their
+ * `renamed`/`deleted` tombstones, and entrypoints) than Cloudflare's limit of
+ * 100. A tombstone is only declared by the deploy that renames or deletes its
+ * class, so renaming or deleting fewer classes per deploy brings it under.
+ * Checked before anything is uploaded.
+ */
+export class TooManyWorkerExports extends Data.TaggedError("TooManyWorkerExports")<{
+  scriptName: string;
+  count: number;
+  tombstones: number;
+}> {
+  override get message() {
+    return (
+      `Worker '${this.scriptName}' would declare ${this.count} exports, ${this.tombstones} of them for renamed or deleted Durable Object classes; Cloudflare allows at most ${MAX_SCRIPT_EXPORTS}. ` +
+      (this.count - this.tombstones <= MAX_SCRIPT_EXPORTS
+        ? "Rename or delete fewer classes in this deploy, or move some Durable Objects to another Worker."
+        : "Move some Durable Objects to another Worker.")
+    );
+  }
+}
 
 class InvalidWorkerEntrypoints extends Data.TaggedError("InvalidWorkerEntrypoints")<{
   scriptName: string;

@@ -6,6 +6,7 @@
  * once per volume on first use and kept for the life of the runtime; a failed
  * lookup is not cached, so the next call retries it.
  */
+import type { ConfigError } from "@distilled.cloud/core/errors";
 import { volumeConnectionFor } from "@distilled.cloud/e2b";
 import type { VolumeConnection } from "@distilled.cloud/e2b/Credentials";
 import * as volumeContent from "@distilled.cloud/e2b/volume_content";
@@ -14,13 +15,30 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import type { E2BAuth } from "../E2BBindings.ts";
 import type { ReadWriteVolumeClient } from "../VolumeFiles.ts";
 
 const decoder = new TextDecoder();
 
-/** The volume-token connection plus an HTTP client: what volume-content calls need. */
-type VolumeLayer = Layer.Layer<VolumeConnection | HttpClient.HttpClient>;
+/**
+ * The volume-token connection plus an HTTP client: what volume-content calls
+ * need. Building it fails with `ConfigError` when the volume's domain can't
+ * be a host name.
+ */
+type VolumeLayer = Layer.Layer<VolumeConnection | HttpClient.HttpClient, ConfigError>;
+
+/** Read a volume file and collect its streamed body; an empty response is an empty file. */
+const readVolumeBytes = (volumeID: string, path: string) =>
+  volumeContent
+    .readVolumeFile({ volumeID, path })
+    .pipe(
+      Effect.flatMap((response) =>
+        response.body === undefined
+          ? Effect.succeed(new Uint8Array())
+          : Stream.mkUint8Array(response.body),
+      ),
+    );
 
 export const makeVolumeFiles = (
   auth: E2BAuth,
@@ -50,9 +68,9 @@ export const makeVolumeFiles = (
     Effect.flatMap(connection, ({ volumeId, layer }) => call(volumeId).pipe(Effect.provide(layer)));
 
   return {
-    read: (path) => inVolume((volumeID) => volumeContent.readVolumeFile({ volumeID, path })),
+    read: (path) => inVolume((volumeID) => readVolumeBytes(volumeID, path)),
     readText: (path) =>
-      inVolume((volumeID) => volumeContent.readVolumeFile({ volumeID, path })).pipe(
+      inVolume((volumeID) => readVolumeBytes(volumeID, path)).pipe(
         Effect.map((bytes) => decoder.decode(bytes)),
       ),
     list: (path, options) =>

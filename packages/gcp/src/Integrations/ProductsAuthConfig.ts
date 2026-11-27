@@ -283,13 +283,11 @@ export const ProductsAuthConfigProvider = () =>
         const created = yield* integrations
           .createProjectsLocationsProductsAuthConfigs({
             parent,
-            body: {
-              displayName,
-              description,
-              decryptedCredential,
-              certificateId: news.certificateId,
-              visibility,
-            },
+            displayName,
+            description,
+            decryptedCredential,
+            certificateId: news.certificateId,
+            visibility,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id)));
         current = created ?? (yield* findOwned(parent, id));
@@ -322,14 +320,11 @@ export const ProductsAuthConfigProvider = () =>
             certificateChanged ? "certificate_id" : undefined,
             credentialChanged ? "decrypted_credential" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            description,
-            decryptedCredential,
-            certificateId: news.certificateId,
-            visibility,
-          },
+          displayName,
+          description,
+          decryptedCredential,
+          certificateId: news.certificateId,
+          visibility,
         });
       }
 

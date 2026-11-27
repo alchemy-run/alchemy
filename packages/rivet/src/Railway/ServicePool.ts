@@ -5,7 +5,6 @@ import {
   isImageProgram,
   makePoolLayer,
   nodeEnvironment,
-  RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -32,6 +31,12 @@ export interface ServicePoolOptions extends PoolSettings {
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.
  *
+ * Railway's API has no way to keep a variable's value out of the
+ * Service's configuration: a variable can only be sealed in the dashboard.
+ * So the control plane's token, and every secret a class reads as
+ * config, are service variables, readable by anyone who can read the
+ * project's variables.
+ *
  * ### Running Durable Objects on Railway
  * **Example:** Nodes on Railway, control plane on Fly
  * ```typescript
@@ -47,8 +52,9 @@ export const ServicePool = (id: string, options: ServicePoolOptions = {}) =>
     id,
     settings: options,
     expected: "a reachable control plane",
-    // Railway services reach the control plane's public address.
-    network: (cluster) => cluster.network ?? { kind: "none" as const },
+    // The nodes join no network of the control plane's, so they connect to its
+    // public endpoint, never a private address they can't reach.
+    network: () => ({ kind: "none" as const }),
     // Every class the pool hosts is bundled into the node program;
     // RivetKit is installed beside it (it loads a native addon).
     nodes: Effect.fn(function* (nodes) {
@@ -60,7 +66,7 @@ export const ServicePool = (id: string, options: ServicePoolOptions = {}) =>
           ? { context: nodes.program.context }
           : {
               main: (yield* bundleNodes("railway", id, nodes.program)) as unknown as string,
-              build: { install: { rivetkit: RIVETKIT_VERSION } },
+              build: { install: { rivetkit: options.rivetkitVersion ?? nodes.rivetkitVersion } },
             }),
         publicDomain: false,
         region: options.region,

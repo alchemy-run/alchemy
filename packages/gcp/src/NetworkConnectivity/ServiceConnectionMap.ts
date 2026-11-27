@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -283,7 +284,7 @@ const toAttrs = (
     location: parsed.location || region,
     serviceClass: map.serviceClass,
     serviceClassUri: map.serviceClassUri,
-    token: map.token,
+    token: revealOptional(map.token),
     producerPscConfigs: (map.producerPscConfigs ?? []).map(toProducer),
     consumerPscConfigs: (map.consumerPscConfigs ?? []).map((config) =>
       toConsumer(config, parsed.project || project),
@@ -391,16 +392,14 @@ export const ServiceConnectionMapProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsServiceConnectionMaps({
+            serviceClass: news.serviceClass,
+            token: news.token,
+            producerPscConfigs,
+            consumerPscConfigs,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             serviceConnectionMapId,
-            body: {
-              serviceClass: news.serviceClass,
-              token: news.token,
-              producerPscConfigs,
-              consumerPscConfigs,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -445,17 +444,14 @@ export const ServiceConnectionMapProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkconnectivity.patchProjectsLocationsServiceConnectionMaps({
+          labels: desiredLabels,
+          description: news.description,
+          token: news.token,
+          producerPscConfigs,
+          consumerPscConfigs,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            token: news.token,
-            producerPscConfigs,
-            consumerPscConfigs,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

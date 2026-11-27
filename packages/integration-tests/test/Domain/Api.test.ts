@@ -516,8 +516,13 @@ describe("Domain Api defects", { tags: ["unit", "local"] }, () => {
 // ---------------------------------------------------------------- middleware order
 
 class Banned extends Domain.Rejection("Banned") {}
-/** Refuses banned authors. It reads the Author that AuthorSession provides. */
-class BanCheck extends RpcMiddleware.Service<BanCheck>()("Test/BanCheck", { error: Banned }) {}
+/**
+ * Refuses banned authors. It requires the Author that AuthorSession, listed
+ * before it, provides, so the RPC needs nothing more to be served.
+ */
+class BanCheck extends RpcMiddleware.Service<BanCheck, { requires: Author }>()("Test/BanCheck", {
+  error: Banned,
+}) {}
 const BanCheckLive = Layer.succeed(BanCheck, (effect) =>
   Effect.serviceOption(Author).pipe(
     Effect.flatMap(

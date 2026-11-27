@@ -417,23 +417,21 @@ export const NotebookRuntimeTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsNotebookRuntimeTemplates({
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            notebookRuntimeType: news.notebookRuntimeType,
+            machineSpec,
+            dataPersistentDiskSpec: news.dataPersistentDiskSpec,
+            networkSpec: news.networkSpec,
+            softwareConfig: news.softwareConfig,
+            encryptionSpec: news.encryptionSpec,
+            networkTags: news.networkTags,
+            idleShutdownConfig: news.idleShutdownConfig,
+            shieldedVmConfig: news.shieldedVmConfig,
+            reservationAffinity: news.reservationAffinity,
             parent: locationParent(env.project, location),
             notebookRuntimeTemplateId: templateId,
-            body: {
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              notebookRuntimeType: news.notebookRuntimeType,
-              machineSpec,
-              dataPersistentDiskSpec: news.dataPersistentDiskSpec,
-              networkSpec: news.networkSpec,
-              softwareConfig: news.softwareConfig,
-              encryptionSpec: news.encryptionSpec,
-              networkTags: news.networkTags,
-              idleShutdownConfig: news.idleShutdownConfig,
-              shieldedVmConfig: news.shieldedVmConfig,
-              reservationAffinity: news.reservationAffinity,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -461,14 +459,11 @@ export const NotebookRuntimeTemplateProvider = () =>
           softwareChanged ? "software_config" : undefined,
         ].filter((field): field is string => field !== undefined);
         const patched = yield* aiplatform.patchProjectsLocationsNotebookRuntimeTemplates({
+          displayName,
+          softwareConfig: news.softwareConfig,
+          etag: current.etag,
           name: observedName,
           updateMask: updateMask.join(","),
-          body: {
-            name: observedName,
-            displayName,
-            softwareConfig: news.softwareConfig,
-            etag: current.etag,
-          },
         });
         current = patched ?? current;
       }

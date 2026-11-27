@@ -67,7 +67,8 @@ export const fromField = (field: rdsdata.Field, typeName: string | undefined): u
 };
 
 const fromArrayValue = (value: rdsdata.ArrayValue): unknown[] =>
-  value.arrayValues?.map(fromArrayValue) ??
+  // A null element of a nested array stays null.
+  value.arrayValues?.map((nested) => (nested === null ? null : fromArrayValue(nested))) ??
   value.booleanValues ??
   value.longValues ??
   value.doubleValues ??

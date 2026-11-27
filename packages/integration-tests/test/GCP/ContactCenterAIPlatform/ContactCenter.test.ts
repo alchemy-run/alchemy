@@ -2,7 +2,7 @@ import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as ccaip from "@distilled.cloud/gcp/contactcenteraiplatform_v1alpha1";
+import * as ccaip from "@distilled.cloud/gcp/unstable/contactcenteraiplatform_v1alpha1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";

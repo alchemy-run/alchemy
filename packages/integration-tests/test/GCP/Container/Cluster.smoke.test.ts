@@ -240,8 +240,8 @@ describe.skipIf(skip).sequential(
           // Nothing was granted at the project level.
           const { project } = yield* GcpEnvironment.current;
           const projectPolicy = yield* resourcemanager.getIamPolicyProjects({
+            options: { requestedPolicyVersion: 3 },
             resource: `projects/${project}`,
-            body: { options: { requestedPolicyVersion: 3 } },
           });
           expect(
             (projectPolicy.bindings ?? []).filter((b) =>
@@ -378,8 +378,8 @@ describe.skipIf(skip).sequential(
           // No grant outlives the workloads at the project level either.
           const { project } = yield* GcpEnvironment.current;
           const projectPolicy = yield* resourcemanager.getIamPolicyProjects({
+            options: { requestedPolicyVersion: 3 },
             resource: `projects/${project}`,
-            body: { options: { requestedPolicyVersion: 3 } },
           });
           expect(
             (projectPolicy.bindings ?? []).filter((b) =>

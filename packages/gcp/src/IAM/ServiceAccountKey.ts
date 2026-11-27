@@ -1,4 +1,4 @@
-import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
+import * as iam from "@distilled.cloud/gcp/iam_v1";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 
 export type ServiceAccountKeyProps = {
@@ -109,8 +110,8 @@ export const ServiceAccountKeyProvider = () =>
       // for a few seconds after the account is created.
       const key = yield* iam
         .createProjectsServiceAccountsKeys({
+          privateKeyType: "TYPE_GOOGLE_CREDENTIALS_FILE",
           name: `projects/-/serviceAccounts/${news.serviceAccount}`,
-          body: { privateKeyType: "TYPE_GOOGLE_CREDENTIALS_FILE" },
         })
         .pipe(
           Effect.retry({
@@ -123,7 +124,7 @@ export const ServiceAccountKeyProvider = () =>
       return {
         name,
         serviceAccount: news.serviceAccount,
-        ...(yield* decodeKeyFile(name, key.privateKeyData ?? "")),
+        ...(yield* decodeKeyFile(name, revealOptional(key.privateKeyData) ?? "")),
       };
     }),
 

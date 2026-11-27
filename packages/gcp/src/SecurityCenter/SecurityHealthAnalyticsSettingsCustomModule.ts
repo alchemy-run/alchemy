@@ -342,8 +342,8 @@ export const SecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
 
       if (current === undefined) {
         current = yield* scc.createProjectsSecurityHealthAnalyticsSettingsCustomModules({
+          ...body,
           parent,
-          body,
         });
       }
 
@@ -369,12 +369,10 @@ export const SecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchProjectsSecurityHealthAnalyticsSettingsCustomModules({
+          enablementState,
+          customConfig,
           name: currentName,
           updateMask,
-          body: {
-            enablementState,
-            customConfig,
-          },
         });
       }
 

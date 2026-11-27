@@ -2,7 +2,7 @@ import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
+import * as firebase from "@distilled.cloud/gcp/unstable/firebase_v1beta1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -59,11 +59,9 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         firebase.createProjectsAndroidApps({
+          packageName: "com.alchemy.test.probe",
+          displayName: "alchemy-probe",
           parent: `projects/${project}`,
-          body: {
-            packageName: "com.alchemy.test.probe",
-            displayName: "alchemy-probe",
-          },
         }),
       );
       expect(error._tag).toEqual("NotFound");

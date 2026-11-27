@@ -1,4 +1,4 @@
-import * as sasportal from "@distilled.cloud/gcp/sasportal_v1alpha1";
+import * as sasportal from "@distilled.cloud/gcp/unstable/sasportal_v1alpha1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -205,10 +205,7 @@ export const CustomersNodesNodeProvider = () =>
 
       if (current === undefined) {
         const created = yield* sasportal
-          .createCustomersNodesNodes({
-            parent,
-            body: desired,
-          })
+          .createCustomersNodesNodes({ ...desired, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findOwnedCustomerNodeNode(id, parent).pipe(Effect.map((found) => found?.row)),
@@ -230,12 +227,12 @@ export const CustomersNodesNodeProvider = () =>
         news.sasUserIds !== undefined && !sameStringList(current.sasUserIds, news.sasUserIds);
       if (nameChanged || usersChanged) {
         current = yield* sasportal.patchNodesNodes({
+          ...desired,
           name,
           updateMask: updateMaskOf(
             "displayName",
             news.sasUserIds !== undefined ? "sasUserIds" : undefined,
           ),
-          body: desired,
         });
       }
 

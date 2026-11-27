@@ -1,0 +1,28 @@
+// src/Api.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Convex from "@alchemy.run/convex";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import { Backend } from "./Backend.ts";
+import { AddMessage, ListMessages } from "./messages.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const list = yield* Convex.RunQuery(Backend);
+    const add = yield* Convex.RunMutation(Backend);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.method === "POST") {
+          yield* add(AddMessage, { body: yield* request.text });
+        }
+        return yield* HttpServerResponse.json(yield* list(ListMessages, {}));
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Layer.mergeAll(Convex.RunQueryHttp, Convex.RunMutationHttp))),
+) {}

@@ -1,0 +1,141 @@
+---
+title: Code mode
+description: On Pi, tools listed inside AI.CodeMode are called from a JavaScript program the model writes, which can resume from a journal after a crash.
+---
+
+In [code mode](/ai/code-mode) the model writes a program that calls tools, and only what the program returns goes back to the model. On Pi, every tool can be reached this way: yours, an MCP server's, and Pi's own.
+
+## Turn it on
+
+Wrap the tools a program may call in `AI.CodeMode`, and provide how programs are written and where they run:
+
+```typescript title="src/Session.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
+import { Add, AddLive } from "./Add.tool.ts";
+import { Withdraw, WithdrawLive } from "./Withdraw.tool.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  AddLive,
+  WithdrawLive,
+  PiCloudflare.DurableObjectStorage,
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalQuickJS())),
+);
+
+export default class Session extends Cloudflare.DurableObject<Session>()(
+  "Session",
+  Effect.gen(function* () {
+    const harness = yield* Pi.Harness({
+      models: [Fast],
+      tools: [AI.CodeMode(Add, Withdraw)],
+    });
+
+    return Effect.gen(function* () {
+      return {
+        create: Effect.fn(function* (name: string) {
+          yield* harness.createConversation({ name });
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+The model is offered one tool, `codemode`, and reaches `add` and `withdraw` from the programs it runs with it.
+
+## Choose what goes through programs
+
+A tool outside the group is a direct call, and a tool listed both ways is offered both ways:
+
+```typescript
+const harness = yield* Pi.Harness({
+  models: [Fast],
+  tools: [AI.CodingTools, Add, AI.CodeMode(Add, Withdraw)],
+});
+```
+
+Here the model calls files, shell and `add` directly, and a program can call `add` and `withdraw`. Pi's own tools can go in the group too, so `AI.CodeMode(AI.CodingTools, Add)` gives the model a program as its only way to act.
+
+## What the model sees
+
+Pi's system prompt gets a `codemode` section with the declarations of the tools a program may call:
+
+```typescript
+declare namespace tools {
+  class InsufficientFunds extends Error {
+    readonly _tag: "InsufficientFunds";
+    readonly balance: number;
+  }
+
+  /** Add two integers. */
+  function add(args: { a: number; b: number }): Promise<{ sum: number }>;
+
+  /**
+   * Withdraw money from an account.
+   * @throws {InsufficientFunds}
+   */
+  function withdraw(args: { account: string; amount: number }): Promise<{ balance: number }>;
+}
+```
+
+The section follows the conversation: a tool it has disabled is left out. See [what the model sees](/ai/code-mode#what-the-model-sees) for how schemas become declarations.
+
+## Write programs as Effects
+
+`AI.CodeModeEffect` declares each tool as an `Effect` with its failures in the error type:
+
+```typescript
+const CodeModeLive = AI.CodeModeEffect.pipe(Layer.provide(AICloudflare.EvalQuickJS()));
+```
+
+```javascript
+export default Effect.gen(function* () {
+  const added = yield* tools.add({ a: 2, b: 3 });
+  const balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(
+    Effect.map((result) => result.balance),
+    Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)),
+  );
+  return added.sum + balance;
+});
+```
+
+See [Effect programs](/ai/code-mode#effect-programs).
+
+## Turn it on or off for one conversation
+
+A conversation's `tools` take the same groups. An exact list without one has no code mode:
+
+```typescript
+yield* harness.configure("pr-142", { tools: [Add, Withdraw] });
+```
+
+Adding a group gives the conversation its tools and the `codemode` tool:
+
+```typescript
+yield* harness.configure("pr-142", { tools: { add: [AI.CodeMode(Add, Withdraw)] } });
+```
+
+Whether a tool is also offered directly is set on the harness, by where it is listed there.
+
+## Where programs run
+
+Provide any `AI.Eval`. `AICloudflare.EvalWorkerLoader()` runs each program in an isolate of its own:
+
+```typescript
+const CodeModeLive = AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalWorkerLoader()));
+```
+
+See [where programs run](/ai/code-mode#where-programs-run), and [Other hosts](/pi/other-hosts) for a harness outside a Durable Object.
+
+## Resume after a crash
+
+A [QuickJS evaluator](/ai/code-mode#run-programs-in-quickjs) runs a program deterministically, and Pi stores each tool call the program finishes. A program cut off by an eviction runs again from the top, gets the stored result for each call it already made, and continues from there.
+
+Under `AICloudflare.EvalWorkerLoader()` a program runs once. One cut off by an eviction fails, and the model is told so.

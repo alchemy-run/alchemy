@@ -220,11 +220,15 @@ const make = (
           options?.env,
         );
         let killed = false;
+        // Wait for the process to go: on Windows its files (SQLite storage)
+        // stay locked until it exits, so a restart or a storage cleanup that
+        // follows the kill would otherwise find them busy.
         yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
+          Effect.suspend(() => {
             killed = true;
             handle.kill();
-          }),
+            return handle.exited();
+          }).pipe(Effect.timeout("5 seconds"), Effect.ignore),
         );
         if (handle.configure) {
           yield* handle.configure();
@@ -568,6 +572,18 @@ const makeNode = (fs: FileSystem.FileSystem) =>
         },
         exited: () =>
           Effect.callback<WorkerdExit>((resume) => {
+            // `close` fires once; a process that already closed won't fire it again.
+            if (child.exitCode !== null || child.signalCode !== null) {
+              resume(
+                Effect.succeed({
+                  pid: child.pid!,
+                  exitCode: child.exitCode,
+                  signal: child.signalCode,
+                  stderr: stderrTail.read(),
+                }),
+              );
+              return;
+            }
             const onClose = (exitCode: number | null, signal: NodeJS.Signals | null) => {
               resume(
                 Effect.succeed({
@@ -662,7 +678,9 @@ const classifyWorkerdError = (
 
   return SystemError.make({
     subtag: "WorkerdStartFailed",
-    message: "The Workers runtime failed to start.",
+    message: `The Workers runtime failed to start (${
+      signal !== null ? `signal ${signal}` : `exit ${exitCode}`
+    }).${lines.length > 0 ? `\n${lines.slice(-5).join("\n")}` : " It wrote nothing to stderr."}`,
     detail,
   });
 };

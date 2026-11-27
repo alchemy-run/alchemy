@@ -4,6 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_DURATION,
@@ -156,7 +157,7 @@ const toAttrs = (
     oneTimeOnly: extras?.oneTimeOnly ?? token.oneTimeOnly,
     duration: extras?.duration ?? token.duration,
     additionalData: extras?.additionalData ?? token.additionalData,
-    value: token.value,
+    value: revealOptional(token.value),
     qrCode: token.qrCode,
     expirationTimestamp: token.expirationTimestamp,
   };
@@ -228,8 +229,8 @@ export const EnterprisesEnrollmentTokenProvider = () =>
 
       if (current === undefined) {
         current = yield* androidmanagement.createEnterprisesEnrollmentTokens({
+          ...desired,
           parent,
-          body: desired,
         });
       }
 

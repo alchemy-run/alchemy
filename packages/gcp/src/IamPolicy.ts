@@ -10,6 +10,7 @@ import * as cloudtasks from "@distilled.cloud/gcp/cloudtasks_v2";
 import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as containeranalysis from "@distilled.cloud/gcp/containeranalysis_v1";
 import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
+import * as iam from "@distilled.cloud/gcp/iam_v1";
 import * as ml from "@distilled.cloud/gcp/ml_v1";
 import * as privateca from "@distilled.cloud/gcp/privateca_v1";
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
@@ -19,7 +20,6 @@ import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as servicedirectory from "@distilled.cloud/gcp/servicedirectory_v1";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
-import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as workstations from "@distilled.cloud/gcp/workstations_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -117,28 +117,25 @@ type QueryGet = (input: {
 }) => Effect.Effect<any, IamPolicyError, GcpOpContext>;
 type BodyGet = (input: {
   resource: string;
-  body?: { options?: { requestedPolicyVersion?: number } };
+  options?: { requestedPolicyVersion?: number };
 }) => Effect.Effect<any, IamPolicyError, GcpOpContext>;
 type Set = (input: {
   resource: string;
-  body?: { policy?: any };
+  policy?: any;
 }) => Effect.Effect<any, IamPolicyError, GcpOpContext>;
 
 const queryStyle =
   (get: QueryGet, set: Set) =>
   (resource: string): IamPolicyTarget => ({
     get: get({ resource, "options.requestedPolicyVersion": 3 }),
-    set: (policy) => set({ resource, body: { policy } }),
+    set: (policy) => set({ resource, policy }),
   });
 
 const bodyStyle =
   (get: BodyGet, set: Set, policyVersion = 3) =>
   (resource: string): IamPolicyTarget => ({
-    get: get({
-      resource,
-      body: { options: { requestedPolicyVersion: policyVersion } },
-    }),
-    set: (policy) => set({ resource, body: { policy } }),
+    get: get({ resource, options: { requestedPolicyVersion: policyVersion } }),
+    set: (policy) => set({ resource, policy }),
   });
 
 const bucketName = (name: string) =>
@@ -155,12 +152,7 @@ const computeInstance = (name: string): IamPolicyTarget => {
       optionsRequestedPolicyVersion: 3,
     }),
     set: (policy) =>
-      compute.setIamPolicyInstances({
-        project,
-        zone,
-        resource,
-        body: { policy: policy as compute.Policy },
-      }),
+      compute.setIamPolicyInstances({ policy: policy as compute.Policy, project, zone, resource }),
   };
 };
 
@@ -231,17 +223,15 @@ const bigqueryDataset = (name: string): IamPolicyTarget => {
       read.pipe(
         Effect.flatMap((dataset) =>
           bigquery.patchDatasets({
+            etag: dataset.etag,
+            access: [
+              ...(dataset.access ?? []).filter((item) => !isPrincipal(item)),
+              ...(policy.bindings ?? []).flatMap((binding) =>
+                (binding.members ?? []).map((member) => accessItemOf(binding.role ?? "", member)),
+              ),
+            ],
             projectId,
             datasetId,
-            body: {
-              etag: dataset.etag,
-              access: [
-                ...(dataset.access ?? []).filter((item) => !isPrincipal(item)),
-                ...(policy.bindings ?? []).flatMap((binding) =>
-                  (binding.members ?? []).map((member) => accessItemOf(binding.role ?? "", member)),
-                ),
-              ],
-            },
           }),
         ),
       ),
@@ -358,10 +348,7 @@ const TARGETS: Record<GcpIamResourceKind, (name: string) => IamPolicyTarget> = {
       optionsRequestedPolicyVersion: 3,
     }),
     set: (policy) =>
-      storage.setIamPolicyBuckets({
-        bucket: bucketName(name),
-        body: policy as storage.Policy,
-      }),
+      storage.setIamPolicyBuckets({ ...(policy as storage.Policy), bucket: bucketName(name) }),
   }),
   "workstations.workstation": queryStyle(
     workstations.getIamPolicyProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations,

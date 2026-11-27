@@ -448,12 +448,12 @@ export const ClustersUserProvider = () =>
       if (current === undefined) {
         const created = yield* alloydb
           .createProjectsLocationsClustersUsers({
-            parent,
-            userId,
-            body: toBody(news, userType, {
+            ...toBody(news, userType, {
               includePassword: true,
               includeKeepExtraRoles: true,
             }),
+            parent,
+            userId,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created !== undefined ? created : yield* waitUntilExists(name);
@@ -479,11 +479,11 @@ export const ClustersUserProvider = () =>
 
         current = yield* alloydb
           .patchProjectsLocationsClustersUsers({
-            name,
-            updateMask: updateMask.join(","),
-            body: toBody(news, userType, {
+            ...toBody(news, userType, {
               includePassword: passwordChanged,
             }),
+            name,
+            updateMask: updateMask.join(","),
           })
           .pipe(
             Effect.retry({

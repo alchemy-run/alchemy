@@ -11,6 +11,7 @@ import AuditManagerTestFunctionLive, { AuditManagerTestFunction } from "./handle
 import AuditManagerAssessmentTestFunctionLive, {
   AuditManagerAssessmentTestFunction,
 } from "./handler-assessment";
+import { ensureRegistered } from "./registration.ts";
 
 const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -236,6 +237,7 @@ describe.sequential(
           "all 22 capabilities bind and the reads answer live data",
           (_stack) =>
             Effect.gen(function* () {
+              yield* ensureRegistered;
               yield* assessmentStack.destroy();
               const cleanup = assessmentStack.destroy().pipe(Effect.catchCause(() => Effect.void));
 

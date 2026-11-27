@@ -1,0 +1,215 @@
+---
+title: Tools
+description: Declare a tool with AI.Tool — its parameters, what it returns and how it fails — and implement it as a Layer or inline, on any harness.
+---
+
+A tool is a function the model can call. The model sees its name, its description and the JSON Schema of its parameters, and decides when to call it. The call runs in your harness, as an Effect, with whatever bindings your Durable Object has.
+
+## Declare a tool
+
+A tool's declaration is its contract: a description for the model, `parameters` it takes and the `success` value it returns.
+
+```typescript title="src/Add.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export class Add extends AI.Tool<Add>()("add", {
+  description: "Add two integers. Use it whenever numbers are added.",
+  parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+  success: Schema.Struct({ sum: Schema.Number }),
+}) {}
+```
+
+Arguments are decoded with `parameters` before the handler runs, and the result is encoded with `success`. A tool that acts and returns nothing says so with `success: Schema.Void`.
+
+## Implement it
+
+`make` turns a handler into the tool's Layer. A handler that needs nothing is a function:
+
+```typescript
+export const AddLive = Add.make(({ a, b }) => ({ sum: a + b }));
+```
+
+A handler that does something is an `Effect.fn`:
+
+```typescript
+export const AddLive = Add.make(
+  Effect.fn(function* ({ a, b }) {
+    yield* Effect.log(`adding ${a} and ${b}`);
+    return { sum: a + b };
+  }),
+);
+```
+
+## Use a binding
+
+A handler that needs a binding is built by an Effect. That Effect runs where the harness is yielded, so the binding is declared at deploy like any other, and it returns the handler:
+
+```typescript title="src/Deploy.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+
+export const Releases = Cloudflare.R2.Bucket("Releases", {});
+
+export class Deploy extends AI.Tool<Deploy>()("deploy", {
+  description: "Upload a release archive.",
+  parameters: Schema.Struct({ version: Schema.String, archive: Schema.String }),
+  success: Schema.Struct({ key: Schema.String }),
+}) {}
+
+export const DeployLive = Deploy.make(
+  Effect.gen(function* () {
+    const releases = yield* Cloudflare.R2.WriteBucket(Releases);
+
+    return Effect.fn(function* ({ version, archive }) {
+      const key = `releases/${version}.tgz`;
+      yield* releases.put(key, archive).pipe(Effect.orDie);
+      return { key };
+    });
+  }),
+).pipe(Layer.provide(Cloudflare.R2.WriteBucketBinding));
+```
+
+## Mention it in a process
+
+A [process](/ai/processes) that mentions a tool may call it. The tool's Layer becomes a requirement of the process, so a program with a Layer missing does not compile:
+
+```typescript title="src/Release.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Add } from "./Add.tool.ts";
+import { Deploy } from "./Deploy.tool.ts";
+
+export class Release extends AI.Process<Release>()("Release", {
+  description: "Work out the next version and upload a release.",
+})`
+  Work out the next version number with ${Add}, then upload the build with ${Deploy}.
+` {}
+```
+
+A harness can also be given tools directly, without a process. See [Tools on Pi](/pi/tools) and [Tools on OpenCode](/opencode/tools).
+
+## Work in the sandbox
+
+`AI.Sandbox` is the sandbox of the conversation a call belongs to. The harness has already picked it, so a tool never names a sandbox or a platform:
+
+```typescript title="src/RunTests.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+export class RunTests extends AI.Tool<RunTests>()("run_tests", {
+  description: "Run the test suite and report failures.",
+  parameters: Schema.Struct({ filter: Schema.optional(Schema.String) }),
+  success: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }),
+}) {}
+
+export const RunTestsLive = RunTests.make(
+  Effect.fn(function* ({ filter }) {
+    const sandbox = yield* AI.Sandbox;
+    const result = yield* sandbox
+      .exec(["npm", "test", ...(filter ? ["--", filter] : [])])
+      .pipe(Effect.orDie);
+    return { exitCode: result.exitCode, output: result.stdout.slice(-8000) };
+  }),
+);
+```
+
+A handler that uses `AI.Sandbox` makes its Layer require `AI.Sandboxes`, so a harness without sandboxes does not compile. See [Sandboxes](/ai/sandboxes).
+
+## Fail with a declared error
+
+A handler can only fail with what the tool declares as `failure`: one `Schema.TaggedError` class, or a union of several.
+
+```typescript title="src/Withdraw.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+export class InsufficientFunds extends Schema.TaggedError<InsufficientFunds>()(
+  "InsufficientFunds",
+  { balance: Schema.Number },
+) {}
+export class AccountFrozen extends Schema.TaggedError<AccountFrozen>()("AccountFrozen", {
+  account: Schema.String,
+}) {}
+
+export class Withdraw extends AI.Tool<Withdraw>()("withdraw", {
+  description: "Withdraw money from an account.",
+  parameters: Schema.Struct({ account: Schema.String, amount: Schema.Number }),
+  success: Schema.Struct({ balance: Schema.Number }),
+  failure: Schema.Union([InsufficientFunds, AccountFrozen]),
+}) {}
+
+export const WithdrawLive = Withdraw.make(
+  Effect.fn(function* ({ account, amount }) {
+    if (account === "frozen") return yield* new AccountFrozen({ account });
+    if (amount > 137) return yield* new InsufficientFunds({ balance: 137 });
+    return { balance: 137 - amount };
+  }),
+);
+```
+
+The model reads a failure as the tool's error result, encoded by the schema, and can try something else:
+
+```json
+{ "_tag": "InsufficientFunds", "balance": 137 }
+```
+
+Anything else a handler hits is a defect: use `Effect.orDie` on errors the model can do nothing about, and the harness reports the failed call to the model in its own words.
+
+## Declare a tool inline
+
+A tool can be a value, declared where its bindings are in scope:
+
+```typescript
+const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+
+const SaveNote = AI.Tool(
+  "save_note",
+  {
+    description: "Save a note the user can read later.",
+    parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
+    success: Schema.Void,
+  },
+  Effect.fn(function* ({ key, text }) {
+    yield* notes.put(key, text).pipe(Effect.orDie);
+  }),
+);
+```
+
+An inline tool has no Layer to provide. Mention it, or list it on a harness, like any other.
+
+## Know which call is running
+
+`AI.ToolCall` is the call a handler is answering: its id, and the conversation it belongs to as the harness identifies it.
+
+```typescript
+const call = yield* AI.ToolCall;
+yield* Effect.log(`call ${call.callId} in conversation ${call.conversationId}`);
+```
+
+## Say whether a call may run twice
+
+A harness that resumes after a crash, as [Pi does](/pi/durability), may find a tool call that was cut off. `replay: "safe"` lets it run the call again. Without it the model is told the call was interrupted.
+
+```typescript
+export class RunTests extends AI.Tool<RunTests>()("run_tests", {
+  description: "Run the test suite and report failures.",
+  parameters: Schema.Struct({}),
+  success: Schema.Struct({ exitCode: Schema.Number }),
+  replay: "safe",
+}) {}
+```
+
+## Declare only a name
+
+A tool declared with only a name has no schema of its own. Its Layer brings the description, the schema and the handler:
+
+```typescript
+export class Bash extends AI.Tool<Bash>()("bash") {}
+```
+
+This is how the same tool can be a different implementation on each harness. See [Coding tools](/ai/coding-tools).

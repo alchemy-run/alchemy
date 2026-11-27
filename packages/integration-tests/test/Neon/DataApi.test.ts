@@ -6,6 +6,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -220,8 +221,10 @@ test.provider(
         ),
       ).toBe(true);
       expect(
-        (yield* SDK.getNeonAuth({ project_id: first.api.projectId, branch_id: first.api.branchId }))
-          .base_url,
+        (yield* SDKUnstable.getNeonAuth({
+          project_id: first.api.projectId,
+          branch_id: first.api.branchId,
+        })).base_url,
       ).toBeDefined();
       yield* stack.destroy();
       expect(

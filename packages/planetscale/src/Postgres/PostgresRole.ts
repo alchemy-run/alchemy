@@ -128,8 +128,11 @@ export interface PostgresRoleAttributes {
    * this DNS zone.
    */
   privateHost: string;
-  /** Service name for this branch supplied by PlanetScale to establish a private connection. */
-  privateConnectionServiceName: string;
+  /**
+   * Service name for this branch supplied by PlanetScale to establish a
+   * private connection. `null` when PlanetScale supplies none.
+   */
+  privateConnectionServiceName: string | null;
   /** Direct connection URL for the database (Redacted). */
   connectionUrl: Redacted.Redacted<string>;
   /** Pooled connection URL via PSBouncer (port 6432, Redacted). */
@@ -490,7 +493,7 @@ const buildAttributes = (
     with_replication: boolean;
     access_host_url: string;
     private_access_host_url: string;
-    private_connection_service_name: string;
+    private_connection_service_name: string | null;
     username: string;
     database_name: string;
     ttl: number | null;

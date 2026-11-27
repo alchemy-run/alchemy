@@ -1,4 +1,5 @@
 import * as Axiom from "@distilled.cloud/axiom";
+import * as AxiomPreview from "@distilled.cloud/axiom/unstable/v2";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -81,7 +82,7 @@ export const VirtualFieldProvider = () =>
       const get = yield* Axiom.getVirtualField;
       const del = yield* Axiom.deleteVirtualField;
       const listVirtualFields = yield* Axiom.getVirtualFields;
-      const listDatasets = yield* Axiom.getDatasets;
+      const listDatasets = yield* AxiomPreview.getDatasets;
 
       return {
         stables: ["id"],

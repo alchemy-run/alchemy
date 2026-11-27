@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -272,8 +273,8 @@ export const Budget = Resource<Budget>("AWS.Budgets.Budget");
  * Compute the ARN of a budget. Budgets is a global service, so the ARN has no
  * region component.
  */
-export const budgetArn = (accountId: string, budgetName: string): string =>
-  `arn:aws:budgets::${accountId}:budget/${budgetName}`;
+export const budgetArn = (partition: Partition, accountId: string, budgetName: string): string =>
+  `arn:${partition}:budgets::${accountId}:budget/${budgetName}`;
 
 const notificationKey = (n: budgets.Notification): string =>
   JSON.stringify({
@@ -457,7 +458,7 @@ export const BudgetProvider = () =>
         stables: ["budgetName", "accountId", "budgetArn"],
         list: () =>
           Effect.gen(function* () {
-            const { accountId } = yield* AWSEnvironment.current;
+            const { accountId, partition } = yield* AWSEnvironment.current;
             return yield* budgets.describeBudgets.pages({ AccountId: accountId }).pipe(
               Stream.runCollect,
               Effect.map((chunk) =>
@@ -466,14 +467,14 @@ export const BudgetProvider = () =>
                   .map((b) => ({
                     budgetName: b.BudgetName,
                     accountId,
-                    budgetArn: budgetArn(accountId, b.BudgetName),
+                    budgetArn: budgetArn(partition, accountId, b.BudgetName),
                   })),
               ),
               Effect.catchTag("NotFoundException", () => Effect.succeed([])),
             );
           }),
         lookup: Effect.fn(function* ({ budgetName: name }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const found = yield* budgets
             .describeBudget({ AccountId: accountId, BudgetName: name })
             .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
@@ -481,11 +482,11 @@ export const BudgetProvider = () =>
           return {
             budgetName: name,
             accountId,
-            budgetArn: budgetArn(accountId, name),
+            budgetArn: budgetArn(partition, accountId, name),
           };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const name = output?.budgetName ?? (yield* createName(id, olds ?? {}));
           const found = yield* budgets
             .describeBudget({ AccountId: accountId, BudgetName: name })
@@ -494,7 +495,7 @@ export const BudgetProvider = () =>
           return {
             budgetName: name,
             accountId,
-            budgetArn: budgetArn(accountId, name),
+            budgetArn: budgetArn(partition, accountId, name),
           };
         }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
@@ -504,7 +505,7 @@ export const BudgetProvider = () =>
           if (oldName !== newName) return { action: "replace" } as const;
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const name = output?.budgetName ?? (yield* createName(id, news));
           const internalTags = yield* createInternalTags(id);
           const budgetBody = buildBudget(name, news);
@@ -555,7 +556,7 @@ export const BudgetProvider = () =>
           yield* syncNotifications(accountId, name, news.notifications ?? []);
 
           // SYNC tags against observed cloud tags.
-          const arn = budgetArn(accountId, name);
+          const arn = budgetArn(partition, accountId, name);
           yield* syncTags(arn, { ...news.tags, ...internalTags });
 
           yield* session.note(name);

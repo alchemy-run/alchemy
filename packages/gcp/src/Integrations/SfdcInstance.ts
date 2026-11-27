@@ -249,7 +249,7 @@ export const SfdcInstanceProvider = () =>
         const created = yield* integrations
           .createProjectsLocationsSfdcInstances({
             parent,
-            body,
+            ...body,
           })
           .pipe(
             Effect.catchTag("Conflict", () => findSfdcInstanceByDescription(parent, description)),
@@ -270,6 +270,7 @@ export const SfdcInstanceProvider = () =>
 
       if (displayChanged || descriptionChanged || orgChanged || authChanged || authorityChanged) {
         current = yield* integrations.patchProjectsLocationsSfdcInstances({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "displayName" : undefined,
@@ -278,7 +279,6 @@ export const SfdcInstanceProvider = () =>
             authChanged ? "authConfigId" : undefined,
             authorityChanged ? "serviceAuthority" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

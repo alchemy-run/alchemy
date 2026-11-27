@@ -344,16 +344,14 @@ export const PrivateConnectionProvider = () =>
       if (current === undefined) {
         const created = yield* ds
           .createProjectsLocationsPrivateConnections({
+            displayName,
+            labels: desiredLabels,
+            vpcPeeringConfig,
+            pscInterfaceConfig: news.pscInterfaceConfig,
             parent: locationParent(env.project, location),
             privateConnectionId,
             force: news.force,
             validateOnly: news.validateOnly,
-            body: {
-              displayName,
-              labels: desiredLabels,
-              vpcPeeringConfig,
-              pscInterfaceConfig: news.pscInterfaceConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         // VPC peering takes 5-10 minutes.

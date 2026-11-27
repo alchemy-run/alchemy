@@ -38,8 +38,8 @@ const hostProjectRoles = (account: string) =>
   Effect.gen(function* () {
     const { project } = yield* GcpEnvironment.current;
     const policy = yield* resourcemanager.getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
       .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))

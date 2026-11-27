@@ -267,12 +267,10 @@ export const TaxonomyProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           datacatalog.createProjectsLocationsTaxonomies({
+            displayName,
+            description,
+            activatedPolicyTypes,
             parent,
-            body: {
-              displayName,
-              description,
-              activatedPolicyTypes,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* observe(id, undefined, env.project, location));
@@ -294,18 +292,15 @@ export const TaxonomyProvider = () =>
       if (displayChanged || descriptionChanged || policyChanged) {
         current = yield* retryTransient(
           datacatalog.patchProjectsLocationsTaxonomies({
+            displayName,
+            description,
+            activatedPolicyTypes,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "display_name" : undefined,
               descriptionChanged ? "description" : undefined,
               policyChanged ? "activated_policy_types" : undefined,
             ),
-            body: {
-              name: currentName,
-              displayName,
-              description,
-              activatedPolicyTypes,
-            },
           }),
         );
       }

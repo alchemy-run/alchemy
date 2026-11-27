@@ -95,10 +95,7 @@ export const FileDiffCard = ({ context, entry }: { context: RepoContext; entry: 
         return;
       }
       // The blob oid is a perfect cacheKey: content-addressed identity.
-      const contents = (
-        text: string | null,
-        oid: string | null | undefined,
-      ): FileContents | null =>
+      const contents = (text: string | null, oid: string | null | undefined): FileContents | null =>
         text === null ? null : { name: entry.path, contents: text, cacheKey: oid ?? undefined };
       // The server guarantees ≥ 1 side, so this never sees (null, null).
       const fileDiff = parseDiffFromFile(

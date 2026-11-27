@@ -48,11 +48,9 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androidmanagement.createEnterprisesEnrollmentTokens({
+          duration: "3600s",
+          additionalData: "alchemy-probe",
           parent: "enterprises/alchemy-missing-enterprise",
-          body: {
-            duration: "3600s",
-            additionalData: "alchemy-probe",
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

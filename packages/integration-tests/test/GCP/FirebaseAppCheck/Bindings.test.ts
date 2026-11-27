@@ -80,8 +80,8 @@ describe.skipIf(!runLifecycle)(
             // exchangeDebugToken is not IAM-gated: the binding grants nothing.
             const project = yield* currentProject;
             const policy = yield* resourcemanager.getIamPolicyProjects({
+              options: { requestedPolicyVersion: 3 },
               resource: `projects/${project}`,
-              body: { options: { requestedPolicyVersion: 3 } },
             });
             const roles = (policy.bindings ?? []).filter((binding) =>
               (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),

@@ -6,6 +6,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -48,7 +49,7 @@ test.provider(
         project_id: first.auth.projectId,
         branch_id: first.auth.branchId,
       };
-      const current = yield* SDK.getNeonAuth(request);
+      const current = yield* SDKUnstable.getNeonAuth(request);
       expect(current.auth_provider).toBe("better_auth");
       expect(current.base_url).toBe(first.auth.baseUrl);
       expect(first.auth.jwksUrl).toMatch(/^https:\/\//);
@@ -63,7 +64,7 @@ test.provider(
       const updated = yield* stack.deploy(application(false, "https://next.example.com"));
       expect(updated.auth.baseUrl).toBe(first.auth.baseUrl);
       expect((yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost).toBe(false);
-      const domains = yield* SDK.listBranchNeonAuthTrustedDomains(request);
+      const domains = yield* SDKUnstable.listBranchNeonAuthTrustedDomains(request);
       expect(domains.domains.some((entry) => entry.domain === "https://next.example.com")).toBe(
         true,
       );
@@ -72,7 +73,7 @@ test.provider(
       );
 
       yield* stack.destroy();
-      const gone = yield* SDK.getNeonAuth(request).pipe(
+      const gone = yield* SDKUnstable.getNeonAuth(request).pipe(
         Effect.as(false),
         Effect.catchTag("NotFound", () => Effect.succeed(true)),
       );
@@ -128,11 +129,11 @@ test.provider(
         Effect.catchTag("InvalidManagedAuth", () => Effect.succeed(true)),
       );
       expect(refused).toBe(true);
-      expect((yield* SDK.getNeonAuth(request)).name).toBe("Equivalent Auth");
+      expect((yield* SDKUnstable.getNeonAuth(request)).name).toBe("Equivalent Auth");
       expect((yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost).toBe(false);
       yield* stack.destroy();
       expect(
-        yield* SDK.getNeonAuth(request).pipe(
+        yield* SDKUnstable.getNeonAuth(request).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         ),

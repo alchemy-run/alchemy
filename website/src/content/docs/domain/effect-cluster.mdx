@@ -120,6 +120,30 @@ A [decision](/domain/decision) records on every instance it reads, or on none. T
 
 Every event reaches the views, projections and policies that consume it, at least once and in order for each source, even if a runner restarts in between. Scheduled commands are persisted messages, delivered when they're due on whichever runner then owns the instance.
 
+## Keep dedupe rows for a while
+
+Some rows exist only to drop repeats: the receipt of each accepted command and committed decision, the mark that a policy ran a delivery, a cancelled scheduled command, and Effect Cluster's processed messages to the model's entity. Every runner deletes them once they are older than `retention`, each hour:
+
+```typescript
+DomainCluster.layerEntities({
+  name: "Bank",
+  main: import.meta.url,
+  handler: "BankLive",
+  pool: Default,
+  retention: {
+    receipts: "30 days", // a command or decision sent again after this is decided again
+    deliveries: "7 days", // a delivery that arrives again after this runs again
+    cancelled: "7 days", // after this, `unschedule` answers `NotScheduled`
+    messages: "7 days",
+    interval: "1 hour",
+  },
+});
+```
+
+These are the defaults. `"forever"` keeps a kind of row. Events, state and the views' entries are never deleted.
+
+On `ClusterCloudflare.DurableObjectPool`, each instance keeps its rows in its own Durable Object and deletes a few past their window every time it commits, as on [Cloudflare](/domain/cloudflare#keep-dedupe-rows-for-a-while). `messages` and `interval` apply only to pools with a cluster database.
+
 ## Watch without polling
 
 Give the client `Domain.protocolWebSocket` (see [Api](/domain/api#choose-a-protocol)). The runtime that serves the Api holds each live read's WebSocket, and the entity that owns the key pushes every commit to it over a streamed call through the pool's gateway.

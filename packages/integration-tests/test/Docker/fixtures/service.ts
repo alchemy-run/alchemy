@@ -11,7 +11,6 @@ import * as Schedule from "effect/Schedule";
  * derived from the clock) and uncommon enough to avoid colliding with other
  * suites on the shared local daemon.
  */
-export const SERVICE_EXTERNAL_PORT = 43117;
 
 /**
  * End-to-end fixture for the effectful `Docker.Service` platform: a
@@ -29,7 +28,7 @@ export default class TestService extends Docker.Service<TestService>()(
   {
     main: import.meta.filename,
     port: 3000,
-    ports: [{ external: SERVICE_EXTERNAL_PORT, internal: 3000 }],
+    ports: [{ internal: 3000 }],
     replicas: 1,
   },
   Effect.gen(function* () {

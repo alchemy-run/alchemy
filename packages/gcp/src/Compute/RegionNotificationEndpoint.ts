@@ -405,13 +405,11 @@ export const RegionNotificationEndpointProvider = () =>
         }
         yield* compute
           .insertRegionNotificationEndpoints({
+            name: notificationEndpointName,
+            description: desiredDescription,
+            grpcSettings,
             project: env.project,
             region,
-            body: {
-              name: notificationEndpointName,
-              description: desiredDescription,
-              grpcSettings,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>

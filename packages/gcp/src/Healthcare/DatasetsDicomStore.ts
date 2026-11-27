@@ -281,13 +281,11 @@ export const DatasetsDicomStoreProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsDicomStores({
+            labels: desiredLabels,
+            notificationConfigs: news.notificationConfigs,
+            notificationConfig: news.notificationConfig,
             parent: dataset,
             dicomStoreId,
-            body: {
-              labels: desiredLabels,
-              notificationConfigs: news.notificationConfigs,
-              notificationConfig: news.notificationConfig,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -307,17 +305,15 @@ export const DatasetsDicomStoreProvider = () =>
       if (labelsChanged || notificationsChanged || legacyChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsDicomStores({
+            labels: desiredLabels,
+            notificationConfigs: news.notificationConfigs,
+            notificationConfig: news.notificationConfig,
             name: currentName,
             updateMask: updateMaskOf(
               labelsChanged ? "labels" : undefined,
               notificationsChanged ? "notificationConfigs" : undefined,
               legacyChanged ? "notificationConfig" : undefined,
             ),
-            body: {
-              labels: desiredLabels,
-              notificationConfigs: news.notificationConfigs,
-              notificationConfig: news.notificationConfig,
-            },
           }),
         );
       }

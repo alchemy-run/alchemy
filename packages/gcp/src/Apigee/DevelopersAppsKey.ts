@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 import {
   attributesToRecord,
@@ -190,7 +191,7 @@ const toAttrs = (
   return {
     name: resourceName(organization, developer, app, consumerKey),
     consumerKey,
-    consumerSecret: key.consumerSecret,
+    consumerSecret: revealOptional(key.consumerSecret),
     developer: developerEmailOf(developer),
     app: appNameOf(app),
     organization: orgIdOf(organization),
@@ -305,7 +306,7 @@ export const DevelopersAppsKeyProvider = () =>
                   toAttrs(
                     {
                       consumerKey: credential.consumerKey,
-                      consumerSecret: credential.consumerSecret,
+                      consumerSecret: revealOptional(credential.consumerSecret),
                       scopes: credential.scopes,
                       apiProducts: credential.apiProducts,
                       status: credential.status,
@@ -343,13 +344,11 @@ export const DevelopersAppsKeyProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsDevelopersAppsKeys({
+            consumerKey,
+            consumerSecret,
+            expiresInSeconds: news.expiresInSeconds,
+            attributes: recordToAttributes(attributes),
             parent,
-            body: {
-              consumerKey,
-              consumerSecret,
-              expiresInSeconds: news.expiresInSeconds,
-              attributes: recordToAttributes(attributes),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -370,14 +369,12 @@ export const DevelopersAppsKeyProvider = () =>
 
       if (scopesChanged || productsChanged || statusChanged || attributesChanged) {
         current = yield* apigee.updateDeveloperAppKeyOrganizationsDevelopersAppsKeys({
+          consumerKey,
+          scopes: news.scopes,
+          apiProducts: news.apiProducts,
+          attributes: recordToAttributes(attributes),
           name,
           action: statusChanged ? status : undefined,
-          body: {
-            consumerKey,
-            scopes: news.scopes,
-            apiProducts: news.apiProducts,
-            attributes: recordToAttributes(attributes),
-          },
         });
       }
 
