@@ -35,6 +35,58 @@ const writeFixture = Effect.fn(function* (files: Record<string, string>) {
 });
 
 layer(NodeServices.layer)("WorkerBundle", (it) => {
+  it.effect(
+    "preserves only selected native exports alongside the Effect Worker bridge",
+    () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const root = yield* writeFixture({
+          "package.json": "{}",
+          "worker.mjs": [
+            `import { WorkerEntrypoint } from "cloudflare:workers";`,
+            `export class HealthRpc extends WorkerEntrypoint { health() { return "ok"; } }`,
+            `export class InternalRpc extends WorkerEntrypoint { internal() { return "private"; } }`,
+            `export default {};`,
+          ].join("\n"),
+        });
+        const bundler = yield* WorkerBundle;
+        for (const { nativeExports, expectedExports } of [
+          { nativeExports: undefined, expectedExports: ["default"] },
+          { nativeExports: ["HealthRpc"], expectedExports: ["HealthRpc", "default"] },
+        ]) {
+          const entryExports: string[] = [];
+          yield* bundler.build({
+            id: "worker-bundle-native-exports",
+            main: path.join(root, "worker.mjs"),
+            compatibility: { date: "2026-03-17", flags: ["nodejs_compat"] },
+            entry: { kind: "effect", exports: {} },
+            stack: { name: "worker-bundle-test", stage: "test" },
+            extraOptions: {
+              nativeExports,
+              input: {
+                external: ["effect/Effect", "alchemy/Runtime", "@alchemy.run/cloudflare/Bridge"],
+              },
+              output: {
+                plugins: [
+                  {
+                    name: "collect-entry-exports",
+                    generateBundle(_options, output) {
+                      for (const chunk of Object.values(output)) {
+                        if (chunk.type === "chunk" && chunk.isEntry) {
+                          entryExports.push(...chunk.exports);
+                        }
+                      }
+                    },
+                  },
+                ],
+              },
+            },
+          });
+          expect(entryExports.sort()).toEqual(expectedExports);
+        }
+      }),
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
+  );
   // Regression test for #880: CJS dependencies (like `pg`) that
   // `require("events")` must have those requires converted into ESM imports
   // of the workerd-provided Node builtins. Left unconverted, rolldown emits
