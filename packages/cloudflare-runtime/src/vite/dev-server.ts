@@ -14,7 +14,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import type * as vite from "vite";
-import { isFileLoadingAllowed } from "vite";
+import { isFileLoadingAllowed, normalizePath } from "vite";
 import * as DurableObjectNamespace from "../core/bindings/DurableObjectNamespace.ts";
 import * as Loopback from "../core/bindings/Loopback.ts";
 import * as UnsafeEval from "../core/bindings/UnsafeEval.ts";
@@ -132,7 +132,10 @@ const resolveAllowedModulePath = async (
 ): Promise<string | null> => {
   let real: string;
   try {
-    real = await NodeFs.realpath(NodePath.resolve(target));
+    // Vite stores `fs.allow`/`safeModulePaths` as forward-slash paths and its
+    // own callers `normalizePath` before the policy check; `realpath` yields
+    // native separators, so normalize or every module 403s on Windows.
+    real = normalizePath(await NodeFs.realpath(NodePath.resolve(target)));
   } catch {
     return null;
   }

@@ -438,30 +438,17 @@ const ensureStateBucket = (
       .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (observed === undefined) {
       yield* Effect.logInfo(`Cloud Storage state store: creating bucket ${bucket} in ${location}`);
-      const created = yield* storage
-        .insertBuckets({
-          name: bucket,
-          location,
-          iamConfiguration: desiredIamConfiguration,
-          versioning: { enabled: true },
-          project,
-        })
-        .pipe(
-          Effect.as(true),
-          // A concurrent first use created it first.
-          Effect.catchTag("Conflict", () => Effect.succeed(false)),
-        );
-      // Lost the create race: someone created the name between our GET and
-      // insert. If we derived the name, re-observe and prove the winner is us
-      // before writing state there.
-      if (!created && enforceOwnership) {
-        const winner = yield* storage
-          .getBuckets({ bucket })
-          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
-        if (winner !== undefined) {
-          yield* assertBucketOwnership(bucket, project, winner.projectNumber);
-        }
-      }
+      // A lost create race surfaces as `Conflict`; let it propagate to the
+      // outer retry, which re-observes (the bucket now exists) and runs the
+      // else-branch below — so a bucket we didn't create is still ownership-
+      // checked instead of adopted straight into IAM sync.
+      yield* storage.insertBuckets({
+        name: bucket,
+        location,
+        iamConfiguration: desiredIamConfiguration,
+        versioning: { enabled: true },
+        project,
+      });
     } else {
       // Adopting an existing bucket: prove it is ours before writing state
       // (only for the engine-derived name; an explicit bucketName is trusted).
@@ -510,10 +497,13 @@ export const provisionStateBucket = (
   // `bootstrapStateBucket` always passes the engine-derived name, so enforce
   // the ownership guard here too.
   ensureStateBucket(bucket, project, location, true).pipe(
-    Effect.mapError(
-      (cause) =>
-        new StateStoreError({
-          message: `Could not provision state bucket ${bucket}: ${cause._tag}`,
-        }),
+    Effect.mapError((cause) =>
+      cause._tag === "StateStoreError"
+        ? // Keep the ownership/permission explanation instead of flattening it
+          // to the tag name.
+          cause
+        : new StateStoreError({
+            message: `Could not provision state bucket ${bucket}: ${cause._tag}`,
+          }),
     ),
   );
