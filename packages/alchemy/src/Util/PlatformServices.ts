@@ -104,12 +104,8 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
 const finishOutput = (stream: NodeJS.WriteStream): Promise<void> =>
   new Promise((resolve) => {
     if (stream.writableFinished || stream.destroyed) return resolve();
-    const done = () => {
-      stream.off("finish", done);
-      stream.off("close", done);
-      stream.off("error", done);
-      resolve();
-    };
+    // Whichever fires first settles; the rest are harmless no-ops.
+    const done = () => resolve();
     stream.once("finish", done);
     stream.once("close", done);
     stream.once("error", done);
