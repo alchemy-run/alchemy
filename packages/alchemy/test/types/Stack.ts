@@ -94,3 +94,17 @@ type _InlineStageReturnsSelf = Expect<
 >;
 NamedStack.stage[anyStage];
 InlineStack.stage[anyStage];
+
+// A class handle's `.make` must produce the handle's declared Shape: consumers
+// that `yield* Handle` read outputs typed as Shape.
+class ShapedStack extends Stack<ShapedStack, { url: string; port: number }>()("ShapedStack") {}
+
+// control: an effect that returns the declared Shape is accepted
+ShapedStack.make(options, Effect.succeed({ url: "https://example.com", port: 8080 }));
+// @ts-expect-error `port` is declared by the Shape but missing from the effect.
+ShapedStack.make(options, Effect.succeed({ url: "https://example.com" }));
+// @ts-expect-error `port` has the wrong type.
+ShapedStack.make(options, Effect.succeed({ url: "https://example.com", port: "8080" }));
+
+// @ts-expect-error `Stack.make` is not a runtime function; use a handle's `.make`.
+Stack.make;
