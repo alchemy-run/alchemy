@@ -1745,7 +1745,11 @@ export const make = (host: Host) => {
       const v = host.force(value);
       const known = Known.real(v);
       if (known) {
-        const text: string | undefined = JSON.stringify(known.value);
+        // A bigint is a value JSON has no way to write: the language throws on it.
+        const text = yield* Effect.try({
+          try: (): string | undefined => JSON.stringify(known.value),
+          catch: () => Value.notTranslated(site, "calls JSON.stringify on a value it cannot write"),
+        });
         return text === undefined ? undefined : Value.str(text);
       }
       if (v._tag === "Term" && v.big !== true && v.term.sort === "Int")
@@ -2412,8 +2416,26 @@ export const make = (host: Host) => {
           }
         },
       });
+      entryServices.set(entry, provided);
       return fibers.tools.wrap("Entry", entry);
     });
+  };
+  /** What `Request.makeEntry` was given to run each entry it made with. */
+  const entryServices = new WeakMap<object, Provided>();
+  /** `entry.context`: the services an entry of a request is run with, by the keys the code has read. */
+  const entryContext = (value: V, key: string): V | undefined => {
+    const entry =
+      key === "context" ? fibers.tools.heldOf<Request.Entry<never>>("Entry", value) : undefined;
+    if (!entry) return undefined;
+    const given = entryServices.get(entry);
+    if (given) return contextOf(given);
+    const provided: Array<readonly [unknown, V]> = [];
+    for (const [service, held] of entry.context.mapUnsafe) {
+      const read = host.services.get(service);
+      if (read === undefined) return undefined;
+      provided.push([read, held as V]);
+    }
+    return contextOf(provided);
   };
   Object.assign(clocks, fibers.sited);
   const contextNow = (): V => contextOf([...host.provided.entries()]);
@@ -2676,7 +2698,7 @@ export const make = (host: Host) => {
     opticMember: optics.member,
     /** A member of a latch or a semaphore: `latch.open`, `semaphore.withPermits`. */
     waitMember: (value: V, key: string, site: Site): V | undefined =>
-      fibers.member(value, key, site) ?? folds.member(value, key),
+      entryContext(value, key) ?? fibers.member(value, key, site) ?? folds.member(value, key),
     /** A sink: `Sink.count.pipe(Sink.map(f))` gives it to each function in turn. */
     piped: sinks.isSink,
     /** An instance of a class of the library that a file exports, other than one of `effect/Data`'s. */

@@ -388,6 +388,12 @@ const base: ReadonlyArray<Group> = [
       `Match.value(a > 0 ? a : null).pipe(Match.when(Match.defined, (n) => n), Match.when(Match.any, () => -1), Match.exhaustive)`,
       `Match.value(a).pipe(Match.withReturnType(), Match.when((n) => n > 0, () => "up"), Match.orElse(() => "down"))`,
     ],
+    unread: [
+      [
+        `Match.value(a).pipe(Match.when(100, () => "many"), Match.exhaustive)`,
+        /meets a value none of its cases takes/,
+      ],
+    ],
   },
   {
     name: "Record",
@@ -483,6 +489,29 @@ const base: ReadonlyArray<Group> = [
       `Optic.id().refine((n) => n > b).modify((n) => n - 1)(a)`,
       `Optic.id().tag("A").replace({ _tag: "B", n: b }, { _tag: "C", n: a })`,
       `Optic.success().compose(Optic.id().key("n")).getResult(Result.succeed({ n: a }))`,
+      `Optic.some().set(a)`,
+      `Optic.id().at("n").replaceResult(b, { n: a })`,
+      `[Result.isSuccess(Optic.getResult(Option.none(), Optic.none())), Result.isSuccess(Optic.getResult(Option.some(a), Optic.none()))]`,
+      `[Optic.getResult(Result.fail(a), Optic.failure()), Result.isSuccess(Optic.getResult(Result.succeed(b), Optic.failure()))]`,
+    ],
+    unread: [
+      [
+        `Optic.get(Option.some(a), Optic.some())`,
+        /reads Optic.get of an optic that may not find its focus/,
+      ],
+      [
+        `Optic.set(a, Optic.id().key("n"))`,
+        /calls Optic.set of an optic that needs the value it replaces in/,
+      ],
+      [`Optic.get(a, Optic.id().key("n"))`, /focuses into a/],
+      [
+        `Optic.entries().modify(() => [])(a)`,
+        /reads Optic.entries of a value that is not a record/,
+      ],
+      [
+        `Optic.entries().modify(() => [[a, 1]])({ x: 1 })`,
+        /makes a record of Optic.entries of keys it cannot see/,
+      ],
     ],
   },
   {
@@ -531,6 +560,8 @@ const base: ReadonlyArray<Group> = [
       `Rational.isRational(ratio(a))`,
       `Rational.Order(ratio(a), third)`,
       `Equal.equals(Rational.sum(ratio(a), third), Rational.sum(third, ratio(a)))`,
+      `Exit.hasDies(Effect.runSyncExit(Effect.sync(() => Rational.makeUnsafe(BigInt(a), 0n))))`,
+      `Exit.hasDies(Effect.runSyncExit(Effect.sync(() => Rational.divideUnsafe(Rational.makeUnsafe(BigInt(a), 1n), Rational.makeUnsafe(0n, 1n)))))`,
     ],
     known: [
       `Rational.format(Rational.sum(ratio(a), third))`,
@@ -1376,6 +1407,8 @@ const base: ReadonlyArray<Group> = [
       `Effect.gen(function* () { yield* Effect.log("l"); yield* Effect.logDebug("d"); yield* Effect.logTrace("t"); yield* Effect.annotateCurrentSpan("a", a); yield* Effect.yieldNow; return a; })`,
       `Effect.gen(function* () { const cell = yield* Ref.make(a); yield* Ref.update(cell, (n) => n + b); const before = yield* cell.pipe(Ref.getAndUpdate((n) => n * 2)); const taken = yield* Ref.modify(cell, (n) => [n - 1, n + 1]); yield* Ref.set(cell, (yield* Ref.get(cell)) + 1); return [before, taken, yield* Ref.get(cell), yield* Ref.getAndSet(cell, 0), yield* Ref.setAndGet(cell, b), yield* Ref.updateAndGet(cell, (n) => n + 1)]; })`,
       `Effect.sync(() => Effect.runSync(Effect.succeed(a + b)))`,
+      `Effect.ensuring(Effect.succeed(a), Effect.fail(new Odd({ n: b }))).pipe(Effect.exit, Effect.map(Exit.hasDies))`,
+      `even(a).pipe(Effect.ignore(), Effect.as(b))`,
     ],
   },
   {
@@ -1515,7 +1548,10 @@ const base: ReadonlyArray<Group> = [
       `Stream.run(stream, Sink.fail("no")).pipe(Effect.result)`,
       `stream.pipe(Stream.mapEffect(even), Stream.run(Sink.head()), Effect.result)`,
       `Effect.gen(function* () { const seen = []; yield* Stream.run(stream, Sink.forEach((n) => Effect.sync(() => void seen.push(n)))); return seen; })`,
+      `Stream.make(a, 2).pipe(Stream.mapEffect((n) => Effect.succeed(n + 1), { concurrency: 1 }), Stream.runCollect)`,
+      `Stream.run(Stream.make(a, 2), Sink.count.pipe(Sink.map((n) => n * 10)))`,
     ],
+    unread: [],
     known: [`Stream.runCollect(Stream.range(1, 3))`, `Stream.runCollect(Stream.range(a, a + 2))`],
   },
 ];
@@ -2990,6 +3026,7 @@ const rest: ReadonlyArray<Group> = [
     ...numbers,
     effectful: true,
     prelude: [
+      `export class Rate extends Context.Service<Rate, { readonly percent: number }>()("test/Rate") {}`,
       `import * as Fiber from "effect/Fiber";`,
       `import * as Cache from "effect/Cache";`,
       `import * as Request from "effect/Request";`,
@@ -3047,6 +3084,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const seen = []; const Double = Request.tagged("Double"); const entry = Request.makeEntry({ request: Double({ n: 2 }), context: Context.empty(), uninterruptible: false, completeUnsafe: (exit) => { seen.push(Exit.isSuccess(exit) ? exit.value : "failed"); } }); yield* Request.succeed(entry, entry.request.n * a); yield* Request.fail(entry, "no"); return [seen, entry.uninterruptible]; })`,
       `Effect.gen(function* () { const seen = []; const Double = Request.tagged("Double"); const entry = Request.makeEntry({ request: Double({ n: 3 }), context: Context.empty(), uninterruptible: true, completeUnsafe: (exit) => { seen.push(Exit.isFailure(exit) ? [Cause.hasFails(exit.cause), Cause.hasDies(exit.cause)] : exit.value); } }); yield* Request.fail(entry, new Odd({ n: a })); yield* Request.failCause(entry, Cause.die(b)); yield* Request.complete(entry, Exit.succeed(b)); return [seen, entry.uninterruptible, entry.request.n]; })`,
       `Effect.gen(function* () { const seen = []; const Double = Request.tagged("Double"); const entry = Request.makeEntry({ request: Double({ n: 2 }), context: Context.empty(), uninterruptible: false, completeUnsafe: (exit) => { seen.push(Exit.isSuccess(exit) ? exit.value : "failed"); } }); yield* Request.completeEffect(entry, even(a)); return seen; })`,
+      `Effect.gen(function* () { const Half = Request.tagged("Half"); const answers = RequestResolver.fromEffectTagged()({ Half: () => Effect.fail(new Odd({ n: b })) }); return yield* Effect.all([Effect.result(Effect.request(Half({ n: 4 }), answers)), Effect.result(Effect.request(Half({ n: 2 }), answers))], { concurrency: 2 }); })`,
+      `Effect.gen(function* () { const seen = yield* Ref.make([]); const Double = Request.tagged("Double"); const cache = yield* RequestResolver.asCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)), { capacity: 4, timeToLive: () => "1 second" }); const first = yield* Cache.get(cache, Double({ n: 1 })); yield* Effect.sleep("2 seconds"); const again = yield* Cache.get(cache, Double({ n: 1 })); return [first, again, (yield* Ref.get(seen)).length]; })`,
+      `Effect.gen(function* () { const Double = Request.tagged("Double"); const doubled = RequestResolver.makeWith({ batchKey: () => "all", preCheck: (entry) => entry.request.n > 1, delay: Effect.yieldNow, collectWhile: () => true, runAll: (entries) => Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n * 2 + a), { discard: true }) }); return yield* Effect.all([2, 3].map((n) => Effect.request(Double({ n }), doubled)), { concurrency: 2 }); })`,
+      `Effect.gen(function* () { const seen = []; const Double = Request.tagged("Double"); const entry = Request.makeEntry({ request: Double({ n: 2 }), context: Context.make(Rate, { percent: a }), uninterruptible: false, completeUnsafe: (exit) => { seen.push(Exit.isSuccess(exit) ? exit.value : "failed"); } }); yield* Request.succeed(entry, b); return [seen, Context.get(entry.context, Rate).percent]; })`,
     ],
     unread: [
       [
@@ -3086,6 +3127,7 @@ const rest: ReadonlyArray<Group> = [
     ...numbers,
     effectful: true,
     prelude: [
+      `class Posed extends Request.Class<{ readonly n: number }, number> {}`,
       `import * as Fiber from "effect/Fiber";`,
       `import * as Request from "effect/Request";`,
       `import * as RequestResolver from "effect/RequestResolver";`,
@@ -3110,6 +3152,7 @@ const rest: ReadonlyArray<Group> = [
       // A resolver from a plain function, and a request written as a class.
       `Effect.gen(function* () { const ask = Request.tagged("Double"); const doubled = RequestResolver.fromFunction((entry) => entry.request.n * 2 + a); return yield* Effect.all([Effect.request(ask({ n: 1 }), doubled), Effect.request(ask({ n: 2 }), doubled)], { concurrency: 2 }); })`,
       `Effect.gen(function* () { const prices = RequestResolver.make((entries) => Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request._tag.length + entry.request.item + a), { discard: true })); const asked = RequestResolver.fromEffect((entry) => Effect.succeed(entry.request.n * 2 + b)); return [yield* Effect.request(new GetPrice({ item: 2 }), prices), yield* Effect.request(new Ask({ n: 3 }), asked), yield* Effect.request(new Kept({ item: 1 }), prices)]; })`,
+      `Effect.gen(function* () { const asked = RequestResolver.fromEffect((entry) => Effect.succeed(entry.request.n * 2 + b)); return [yield* Effect.request(new Posed({ n: 3 }), asked), a]; })`,
     ],
     unread: [
       [
@@ -3303,6 +3346,7 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const queue = yield* Channel.toQueueArray(Channel.fromIterableArray([a, b, 3], 2), { capacity: 4 }); return [yield* Queue.take(queue), yield* Queue.take(queue), yield* Queue.take(queue)]; }))`,
       `Effect.map(Effect.exit(Cause.done()), (exit) => Exit.isFailure(exit) ? [Result.isSuccess(Pull.filterDoneVoid(exit.cause)), exit.cause.reasons.map((reason) => Pull.isDoneFailure(reason))] : [])`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const got = yield* Effect.forkChild(Channel.fromPubSub(hub).pipe(Channel.pipeTo(Channel.identity()), Channel.runHead)); yield* Effect.sleep(1); yield* PubSub.publish(hub, a); return yield* Fiber.join(got); }))`,
+      `Channel.fail(new Odd({ n: a })).pipe(Channel.orDie, Channel.runCollect, Effect.exit, Effect.map(Exit.hasDies))`,
     ],
     unread: [
       [
@@ -3504,6 +3548,8 @@ const rest: ReadonlyArray<Group> = [
       `Schema.encodeUnknownSync(Ticket)({ n: 6 })`,
       `Schema.asserts(Names, ["x", "y"])`,
       `Result.match(Schema.decodeUnknownResult(Ticket)({ n: a }), { onSuccess: () => false, onFailure: Schema.isSchemaError })`,
+      `Exit.hasDies(Effect.runSyncExit(Effect.sync(() => Schema.decodeUnknownSync(Ticket)({ n: a + 20 }))))`,
+      `Exit.hasDies(Effect.runSyncExit(Effect.sync(() => Schema.asserts(Names, [a]))))`,
     ],
     unread: [
       [
@@ -3563,8 +3609,12 @@ const rest: ReadonlyArray<Group> = [
       `(() => { const made = { n: a, list: [b] }; const copy = structuredClone(made); copy.n = 9; copy.list.push(1); return [made, copy]; })()`,
       `(() => { const one = Symbol("s"); const two = Symbol("s"); return [one === one, one === two]; })()`,
       `[globalThis.String(a), globalThis.Math.max(a, b), globalThis.Number.isInteger(b)]`,
+      `(() => { try { return JSON.parse(a > 100 ? "1" : "{"); } catch (error) { return error.name; } })()`,
+      `[...[a, b].values()]`,
     ],
     unread: [
+      [`JSON.stringify({ n: 1n, m: a })`, /calls JSON.stringify on a value it cannot write/],
+      [`Uint8Array([a])`, /calls Uint8Array without new/],
       [`Number(String(a))`, /calls Number on a value the prover cannot see/],
       [`JSON.stringify({ n: "t" + a })`, /calls JSON\.stringify on a value the prover cannot see/],
       [`parseInt("1" + a)`, /calls parseInt on text the prover cannot see/],
@@ -3591,6 +3641,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.succeed([Hash.array([1, "a", true]), Hash.structure({ n: 1, s: "x" }), Hash.structureKeys({ n: 1, s: "x" }, ["n"]), Hash.isHash(7), Hash.hash("a") === Hash.hash("a")])`,
     ],
     unread: [
+      [
+        `Effect.succeed(Metric.boundariesFromIterable(5))`,
+        /calls Metric.boundariesFromIterable with bounds it does not take/,
+      ],
       [`Metric.value(orders)`, /calls Metric\.value, which reads a metric/],
       [`Effect.succeed(Hash.hash("t" + a))`, /calls Hash\.hash on a value the prover cannot hash/],
     ],
@@ -3788,6 +3842,7 @@ const rest: ReadonlyArray<Group> = [
       `Effect.fail(new Cause.ExceededCapacityError("full")).pipe(Effect.catch((error) => Effect.succeed([Cause.isExceededCapacityError(error), error._tag, error.message, a])))`,
       `Effect.fail(new Cause.UnknownError(a, "what")).pipe(Effect.catch((error) => Effect.succeed([Cause.isUnknownError(error), error._tag, error.message, error.cause])))`,
       `Effect.head(Effect.succeed([])).pipe(Effect.catch((error) => Effect.succeed(Cause.isNoSuchElementError(error))))`,
+      `Effect.succeed([Result.isSuccess(Cause.findDie(Cause.die(a))), Result.isSuccess(Cause.findDie(Cause.fail(b)))])`,
     ],
   },
   {
@@ -3935,6 +3990,7 @@ const rest: ReadonlyArray<Group> = [
       `Stream.runCollect(Stream.fromIteratorSucceed((function* () {})()))`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* pipe(paced(2, a), Stream.concat(Stream.fail("no")), Stream.toPubSubTake({ capacity: "unbounded" })); return yield* Effect.flip(Stream.runCollect(Stream.fromPubSubTake(hub))); }))`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* Stream.toPubSubTake(paced(2, a, b), { capacity: 4 }); const sub = yield* PubSub.subscribe(hub); const first = yield* PubSub.take(sub); const second = yield* PubSub.take(sub); const third = yield* PubSub.take(sub); return [first, second, Exit.isExit(third) && Exit.isSuccess(third)]; }))`,
+      `Stream.fromEffect(Effect.as(Effect.sleep("2300 millis"), a)).pipe(Stream.timeoutOrElse({ duration: "1700 millis", orElse: () => Stream.make(b) }), Stream.runCollect)`,
     ],
     unread: [
       // A stream's time limit is worked out from the clock, which a handler's does not move: it never comes.
@@ -4024,8 +4080,22 @@ const rest: ReadonlyArray<Group> = [
       `Stream.runCollect(Stream.aggregate(four(a, b), Sink.foldUntil(() => 0, 2, (total, n) => Effect.succeed(total + n))))`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const got = yield* four(a, b).pipe(Stream.tapSink(Sink.forEach((n) => log(seen, n))), Stream.runCollect); return [got, yield* Ref.get(seen)]; })`,
       `Effect.scoped(Effect.gen(function* () { const [first, rest] = yield* Stream.peel(four(a, b), Sink.take(1)); return [first, yield* Stream.runCollect(rest)]; }))`,
+      `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), () => Sink.last()))`,
+      `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), ([first]) => Sink.reduce(() => first, (total, n) => total - n)))`,
+      `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), () => Sink.fold(() => 0, (total) => total < 5, (total, n) => Effect.succeed(total + n))))`,
+      `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), () => Sink.every((n) => n > a)))`,
+      `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), () => Sink.some((n) => n > a)))`,
+      `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), () => Sink.find((n) => n > b)))`,
+      `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), ([first]) => Sink.succeed(first + a)))`,
+      `Stream.run(four(a, b), Sink.flatMap(Sink.take(2), () => Sink.drain))`,
+      `Stream.run(Stream.concat(four(a, b), Stream.fail(new Odd({ n: a }))), Sink.flatMap(Sink.take(1), () => Sink.collect())).pipe(Effect.flip, Effect.map((error) => error.n))`,
+      `Stream.run(Stream.concat(Stream.make(a), Stream.fail(new Odd({ n: b }))), Sink.orElse(Sink.collect(), () => Sink.succeed(-1))).pipe(Effect.result)`,
     ],
     unread: [
+      [
+        `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), () => a))`,
+        /is called in a way the prover has no model for/,
+      ],
       [`Stream.run(four(a, b), Sink.never)`, /runs a stream into Sink.never, which never ends/],
     ],
   },

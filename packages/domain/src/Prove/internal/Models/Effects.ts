@@ -479,10 +479,8 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
               (reason) => Cause.isFailReason(reason) && reason.error._tag !== "Rejected",
             )
               ? Effect.void
-              : // A finalizer cannot fail: one that does is a defect, as the library makes it.
-                Effect.catchTag(finalizer.run, "Rejected", (failed) =>
-                  Effect.fail(new Value.Rejected({ rejection: failed.rejection, defect: true })),
-                ),
+              : // A finalizer that fails fails the effect, as the library's does.
+                finalizer.run,
           )
         : wrongArguments(site, "Effect.ensuring"),
     ),

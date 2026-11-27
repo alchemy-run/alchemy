@@ -275,25 +275,27 @@ const kept = new WeakMap<object, Kept>();
  * `new Uint8Array([1, 2])`: bytes the code writes, as the language holds them.
  * `new Uint8Array(buffer)` views the bytes of a buffer the library made.
  */
+const bytesOf = ([given]: ReadonlyArray<V>, at: Site): Eval<V> => {
+  if (given?._tag === "Host" && given.name === "ArrayBuffer")
+    return Effect.succeed({
+      _tag: "Host",
+      value: new Uint8Array(given.value as ArrayBuffer),
+      name: "bytes",
+    });
+  const real = given ? Known.real(given) : { value: 0 };
+  return real && (typeof real.value === "number" || Array.isArray(real.value))
+    ? Effect.sync((): V => ({
+        _tag: "Host",
+        value: new Uint8Array(real.value as ArrayLike<number>),
+        name: "bytes",
+      }))
+    : Effect.fail(Value.notTranslated(at, "makes bytes of values the prover cannot see"));
+};
+/** `Uint8Array(...)` with no `new` throws, as the language's does. */
 const BYTES: V = {
   _tag: "Native",
   name: "Uint8Array",
-  call: ([given], at) => {
-    if (given?._tag === "Host" && given.name === "ArrayBuffer")
-      return Effect.succeed({
-        _tag: "Host",
-        value: new Uint8Array(given.value as ArrayBuffer),
-        name: "bytes",
-      });
-    const real = given ? Known.real(given) : { value: 0 };
-    return real && (typeof real.value === "number" || Array.isArray(real.value))
-      ? Effect.sync((): V => ({
-          _tag: "Host",
-          value: new Uint8Array(real.value as ArrayLike<number>),
-          name: "bytes",
-        }))
-      : Effect.fail(Value.notTranslated(at, "makes bytes of values the prover cannot see"));
-  },
+  call: (_, at) => Effect.fail(Value.notTranslated(at, "calls Uint8Array without new")),
 };
 /** `Map` and `Set`, which `new` makes one of. */
 const KEEPERS: ReadonlyMap<string, V> = new Map(
@@ -2668,7 +2670,7 @@ export const make = (given: Loader, run: Run): Interpreter => {
         return yield* cls.call(args, site);
       if (cls._tag === "Lib" && library.constructed(cls.module, cls.path))
         return yield* call(cls, args, site);
-      if (cls === BYTES) return yield* BYTES.call(args, site);
+      if (cls === BYTES) return yield* bytesOf(args, site);
       if (cls === KEEPERS.get("Map")) return yield* keeping("Map", args[0], site);
       if (cls === KEEPERS.get("Set")) return yield* keeping("Set", args[0], site);
       if (classes.has(cls)) {
