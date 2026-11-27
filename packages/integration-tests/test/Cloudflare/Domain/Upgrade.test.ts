@@ -400,10 +400,10 @@ test.provider(
 
 /**
  * A Worker deployed before Domain versions existed goes straight to the
- * shared class. The upload renames its classes after the model, keeping
- * their objects, which then move into the shared class. That code listed none
- * of its objects, so the old classes stay until the move's passes have seen
- * everything Cloudflare lists.
+ * shared class. Its classes keep their names: nothing is renamed, so the
+ * upload lists each once (#2976), and their objects move into the shared
+ * class. That code listed none of its objects, so the old classes stay until
+ * the move's passes have seen everything Cloudflare lists.
  */
 test.provider(
   "upgrading a model deployed before Domain versions straight to the shared class keeps its data",
@@ -442,16 +442,15 @@ test.provider(
         }),
       );
       yield* waitForVersion(url, 1);
-      // renamed after the model, keeping their namespaces, next to the shared class
-      const renamed = Object.fromEntries(
-        Object.entries(legacy).map(([cls, id]) => [`Billing.${cls}`, id]),
-      );
+      // kept under their own names, next to the shared class
       const upgraded = yield* namespacesOf(scriptName);
-      expect(upgraded).toEqual({ ...renamed, "Billing.Domain": upgraded["Billing.Domain"] });
+      expect(upgraded).toEqual({ ...legacy, "Billing.Domain": upgraded["Billing.Domain"] });
       expect(upgraded["Billing.Domain"]).toBeDefined();
-      // kept: that code listed nothing, so the move's passes decide
+      // each reached through the model's binding to it, and kept: that code
+      // listed nothing, so the move's passes decide
       const bindings = yield* doBindings(scriptName);
-      for (const cls of Object.keys(renamed)) expect(bindings[cls]).toBe(cls);
+      for (const cls of Object.keys(legacy))
+        expect(bindings[`Billing.${cls}.BeforeVersions`]).toBe(cls);
       expect(yield* movedBy(scriptName)).toBeGreaterThanOrEqual(3);
 
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
@@ -465,7 +464,7 @@ test.provider(
       // Once the move has settled, the next upload deletes the old classes. The saga's
       // waits for passes of its own: a run started just before the upgrade is listed
       // nowhere until Cloudflare lists it.
-      yield* backdatePasses(scriptName, Object.keys(renamed));
+      yield* backdatePasses(scriptName, Object.keys(legacy));
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* UpgradeSharedNextWorker };
@@ -480,7 +479,7 @@ test.provider(
       );
       expect(
         Object.keys(yield* doBindings(scriptName)).filter(
-          (name) => name !== "Billing.Domain" && name !== "Billing.ApproveWorkflow",
+          (name) => name !== "Billing.Domain" && name !== "Billing.ApproveWorkflow.BeforeVersions",
         ),
       ).toEqual([]);
       yield* stack.deploy(
@@ -504,9 +503,9 @@ test.provider(
 
 /**
  * Two models shared a class before Domain versions existed. Upgraded straight
- * to the shared class, only the model that keeps the data takes the class
- * over and moves it; the other, with `legacyData: false`, starts empty. Until
- * one opts out, the deploy stops before any upload.
+ * to the shared class, only the model that keeps the data moves it; the
+ * other, with `legacyData: false`, starts empty. Until one opts out, the
+ * deploy stops before any upload.
  */
 test.provider(
   "upgrading models that shared a class straight to the shared class moves it to one",
@@ -535,7 +534,7 @@ test.provider(
         )
         .pipe(Effect.exit);
       expect(Exit.isFailure(ambiguous)).toBe(true);
-      expect(String(ambiguous)).toContain("DurableObjectRenameConflict");
+      expect(String(ambiguous)).toContain("AmbiguousDomainLegacyData");
       expect(yield* namespacesOf(scriptName)).toEqual(legacy);
 
       yield* stack.deploy(
@@ -544,15 +543,16 @@ test.provider(
         }),
       );
       yield* waitForVersion(url, 1);
-      // Billing takes the class over; Audit's is never created
       const upgraded = yield* namespacesOf(scriptName);
-      expect(upgraded["Billing.AccountAggregate"]).toBe(legacy.AccountAggregate);
-      expect(upgraded["Billing.Domain"]).toBeDefined();
-      expect(upgraded["Audit.Domain"]).toBeDefined();
-      expect(upgraded["Audit.AccountAggregate"]).toBeUndefined();
-      const renamed = Object.keys(upgraded).filter(
-        (cls) => cls.startsWith("Billing.") && cls !== "Billing.Domain",
-      );
+      expect(upgraded).toEqual({
+        ...legacy,
+        "Billing.Domain": upgraded["Billing.Domain"],
+        "Audit.Domain": upgraded["Audit.Domain"],
+      });
+      // Billing's binding to the class stays; Audit has none
+      const bindings = yield* doBindings(scriptName);
+      expect(bindings["Billing.AccountAggregate.BeforeVersions"]).toBe("AccountAggregate");
+      expect(bindings["Audit.AccountAggregate.BeforeVersions"]).toBeUndefined();
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Audit/state/a-1")).toEqual({ owner: null });
@@ -561,7 +561,7 @@ test.provider(
       expect(yield* call(url, "/Audit/state/a-1")).toEqual({ owner: "ann" });
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
 
-      yield* backdatePasses(scriptName, renamed);
+      yield* backdatePasses(scriptName, Object.keys(legacy));
       yield* stack.deploy(
         Effect.gen(function* () {
           return { worker: yield* SharedV1BillingWorker };

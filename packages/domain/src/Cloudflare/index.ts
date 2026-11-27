@@ -63,6 +63,7 @@ import {
   declare,
   domainClass,
   domainClassName,
+  type LegacyClass,
   objectState,
   onCloudflare,
   routeView,
@@ -198,6 +199,66 @@ const renamedFrom = (
 ): InlineDurableObjectProps =>
   version !== undefined && legacyData ? { renamedFrom: legacyName } : {};
 
+/** The directory's class: before Domain versions, one for every model of a Worker. */
+const DIRECTORY_CLASS = "DomainDirectory";
+
+/**
+ * Two models of a Worker would both take over a Durable Object class from
+ * before Domain versions, which every model that listed its definition
+ * shared. Only one can keep its objects.
+ */
+export class AmbiguousDomainLegacyData extends Data.TaggedError("AmbiguousDomainLegacyData")<{
+  readonly className: string;
+  readonly models: ReadonlyArray<string>;
+}> {
+  override get message() {
+    return (
+      `Models ${this.models.map((model) => `'${model}'`).join(" and ")} both take over the Durable Object class '${this.className}', deployed before Domain versions. ` +
+      `Only one can keep its objects: set \`legacyData: false\` on the \`layer\` of each model that starts empty.`
+    );
+  }
+}
+
+/** The model that takes over each class from before Domain versions, per Worker. */
+const takenOver = new WeakMap<object, Map<string, string>>();
+
+/**
+ * The classes a route's objects may still be on when its model gets one class:
+ * its version 0 class (`Billing.AccountAggregate`), and the class it was
+ * before versions (`AccountAggregate`), which keeps its name. The deploy keeps
+ * whichever the Worker has. A model that sets `legacyData: false` takes over
+ * nothing from before versions. The directory from before versions was one
+ * class for every model: the first model to list it keeps it.
+ */
+const legacyClasses = Effect.fn(function* (
+  modelName: string,
+  route: string,
+  legacyData: boolean,
+  legacyName: string,
+) {
+  const current: LegacyClass = { className: route, binding: route };
+  if (!legacyData) return [current];
+  const before: LegacyClass = {
+    className: legacyName,
+    binding: `${route}.BeforeVersions`,
+    beforeVersions: true,
+  };
+  // At runtime the bindings the upload kept decide (see `DomainClass.ts`).
+  if (globalThis.__ALCHEMY_RUNTIME__) return [current, before];
+  const worker = yield* CloudflareWorker;
+  let models = takenOver.get(worker);
+  if (models === undefined) takenOver.set(worker, (models = new Map()));
+  const owner = models.get(legacyName);
+  if (owner === undefined || owner === modelName) {
+    models.set(legacyName, modelName);
+    return [current, before];
+  }
+  if (legacyName === DIRECTORY_CLASS) return [current];
+  return yield* Effect.die(
+    new AmbiguousDomainLegacyData({ className: legacyName, models: [owner, modelName] }),
+  );
+});
+
 /** A model's one class on the Worker, as `domainClass` hands it back. */
 type SharedClass = Effect.Success<ReturnType<typeof domainClass>>;
 
@@ -213,7 +274,12 @@ interface OneClass {
   /** Each saga's class in version 0 (`Billing.ApproveWorkflow`): its model, its saga, and the class it was before versions. */
   readonly sagas: Map<
     string,
-    { readonly modelName: string; readonly saga: string; readonly renamedFrom?: string }
+    {
+      readonly modelName: string;
+      readonly saga: string;
+      readonly legacyData: boolean;
+      readonly legacyName: string;
+    }
   >;
 }
 
@@ -224,11 +290,16 @@ const sharedOf = (oneClass: OneClass, modelName: string) =>
   );
 
 /**
- * Tell the Worker deploy that `route`'s version 0 class is kept only while
- * its objects move into the model's class: the deploy moves them between its
- * two uploads, then deletes the class (see `DurableObjectRetirement`).
+ * Tell the Worker deploy that `route`'s old classes are kept only while
+ * their objects move into the model's class: the deploy moves them between its
+ * two uploads, then deletes each (see `DurableObjectRetirement`).
  */
-const retiring = (modelName: string, route: string, timeoutSeconds: number | undefined) =>
+const retiring = (
+  modelName: string,
+  route: string,
+  legacy: ReadonlyArray<LegacyClass>,
+  timeoutSeconds: number | undefined,
+) =>
   globalThis.__ALCHEMY_RUNTIME__
     ? Effect.void
     : Effect.gen(function* () {
@@ -239,9 +310,12 @@ const retiring = (modelName: string, route: string, timeoutSeconds: number | und
           ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }),
         };
         yield* worker.bind`${route}.Retiring`({
-          retiringClasses: [
-            { group: modelName, className: route, binding: route, data: { ...data } },
-          ],
+          retiringClasses: legacy.map(({ className, binding, beforeVersions }) => ({
+            group: modelName,
+            className,
+            binding,
+            data: { ...data, ...(beforeVersions ? { beforeVersions } : {}) },
+          })),
         });
       });
 
@@ -349,12 +423,10 @@ const cloudflareHost = (
             : Effect.gen(function* () {
                 const shared = yield* sharedOf(oneClass, modelName);
                 const route = className(modelName, name);
-                // The version 0 class stays declared while its objects move over.
-                yield* retiring(modelName, route, backfillTimeoutSeconds);
-                const namespace = yield* shared.object(route, onCloudflare(impl), {
-                  className: route,
-                  ...renamedFrom(0, legacyData, name),
-                });
+                // The old classes stay declared while their objects move over.
+                const legacy = yield* legacyClasses(modelName, route, legacyData, name);
+                yield* retiring(modelName, route, legacy, backfillTimeoutSeconds);
+                const namespace = yield* shared.object(route, onCloudflare(impl), legacy);
                 return placed(namespace, placement);
               }),
         lookup: ({ modelName }, name) => {
@@ -404,11 +476,8 @@ const cloudflareHost = (
                 oneClass.sagas.set(className(model.modelName, `${saga}Workflow`), {
                   modelName: model.modelName,
                   saga,
-                  ...renamedFrom(
-                    0,
-                    model.legacyData,
-                    `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
-                  ),
+                  legacyData: model.legacyData,
+                  legacyName: `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
                 });
               else
                 sagaRenames.set(
@@ -606,9 +675,9 @@ const cloudflareHost = (
  * (`Billing.AccountAggregate`), so models that list the same aggregate never
  * share its data. A Worker deployed before Domain version 0 named a class
  * after its definition alone (`AccountAggregate`), shared by every model that
- * listed it; the next deploy renames it to the model's class with
- * `renamedFrom`, keeping its objects. When two models shared one, set
- * `legacyData: false` on the `layer` of each model that starts empty.
+ * listed it; the next deploy moves its objects into the model's class. When
+ * two models shared one, set `legacyData: false` on the `layer` of each model
+ * that starts empty.
  *
  * **Example:** Two models that both list `Account`
  * ```typescript
@@ -730,14 +799,12 @@ const sagaEngine = (
         );
       return Effect.gen(function* () {
         const shared = yield* sharedOf(oneClass, saga.modelName);
-        yield* retiring(saga.modelName, name, timeoutSeconds);
+        const legacy = yield* legacyClasses(saga.modelName, name, saga.legacyData, saga.legacyName);
+        yield* retiring(saga.modelName, name, legacy, timeoutSeconds);
         const namespace = yield* shared.object(
           name,
           listedRuns(oneClass, saga.modelName, saga.saga, cloudflareImpl),
-          {
-            className: name,
-            ...(saga.renamedFrom === undefined ? {} : { renamedFrom: saga.renamedFrom }),
-          },
+          legacy,
         );
         return placed(namespace, placement);
       });

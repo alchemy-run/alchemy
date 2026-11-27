@@ -76,7 +76,7 @@ export const scaleWorker = (version: number | undefined) =>
     const Platform = DomainCloudflare.layerDurableObjects();
     const hosted = yield* Effect.forEach(
       banks,
-      (bank, n) =>
+      (bank) =>
         Effect.all({
           checking: bank.Checking as any,
           savings: bank.Savings as any,
@@ -85,7 +85,7 @@ export const scaleWorker = (version: number | undefined) =>
         }).pipe(
           Effect.provide(
             (bank.Bank as any)
-              .layer(Layer.empty, { legacyData: n === 0 })
+              .layer(Layer.empty)
               .pipe(Layer.provide(Platform)) as Layer.Layer<never>,
           ),
         ) as unknown as Effect.Effect<Record<string, any>>,

@@ -127,13 +127,19 @@ export const onCloudflare = (impl: DomainObjectImpl): ObjectImpl =>
   );
 
 /**
- * The class a route's objects may still be on: its Domain version 0 class
- * (`Billing.AccountAggregate`), which takes over the class it was named
- * before versions (`AccountAggregate`) with `renamedFrom`, if any.
+ * A class a route's objects may still be on: its Domain version 0 class
+ * (`Billing.AccountAggregate`), or the class it was before versions
+ * (`AccountAggregate`), which keeps its name and is reached by a binding of
+ * the model's own (`Billing.AccountAggregate.BeforeVersions`). Renaming it
+ * would list it twice in the upload, and a Worker with many definitions would
+ * pass Cloudflare's limit of 100 exports (#2976).
  */
 export interface LegacyClass {
   readonly className: string;
-  readonly renamedFrom?: string;
+  /** The binding the code reaches the class by. */
+  readonly binding: string;
+  /** From before Domain versions: that code listed none of its objects. */
+  readonly beforeVersions?: boolean;
 }
 
 /** The objects of one route, in the shared class. */
@@ -147,7 +153,7 @@ export interface Classes {
   readonly className: string;
   /** Every route the model hosts, and its implementation. */
   readonly routes: Map<string, ObjectImpl>;
-  /** The old class of each route, while the code still moves its objects. */
+  /** The binding of each route's old class, while the code still moves its objects. */
   readonly movers: Map<string, string>;
   readonly namespace: Namespace;
   /** The migration Workflow's name, as deployed. */
@@ -248,26 +254,30 @@ export const domainClass = Effect.fn(function* (random: Random, modelName: strin
     /** The migration Workflow's name, as deployed: for the deploy's migration run. */
     workflowName: shared.workflowName,
     /**
-     * Host `route`'s objects in the shared class. `legacy` is the class they
-     * may still be on, declared too and running the same code, so a Worker
-     * upgraded from it moves their storage over (see `Router.ts`).
+     * Host `route`'s objects in the shared class. `legacy` lists the classes
+     * they may still be on, declared too and running the same code, so a Worker
+     * upgraded from one moves their storage over (see `Router.ts`).
      */
-    object: (route: string, impl: ObjectImpl, legacy?: LegacyClass) =>
+    object: (route: string, impl: ObjectImpl, legacy: ReadonlyArray<LegacyClass> = []) =>
       Effect.gen(function* () {
         shared.routes.set(route, impl);
-        if (legacy === undefined || shared.movers.has(route))
-          return routeView(shared.namespace, route);
-        // At deploy time the old class is declared, and the upload keeps it while
-        // it still holds objects (see `Migration.ts`). At runtime only a class the
-        // upload kept has a binding: declaring another would fail.
-        if (globalThis.__ALCHEMY_RUNTIME__ && shared.env?.[legacy.className] === undefined)
-          return routeView(shared.namespace, route);
-        shared.movers.set(route, legacy.className);
-        yield* declare(
-          legacy.className,
-          legacy.renamedFrom === undefined ? {} : { renamedFrom: legacy.renamedFrom },
-          legacyObject(shared, route, impl),
-        );
+        if (shared.movers.has(route)) return routeView(shared.namespace, route);
+        // At deploy time every old class is declared, and the upload keeps the one
+        // the Worker has while it still holds objects (see `Migration.ts`). At
+        // runtime only a class the upload kept has a binding: declaring another
+        // would fail.
+        const kept = globalThis.__ALCHEMY_RUNTIME__
+          ? legacy.filter(({ binding }) => shared.env?.[binding] !== undefined)
+          : legacy;
+        const mover = kept[0];
+        if (mover === undefined) return routeView(shared.namespace, route);
+        shared.movers.set(route, mover.binding);
+        for (const old of kept)
+          yield* declare(
+            old.binding,
+            old.binding === old.className ? {} : { className: old.className },
+            legacyObject(shared, route, impl),
+          );
         return routeView(shared.namespace, route);
       }),
     /** The model's class, unscoped: see `Resolver.namespace`. */

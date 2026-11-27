@@ -934,6 +934,8 @@ export interface RetiringDomainClass {
   readonly domainClass: string;
   /** How long a deploy waits for the move, in seconds. */
   readonly timeoutSeconds?: number;
+  /** The class is from before Domain versions: that code listed none of its objects. */
+  readonly beforeVersions?: boolean;
 }
 
 /** The deployed name of the Worker's migration Workflow, from its bindings. */
@@ -946,21 +948,19 @@ const migrationWorkflowName = (request: RetirementRequest) => {
 };
 
 /**
- * A class this upload renames from its name before Domain versions: that code
- * listed none of its objects, so what it wrote in its last minutes is in
- * neither the model's directory nor Cloudflare's listing yet. The class stays
- * until passes far enough apart have moved every object Cloudflare lists.
+ * A class from before Domain versions, in the deploy that gives its model a
+ * class: that code listed none of its objects, so what it wrote in its last
+ * minutes is in neither the model's directory nor Cloudflare's listing yet.
+ * The class stays until passes far enough apart have moved every object
+ * Cloudflare lists.
  */
-const renamedNow = (request: RetirementRequest, className: string) =>
-  request.bindings.some(
-    (item) =>
-      item.type === "durable_object_namespace" &&
-      "className" in item &&
-      item.className === className &&
-      "renamedFrom" in item &&
-      typeof item.renamedFrom === "string" &&
-      request.deployedClasses.has(item.renamedFrom),
-  );
+const upgradedNow = (
+  request: RetirementRequest,
+  retiring: RetirementRequest["classes"][number],
+) => {
+  const data = retiring.data as RetiringDomainClass | undefined;
+  return data?.beforeVersions === true && !request.deployedClasses.has(data.domainClass);
+};
 
 /** An error as the Worker deploy reports it: the error itself when it has a tag and a message. */
 const describeError = (error: unknown): { readonly _tag: string; readonly message: string } =>
@@ -1049,10 +1049,10 @@ export const DomainRetirementLive = Layer.effect(
       return new Set(
         request.classes
           .filter(
-            ({ className }) =>
-              !className.endsWith("Workflow") &&
-              (skipped[className] ?? 0) === 0 &&
-              !renamedNow(request, className),
+            (retiring) =>
+              !retiring.className.endsWith("Workflow") &&
+              (skipped[retiring.className] ?? 0) === 0 &&
+              !upgradedNow(request, retiring),
           )
           .map(({ className }) => className),
       ) as ReadonlySet<string>;
