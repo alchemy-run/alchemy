@@ -359,7 +359,21 @@ Not done
   ✗ to change a rule on purpose, run the test once with UPDATE_VERIFY_LOCK=1: it locks each rule as it is written, and says which
 ```
 
-A new rule is added to the file. An invariant of an aggregate that changed is compared with the one kept: the solver looks for a state the rules allow now that the old rule refused. If there is none, the new rule says at least as much, and it replaces the old one in the file. Every other kind of rule is compared as text.
+An invariant of an aggregate that changed is compared with the one kept: the solver looks for a state the rules allow now that the old rule refused. If there is none, the new rule says at least as much. Every other kind of rule is compared as text.
+
+## Hold a new rule to what is stored
+
+A proof starts from a state the rules allow. An instance recorded before a rule was written was never held to it, and may be stored in a state the rule refuses. The lock has the rules as they were, so an invariant that is new, or changed to say more, is compared with them: the solver looks for a state the locked invariants allowed that the rule refuses now. Here `WithinDailyLimit` is added to an account that was locked without it:
+
+```text
+Not done
+  ✗ Account.WithinDailyLimit is new, and the rules locked in Bank.lock.json allowed { _tag: "Open", customerId: "", owner: "", balance: 0, frozen: "", today: { day: "", withdrawn: 100001 } }, which it refuses. An instance recorded before this change may be stored in such a state, and no proof starts from it: check that none is, or rewrite the ones that are
+  ✗ to change a rule on purpose, run the test once with UPDATE_VERIFY_LOCK=1: it locks each rule as it is written, and says which
+```
+
+An account may be in that state today. No command leaves it there any more, so no proof starts from it, and what a command does from it isn't known. Check that no stored account is in it, or [rewrite](/domain/rewrite) the ones that are, then lock the rule with `UPDATE_VERIFY_LOCK=1`.
+
+A rule the locked ones already kept is added to the file without that: one rule written as two, or a rule that follows from the others. So is every rule of an aggregate the lock hasn't seen, which has no instances yet.
 
 ## Change a locked rule on purpose
 
@@ -858,6 +872,8 @@ Relations are proved together: each proof takes every relation to hold before th
 Arithmetic on numbers that may not be whole isn't proved. A solver counts exactly and JavaScript rounds, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Code that adds, subtracts or multiplies such numbers is reported as not supported. Keep money in whole cents, which is exact.
 
 `eventually` is checked on the sequences that run their course, not proved for all of them.
+
+The lock stands in for what is stored. A new rule is held against the states the locked invariants allowed, not against the instances themselves, so the state it reports may be one no instance is in. Only an aggregate's invariants are held this way. A change to `evolve` gives every stored event a new meaning, and isn't compared with what it was.
 
 What a projection writes isn't checked, nor what a stream or a query gives. A rule can say what a projection is given, and a story runs its handler, but nothing compares the table it writes with the model. Test that with [stories](/domain/testing-models).
 

@@ -89,5 +89,9 @@
         "source": "Effect.fn(function* ({ before, after }) {\n      if (before._tag !== \"Open\" || after._tag !== \"Open\") return true;\n      if (before.customerId === after.customerId) return true;\n      return (yield* CurrentActor)._tag === \"Agent\";\n    })"
       }
     }
+  },
+  "aggregates": {
+    "Bank": ["Account", "Customer", "Transfer", "UsernameClaim"],
+    "Account": ["Account"]
   }
 }
