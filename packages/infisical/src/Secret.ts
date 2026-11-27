@@ -54,17 +54,24 @@ export type Secret = Resource<"Infisical.Secret", SecretProps, SecretAttributes,
  * Infisical does.
  *
  * Changing project, environment, path or name replaces the secret; value and
- * comment update in place. A row this stack didn't make needs `--adopt`.
+ * comment update in place. A row this stack didn't make needs `--adopt`. The
+ * deploying identity needs permission to read secret values; without it every
+ * deploy writes the value again.
  *
  * ### Publishing a Stack Value
  * **Example:** An ingest token for tools that read Infisical
  * ```typescript
+ * const token = yield* Axiom.ApiToken("Ingest", {
+ *   name: "ingest",
+ *   datasetCapabilities: { "my-app-traces": { ingest: ["create"] } },
+ * });
+ *
  * const secret = yield* Infisical.Secret("IngestToken", {
  *   project: "00000000-0000-4000-8000-000000000000",
  *   environment: "dev",
  *   path: "/observability",
  *   name: "INGEST_TOKEN",
- *   value: token.value,
+ *   value: token.token,
  * });
  * ```
  *
