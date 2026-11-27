@@ -49,6 +49,23 @@ agentOS installs its default software first (coreutils, sed, grep, gawk, finduti
 
 A VM keeps the base it was created with. A changed base applies to VMs created after it.
 
+## Let a VM reach the network
+
+A VM reaches its own servers and agentOS's allowlist of model provider endpoints, and nothing else. `permissions.network` opens it to the hosts you name:
+
+```typescript
+const base = yield* Rivet.SandboxTemplate("Agent", {
+  permissions: {
+    network: {
+      default: "deny",
+      rules: [{ mode: "allow", patterns: ["dns://api.example.com", "tcp://api.example.com:*"] }],
+    },
+  },
+});
+```
+
+A host needs both its `dns://` lookup and its `tcp://` connection. `*` matches within one part of a name, and `**` across dots, so `dns://**.amazonaws.com` covers every S3 bucket's host. Rules replace the network defaults, so a VM that also serves its own ports allows `listen` on `tcp://**` and `http` to `tcp://127.0.0.1:*`.
+
 ## Get a VM by key
 
 `Rivet.CreateSandbox` binds VMs from a base into a runtime. Provide the Services pool with it:
@@ -114,6 +131,82 @@ const entries = yield* sandbox.files.list("/home/agentos/app");
 ```
 
 `read` returns bytes, `stat` an entry's type and size, and `remove` deletes a file or a whole directory. A missing file fails with `Rivet.SandboxActionError`, whose `group` and `code` are agentOS's (`user`, `not_found`).
+
+A VM's files are its Actor's storage, kept by the control plane. They aren't on your service's disk or in a bucket, and they last until the VM is destroyed.
+
+## Use your cloud's data
+
+A VM can't mount a bucket. The runtime that holds the sandboxes binds the bucket instead, and brings its data to the VM. The VM never sees a credential.
+
+The simplest way is to copy: the runtime reads an object into the VM, the VM works on it, and the runtime writes the result back.
+
+```typescript title="src/api.ts"
+import * as AWS from "@alchemy.run/aws";
+import * as Docker from "@alchemy.run/docker";
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import { Cluster, Services } from "./cluster.ts";
+
+export const Data = AWS.S3.Bucket("Data");
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const cluster = yield* Rivet.Cluster;
+    return {
+      main: import.meta.url,
+      port: 3000,
+      networks: cluster.network?.kind === "docker" ? [{ name: cluster.network.name }] : [],
+    };
+  }).pipe(Effect.provide(Cluster)),
+  Effect.gen(function* () {
+    const bucket = yield* Data;
+    const getObject = yield* AWS.S3.GetObject(bucket);
+    const putObject = yield* AWS.S3.PutObject(bucket);
+    const base = yield* Rivet.SandboxTemplate("Agent", {});
+    const sandboxes = yield* Rivet.CreateSandbox(base);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const task = new URL(request.url, "http://api").searchParams.get("task") ?? "default";
+        const sandbox = sandboxes.getOrCreate(task);
+        const input = yield* getObject({ Key: `${task}/input.txt` });
+        yield* sandbox.files.makeDir("/work");
+        yield* sandbox.files.write("/work/input.txt", yield* Stream.mkString(Stream.decodeText(input.Body!)));
+        yield* sandbox.exec("tr a-z A-Z < input.txt > output.txt", { cwd: "/work" });
+        yield* putObject({ Key: `${task}/output.txt`, Body: yield* sandbox.files.readText("/work/output.txt") });
+        return HttpServerResponse.text("done");
+      }),
+    };
+  }).pipe(Effect.provide(Layer.mergeAll(Services, AWS.S3.GetObjectHttp, AWS.S3.PutObjectHttp))),
+) {}
+```
+
+When the VM should fetch data itself, mint it a presigned URL. It downloads the object with no credentials, and only that object, until the URL expires. Allow the VM to reach S3, then pass the URL to its command:
+
+```diff lang="typescript"
+const getObject = yield* AWS.S3.GetObject(bucket);
+-const putObject = yield* AWS.S3.PutObject(bucket);
+-const base = yield* Rivet.SandboxTemplate("Agent", {});
++const presignGetObject = yield* AWS.S3.PresignGetObject(bucket);
++const base = yield* Rivet.SandboxTemplate("Agent", {
++  permissions: {
++    network: {
++      default: "deny",
++      rules: [{ mode: "allow", patterns: ["dns://**.amazonaws.com", "tcp://**.amazonaws.com:*"] }],
++    },
++  },
++});
+```
+
+```typescript
+const url = yield* presignGetObject({ key: `${task}/input.txt`, expiresIn: 300 });
+yield* sandbox.exec(["node", "-e", "fetch(process.argv[1]).then((r) => r.text()).then(console.log)", url]);
+```
 
 ## Stream a process
 

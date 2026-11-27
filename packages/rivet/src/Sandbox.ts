@@ -33,6 +33,53 @@ export interface SandboxTemplateProps {
    * @default no extra variables
    */
   readonly environment?: Readonly<Record<string, string>>;
+  /**
+   * What the VM's processes may do, merged over agentOS's defaults; a scope
+   * left out keeps its default. By default a VM reaches only its own
+   * listeners and agentOS's allowlist of model provider endpoints.
+   * @default agentOS's defaults
+   */
+  readonly permissions?: SandboxPermissions;
+}
+
+/** Whether a permission scope or rule allows or denies. */
+export type SandboxPermissionMode = "allow" | "deny";
+
+/** One rule of a permission scope: the operations and targets it matches. */
+export interface SandboxPermissionRule {
+  readonly mode: SandboxPermissionMode;
+  /**
+   * The operations it matches: for `network`, `dns`, `http` and `listen`.
+   * @default every operation
+   */
+  readonly operations?: ReadonlyArray<string>;
+  /**
+   * The targets it matches: for `network`, `dns://<host>`,
+   * `tcp://<host>:<port>` and `unix:<path>`. `*` matches within one part of
+   * a name (`tcp://api.example.com:*`), `**` across dots
+   * (`dns://**.amazonaws.com`).
+   * @default every target
+   */
+  readonly patterns?: ReadonlyArray<string>;
+}
+
+/**
+ * A permission scope: `allow` or `deny` everything, or rules over a default.
+ * A rule set replaces the scope's defaults, so a `network` rule set that
+ * should keep the VM's own servers reachable allows `listen` on `tcp://**`
+ * and `http` to `tcp://127.0.0.1:*` and `tcp://localhost:*`.
+ */
+export type SandboxPermission =
+  | SandboxPermissionMode
+  | {
+      readonly default?: SandboxPermissionMode;
+      readonly rules: ReadonlyArray<SandboxPermissionRule>;
+    };
+
+/** The permission scopes a VM is created with. */
+export interface SandboxPermissions {
+  /** DNS lookups, outbound connections and listeners. */
+  readonly network?: SandboxPermission;
 }
 
 /** A base for agentOS VMs: the config each starts with. */
@@ -171,6 +218,7 @@ const makeHandle = (target: Target | undefined, template: SandboxTemplate, key: 
         software: template.props.software,
         defaultSoftware: template.props.defaultSoftware,
         environment: template.props.environment,
+        permissions: template.props.permissions,
       },
     }),
   );
