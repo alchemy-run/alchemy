@@ -16,7 +16,11 @@ export interface SecretProps {
   project: string;
   /** Environment slug. Changing it replaces the secret. */
   environment: string;
-  /** Folder path. Changing it replaces the secret. @default "/" */
+  /**
+   * Folder path. The folder must already exist. Changing it replaces the
+   * secret.
+   * @default "/"
+   */
   path?: string;
   /** Secret key, used exactly as given. Changing it replaces the secret. */
   name: string;

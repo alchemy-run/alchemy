@@ -122,6 +122,51 @@ describe("Secret", { tags: ["provider:infisical", "provider:infisical:secret", "
       }),
     { timeout: 120_000 },
   );
+
+  test.provider(
+    "replaces on a key change, recreates a row deleted by hand, and refuses one made in its place",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const props = yield* declaration(stack);
+        const renamed = { ...props, name: `${props.name}_RENAMED` };
+        const first = yield* stack.deploy(Infisical.Secret("Secret", props));
+
+        // A new key replaces the secret: the new row is written, the old one deleted.
+        const replaced = yield* stack.deploy(Infisical.Secret("Secret", renamed));
+        expect(replaced.id).not.toBe(first.id);
+        expect(replaced.name).toBe(renamed.name);
+        expect(valueOf(yield* get(renamed))).toBe("Authorization=initial");
+        expect(yield* find(props)).toBeUndefined();
+
+        // A row deleted outside the stack is written again.
+        yield* removeByHand(renamed);
+        const recreated = yield* stack.deploy(Infisical.Secret("Secret", renamed));
+        expect(recreated.id).not.toBe(replaced.id);
+        expect(valueOf(yield* get(renamed))).toBe("Authorization=initial");
+
+        // A row made by hand in its place is not taken over, nor deleted.
+        yield* removeByHand(renamed);
+        yield* infisical.createSecretV4({
+          projectId: renamed.project,
+          environment: renamed.environment,
+          secretName: renamed.name,
+          type: "shared",
+          secretValue: "Handmade value",
+        });
+        const refused = yield* Effect.exit(stack.deploy(Infisical.Secret("Secret", renamed)));
+        assert(Exit.isFailure(refused), "A row made by hand in the stack's place was taken over");
+        expect(Option.getOrThrow(Cause.findErrorOption(refused.cause))).toBeInstanceOf(
+          Infisical.SecretNotOwned,
+        );
+        expect(valueOf(yield* get(renamed))).toBe("Handmade value");
+
+        yield* stack.destroy();
+        expect(valueOf(yield* get(renamed))).toBe("Handmade value");
+        yield* removeByHand(renamed);
+      }),
+    { timeout: 120_000 },
+  );
 });
 
 const declaration = Effect.fn(function* (stack: Test.ScratchStack) {
@@ -154,6 +199,15 @@ const get = (props: Infisical.SecretProps) =>
       includeImports: false,
     })
     .pipe(Effect.map(({ secret }) => secret));
+
+const removeByHand = (props: Infisical.SecretProps) =>
+  infisical.deleteSecretV4({
+    projectId: props.project,
+    environment: props.environment,
+    secretPath: props.path ?? "/",
+    secretName: props.name,
+    type: "shared",
+  });
 
 const find = (props: Infisical.SecretProps) =>
   get(props).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
