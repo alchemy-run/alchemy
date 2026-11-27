@@ -1,4 +1,4 @@
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 /**
  * `AWS.Lambda.Function` under `alchemy dev`: the dualized provider deploys
  * the function INTO the floci emulator (RPC-sidecar-hosted
@@ -281,6 +281,48 @@ test.provider(
       expect(gone).toBe(true);
     }),
   { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 540_000 },
+);
+
+test.provider(
+  "dev plans no update when a stack reload only changes main's import namespace",
+  (stack) =>
+    Effect.gen(function* () {
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const clone = yield* cloneFixture(devFixtureDir, {
+        prefix: "floci-dev-ns-",
+      });
+      const mainUrl = pathToFileURL(path.join(clone, "handler.ts")).href;
+
+      // `alchemy dev` imports the stack under a new namespace on every
+      // reload, which reaches `main: import.meta.url`.
+      const deploy = (namespace: string) =>
+        stack.deploy(
+          AWS.Lambda.Function("DevNsFn", {
+            main: `${mainUrl}?alchemy-import-namespace=${namespace}`,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+          }),
+        );
+      const revisionOf = (functionName: string) =>
+        Lambda.getFunction({ FunctionName: functionName }).pipe(
+          Effect.map((fn) => fn.Configuration?.RevisionId),
+          Effect.provide(flociContext),
+        );
+
+      const fn = yield* deploy("first");
+      const before = yield* revisionOf(fn.functionName);
+      expect(before).toBeDefined();
+
+      yield* deploy("second");
+      expect(yield* revisionOf(fn.functionName)).toBe(before);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 300_000 },
 );
 
 test.provider(
