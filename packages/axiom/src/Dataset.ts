@@ -16,6 +16,24 @@ export class DatasetUnexpectedResponse extends Data.TaggedError("DatasetUnexpect
   readonly cause?: unknown;
 }> {}
 
+/**
+ * The deploying token can't read the dataset: it has org capabilities but
+ * no dataset capability covering it. Grant one, e.g.
+ * `datasetCapabilities: { "*": { ingest: ["create"] } }`.
+ */
+export class DatasetNotReadable extends Data.TaggedError("DatasetNotReadable")<{
+  readonly dataset: string;
+  readonly exists: boolean | undefined;
+}> {
+  override get message() {
+    return `${
+      this.exists
+        ? `Axiom dataset "${this.dataset}" already exists, and the token can't read it to check who owns it.`
+        : `The token can't read Axiom dataset "${this.dataset}".`
+    } Give the deploying token a dataset capability that covers it, e.g. datasetCapabilities: { "*": { ingest: ["create"] } }.`;
+  }
+}
+
 export type DatasetKind =
   | "otel:metrics:v1"
   | "otel:traces:v1"
@@ -148,6 +166,31 @@ export interface DatasetLookup {
  * });
  * ```
  *
+ * ### Deploying with a scoped token
+ * A token with org capabilities only (`datasets`, no dataset capability)
+ * can create, update and delete datasets, but Axiom won't let it read
+ * them. Alchemy then can't tell whether a dataset with the same name
+ * belongs to someone else, so creating over an existing name, and
+ * `Dataset.lookup`, fail with `DatasetNotReadable`. Give the deploying
+ * token a dataset capability to avoid this. It also needs one to mint an
+ * `ApiToken` that ingests, since a token can only grant what it holds.
+ *
+ * Without one, a dataset deleted outside Alchemy goes unnoticed until its
+ * props change. And a deploy interrupted after Axiom created the dataset
+ * leaves one with this stack's name that the next deploy can't claim.
+ *
+ * **Example:** Token for deploying from CI
+ * ```typescript
+ * yield* Axiom.ApiToken("CIToken", {
+ *   name: "ci",
+ *   orgCapabilities: {
+ *     datasets: ["create", "read", "update", "delete"],
+ *     apiTokens: ["create", "read", "delete"],
+ *   },
+ *   datasetCapabilities: { "*": { ingest: ["create"] } },
+ * });
+ * ```
+ *
  * ### Looking up an existing dataset
  * `Dataset.lookup` references a dataset Alchemy doesn't manage (created in
  * the Axiom console or by another stack). It is read during plan/deploy,
@@ -272,58 +315,66 @@ export const DatasetProvider = () =>
           // surfaced foreign datasets as `Unowned`, so by the time we land
           // here mutation is safe.
           const datasetId = output?.id ?? news.name;
-          const observed = yield* get({ dataset_id: datasetId }).pipe(
-            Effect.catchTag("NotFound", () => Effect.undefined),
-          );
+          const desired = {
+            description: augmentDescription(news.description, marker),
+            retentionDays: news.retentionDays,
+            useRetentionPeriod: news.useRetentionPeriod,
+          };
+          const createDataset = create({
+            name: news.name,
+            edgeDeployment: news.edgeDeployment,
+            kind: news.kind,
+            ...desired,
+          });
 
           // Ensure — POST creates the dataset. Tolerate Conflict/
           // UnprocessableEntity as a race with a peer reconciler (or with
           // upstream read↔create), falling through to the sync path.
-          let current = observed;
-          if (current === undefined) {
-            current = yield* (
-              create({
-                name: news.name,
-                description: augmentDescription(news.description, marker),
-                edgeDeployment: news.edgeDeployment,
-                kind: news.kind,
-                retentionDays: news.retentionDays,
-                useRetentionPeriod: news.useRetentionPeriod,
-              }) as Effect.Effect<AxiomPreview.Dataset, { readonly _tag: string }, never>
-            ).pipe(
-              Effect.catchIf(
-                (e): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>
-                  e._tag === "Conflict" || e._tag === "UnprocessableEntity",
-                () =>
-                  update({
-                    dataset_id: news.name,
-                    description: augmentDescription(news.description, marker),
-                    retentionDays: news.retentionDays,
-                    useRetentionPeriod: news.useRetentionPeriod,
-                  }),
-              ),
-            );
-            return yield* toAttrs(current);
-          }
+          const ensure = createDataset.pipe(
+            Effect.catchTag(["Conflict", "UnprocessableEntity"], () =>
+              update({ dataset_id: news.name, ...desired }),
+            ),
+          );
 
           // Sync — the dataset exists. Apply mutable aspects (description,
           // retentionDays, useRetentionPeriod) via PATCH. `kind` and `name`
           // are stable and replacement-only via diff above.
-          const desiredDescription = augmentDescription(news.description, marker);
-          const needsSync =
-            current.description !== desiredDescription ||
-            current.retentionDays !== news.retentionDays ||
-            current.useRetentionPeriod !== news.useRetentionPeriod;
-          if (!needsSync) {
-            return yield* toAttrs(current);
-          }
-          const updated = yield* update({
-            dataset_id: current.id,
-            description: desiredDescription,
-            retentionDays: news.retentionDays,
-            useRetentionPeriod: news.useRetentionPeriod,
-          });
-          return yield* toAttrs(updated);
+          const sync = (current: AxiomPreview.Dataset) =>
+            current.description === desired.description &&
+            current.retentionDays === desired.retentionDays &&
+            current.useRetentionPeriod === desired.useRetentionPeriod
+              ? Effect.succeed(current)
+              : update({ dataset_id: current.id, ...desired });
+
+          // Write blind — a token with org capabilities only may create,
+          // update and delete datasets but not read them. Update the
+          // dataset in state by its id, or create a new one. A name that
+          // already exists can't be checked for ownership, so it fails
+          // instead of being taken over.
+          const createBlind = createDataset.pipe(
+            Effect.catchTag("Conflict", () =>
+              Effect.fail(new DatasetNotReadable({ dataset: news.name, exists: true })),
+            ),
+          );
+          const writeBlind = output
+            ? update({ dataset_id: output.id, ...desired }).pipe(
+                Effect.catchTag("NotFound", () => createBlind),
+              )
+            : createBlind;
+
+          // Observe — Axiom's dataset path identifier is `name`, which is
+          // also stable input. Probe for live state by name (preferring the
+          // cached `output.id` when present). `read` upstream has already
+          // surfaced foreign datasets as `Unowned`, so by the time we land
+          // here mutation is safe.
+          const next = yield* get({ dataset_id: datasetId }).pipe(
+            Effect.map(sync),
+            Effect.catchTags({
+              NotFound: () => Effect.succeed(ensure),
+              Forbidden: () => Effect.succeed(writeBlind),
+            }),
+          );
+          return yield* toAttrs(yield* next);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* del({ dataset_id: output.id }).pipe(
@@ -332,7 +383,11 @@ export const DatasetProvider = () =>
         }),
         lookup: Effect.fn(function* ({ name }) {
           const existing = yield* get({ dataset_id: name }).pipe(
-            Effect.catchTag("NotFound", () => Effect.undefined),
+            Effect.catchTags({
+              NotFound: () => Effect.undefined,
+              Forbidden: () =>
+                Effect.fail(new DatasetNotReadable({ dataset: name, exists: undefined })),
+            }),
           );
           return existing === undefined ? undefined : yield* toAttrs(existing);
         }),
@@ -342,18 +397,26 @@ export const DatasetProvider = () =>
           const stage = yield* Stage;
           const datasetId = output?.id ?? olds?.name;
           if (!datasetId) return undefined;
-          const existing = yield* get({ dataset_id: datasetId }).pipe(
-            Effect.catchTag("NotFound", () => Effect.undefined),
+          return yield* get({ dataset_id: datasetId }).pipe(
+            Effect.flatMap((existing) =>
+              Effect.gen(function* () {
+                const ownership = parseMarker(existing.description);
+                const isOurs =
+                  ownership !== undefined &&
+                  ownership.stack === stack.name &&
+                  ownership.stage === stage &&
+                  ownership.id === id;
+                const attrs = yield* toAttrs(existing);
+                return isOurs ? attrs : Unowned(attrs);
+              }),
+            ),
+            Effect.catchTags({
+              NotFound: () => Effect.undefined,
+              // The token can't read datasets. Keep what state says; with no
+              // state, report nothing and let reconcile's create find out.
+              Forbidden: () => Effect.succeed(output),
+            }),
           );
-          if (!existing) return undefined;
-          const ownership = parseMarker(existing.description);
-          const isOurs =
-            ownership !== undefined &&
-            ownership.stack === stack.name &&
-            ownership.stage === stage &&
-            ownership.id === id;
-          const attrs = yield* toAttrs(existing);
-          return isOurs ? attrs : Unowned(attrs);
         }),
       };
     }),
