@@ -90,7 +90,9 @@ export const devCommand = Command.make(
       let command: [string, ...string[]];
       const entry = fileURLToPath(import.meta.resolve("alchemy/bin/exec.js"));
       if (typeof globalThis.Bun !== "undefined") {
-        command = ["bun", "run", ...process.execArgv, entry];
+        // This bun, not "bun" from PATH: a wrapper there would sit between
+        // this process and the exec child, which watches its parent (#3369).
+        command = [process.execPath, "run", ...process.execArgv, entry];
       } else {
         // Node: the exec entry runs with alchemy's Oxc loader hooks,
         // exactly as bin/cli.js started this process. Select the loader from
