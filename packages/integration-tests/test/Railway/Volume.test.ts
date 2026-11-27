@@ -114,6 +114,36 @@ test.provider(
       expect(fetchedUpdate.mountPath).toEqual("/app/data");
       expect(fetchedUpdate.volume.name).toEqual(updated.volume.name);
 
+      // Keep the generated shape so the renamed volume stays per-stage and
+      // reclaimable by nuke.
+      const nextName =
+        created.volume.name.slice(0, -1) + (created.volume.name.endsWith("z") ? "y" : "z");
+
+      const renamed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const volume = yield* Railway.Volume("Data", {
+            project,
+            environment,
+            name: nextName,
+            mountPath: "/app/data",
+          });
+          return { project, environment, volume };
+        }),
+      );
+
+      expect(renamed.volume.name).toEqual(nextName);
+      expect(renamed.volume.volumeId).toEqual(created.volume.volumeId);
+      expect(renamed.volume.volumeInstanceId).toEqual(created.volume.volumeInstanceId);
+      expect(renamed.volume.createdAt).toEqual(created.volume.createdAt);
+      expect(renamed.volume.mountPath).toEqual("/app/data");
+
+      const fetchedRename = yield* readVolumeInstance(renamed.volume.volumeInstanceId);
+      expect(fetchedRename.id).toEqual(created.volume.volumeInstanceId);
+      expect(fetchedRename.volumeId).toEqual(created.volume.volumeId);
+      expect(fetchedRename.volume.name).toEqual(nextName);
+      expect(fetchedRename.mountPath).toEqual("/app/data");
+
       yield* stack.destroy();
 
       const gone = yield* waitUntilVolumeGone(created.volume.volumeInstanceId);
