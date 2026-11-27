@@ -131,6 +131,8 @@ export interface CapabilityGraphShape {
   readonly owns: (kind: string, name: string, resource: string) => void;
   /** Mark a frame's term as having no host. */
   readonly unhosted: (frame: Frame) => void;
+  /** Record that a value given out for a term is the term: a lookup that receives it reaches the term. */
+  readonly stands: (kind: string, name: string, value: unknown) => void;
   /** Record that a frame's term uses another term. */
   readonly refers: (frame: Frame, relation: string, kind: string, name: string) => void;
   /** The runtime's terms, sorted by id. */
@@ -175,6 +177,8 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
   const acquisitions = new Map<Frame, Map<string, Acquisition>>();
   const references = new Map<Frame, Map<string, Reference>>();
   const loose = new Set<Frame>();
+  /** A value given out for a term → the term's id. */
+  const standing = new WeakMap<object, string>();
   /** Term id → the bindings that are its resources. */
   const owned = new Map<string, Set<string>>();
   /** key → frames whose build produced it (several when two Layers
@@ -189,6 +193,11 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
 
   const providersOf = (key: string, value: unknown): ReadonlySet<Frame> => {
     if (isObject(value)) {
+      const term = standing.get(value);
+      if (term !== undefined) {
+        const built = frames.filter((frame) => `${frame.kind}:${frame.name}` === term);
+        if (built.length > 0) return new Set(built);
+      }
       const exact = providersByValue.get(value);
       if (exact !== undefined) return new Set([exact]);
     }
@@ -302,6 +311,9 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
     unhosted: (frame) => {
       loose.add(frame);
     },
+    stands: (kind, name, value) => {
+      if (isObject(value)) standing.set(value, `${kind}:${name}`);
+    },
     refers: (frame, relation, kind, name) => {
       const reference = { relation, to: `${kind}:${name}` };
       const map = references.get(frame);
@@ -337,10 +349,10 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
         walk(root, true);
         return [...out];
       };
-      /** What hosts a frame: the nearest Host frame around it. */
+      /** What hosts a frame: the nearest named Host frame around it. */
       const hostOf = (frame: Frame): string | undefined => {
         for (let each = frame.parent; each !== undefined; each = each.parent) {
-          if (each.kind === HOST) return each.name;
+          if (each.kind === HOST && each.name !== undefined) return each.name;
         }
         return undefined;
       };
@@ -482,6 +494,36 @@ export const refer = (relation: string, kind: string, name: string): Effect.Effe
 export const own = (kind: string, name: string, resource: string): Effect.Effect<void> =>
   Effect.map(Effect.serviceOption(CapabilityGraph), (graph) => {
     if (Option.isSome(graph)) graph.value.owns(kind, name, resource);
+  });
+
+/**
+ * Run `effect` as what a host builds, when the host is only known once it is
+ * built: `hosted(build, (made) => made.objectName)`. Every term built inside is
+ * hosted by that name; with no name, by nothing. Without a graph it is `effect`.
+ */
+export const hosted = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  name: (made: A) => string | undefined,
+): Effect.Effect<A, E, R> =>
+  Effect.flatMap(Effect.serviceOption(CapabilityGraph), (graph) => {
+    if (Option.isNone(graph)) return effect;
+    const frame = graph.value.frame(HOST, undefined, undefined);
+    return Effect.tap(Effect.provideService(effect, CurrentFrame, frame), (made) =>
+      Effect.sync(() => {
+        const host = name(made);
+        if (host !== undefined) graph.value.label(frame, host);
+      }),
+    );
+  });
+
+/**
+ * Record that `value` is given out for a term (a client to it): a lookup that
+ * receives it uses the term. `standsFor("Process", "Triage", client)`.
+ * Without a graph it does nothing.
+ */
+export const standsFor = (kind: string, name: string, value: unknown): Effect.Effect<void> =>
+  Effect.map(Effect.serviceOption(CapabilityGraph), (graph) => {
+    if (Option.isSome(graph)) graph.value.stands(kind, name, value);
   });
 
 /**
