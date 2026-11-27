@@ -3,8 +3,8 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as infisical from "@distilled.cloud/infisical";
 import { isActionState, State } from "alchemy/State/State";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import { testProject } from "./project.ts";
 
 const { test } = Test.make({ providers: Infisical.providers() });
 
@@ -26,8 +26,7 @@ const oidcDefaults = {
   ],
 };
 
-// Runs against an existing project, given by its UUID.
-describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJECT)(
+describe(
   "ProjectIdentity",
   { tags: ["provider:infisical", "provider:infisical:projectidentity", "live"] },
   () => {
@@ -35,7 +34,7 @@ describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJE
       "converges roles and OIDC, repairs drift, recovers, and deletes",
       (stack) =>
         Effect.gen(function* () {
-          const project = yield* Config.String("INFISICAL_TEST_PROJECT");
+          const project = yield* testProject;
           const program = (
             roles: Infisical.ProjectIdentityProps["roles"],
             oidcAuth: Infisical.OidcAuth = trust,

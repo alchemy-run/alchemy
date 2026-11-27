@@ -11,127 +11,122 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import { testProject } from "./project.ts";
 
 const { test } = Test.make({ providers: Infisical.providers() });
 
-// Runs against an existing project, given by its UUID; the environment slug
-// defaults to the project's standard development environment.
-describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJECT)(
-  "Secret",
-  { tags: ["provider:infisical", "provider:infisical:secret", "live"] },
-  () => {
-    test.provider(
-      "writes, updates, repairs, recovers and deletes a shared secret",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const props = yield* declaration(stack);
-          const program = (changes: Partial<Infisical.SecretProps> = {}) =>
-            Infisical.Secret("Secret", { ...props, ...changes });
+describe("Secret", { tags: ["provider:infisical", "provider:infisical:secret", "live"] }, () => {
+  test.provider(
+    "writes, updates, repairs, recovers and deletes a shared secret",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const props = yield* declaration(stack);
+        const program = (changes: Partial<Infisical.SecretProps> = {}) =>
+          Infisical.Secret("Secret", { ...props, ...changes });
 
-          const first = yield* stack.deploy(program());
-          const created = yield* get(props);
-          expect(first).toEqual({
-            id: created.id,
-            project: props.project,
-            environment: props.environment,
-            path: "/",
-            name: props.name,
-            comment: "",
-            version: created.version,
-          });
-          expect(valueOf(created)).toBe("Authorization=initial");
-          expect(metadata(created)).toEqual({
-            "alchemy::stack": stack.name,
-            "alchemy::stage": stack.stage,
-            "alchemy::id": "Secret",
-            "alchemy::instance": expect.any(String),
-          });
+        const first = yield* stack.deploy(program());
+        const created = yield* get(props);
+        expect(first).toEqual({
+          id: created.id,
+          project: props.project,
+          environment: props.environment,
+          path: "/",
+          name: props.name,
+          comment: "",
+          version: created.version,
+        });
+        expect(valueOf(created)).toBe("Authorization=initial");
+        expect(metadata(created)).toEqual({
+          "alchemy::stack": stack.name,
+          "alchemy::stage": stack.stage,
+          "alchemy::id": "Secret",
+          "alchemy::instance": expect.any(String),
+        });
 
-          const unchanged = yield* stack.deploy(program());
-          expect(unchanged.id).toBe(first.id);
-          expect((yield* get(props)).version).toBe(created.version);
+        const unchanged = yield* stack.deploy(program());
+        expect(unchanged.id).toBe(first.id);
+        expect((yield* get(props)).version).toBe(created.version);
 
-          const rotated = yield* stack.deploy(
-            program({ value: Redacted.make("rotated"), comment: "Token" }),
-          );
-          expect(rotated.id).toBe(first.id);
-          const rotatedRow = yield* get(props);
-          expect(valueOf(rotatedRow)).toBe("rotated");
-          expect(rotatedRow.secretComment).toBe("Token");
+        const rotated = yield* stack.deploy(
+          program({ value: Redacted.make("rotated"), comment: "Token" }),
+        );
+        expect(rotated.id).toBe(first.id);
+        const rotatedRow = yield* get(props);
+        expect(valueOf(rotatedRow)).toBe("rotated");
+        expect(rotatedRow.secretComment).toBe("Token");
 
-          // A value changed outside the stack is written again on the next deploy.
-          yield* infisical.updateSecretV4({
-            projectId: props.project,
-            environment: props.environment,
-            secretName: props.name,
-            type: "shared",
-            secretValue: "drifted",
-          });
-          yield* stack.deploy(program({ value: Redacted.make("rotated"), comment: "Token" }));
-          expect(valueOf(yield* get(props))).toBe("rotated");
+        // A value changed outside the stack is written again on the next deploy.
+        yield* infisical.updateSecretV4({
+          projectId: props.project,
+          environment: props.environment,
+          secretName: props.name,
+          type: "shared",
+          secretValue: "drifted",
+        });
+        yield* stack.deploy(program({ value: Redacted.make("rotated"), comment: "Token" }));
+        expect(valueOf(yield* get(props))).toBe("rotated");
 
-          // A create whose attributes never reached state: deploy finds the
-          // row by its key and keeps it.
-          yield* forgetAttributes(stack);
-          const recovered = yield* stack.deploy(
-            program({ value: Redacted.make("rotated"), comment: "Token" }),
-          );
-          expect(recovered.id).toBe(first.id);
+        // A create whose attributes never reached state: deploy finds the
+        // row by its key and keeps it.
+        yield* forgetAttributes(stack);
+        const recovered = yield* stack.deploy(
+          program({ value: Redacted.make("rotated"), comment: "Token" }),
+        );
+        expect(recovered.id).toBe(first.id);
 
-          yield* stack.destroy();
-          expect(yield* find(props)).toBeUndefined();
-        }),
-      { timeout: 120_000 },
-    );
+        yield* stack.destroy();
+        expect(yield* find(props)).toBeUndefined();
+      }),
+    { timeout: 120_000 },
+  );
 
-    test.provider(
-      "adopts a shared secret made by hand only with --adopt, keeping its metadata",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const props = yield* declaration(stack);
-          yield* infisical.createSecretV4({
-            projectId: props.project,
-            environment: props.environment,
-            secretName: props.name,
-            type: "shared",
-            secretValue: "Handmade value",
-            secretMetadata: [{ key: "managed-by", value: "test-fixture" }],
-          });
-          const original = yield* get(props);
-          const program = Infisical.Secret("Secret", props);
+  test.provider(
+    "adopts a shared secret made by hand only with --adopt, keeping its metadata",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const props = yield* declaration(stack);
+        yield* infisical.createSecretV4({
+          projectId: props.project,
+          environment: props.environment,
+          secretName: props.name,
+          type: "shared",
+          secretValue: "Handmade value",
+          secretMetadata: [{ key: "managed-by", value: "test-fixture" }],
+        });
+        const original = yield* get(props);
+        const program = Infisical.Secret("Secret", props);
 
-          const refused = yield* Effect.exit(stack.deploy(program));
-          assert(Exit.isFailure(refused), "A shared secret made by hand was taken without --adopt");
-          expect(Option.getOrThrow(Cause.findErrorOption(refused.cause))).toBeInstanceOf(
-            OwnedBySomeoneElse,
-          );
-          expect(yield* get(props)).toEqual(original);
+        const refused = yield* Effect.exit(stack.deploy(program));
+        assert(Exit.isFailure(refused), "A shared secret made by hand was taken without --adopt");
+        expect(Option.getOrThrow(Cause.findErrorOption(refused.cause))).toBeInstanceOf(
+          OwnedBySomeoneElse,
+        );
+        expect(yield* get(props)).toEqual(original);
 
-          const adopted = yield* stack.deploy(program).pipe(adopt(true));
-          expect(adopted.id).toBe(original.id);
-          const owned = yield* get(props);
-          expect(valueOf(owned)).toBe("Authorization=initial");
-          expect(metadata(owned)).toEqual({
-            "managed-by": "test-fixture",
-            "alchemy::stack": stack.name,
-            "alchemy::stage": stack.stage,
-            "alchemy::id": "Secret",
-            "alchemy::instance": expect.any(String),
-          });
+        const adopted = yield* stack.deploy(program).pipe(adopt(true));
+        expect(adopted.id).toBe(original.id);
+        const owned = yield* get(props);
+        expect(valueOf(owned)).toBe("Authorization=initial");
+        expect(metadata(owned)).toEqual({
+          "managed-by": "test-fixture",
+          "alchemy::stack": stack.name,
+          "alchemy::stage": stack.stage,
+          "alchemy::id": "Secret",
+          "alchemy::instance": expect.any(String),
+        });
 
-          yield* stack.destroy();
-          expect(yield* find(props)).toBeUndefined();
-        }),
-      { timeout: 120_000 },
-    );
-  },
-);
+        yield* stack.destroy();
+        expect(yield* find(props)).toBeUndefined();
+      }),
+    { timeout: 120_000 },
+  );
+});
 
 const declaration = Effect.fn(function* (stack: Test.ScratchStack) {
   return {
-    project: yield* Config.String("INFISICAL_TEST_PROJECT"),
+    project: yield* testProject,
     environment: yield* Config.String("INFISICAL_TEST_ENVIRONMENT").pipe(Config.withDefault("dev")),
     // Infisical caps the key's length in the URL, so hash the stack and stage
     // into a short key that stays unique per test, user and worktree.
