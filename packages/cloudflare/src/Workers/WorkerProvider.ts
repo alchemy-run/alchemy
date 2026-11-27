@@ -1275,6 +1275,48 @@ const resolveWorkerMetadataHash = ({
       : undefined,
   }).pipe(Effect.flatMap((metadata) => sha256Object({ metadata })));
 
+/**
+ * The version and deployment a full script PUT created. The PUT's
+ * `deployment_id` is the uploaded *version* id (compact or hyphenated, as
+ * wrangler's `parseNonHyphenedUuid` handles), so it is authoritative for
+ * `versionId`. The deployment record that put it live is then found by that
+ * version: the deployments listing is eventually consistent and can still
+ * describe the previous deployment right after the PUT.
+ */
+const observeUploadedWorkerVersion = Effect.fn(function* (
+  accountId: string,
+  scriptName: string,
+  receipt: string | null | undefined,
+) {
+  const compact = receipt?.replaceAll("-", "").toLowerCase();
+  if (compact === undefined || !/^[a-f0-9]{32}$/.test(compact)) {
+    return yield* new WorkerVersionConfigError({
+      message: `Cloudflare did not return the uploaded version id for '${scriptName}' (got ${JSON.stringify(receipt)}).`,
+    });
+  }
+  const versionId = compact.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+  const deploymentId = yield* workers.listScriptDeployments({ accountId, scriptName }).pipe(
+    // On a Worker's first deploy, GET /deployments can still return
+    // `WorkerNotFound` (code 10007) after `putScript` succeeded (#2999).
+    Effect.retry({
+      while: (error) => error._tag === "WorkerNotFound",
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+    }),
+    Effect.map(
+      ({ deployments }) =>
+        deployments.find((deployment) =>
+          deployment.versions.some((version) => version.versionId === versionId),
+        )?.id,
+    ),
+    Effect.repeat({
+      until: (id) => id !== undefined,
+      schedule: Schedule.exponential(200),
+      times: 8,
+    }),
+  );
+  return { versionId, deploymentId };
+});
+
 export const WorkerProvider = () =>
   ProviderLayer.dual(Worker, {
     live: () => LiveWorkerProvider(),
@@ -4030,6 +4072,7 @@ export const LiveWorkerProvider = () =>
         let versionId: string | undefined;
         let deploymentId: string | undefined;
         let worker: {
+          deploymentId?: string | null;
           id?: string | null;
           logpush?: boolean | null;
           /** The immutable script id (Cloudflare's script "tag"). */
@@ -4516,20 +4559,11 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         if (!dispatchNamespace && versionId === undefined) {
-          // Same eventual-consistency window as `setWorkerSubdomain`: on a
-          // Worker's first deploy, GET /deployments can still return
-          // `WorkerNotFound` (code 10007) after `putScript` succeeded (#2999).
-          const { deployments } = yield* workers
-            .listScriptDeployments({ accountId, scriptName: name })
-            .pipe(
-              Effect.retry({
-                while: (error) => error._tag === "WorkerNotFound",
-                schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
-              }),
-            );
-          const active = deployments[0];
-          deploymentId = active?.id;
-          versionId = active?.versions.find((version) => version.percentage === 100)?.versionId;
+          ({ versionId, deploymentId } = yield* observeUploadedWorkerVersion(
+            accountId,
+            name,
+            worker.deploymentId,
+          ));
         }
         return {
           // The immutable script ID. The gradual-rollout branch deploys via

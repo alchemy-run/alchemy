@@ -1444,7 +1444,7 @@ export type Worker<Bindings = any> = Resource<
     /**
      * The id of the version uploaded by the most recent deploy. Set for
      * every Worker outside a dispatch namespace: a full deploy records the
-     * version serving 100% of traffic, a gradual rollout
+     * version its script upload returned, a gradual rollout
      * (`version.traffic` < 100) and a version worker (`version.parent`)
      * record the version they uploaded.
      */
@@ -1459,7 +1459,7 @@ export type Worker<Bindings = any> = Resource<
     versionAlias?: string | undefined;
     /**
      * The id of the deployment created by the most recent deploy. A full
-     * deploy records the active deployment; a version with `traffic > 0`
+     * deploy records the deployment that serves its uploaded version; a version with `traffic > 0`
      * records the deployment it created through the deployments API.
      * Preview-only versions (`traffic: 0`) and Workers in a dispatch
      * namespace have no deployment.
