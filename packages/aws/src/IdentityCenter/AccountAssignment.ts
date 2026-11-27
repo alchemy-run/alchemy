@@ -93,14 +93,7 @@ export const AccountAssignmentProvider = () =>
     AccountAssignment,
     Effect.gen(function* () {
       return {
-        stables: [
-          "instanceArn",
-          "permissionSetArn",
-          "principalId",
-          "principalType",
-          "targetId",
-          "targetType",
-        ],
+        stables: ["targetType"],
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
           if (
@@ -159,80 +152,85 @@ export const AccountAssignmentProvider = () =>
           return yield* readAssignment(olds);
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // Observe — look up the assignment between (principal,
-          // permissionSet, target). All identifying fields are stable;
-          // diff() forces a replace on any change, so this reconcile is
-          // existence-only.
-          const existing = yield* readAssignment({
-            ...news,
-            instanceArn: output?.instanceArn ?? news.instanceArn,
-          });
-          if (existing) {
-            yield* session.note(
-              `${existing.targetId}:${existing.permissionSetArn}:${existing.principalId}`,
+          const instanceArn = news.instanceArn ?? output?.instanceArn;
+          let assignment = yield* readAssignment({ ...news, instanceArn });
+          if (!assignment) {
+            const instance = yield* resolveInstance(instanceArn);
+            const response = yield* retryIdentityCenter(
+              ssoAdmin.createAccountAssignment({
+                InstanceArn: instance.InstanceArn!,
+                PermissionSetArn: news.permissionSetArn,
+                PrincipalId: news.principalId,
+                PrincipalType: news.principalType,
+                TargetId: news.targetId,
+                TargetType: "AWS_ACCOUNT",
+              }),
             );
-            return existing;
-          }
 
-          // Ensure — create the assignment if missing.
-          const instance = yield* resolveInstance(news.instanceArn);
-          const response = yield* retryIdentityCenter(
-            ssoAdmin.createAccountAssignment({
-              InstanceArn: instance.InstanceArn!,
-              PermissionSetArn: news.permissionSetArn,
-              PrincipalId: news.principalId,
-              PrincipalType: news.principalType,
-              TargetId: news.targetId,
-              TargetType: "AWS_ACCOUNT",
-            }),
-          );
+            const requestId = response.AccountAssignmentCreationStatus?.RequestId ?? undefined;
+            if (requestId) {
+              yield* waitForAssignmentCreation(instance.InstanceArn!, requestId);
+            }
 
-          const requestId = response.AccountAssignmentCreationStatus?.RequestId ?? undefined;
-          if (requestId) {
-            yield* waitForAssignmentCreation(instance.InstanceArn!, requestId);
-          }
-
-          const created = yield* readAssignment({
-            ...news,
-            instanceArn: instance.InstanceArn,
-          });
-          if (!created) {
-            return yield* new AccountAssignmentUnexpectedResponse({
-              message: "account assignment not found after create",
+            assignment = yield* readAssignment({
+              ...news,
+              instanceArn: instance.InstanceArn,
             });
+            if (!assignment) {
+              return yield* new AccountAssignmentUnexpectedResponse({
+                message: "account assignment not found after create",
+              });
+            }
+          }
+
+          // An unresolved identity cannot force a safe replacement at plan
+          // time: it may resolve to the same assignment. Prune only after
+          // ensuring the desired assignment and comparing physical identities.
+          if (
+            output &&
+            (output.instanceArn !== assignment.instanceArn ||
+              output.permissionSetArn !== assignment.permissionSetArn ||
+              output.principalId !== assignment.principalId ||
+              output.principalType !== assignment.principalType ||
+              output.targetId !== assignment.targetId)
+          ) {
+            yield* deleteAssignment(output);
           }
 
           yield* session.note(
-            `${created.targetId}:${created.permissionSetArn}:${created.principalId}`,
+            `${assignment.targetId}:${assignment.permissionSetArn}:${assignment.principalId}`,
           );
-          return created;
+          return assignment;
         }),
-        delete: Effect.fn(function* ({ output }) {
-          if (!(yield* readAssignment(output))) {
-            return;
-          }
-
-          const response = yield* retryIdentityCenter(
-            ssoAdmin
-              .deleteAccountAssignment({
-                InstanceArn: output.instanceArn,
-                PermissionSetArn: output.permissionSetArn,
-                PrincipalId: output.principalId,
-                PrincipalType: output.principalType,
-                TargetId: output.targetId,
-                TargetType: "AWS_ACCOUNT",
-              })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
-          );
-
-          const requestId = response?.AccountAssignmentDeletionStatus?.RequestId ?? undefined;
-          if (requestId) {
-            yield* waitForAssignmentDeletion(output.instanceArn, requestId);
-          }
-        }),
+        delete: ({ output }) => deleteAssignment(output),
       };
     }),
   );
+
+const deleteAssignment = Effect.fn(function* (output: AccountAssignment["Attributes"]) {
+  const existing = yield* readAssignment(output).pipe(
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+  );
+  if (!existing) return;
+
+  const response = yield* retryIdentityCenter(
+    ssoAdmin
+      .deleteAccountAssignment({
+        InstanceArn: output.instanceArn,
+        PermissionSetArn: output.permissionSetArn,
+        PrincipalId: output.principalId,
+        PrincipalType: output.principalType,
+        TargetId: output.targetId,
+        TargetType: "AWS_ACCOUNT",
+      })
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
+  );
+
+  const requestId = response?.AccountAssignmentDeletionStatus?.RequestId ?? undefined;
+  if (requestId) {
+    yield* waitForAssignmentDeletion(output.instanceArn, requestId);
+  }
+});
 
 const listAssignmentsForInstance = Effect.fn(function* (instanceArn: string) {
   const permissionSetArns = yield* retryIdentityCenter(
