@@ -7,6 +7,7 @@ import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiMiddleware from "effect/http-api/HttpApiMiddleware";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
 import * as HttpApiSecurity from "effect/http-api/HttpApiSecurity";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -35,12 +36,10 @@ export class BearerTokenValidator extends Context.Service<
   }
 >()("alchemy/State/BearerTokenValidator") {}
 
-export class StateAuth extends HttpApiMiddleware.Service<
-  StateAuth,
-  { requires: BearerTokenValidator }
->()("alchemy/State/StateAuth", {
+export class StateAuth extends HttpApiMiddleware.Service<StateAuth>()("alchemy/State/StateAuth", {
   security: {
     bearer: HttpApiSecurity.bearer,
+    dpop: HttpApiSecurity.http({ scheme: "DPoP" }),
   },
   error: HttpApiError.UnauthorizedNoContent,
 }) {}
@@ -50,9 +49,39 @@ export const StateAuthLive: Layer.Layer<StateAuth, never, BearerTokenValidator> 
   Effect.gen(function* () {
     const validator = yield* BearerTokenValidator;
     return {
+      dpop: () => Effect.fail(HttpApiError.Unauthorized.make({})),
       bearer: (httpEffect, { credential }) =>
         validator.validate(Redacted.value(credential)).pipe(Effect.flatMap(() => httpEffect)),
     };
+  }),
+);
+
+/** Host-owned request authentication and authorization, including proof/replay validation. */
+export class StateRequestValidator extends Context.Service<
+  StateRequestValidator,
+  {
+    readonly validate: (
+      request: HttpServerRequest.HttpServerRequest,
+    ) => Effect.Effect<void, HttpApiError.Unauthorized>;
+  }
+>()("alchemy/State/StateRequestValidator") {}
+
+/** Opt-in replacement for StateAuthLive. Never falls back to the bearer validator. */
+export const StateAuthRequestLive = Layer.effect(
+  StateAuth,
+  Effect.gen(function* () {
+    const validator = yield* StateRequestValidator;
+    const validate = HttpServerRequest.HttpServerRequest.pipe(Effect.flatMap(validator.validate));
+    return StateAuth.of({
+      bearer: (handler, { credential }) =>
+        Redacted.value(credential) === ""
+          ? Effect.fail(HttpApiError.Unauthorized.make({}))
+          : validate.pipe(Effect.flatMap(() => handler)),
+      dpop: (handler, { credential }) =>
+        Redacted.value(credential) === ""
+          ? Effect.fail(HttpApiError.Unauthorized.make({}))
+          : validate.pipe(Effect.flatMap(() => handler)),
+    });
   }),
 );
 
