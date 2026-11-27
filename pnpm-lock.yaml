@@ -11268,6 +11268,9 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../hetzner
+      '@alchemy.run/infisical':
+        specifier: workspace:*
+        version: link:../infisical
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
@@ -11370,6 +11373,9 @@ importers:
       '@distilled.cloud/iceberg':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/iceberg
+      '@distilled.cloud/infisical':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/infisical
       '@distilled.cloud/modal':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/modal
