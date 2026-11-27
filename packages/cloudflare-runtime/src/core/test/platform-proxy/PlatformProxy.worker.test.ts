@@ -149,6 +149,40 @@ describe("platform-proxy RPC result lifetime", () => {
     expect(dispose).toHaveBeenCalledOnce();
   });
 
+  it("disposes a sibling argument that resolves after another argument failed", async () => {
+    const dispose = vi.fn();
+    const response = await worker.fetch(
+      new Request(`http://platform-proxy.test${PATH_CALL}`, {
+        method: "POST",
+        headers: { [HEADER_TOKEN]: "test-token", "content-type": "application/json" },
+        body: JSON.stringify({
+          binding: "TEST",
+          chain: [
+            {
+              method: "consume",
+              args: [
+                { $: "chain", chain: [{ method: "fail", args: [] }] },
+                { $: "chain", chain: [{ method: "slow", args: [] }] },
+              ],
+            },
+          ],
+        }),
+      }) as Parameters<typeof worker.fetch>[0],
+      {
+        [BINDING_PLATFORM_PROXY_TOKEN]: "test-token",
+        TEST: {
+          consume: () => "unreachable",
+          fail: () => Promise.reject(new Error("argument failed")),
+          slow: () =>
+            new Promise((resolve) => setTimeout(() => resolve({ [Symbol.dispose]: dispose }), 20)),
+        },
+      },
+    );
+
+    expect(response.status).not.toBe(200);
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
   it.each([null, undefined, false, 42, "plain result"])(
     "preserves a primitive or nullish result: %s",
     async (value) => {
