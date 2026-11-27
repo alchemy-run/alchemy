@@ -256,6 +256,18 @@ describe("YAML property display", { tags: ["unit", "local"] }, () => {
     expect(lines).not.toContain("legacy-token");
   });
 
+  test("hides a previous array or record whose shape changed around a secret", () => {
+    const lines = formatDeclaredPropertyYaml(
+      { list: ["legacy-list"], record: { token: "legacy-record" } },
+      { list: { token: Redacted.make("new") }, record: [Redacted.make("new")] },
+      "update",
+    )?.lines.join("\n");
+
+    expect(lines).toContain("list: (hidden)");
+    expect(lines).toContain("record: (hidden)");
+    expect(lines).not.toContain("legacy-");
+  });
+
   test("handles bigint and cycles", () => {
     const value: Record<string, unknown> = { size: 2n };
     value.self = value;

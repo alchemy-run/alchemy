@@ -144,6 +144,10 @@ const hidesPrevious = (desired: unknown) =>
   Effect.isEffect(desired) ||
   typeof desired === "function";
 
+/** Both arrays, or both plain records: the walk can match their entries. */
+const sameShape = (value: unknown, desired: unknown) =>
+  isPlainData(value) && isPlainData(desired) && Array.isArray(value) === Array.isArray(desired);
+
 /** Whether any value inside plain desired data {@link hidesPrevious}. */
 const containsHidden = (desired: unknown, ancestors = new WeakSet<object>()): boolean => {
   if (hidesPrevious(desired)) return true;
@@ -169,9 +173,10 @@ const toYamlDisplayValueRedacting = (
   // Output expressions are Effects too, so this order is security-sensitive.
   if (Redacted.isRedacted(value)) return REDACTED;
   if (hidesPrevious(desired)) return HIDDEN;
-  // A value turned into data holding a secret (`"tok"` → `{ token: Redacted }`)
-  // has no matching path inside it to hide by, so hide it whole.
-  if (!isPlainData(value) && containsHidden(desired)) return HIDDEN;
+  // A value whose shape changed into data holding a secret (`"tok"` or
+  // `["tok"]` → `{ token: Redacted }`) has no matching path inside it to hide
+  // by, so hide it whole.
+  if (!sameShape(value, desired) && containsHidden(desired)) return HIDDEN;
   if (Output.isExpr(value)) return KNOWN_AFTER_APPLY;
   if (Effect.isEffect(value) || typeof value === "function") return COMPUTED;
   if (value === undefined) return UNDEFINED;
