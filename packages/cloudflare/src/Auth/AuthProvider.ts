@@ -36,6 +36,7 @@ import {
   CloudflareAuthConfigSchema,
   validateAccountId,
   validateAccountIdField,
+  validateApiTokenExpiry,
   type CloudflareAuthConfig,
   type CloudflareResolvedCredentials,
 } from "./AuthConfig.ts";
@@ -169,6 +170,15 @@ const storedFields: ReadonlyArray<ConfigureField> = [
   },
   { name: "apiKey", label: "Cloudflare API Key", secret: true, optional: true },
   { name: "email", label: "Cloudflare Email", optional: true },
+  {
+    name: "expiresAt",
+    label: "API token expiry (epoch milliseconds)",
+    optional: true,
+    validate: (value) =>
+      value.trim() !== "" && Number.isSafeInteger(Number(value)) && Number(value) > 0
+        ? undefined
+        : "Expected a positive integer epoch timestamp in milliseconds",
+  },
   accountIdField,
 ];
 
@@ -380,9 +390,11 @@ export const CloudflareAuth = AuthProviderLayer<
         return yield* Match.value(config).pipe(
           Match.when({ method: "stored", credentialType: "apiToken" }, (c) =>
             validateAccountId(c.accountId, `stored for profile '${profileName}'`).pipe(
+              Effect.tap(() => validateApiTokenExpiry(c.expiresAt)),
               Effect.map((accountId) => ({
                 type: "apiToken" as const,
                 apiToken: Redacted.make(c.apiToken),
+                expiresAt: c.expiresAt,
                 accountId,
                 source: { type: "stored" as const },
               })),
@@ -737,15 +749,22 @@ export const CloudflareAuth = AuthProviderLayer<
           const apiToken = storedSecret(values.apiToken);
           const apiKey = storedSecret(values.apiKey);
           const email = storedValueText(values.email);
+          const expiry = storedValueText(values.expiresAt);
           if (apiToken !== undefined && apiKey === undefined && email === undefined) {
             return persist({
               method: "stored",
               credentialType: "apiToken",
               apiToken: Redacted.value(apiToken),
+              ...(expiry === undefined ? {} : { expiresAt: Number(expiry) }),
               accountId,
             });
           }
-          if (apiToken === undefined && apiKey !== undefined && email !== undefined) {
+          if (
+            apiToken === undefined &&
+            apiKey !== undefined &&
+            email !== undefined &&
+            expiry === undefined
+          ) {
             return persist({
               method: "stored",
               credentialType: "apiKey",

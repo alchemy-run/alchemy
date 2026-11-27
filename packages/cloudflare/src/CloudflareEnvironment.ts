@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
+  cloudflareCredentialExpiresAt,
   type CloudflareResolvedCredentials,
 } from "./Auth/AuthConfig.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironmentService.ts";
@@ -19,6 +20,6 @@ export const fromProfile = () =>
     lazyCredentials<CloudflareResolvedCredentials>()(
       CLOUDFLARE_AUTH_PROVIDER_NAME,
       (creds) => creds,
-      { expiresAt: (creds) => (creds.type === "oauth" ? creds.expires : undefined) },
+      { expiresAt: cloudflareCredentialExpiresAt },
     ).pipe(Effect.map(Effect.orDie)),
   );
