@@ -20,7 +20,11 @@ import { nameOf } from "./ReadRpcs.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as View from "./View.ts";
 
-/** Per-call headers, read when a Command or query runs, never part of its args. */
+/**
+ * Per-call headers, read when a Command or query runs, never part of its args. Provide it under
+ * `layer` (`Bank.layer.pipe(Layer.provide(Headers))`): a query can fetch outside the component that
+ * asked for it, so a sibling of `layer` reaches Commands but not every query fetch.
+ */
 export class CommandHeaders extends Context.Service<
   CommandHeaders,
   {
@@ -222,8 +226,13 @@ const Receipts = Schema.Union([Receipt, Schema.Array(Receipt)]);
 
 type AnyClient = Record<string, unknown>;
 
-const headersFor = (headers: Option.Option<CommandHeaders["Service"]>, name: string) =>
-  Option.isSome(headers) ? headers.value.get(name) : Effect.succeed(undefined);
+/** Look the headers up on each call: under `layer`, else where the Command runs. */
+const headersFor = (name: string) =>
+  Effect.serviceOption(CommandHeaders).pipe(
+    Effect.flatMap((headers) =>
+      Option.isSome(headers) ? headers.value.get(name) : Effect.succeed(undefined),
+    ),
+  );
 
 const commandService = (api: Api.Any, command: DomainCommand.Any) => {
   const { payloadSchema } = command.rpc as Rpc.AnyWithProps;
@@ -249,13 +258,13 @@ const commandService = (api: Api.Any, command: DomainCommand.Any) => {
   const layer = service.toLayer(
     Effect.gen(function* () {
       const client = (yield* Effect.service(api.Client)) as AnyClient;
-      const headers = yield* Effect.serviceOption(CommandHeaders);
-      // Services the command client needs (its middleware), captured once per Layer build.
+      // Services the command client needs (its middleware), and `CommandHeaders` when it is
+      // provided under `layer`, captured once per Layer build.
       const context = yield* Effect.context<never>();
       return (args: { readonly input: unknown; readonly commandId: string }) =>
         Effect.gen(function* () {
           const { commandId } = args;
-          const callHeaders = yield* headersFor(headers, command.tag);
+          const callHeaders = yield* headersFor(command.tag);
           const { reply, ...receipt } = (yield* sendPayload(client[command.tag], args, {
             headers: callHeaders,
           })) as { reply: unknown; stream?: string; version?: number; commits?: unknown };
@@ -296,6 +305,8 @@ const queryService = (api: Api.Any, query: DomainQuery.Any, options: MakeOptions
       after: Schema.optional(Schema.String),
       take: Schema.optional(Schema.Number),
     },
+    // The cast skips Effect UI's NoServices check: a success Schema that needs services to decode
+    // fails only at runtime.
     success: successSchema as Schema.Top as any,
     error: Schema.Union([
       Schema.TaggedStruct("Rejected", { rejection: Schema.Union(query.definition.rejects ?? []) }),
@@ -316,10 +327,11 @@ const queryService = (api: Api.Any, query: DomainQuery.Any, options: MakeOptions
           options: DomainQuery.RunOptions & { readonly headers?: Headers.Input | undefined },
         ) => Effect.Effect<unknown, unknown>
       >;
-      const headers = yield* Effect.serviceOption(CommandHeaders);
+      // `CommandHeaders` when it is provided under `layer`, captured once per Layer build.
+      const context = yield* Effect.context<never>();
       return ({ input, atLeast, after, take }: QueryArgs<DomainQuery.Any>) =>
         Effect.gen(function* () {
-          const callHeaders = yield* headersFor(headers, name);
+          const callHeaders = yield* headersFor(name);
           return yield* client[name](input, {
             headers: callHeaders,
             ...(atLeast === undefined ? {} : { atLeast }),
@@ -339,6 +351,7 @@ const queryService = (api: Api.Any, query: DomainQuery.Any, options: MakeOptions
                     ),
               ),
           ),
+          Effect.provide(context),
         );
     }) as Effect.Effect<any, never, any>,
   );

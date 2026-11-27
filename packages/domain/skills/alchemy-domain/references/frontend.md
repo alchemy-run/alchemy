@@ -189,7 +189,7 @@ More: [Integrate with Foldkit: Test and host the app](https://alchemy.run/domain
 
 ## Effect UI (experimental)
 
-`@alchemy.run/domain/EffectUI` is the same adapter for [Effect UI](https://github.com/Effect-TS/ui), the successor of Foldkit. It is experimental. `@effect/ui` is not on npm yet: install it from a pkg.pr.new snapshot.
+`@alchemy.run/domain/EffectUI` is the same adapter for [Effect UI](https://github.com/Effect-TS/ui), which [continues the work of Foldkit 0.x](https://ui.effect.website/article.md). It is experimental. `@effect/ui` is not on npm yet: install it from a pkg.pr.new snapshot.
 
 ```ts
 import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
@@ -208,6 +208,6 @@ $.evolve({ commandIds }).run(
 );
 ```
 
-Each Api command is a `Command.Service` and each Api query a `Query.Service` (declare it in a component's `queries`). Each View and Stream has `watch(key, options)` and `events(key, { after, restartKey, ... })`, which return Subscriptions. Provide `Bank.layer` and the Api client where the app mounts. The failures (`Rejected`, `Denied`, `Unknown`) and the rules for ids and reads are the same as for Foldkit.
+Each Api command is a `Command.Service` and each Api query a `Query.Service` (declare it in a component's `queries`). Each View and Stream has `watch(key, options)` and `events(key, { after, restartKey, ... })`, which return Subscriptions. Provide `Bank.layer` and the Api client where the app mounts, and `CommandHeaders` under `Bank.layer` (`Bank.layer.pipe(Layer.provide(Headers))`), so every query fetch sends them. The failures (`Rejected`, `Denied`, `Unknown`) and the rules for ids and reads are the same as for Foldkit.
 
 More: [Integrate with Effect UI](https://alchemy.run/domain/effect-ui).

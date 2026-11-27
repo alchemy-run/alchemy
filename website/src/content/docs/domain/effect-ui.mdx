@@ -7,7 +7,7 @@ description: Derive Effect UI Command and Query services from an Api, and follow
 `@alchemy.run/domain/EffectUI` is experimental, and its API can change in any release. `@effect/ui` is not on npm yet. Until it is, install it from a pkg.pr.new snapshot: the workspace pins `https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f`.
 :::
 
-[Effect UI](https://github.com/Effect-TS/ui) is the successor of Foldkit. A component changes its Model through Messages, runs side effects as Commands, loads data through Queries, and follows live data with Subscriptions. The optional `@alchemy.run/domain/EffectUI` adapter connects these parts to a Domain Api. It follows the [Foldkit adapter](/domain/foldkit): the failures, ids, and read rules are the same.
+[Effect UI](https://github.com/Effect-TS/ui) [continues the work of Foldkit 0.x](https://ui.effect.website/article.md). A component changes its Model through Messages, runs side effects as Commands, loads data through Queries, and follows live data with Subscriptions. The optional `@alchemy.run/domain/EffectUI` adapter connects these parts to a Domain Api. It follows the [Foldkit adapter](/domain/foldkit): the failures, ids, and read rules are the same.
 
 Install `@effect/ui` in the web package. Domain's root entry does not import it.
 
@@ -74,17 +74,20 @@ The adapter converts absent state to `Option.none()`. A new key restarts the wat
 
 ## Provide the client and headers
 
-Provide `Bank.layer`, the Api client, and optionally `DomainEffectUI.CommandHeaders` where the app mounts:
+Provide `Bank.layer` and the Api client where the app mounts. Provide `DomainEffectUI.CommandHeaders` under `Bank.layer`:
 
 ```typescript
+const Headers = Layer.succeed(DomainEffectUI.CommandHeaders, {
+  get: (name) => Effect.succeed(name === "WithdrawMoney" ? { "x-mfa-code": "000000" } : {}),
+});
 const Connection = CustomerApi.layerClient.pipe(
   Layer.provide(Domain.protocolWebSocket(`${location.origin}/api`)),
   Layer.provide(Socket.layerWebSocketConstructorGlobal),
 );
 const Main = BrowserHost.mount(App, {}, document.getElementById("app")!).pipe(
-  Layer.provide(Bank.layer),
+  Layer.provide(Bank.layer.pipe(Layer.provide(Headers))),
   Layer.provideMerge(Connection),
 );
 ```
 
-`CommandHeaders.get` receives the command tag or query name, and runs on each call. Never put credentials in Command args or Messages. The rules for cookies and protocols are in [Integrate with Foldkit](/domain/foldkit#provide-the-client-and-headers).
+`CommandHeaders.get` receives the command tag or query name, and runs on each call. A Command also finds headers provided beside `Bank.layer`, but a query fetch can run outside the component that asked for it, so only headers under `Bank.layer` reach every query. Never put credentials in Command args or Messages. The rules for cookies and protocols are in [Integrate with Foldkit](/domain/foldkit#provide-the-client-and-headers).

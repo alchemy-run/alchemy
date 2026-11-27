@@ -6,8 +6,10 @@ import { Html } from "@effect/ui/html";
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing";
 import { TestHost } from "@effect/ui/testing";
 import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcClientError from "effect/rpc/RpcClientError";
@@ -19,6 +21,10 @@ import {
   CounterApi,
   CounterId,
   Limit,
+  Session,
+  Total,
+  TotalLive,
+  Unauthenticated,
 } from "./FoldkitCounter.ts";
 
 const Counter = DomainEffectUI.make(CounterApi);
@@ -34,21 +40,49 @@ const CountLive = Count.toLayer(
     counterId === "over" ? Effect.fail(new Limit({ amount: 11 })) : Effect.succeed(3),
   ),
 );
+class Guarded extends Domain.Query("Guarded", {
+  input: { counterId: CounterId },
+  success: Schema.Number,
+  middleware: [Session],
+}) {}
+const GuardedLive = Guarded.toLayer(Effect.succeed(() => Effect.succeed(1)));
+class Settled extends Domain.Query("Settled", {
+  input: { counterId: CounterId },
+  success: Schema.Number,
+  waitsFor: [Total],
+}) {}
+const SettledLive = Settled.toLayer(Effect.succeed(() => Effect.succeed(1)));
 class QueryModel extends Domain.Model("EffectUIQueries", {
   aggregates: [CounterAggregate],
-  queries: [Count],
+  views: [Total],
+  queries: [Count, Guarded, Settled],
 }) {}
 class QueryApi extends Domain.Api("EffectUIQueryApi", {
   model: QueryModel,
   commands: [],
   views: [],
   streams: [],
-  queries: ["Count"],
+  queries: ["Count", "Guarded", "Settled"],
 }) {}
 const Queries = DomainEffectUI.make(QueryApi);
 const QueryClient = QueryApi.layerClientInProcess.pipe(
-  Layer.provide(QueryModel.layer(CountLive).pipe(Layer.provide(Domain.InMemory))),
+  Layer.provide(
+    Layer.merge(
+      QueryModel.layer(Layer.mergeAll(CountLive, GuardedLive, SettledLive, TotalLive)).pipe(
+        Layer.provide(Domain.InMemory),
+      ),
+      Layer.succeed(Session, () => Effect.fail(Unauthenticated.make({}))),
+    ),
+  ),
 );
+/** Run query work against the adapter's Layer, the Effect UI cache and `client`. */
+const ask = <A, E>(
+  effect: Effect.Effect<A, E, any>,
+  client: Layer.Layer<typeof QueryApi.Client.Identifier> = QueryClient,
+) =>
+  effect.pipe(
+    Effect.provide(Layer.merge(Queries.layer, Query.layer()).pipe(Layer.provide(client))),
+  ) as Effect.Effect<A, E, never>;
 
 /** Run an issued Command's work against the adapter's Layer and the in-process client. */
 const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -120,11 +154,13 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const client = yield* CounterApi.Client;
       let calls = 0;
+      const sent: Array<unknown> = [];
       const uncertain = Layer.succeed(CounterApi.Client, {
         ...client,
         // The server applies the command; its reply is lost on the way back.
-        Increment: (...args: Parameters<typeof client.Increment>) =>
-          client.Increment(...args).pipe(
+        Increment: (...args: Parameters<typeof client.Increment>) => {
+          sent.push(args[1]?.headers);
+          return client.Increment(...args).pipe(
             Effect.andThen(
               Effect.fail(
                 new RpcClientError.RpcClientError({
@@ -135,13 +171,14 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
                 }),
               ),
             ),
-          ),
+          );
+        },
       });
       const headers = Layer.succeed(DomainEffectUI.CommandHeaders, {
         get: () =>
           Effect.sync(() => {
             calls += 1;
-            return { "x-mfa-code": "secret" };
+            return { "x-mfa-code": `code-${calls}` };
           }),
       });
       const command = Counter.Increment.make({
@@ -150,13 +187,62 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
       });
       expect(calls).toBe(0);
       const layer = Counter.layer.pipe(Layer.provide(Layer.merge(uncertain, headers)));
-      const failure = yield* command.effect.pipe(Effect.scoped, Effect.provide(layer), Effect.flip);
-      expect(calls).toBe(1);
-      expect(failure).toEqual({ _tag: "Unknown", commandId: "page:4" });
+      for (const _ of [0, 1]) {
+        const failure = yield* command.effect.pipe(
+          Effect.scoped,
+          Effect.provide(layer),
+          Effect.flip,
+        );
+        expect(failure).toEqual({ _tag: "Unknown", commandId: "page:4" });
+      }
+      expect(calls).toBe(2);
+      expect(sent).toEqual([{ "x-mfa-code": "code-1" }, { "x-mfa-code": "code-2" }]);
       expect(command.args).toEqual({
         input: { counterId: target, amount: 1 },
         commandId: "page:4",
       });
+    }).pipe(Effect.provide(Client)),
+  );
+
+  it.live("reads headers provided beside the layer where the Command runs", () =>
+    Effect.gen(function* () {
+      const client = yield* CounterApi.Client;
+      const sent: Array<unknown> = [];
+      const spy = Layer.succeed(CounterApi.Client, {
+        ...client,
+        Increment: (...args: Parameters<typeof client.Increment>) => {
+          sent.push(args[1]?.headers);
+          return client.Increment(...args);
+        },
+      });
+      const headers = Layer.succeed(DomainEffectUI.CommandHeaders, {
+        get: (name) => Effect.succeed({ "x-command": name }),
+      });
+      yield* Counter.Increment.make({
+        input: { counterId: target, amount: 1 },
+        commandId: "page:sibling",
+      }).effect.pipe(
+        Effect.scoped,
+        Effect.provide(Layer.merge(Counter.layer.pipe(Layer.provide(spy)), headers)),
+      );
+      expect(sent).toEqual([{ "x-command": "Increment" }]);
+    }).pipe(Effect.provide(Client)),
+  );
+
+  it.live("turns a defect while reading headers into Unknown", () =>
+    Effect.gen(function* () {
+      const headers = Layer.succeed(DomainEffectUI.CommandHeaders, {
+        get: () => Effect.die("storage unavailable"),
+      });
+      const failure = yield* Counter.Increment.make({
+        input: { counterId: target, amount: 1 },
+        commandId: "page:5",
+      }).effect.pipe(
+        Effect.scoped,
+        Effect.provide(Counter.layer.pipe(Layer.provide(headers))),
+        Effect.flip,
+      );
+      expect(failure).toEqual({ _tag: "Unknown", commandId: "page:5" });
     }).pipe(Effect.provide(Client)),
   );
 
@@ -203,14 +289,50 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
 
   it.live("serves a query through the Effect UI cache and keeps a typed refusal", () =>
     Effect.gen(function* () {
-      expect(yield* Queries.Count.get({ input: { counterId: target } })).toBe(3);
-      const refused = yield* Queries.Count.get({
-        input: { counterId: CounterId.make("over") },
-      }).pipe(Effect.flip);
+      expect(yield* ask(Queries.Count.get({ input: { counterId: target } }))).toBe(3);
+      const refused = yield* ask(
+        Queries.Count.get({ input: { counterId: CounterId.make("over") } }).pipe(Effect.flip),
+      );
       expect(refused).toEqual({ _tag: "Rejected", rejection: new Limit({ amount: 11 }) });
-    }).pipe(
-      Effect.provide(Layer.merge(Queries.layer, Query.layer()).pipe(Layer.provide(QueryClient))),
-    ),
+    }),
+  );
+
+  it.live("classifies query middleware refusals, timeouts and transport loss", () =>
+    Effect.gen(function* () {
+      const denied = yield* ask(
+        Queries.Guarded.get({ input: { counterId: target } }).pipe(Effect.flip),
+      );
+      expect(denied).toMatchObject({ _tag: "Denied", error: { _tag: "Unauthenticated" } });
+      const client = yield* QueryApi.Client.pipe(Effect.provide(QueryClient));
+      const broken = Layer.succeed(QueryApi.Client, {
+        ...client,
+        Settled: () =>
+          Effect.fail(
+            new Domain.ConsistencyTimeout({
+              view: "Total",
+              key: "one",
+              stream: "Counter/one",
+              version: 1,
+            }),
+          ),
+        Count: () =>
+          Effect.fail(
+            new RpcClientError.RpcClientError({
+              reason: new RpcClientError.RpcClientDefect({ cause: "lost", message: "lost" }),
+            }),
+          ),
+        Guarded: () => Effect.die("socket closed"),
+      } as typeof client);
+      expect(
+        yield* ask(Queries.Settled.get({ input: { counterId: target } }).pipe(Effect.flip), broken),
+      ).toEqual({ _tag: "TimedOut" });
+      expect(
+        yield* ask(Queries.Count.get({ input: { counterId: target } }).pipe(Effect.flip), broken),
+      ).toEqual({ _tag: "Unknown" });
+      expect(
+        yield* ask(Queries.Guarded.get({ input: { counterId: target } }).pipe(Effect.flip), broken),
+      ).toEqual({ _tag: "Unknown" });
+    }),
   );
 
   type TotalMessage =
@@ -347,6 +469,96 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
       expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
     }).pipe(Effect.provide(Client)),
   );
+
+  it.live("turns a mid-stream validate refusal into an app Message", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>();
+      const watch = yield* watched(target).stream.pipe(
+        Stream.tap(() => Deferred.succeed(started, undefined)),
+        Stream.take(2),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* Deferred.await(started);
+      yield* run(
+        Counter.Increment.make({ input: { counterId: target, amount: 6 }, commandId: "page:0" })
+          .effect,
+      );
+      expect(yield* Fiber.join(watch)).toEqual([
+        { _tag: "ReceivedTotal", snapshot: { state: Option.none(), cursor: 0 } },
+        { _tag: "FailedTotal", reason: "Limit" },
+      ]);
+      expect(yield* feed(Option.none()).stream.pipe(Stream.runCollect)).toEqual(["failed:Limit"]);
+    }).pipe(Effect.scoped, Effect.provide(Client)),
+  );
+
+  it.live("preserves interruption in watch and event feeds", () =>
+    Effect.gen(function* () {
+      const client = yield* CounterApi.Client;
+      const source = Layer.succeed(CounterApi.Client, {
+        ...client,
+        Total: {
+          ...client.Total,
+          watch: (...args: Parameters<typeof client.Total.watch>) =>
+            client.Total.watch(...args).pipe(
+              Stream.take(1),
+              Stream.concat(Stream.fromEffect(Effect.interrupt)),
+            ),
+          events: (...args: Parameters<typeof client.Total.events>) =>
+            client.Total.events(...args).pipe(
+              Stream.take(1),
+              Stream.concat(Stream.fromEffect(Effect.interrupt)),
+            ),
+        },
+      });
+      const reads = [
+        watched(target).stream.pipe(Stream.runDrain),
+        feed(Option.none()).stream.pipe(Stream.runDrain),
+      ];
+      for (const read of reads) {
+        const exit = yield* read.pipe(Effect.provide(source), Effect.exit);
+        expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true);
+      }
+    }).pipe(Effect.provide(Client)),
+  );
+
+  it.live("watches Stream absence and reports CaughtUp", () =>
+    Effect.gen(function* () {
+      const snapshots = yield* Counter.Outputs.watch(target, {
+        onSnapshot: (snapshot) => snapshot,
+        onFailure: () => ({ state: Option.none(), cursor: -1 }),
+        onDefect: () => ({ state: Option.none(), cursor: -1 }),
+      }).stream.pipe(Stream.take(1), Stream.runCollect);
+      expect(snapshots).toEqual([{ state: Option.none(), cursor: 0 }]);
+      const events = yield* Counter.Outputs.events(target, {
+        after: Option.none(),
+        onEntry: (entry) => entry.event.amount,
+        onCaughtUp: (cursor) => cursor,
+        onFailure: () => -1,
+        onDefect: () => -1,
+      }).stream.pipe(Stream.take(1), Stream.runCollect);
+      expect(events).toEqual([0]);
+    }).pipe(Effect.provide(Client)),
+  );
+
+  it("reserves layer for the services' implementation", () => {
+    // A model already refuses a command, aggregate or view named `layer`; a query is not refused.
+    class LayerQuery extends Domain.Query("layer", { input: {}, success: Schema.Number }) {}
+    class Collision extends Domain.Model("EffectUICollision", {
+      aggregates: [CounterAggregate],
+      queries: [LayerQuery],
+    }) {}
+    class CollisionApi extends Domain.Api("EffectUICollisionApi", {
+      model: Collision,
+      commands: ["Increment"],
+      views: [],
+      streams: [],
+      queries: ["layer"],
+    }) {}
+    // @ts-expect-error layer is reserved for the services' implementation
+    const collision = DomainEffectUI.make(CollisionApi);
+    expect(Layer.isLayer(collision.layer)).toBe(true);
+  });
 
   // A whole component: a click runs the Api command, the View watch shows the new total.
   const PanelMessage = UiSchema.TaggedEnum({
