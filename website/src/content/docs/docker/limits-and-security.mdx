@@ -39,6 +39,10 @@ const worker = yield* Docker.Container("worker", {
 
 `sharedMemorySize` sizes `/dev/shm`, which Postgres uses for parallel queries; Docker's default is 64 MB. It counts separately from `memory`. A container that shares another's IPC namespace uses that namespace's `/dev/shm`, so it can't set one.
 
+## Pin execution and memory allocation
+
+On a Linux Docker engine with CPU-set support, `cpuSet: "0,2-4"` restricts execution to the listed CPUs, while `memoryNodes: "0"` restricts allocation to that NUMA node. Use IDs available to the target daemon. These settings are independent of `cpus`, which limits CPU time without choosing where the container runs.
+
 ## Drop privileges
 
 ```typescript

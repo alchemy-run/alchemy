@@ -117,6 +117,10 @@ export class Docker extends Context.Service<
         "memory-reservation"?: string | undefined;
         /** CPU quota, in cores. */
         cpus?: number | undefined;
+        /** Linux CPU affinity list. */
+        "cpuset-cpus"?: string | undefined;
+        /** Linux NUMA memory node affinity list. */
+        "cpuset-mems"?: string | undefined;
         /** Per-container process and thread limit. */
         "pids-limit"?: number | undefined;
         /** Mount the root filesystem read-only. */
@@ -579,6 +583,8 @@ export declare namespace Docker {
       MemorySwap?: number;
       MemoryReservation?: number;
       NanoCpus?: number;
+      CpusetCpus?: string;
+      CpusetMems?: string;
       PidsLimit?: number;
       ReadonlyRootfs?: boolean;
       SecurityOpt?: string[] | null;

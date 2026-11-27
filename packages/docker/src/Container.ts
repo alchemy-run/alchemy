@@ -117,6 +117,10 @@ export interface ContainerProps {
   memoryReservation?: string;
   /** CPU quota, in cores (e.g. `0.5` limits to half a CPU). */
   cpus?: number;
+  /** Bind execution to a Linux CPU list such as `"0,2-4"`; independent of the CPU quota. */
+  cpuSet?: string;
+  /** Restrict memory allocation to a list of Linux NUMA nodes available to the daemon. */
+  memoryNodes?: string;
   /** Maximum number of processes and threads in the container. */
   pidsLimit?: number;
   /** Mount the container's root filesystem read-only. Writable paths need a volume or tmpfs. */
@@ -192,6 +196,8 @@ export declare namespace Container {
     external: number | string;
     /** Internal port inside the container. */
     internal: number | string;
+    /** Host IPv4 or IPv6 address, e.g. `"127.0.0.1"` or `"::1"`. Omit for Docker's default bind address. */
+    hostIp?: string;
     /** Protocol used for the mapping. @default "tcp" */
     protocol?: "tcp" | "udp";
   }
@@ -500,6 +506,15 @@ export interface ContainerLookup {
  * });
  * ```
  *
+ * **Example:** Pin a worker to CPUs and a NUMA node
+ * ```typescript
+ * const worker = yield* Docker.Container("pinned-worker", {
+ *   image: "ghcr.io/acme/worker:latest",
+ *   cpuSet: "0,2-4",
+ *   memoryNodes: "0",
+ * });
+ * ```
+ *
  * **Example:** Customize confinement, process limits, and log rotation
  * ```typescript
  * const api = yield* Docker.Container("api", {
@@ -533,12 +548,12 @@ export interface ContainerLookup {
  * });
  * ```
  *
- * **Example:** Publish on any free host port
+ * **Example:** Publish on any free loopback port
  * ```typescript
  * const api = yield* Docker.Container("api", {
  *   image: "ghcr.io/acme/api:latest",
  *   // `external: 0` lets Docker choose; the assigned port is reported back.
- *   ports: [{ external: 0, internal: 3000 }],
+ *   ports: [{ external: 0, internal: 3000, hostIp: "127.0.0.1" }],
  *   start: true,
  * });
  * const hostPort = api.ports["3000/tcp"];
@@ -1056,14 +1071,7 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       volume: news.volumes?.map(
         (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
       ),
-      p: news.ports?.map((port) => {
-        const target = `${port.internal}/${port.protocol ?? "tcp"}`;
-        // `external: 0` means "any free host port". Docker spells that as a
-        // bare container port (`-p 80/tcp`); `-p 0:80/tcp` instead asks for
-        // host port 0 literally, which the daemon accepts and then reports
-        // back as 0.
-        return isRandomHostPort(port.external) ? target : `${port.external}:${target}`;
-      }),
+      p: news.ports?.map(formatPublishedPort),
       "add-host": news.extraHosts,
       ...(news.hostname !== undefined ? { hostname: news.hostname } : {}),
       ...(news.dns?.length ? { dns: news.dns } : {}),
@@ -1082,6 +1090,8 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
         ? { "memory-reservation": news.memoryReservation }
         : {}),
       ...(news.cpus !== undefined ? { cpus: news.cpus } : {}),
+      ...(news.cpuSet !== undefined ? { "cpuset-cpus": news.cpuSet } : {}),
+      ...(news.memoryNodes !== undefined ? { "cpuset-mems": news.memoryNodes } : {}),
       ...(news.pidsLimit !== undefined ? { "pids-limit": news.pidsLimit } : {}),
       ...(news.readOnlyRootFilesystem ? { "read-only": true } : {}),
       ...(news.privileged ? { privileged: true } : {}),
@@ -1316,6 +1326,9 @@ const hasUnverifiedCreationOptions = (props: ContainerProps): boolean =>
   props.memorySwap !== undefined ||
   props.memoryReservation !== undefined ||
   props.cpus !== undefined ||
+  props.cpuSet !== undefined ||
+  props.memoryNodes !== undefined ||
+  props.ports?.some((port) => port.hostIp !== undefined) === true ||
   props.pidsLimit !== undefined ||
   props.readOnlyRootFilesystem === true ||
   props.noNewPrivileges === true ||
@@ -1442,6 +1455,31 @@ const validateContainerValues = (news: ContainerProps) => {
   ) {
     return invalidContainerOption("sharedMemorySize", "requires private or shareable ipcNamespace");
   }
+  for (const [index, port] of (news.ports ?? []).entries()) {
+    if (port.hostIp === undefined) continue;
+    if (Result.isFailure(parseIpAddress(port.hostIp))) {
+      return invalidContainerOption(
+        `ports[${index}].hostIp`,
+        "must be an IPv4 or IPv6 address, without brackets",
+      );
+    }
+    // The host address has its own field. Do not accept a second address in
+    // either port string when the structured form is used.
+    for (const field of ["external", "internal"] as const) {
+      if (!/^\d+(?:-\d+)?$/.test(String(port[field]))) {
+        return invalidContainerOption(
+          `ports[${index}].${field}`,
+          "must be a port number or range when hostIp is set",
+        );
+      }
+    }
+    if (news.networkMode === "host") {
+      return invalidContainerOption(
+        `ports[${index}].hostIp`,
+        "requires a network mode that supports port publishing",
+      );
+    }
+  }
   for (const [index, value] of (news.dns ?? []).entries()) {
     if (Result.isFailure(parseIpAddress(value))) {
       return invalidContainerOption(`dns[${index}]`, "must be an IPv4 or IPv6 address");
@@ -1495,6 +1533,17 @@ const validateContainerNetworks = (news: ContainerProps) => {
   return Effect.void;
 };
 
+// Validate the syntax before planning a replacement. Only the target
+// daemon knows which CPU and NUMA node IDs are available.
+const isAffinityList = (value: string): boolean =>
+  value.split(",").every((part) => {
+    const match = /^(\d+)(?:-(\d+))?$/.exec(part);
+    if (!match) return false;
+    const first = Number(match[1]);
+    const last = match[2] === undefined ? first : Number(match[2]);
+    return Number.isSafeInteger(first) && Number.isSafeInteger(last) && last >= first;
+  });
+
 const validateContainerRuntime = (news: ContainerProps) => {
   if (news.capDrop?.some((capability) => capability.trim().length === 0)) {
     return invalidContainerOption("capDrop", "cannot contain empty capabilities");
@@ -1536,6 +1585,15 @@ const validateContainerRuntime = (news: ContainerProps) => {
   }
   if (news.cpus !== undefined && (!Number.isFinite(news.cpus) || news.cpus <= 0)) {
     return invalidContainerOption("cpus", "must be a finite, positive number");
+  }
+  for (const field of ["cpuSet", "memoryNodes"] as const) {
+    const value = news[field];
+    if (value !== undefined && !isAffinityList(value)) {
+      return invalidContainerOption(
+        field,
+        "must be a comma-separated list of non-negative IDs or ascending ranges",
+      );
+    }
   }
   if (
     news.pidsLimit !== undefined &&
@@ -1657,9 +1715,15 @@ const toPortAttributes = (info: Docker.Container): Record<string, number> => {
   return ports;
 };
 
-/** `external: 0` / `"0"` asks Docker to pick any free host port. */
-const isRandomHostPort = (external: number | string): boolean =>
-  Number.parseInt(String(external), 10) === 0;
+const formatPublishedPort = ({ external, internal, protocol, hostIp }: Container.PortMapping) => {
+  const target = `${internal}/${protocol ?? "tcp"}`;
+  // An omitted host port asks Docker to allocate one. Keep legacy compound
+  // external strings verbatim; only a zero port itself means automatic.
+  const port = /^0+$/.test(String(external)) ? "" : String(external);
+  if (hostIp === undefined) return port ? `${port}:${target}` : target;
+  const host = hostIp.includes(":") ? `[${hostIp}]` : hostIp;
+  return `${host}:${port}:${target}`;
+};
 
 const normalizeEnvironment = (
   environment: Record<string, string | Redacted.Redacted<string>> | undefined,
