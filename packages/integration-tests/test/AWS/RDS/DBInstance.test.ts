@@ -905,6 +905,7 @@ const observeInstanceRequests = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient;
   const requests: Array<{
     action: string;
+    instance: string | null;
     port: string | null;
     parameterGroup: string | null;
     securityGroups: string[];
@@ -930,11 +931,16 @@ const observeInstanceRequests = Effect.gen(function* () {
         const action = parameters.get("Action");
         if (
           action === "CreateDBInstance" ||
+          action === "CreateDBInstanceReadReplica" ||
           action === "ModifyDBInstance" ||
+          action === "RebootDBInstance" ||
+          action === "PromoteReadReplica" ||
+          action === "DeleteDBInstance" ||
           action === "DescribeDBInstances"
         ) {
           requests.push({
             action,
+            instance: parameters.get("DBInstanceIdentifier"),
             iamAuthentication: parameters.get("EnableIAMDatabaseAuthentication"),
             publiclyAccessible: parameters.get("PubliclyAccessible"),
             deletionProtection: parameters.get("DeletionProtection"),
@@ -959,7 +965,7 @@ const observeInstanceRequests = Effect.gen(function* () {
               .filter(([key]) => key.startsWith("VpcSecurityGroupIds."))
               .map(([, value]) => value)
               .sort(),
-            port: parameters.get(action === "CreateDBInstance" ? "Port" : "DBPortNumber"),
+            port: parameters.get(action.startsWith("CreateDBInstance") ? "Port" : "DBPortNumber"),
           });
         }
       }),
@@ -2832,6 +2838,158 @@ lifecycle(4, process.env.AWS_TEST_RDS_DBINSTANCE)(
         ),
       );
       expect(rows).toEqual([{ name: "0001_users.sql" }, { name: "0002_posts.sql" }]);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: LONG_INSTANCE_TIMEOUT,
+  },
+);
+
+// Both checks fail before any create, so nothing is provisioned.
+test.provider(
+  "read replica rejects inherited props and a missing source",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const replica = (props: Partial<DBInstanceProps>) =>
+        DBInstance("ProbeReplica", {
+          sourceDBInstanceIdentifier: stageIdentifier(stack.stage, "rds-missing-source"),
+          engine: "postgres",
+          dbInstanceClass: "db.t4g.micro",
+          ...props,
+        });
+
+      const inherited = yield* stack
+        .deploy(replica({ dbName: "app", masterUsername: "app" }))
+        .pipe(Effect.result);
+      expect(renderFailure(inherited)).toContain("InvalidDBInstanceReadReplica");
+      expect(renderFailure(inherited)).toContain("dbName, masterUsername");
+
+      const missing = yield* stack.deploy(replica({})).pipe(Effect.result);
+      expect(renderFailure(missing)).toContain("InvalidDBInstanceReadReplica");
+      expect(renderFailure(missing)).toContain("was not found");
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:rds", "live"],
+    timeout: 120_000,
+  },
+);
+
+lifecycle(6, process.env.AWS_TEST_RDS_DBINSTANCE)(
+  "read replica of an existing instance leaves its source untouched",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const adoptedId = stageIdentifier(stack.stage, "rds-replica-adopted");
+      const { client, requests } = yield* observeInstanceRequests;
+      const program = (replicas?: { replicaClass?: string; withSource?: boolean }) =>
+        Effect.gen(function* () {
+          const network = yield* Network("ReplicaNet", { cidrBlock: "10.57.0.0/16" });
+          const subnetGroup = yield* DBSubnetGroup("ReplicaSubnets", {
+            description: "alchemy read replica lifecycle",
+            subnetIds: network.privateSubnetIds,
+          });
+          const group = yield* SecurityGroup("ReplicaGroup", {
+            vpcId: network.vpcId,
+            description: "alchemy read replica lifecycle",
+          });
+          const source = yield* DBInstance("ReplicaSource", {
+            engine: "postgres",
+            dbInstanceClass: "db.t4g.micro",
+            dbName: "app",
+            masterUsername: "app",
+            masterUserPassword: Redacted.make("ReplicaSourcePassw0rd"),
+            backupRetentionPeriod: "1 day",
+            dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+            vpcSecurityGroupIds: [group.groupId],
+          });
+          if (replicas === undefined) {
+            return { source, replica: undefined, adopted: undefined };
+          }
+          const replica = yield* DBInstance("Replica", {
+            ...(replicas.withSource === false
+              ? {}
+              : { sourceDBInstanceIdentifier: source.dbInstanceIdentifier }),
+            engine: "postgres",
+            dbInstanceClass: replicas.replicaClass ?? "db.t4g.micro",
+            vpcSecurityGroupIds: [group.groupId],
+          });
+          // Created out of band below, as if a deploy died after RDS
+          // accepted the create.
+          const adopted = yield* DBInstance("AdoptedReplica", {
+            dbInstanceIdentifier: adoptedId,
+            sourceDBInstanceIdentifier: source.dbInstanceIdentifier,
+            engine: "postgres",
+            dbInstanceClass: "db.t4g.micro",
+            vpcSecurityGroupIds: [group.groupId],
+          });
+          return { source, replica, adopted };
+        });
+      const deploy = (replicas?: Parameters<typeof program>[0]) =>
+        stack.deploy(program(replicas)).pipe(Effect.provideService(HttpClient.HttpClient, client));
+      const sourceWrites = (sourceId: string) =>
+        requests.filter(
+          (request) => request.instance === sourceId && request.action !== "DescribeDBInstances",
+        );
+
+      const first = yield* deploy();
+      const sourceId = first.source.dbInstanceIdentifier;
+      const outOfBand = yield* rds.createDBInstanceReadReplica({
+        DBInstanceIdentifier: adoptedId,
+        SourceDBInstanceIdentifier: sourceId,
+        DBInstanceClass: "db.t4g.micro",
+      });
+
+      // Adding replicas creates the missing one and finds the existing one.
+      requests.length = 0;
+      const added = yield* deploy({});
+      expect(added.source.dbiResourceId).toBe(first.source.dbiResourceId);
+      expect(sourceWrites(sourceId)).toEqual([]);
+      expect(
+        requests
+          .filter((request) => request.action === "CreateDBInstanceReadReplica")
+          .map((request) => request.instance),
+      ).toEqual([added.replica!.dbInstanceIdentifier]);
+      expect(added.replica!.readReplicaSourceDBInstanceIdentifier).toBe(sourceId);
+      expect(added.replica!.endpointAddress).toBeDefined();
+      expect(added.adopted!.dbiResourceId).toBe(outOfBand.DBInstance!.DbiResourceId);
+      expect(added.adopted!.readReplicaSourceDBInstanceIdentifier).toBe(sourceId);
+      const listed = (yield* rds.describeDBInstances({ DBInstanceIdentifier: sourceId }))
+        .DBInstances![0]!.ReadReplicaDBInstanceIdentifiers;
+      expect([...(listed ?? [])].sort()).toEqual(
+        [added.replica!.dbInstanceIdentifier, adoptedId].sort(),
+      );
+      expect((yield* stack.plan(program({}))).resources).toMatchObject({
+        ReplicaSource: { action: "noop" },
+        Replica: { action: "noop" },
+        AdoptedReplica: { action: "noop" },
+      });
+
+      // Dropping the source would replace the replica with an empty database.
+      const detached = yield* stack.plan(program({ withSource: false })).pipe(Effect.result);
+      expect(renderFailure(detached)).toContain("InvalidDBInstanceReadReplica");
+
+      requests.length = 0;
+      const resized = yield* deploy({ replicaClass: "db.t4g.small" });
+      expect(resized.replica!.dbInstanceClass).toBe("db.t4g.small");
+      expect(resized.replica!.dbiResourceId).toBe(added.replica!.dbiResourceId);
+      expect(sourceWrites(sourceId)).toEqual([]);
+
+      // Removing the replicas deletes only them.
+      requests.length = 0;
+      const removed = yield* deploy();
+      expect(removed.source.dbiResourceId).toBe(first.source.dbiResourceId);
+      expect(sourceWrites(sourceId)).toEqual([]);
+      for (const id of [added.replica!.dbInstanceIdentifier, adoptedId]) {
+        const gone = yield* rds
+          .describeDBInstances({ DBInstanceIdentifier: id })
+          .pipe(Effect.result);
+        expect(Result.isFailure(gone) && gone.failure._tag).toBe("DBInstanceNotFoundFault");
+      }
 
       yield* stack.destroy();
     }),
