@@ -32,10 +32,10 @@ export class OAuthError extends Data.TaggedError("OAuthError")<{
   }
 }
 
-/** A request to the authorization server could not be sent or answered. */
 /** How long a token refresh may take before it fails. */
 const REFRESH_TIMEOUT = Duration.seconds(30);
 
+/** A request to the authorization server could not be sent or answered. */
 export class OAuthNetworkError extends Data.TaggedError("OAuthNetworkError")<{
   endpoint: string;
   cause: unknown;
@@ -313,7 +313,7 @@ export interface OAuthClient {
    * servers rotate the refresh token, so the old one is spent once the request
    * is sent: save the result in the same uninterruptible step, e.g.
    * `Effect.uninterruptible(refresh(creds).pipe(Effect.tap(save)))`. Fails
-   * with `OAuthNetworkError` after 30 seconds without a response.
+   * with `OAuthNetworkError` when the server doesn't answer in time.
    */
   readonly refresh: (
     credentials: OAuthCredentials,
@@ -611,7 +611,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
           Effect.fail(
             new OAuthNetworkError({
               endpoint: spec.endpoints.token,
-              cause: new Error("no response within 30 seconds"),
+              cause: new Error(`no response within ${Duration.format(REFRESH_TIMEOUT)}`),
             }),
           ),
       }),

@@ -291,20 +291,27 @@ export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloud
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
         if (config.expires > now + 60_000) return config;
-        const session = yield* refreshDeviceSession(Redacted.make(config.refresh)).pipe(
-          Effect.provide(FetchHttpClient.layer),
-          Effect.mapError((cause) =>
-            NeedsReauth.make({
-              provider: RIVET_CLOUD_AUTH_PROVIDER_NAME,
-              profile: profileName,
-              message: `Rivet Cloud sign-in expired. ${refreshHint(RIVET_CLOUD_AUTH_PROVIDER_NAME, profileName)}`,
-              cause,
-            }),
-          ),
+        // The refresh spends the stored token: request and save in one
+        // uninterruptible step (#2843), with a timeout so it can't hang.
+        return yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            const session = yield* refreshDeviceSession(Redacted.make(config.refresh)).pipe(
+              Effect.provide(FetchHttpClient.layer),
+              Effect.timeout("30 seconds"),
+              Effect.mapError((cause) =>
+                NeedsReauth.make({
+                  provider: RIVET_CLOUD_AUTH_PROVIDER_NAME,
+                  profile: profileName,
+                  message: `Rivet Cloud sign-in expired. ${refreshHint(RIVET_CLOUD_AUTH_PROVIDER_NAME, profileName)}`,
+                  cause,
+                }),
+              ),
+            );
+            const next = yield* sessionConfig(config.cluster, config.organization, session);
+            yield* updateConfig?.(next) ?? Effect.void;
+            return next;
+          }),
         );
-        const next = yield* sessionConfig(config.cluster, config.organization, session);
-        yield* updateConfig?.(next) ?? Effect.void;
-        return next;
       });
 
     const read = (

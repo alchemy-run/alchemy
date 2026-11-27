@@ -318,8 +318,15 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
         ),
         Match.when({ method: "oauth" }, (oauth) =>
           Effect.gen(function* () {
-            const fresh = yield* freshGrant(profileName, oauth);
-            if (fresh !== oauth) yield* updateConfig?.(fresh) ?? Effect.void;
+            // Refresh tokens may rotate: request and save in one
+            // uninterruptible step (#2843).
+            const fresh = yield* Effect.uninterruptible(
+              freshGrant(profileName, oauth).pipe(
+                Effect.tap((fresh) =>
+                  fresh === oauth ? Effect.void : (updateConfig?.(fresh) ?? Effect.void),
+                ),
+              ),
+            );
             return {
               apiKey: undefined,
               accessToken: Redacted.make(fresh.access),
@@ -349,10 +356,17 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
             Effect.gen(function* () {
               const current = yield* reload ?? Effect.succeed(oauth);
               if (current.method !== "oauth") return current;
-              const refreshed = withGrant(current, yield* refreshGrant(grantOf(current)));
-              if (updateConfig === undefined) return refreshed;
-              yield* updateConfig(refreshed);
-              return undefined;
+              // Request and save in one uninterruptible step (#2843).
+              return yield* Effect.uninterruptible(
+                refreshGrant(grantOf(current)).pipe(
+                  Effect.flatMap((grant) => {
+                    const refreshed = withGrant(current, grant);
+                    return updateConfig === undefined
+                      ? Effect.succeed<E2BAuthConfig | undefined>(refreshed)
+                      : Effect.as(updateConfig(refreshed), undefined);
+                  }),
+                ),
+              );
             }),
           ).pipe(
             Effect.catchTag("E2BLoginError", () =>
