@@ -69,8 +69,10 @@ export interface EffectUIProps<
  * Add `HtmlServerVite.plugin` with a `serverOutDir` to render pages in the
  * Worker. The server entry exports the app's `HttpRouter` Layer as its
  * default export, and `prerender` lists the pages built ahead of time,
- * which are served as assets. Bindings in `env` reach the Worker through
- * `cloudflare:workers`.
+ * which are served as assets. Server code reads the bindings in `env`
+ * from `cloudflare:workers`, imported when a request arrives: the build
+ * imports the server entry in Node to prerender, where that module doesn't
+ * exist.
  *
  * **Example:** vite.config.ts for a server-rendered app
  * ```typescript
