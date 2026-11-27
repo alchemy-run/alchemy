@@ -1463,15 +1463,30 @@ const validateContainerValues = (news: ContainerProps) => {
         "must be an IPv4 or IPv6 address, without brackets",
       );
     }
-    // The host address has its own field. Do not accept a second address in
-    // either port string when the structured form is used.
-    for (const field of ["external", "internal"] as const) {
-      if (!/^\d+(?:-\d+)?$/.test(String(port[field]))) {
-        return invalidContainerOption(
-          `ports[${index}].${field}`,
-          "must be a port number or range when hostIp is set",
-        );
-      }
+    // Validate only the structured form; legacy compound strings go to Docker.
+    const hostPort = String(port.external);
+    const external = parseDecimalRange(hostPort, isPortNumber);
+    const internal = parseDecimalRange(String(port.internal), isPortNumber);
+    if (!external || !internal) {
+      return invalidContainerOption(
+        `ports[${index}].${external ? "internal" : "external"}`,
+        "must be a port number or range when hostIp is set (0–65535, ascending)",
+      );
+    }
+    const [firstInternal, lastInternal] = internal;
+    const [firstExternal, lastExternal] = external;
+    // Docker allows a host allocation range for a single container port.
+    // A container range instead maps one-to-one, except with automatic ports.
+    const internalSpan = lastInternal - firstInternal;
+    if (
+      internalSpan > 0 &&
+      !isAutomaticHostPort(hostPort) &&
+      lastExternal - firstExternal !== internalSpan
+    ) {
+      return invalidContainerOption(
+        `ports[${index}].external`,
+        "must match the size of the internal port range or be 0 for automatic allocation",
+      );
     }
     if (news.networkMode === "host") {
       return invalidContainerOption(
@@ -1533,16 +1548,24 @@ const validateContainerNetworks = (news: ContainerProps) => {
   return Effect.void;
 };
 
-// Validate the syntax before planning a replacement. Only the target
-// daemon knows which CPU and NUMA node IDs are available.
+const isAffinityId = Schema.is(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)));
+// Keep this on stable Schema primitives: Schema.Port is experimental.
+const isPortNumber = Schema.is(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })));
+
+const parseDecimalRange = (
+  value: string,
+  isEndpoint: (value: number) => boolean,
+): [first: number, last: number] | undefined => {
+  const match = /^(\d+)(?:-(\d+))?$/.exec(value);
+  if (!match) return undefined;
+  const first = Number(match[1]);
+  const last = match[2] === undefined ? first : Number(match[2]);
+  return isEndpoint(first) && isEndpoint(last) && last >= first ? [first, last] : undefined;
+};
+
+// Only the target daemon knows which CPU and NUMA node IDs are available.
 const isAffinityList = (value: string): boolean =>
-  value.split(",").every((part) => {
-    const match = /^(\d+)(?:-(\d+))?$/.exec(part);
-    if (!match) return false;
-    const first = Number(match[1]);
-    const last = match[2] === undefined ? first : Number(match[2]);
-    return Number.isSafeInteger(first) && Number.isSafeInteger(last) && last >= first;
-  });
+  value.split(",").every((part) => parseDecimalRange(part, isAffinityId) !== undefined);
 
 const validateContainerRuntime = (news: ContainerProps) => {
   if (news.capDrop?.some((capability) => capability.trim().length === 0)) {
@@ -1715,11 +1738,14 @@ const toPortAttributes = (info: Docker.Container): Record<string, number> => {
   return ports;
 };
 
+const isAutomaticHostPort = (port: string): boolean => /^0+$/.test(port);
+
 const formatPublishedPort = ({ external, internal, protocol, hostIp }: Container.PortMapping) => {
   const target = `${internal}/${protocol ?? "tcp"}`;
   // An omitted host port asks Docker to allocate one. Keep legacy compound
   // external strings verbatim; only a zero port itself means automatic.
-  const port = /^0+$/.test(String(external)) ? "" : String(external);
+  const hostPort = String(external);
+  const port = isAutomaticHostPort(hostPort) ? "" : hostPort;
   if (hostIp === undefined) return port ? `${port}:${target}` : target;
   const host = hostIp.includes(":") ? `[${hostIp}]` : hostIp;
   return `${host}:${port}:${target}`;

@@ -292,12 +292,20 @@ test.provider(
           ports: [
             { external: 0, internal: 8080, hostIp: "::1" },
             { external: `0.0.0.0:${hostPort}`, internal: 8081 },
+            { external: "9000-9002", internal: 8082, hostIp: "127.0.0.1" },
+            { external: "9003-9004", internal: "8083-8084", hostIp: "127.0.0.1" },
+            { external: 0, internal: "8085-8086", hostIp: "127.0.0.1" },
           ],
         }),
       );
       const configured = (yield* docker.container.inspect(stopped.id)).HostConfig.PortBindings;
       expect(configured?.["8080/tcp"]?.[0]?.HostIp).toBe("::1");
       expect(configured?.["8081/tcp"]).toEqual([{ HostIp: "0.0.0.0", HostPort: String(hostPort) }]);
+      expect(configured?.["8082/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "9000-9002" }]);
+      expect(configured?.["8083/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "9003" }]);
+      expect(configured?.["8084/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "9004" }]);
+      expect(configured?.["8085/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "" }]);
+      expect(configured?.["8086/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "" }]);
       yield* stack.destroy();
     }),
   { tags: ["provider:docker", "provider:docker:container", "local"] },
@@ -488,6 +496,22 @@ test.provider(
         {
           options: { ports: [{ external: 0, internal: 80, hostIp: "localhost" }] },
           reason: "ports[0].hostIp",
+        },
+        {
+          options: { ports: [{ external: 65536, internal: 80, hostIp: "127.0.0.1" }] },
+          reason: "ports[0].external",
+        },
+        {
+          options: { ports: [{ external: 8080, internal: "81-80", hostIp: "127.0.0.1" }] },
+          reason: "ports[0].internal",
+        },
+        {
+          options: { ports: [{ external: "8080-8082", internal: "80-81", hostIp: "127.0.0.1" }] },
+          reason: "ports[0].external",
+        },
+        {
+          options: { ports: [{ external: "0-0", internal: "80-81", hostIp: "127.0.0.1" }] },
+          reason: "ports[0].external",
         },
         { options: { sharedMemorySize: "0" }, reason: "sharedMemorySize" },
         { options: { sharedMemorySize: "-1m" }, reason: "sharedMemorySize" },
