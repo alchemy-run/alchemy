@@ -6,7 +6,8 @@
 import type { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import { WorkerLoader } from "@alchemy.run/cloudflare/Workers/WorkerLoader";
 import type { CodemodeRemote } from "@earendil-works/pi-codemode";
-import { WorkerEnvironment } from "alchemy/Workers/WorkerEnvironment";
+import type { RpcCallError } from "alchemy/Rpc";
+import type { WorkerEnvironment } from "alchemy/Workers/WorkerEnvironment";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { CodeModeError, Eval, quickJSEvaluator, type Evaluation } from "../CodeMode.ts";
@@ -99,25 +100,15 @@ export const EvalWorkerLoader = (
   Layer.effect(
     Eval,
     Effect.gen(function* () {
-      const name = options.name ?? "CODEMODE";
-      // Registers the binding; the raw loader is read from the environment
-      // where programs run, since its stubs speak promises.
-      yield* WorkerLoader(name);
-      const env = yield* WorkerEnvironment;
+      const loader = yield* WorkerLoader(options.name ?? "CODEMODE");
       const timeoutMs = options.timeoutMs ?? 60_000;
       return {
         run: (script, tools) =>
           Effect.gen(function* () {
-            const loader = loaderOf(env, name);
-            if (loader === undefined) {
-              return yield* new CodeModeError({
-                message: `AICloudflare.EvalWorkerLoader: no worker_loader binding named ${name}`,
-              });
-            }
             const source = isolateModule(script);
             // The same program loads the same isolate.
             const id = yield* load(() => digest(source));
-            const isolate = loader.get(id, () => ({
+            const isolate = yield* loader.get(id, () => ({
               compatibilityDate: options.compatibilityDate ?? "2026-01-28",
               mainModule: "program.js",
               modules: { "program.js": source },
@@ -134,25 +125,27 @@ export const EvalWorkerLoader = (
               }
             };
             // A program that does not compile fails where the isolate loads.
-            return yield* Effect.promise(() =>
-              (isolate.getEntrypoint() as unknown as ProgramIsolate)
-                .run(call)
-                .catch((cause): Evaluation => ({
-                  ok: false,
-                  message: messageOf(cause),
-                  output: [],
-                })),
-            ).pipe(
-              Effect.timeoutOrElse({
-                duration: timeoutMs,
-                orElse: () =>
+            return yield* isolate
+              .getEntrypoint<ProgramIsolate>()
+              .run(call)
+              .pipe(
+                Effect.catch((error) =>
                   Effect.succeed<Evaluation>({
                     ok: false,
-                    message: `The program ran longer than ${timeoutMs} ms.`,
+                    message: messageOf(error.cause),
                     output: [],
                   }),
-              }),
-            );
+                ),
+                Effect.timeoutOrElse({
+                  duration: timeoutMs,
+                  orElse: () =>
+                    Effect.succeed<Evaluation>({
+                      ok: false,
+                      message: `The program ran longer than ${timeoutMs} ms.`,
+                      output: [],
+                    }),
+                }),
+              );
           }),
       };
     }),
@@ -195,51 +188,44 @@ export const EvalQuickJSWorkerLoader = (
   Layer.effect(
     Eval,
     Effect.gen(function* () {
-      const name = options.name ?? "CODEMODE";
-      yield* WorkerLoader(name);
-      const env = yield* WorkerEnvironment;
+      const loader = yield* WorkerLoader(options.name ?? "CODEMODE");
       const interruptBudget = options.interruptBudget ?? 50_000;
       const memoryLimitBytes = options.memoryLimitBytes ?? 64 * 1024 * 1024;
       return quickJSEvaluator(
         Effect.gen(function* () {
-          const loader = loaderOf(env, name);
-          if (loader === undefined) {
-            return yield* new CodeModeError({
-              message: `AICloudflare.EvalQuickJSWorkerLoader: no worker_loader binding named ${name}`,
-            });
-          }
-          return yield* load(async () => {
-            const [
-              { RemoteCodemodeSandbox, cloudflareQuickJSWasm },
-              { ISOLATE_MODULE, ISOLATE_VERSION },
-            ] = await Promise.all([
+          const [
+            { RemoteCodemodeSandbox, cloudflareQuickJSWasm },
+            { ISOLATE_MODULE, ISOLATE_VERSION },
+          ] = yield* load(() =>
+            Promise.all([
               import("@earendil-works/pi-codemode/cloudflare"),
               import("../internal/codemode-isolate.generated.ts"),
-            ]);
-            const isolate = loader.get(
-              `${ISOLATE_VERSION}-${interruptBudget}-${memoryLimitBytes}`,
-              () => ({
-                compatibilityDate: options.compatibilityDate ?? "2026-01-28",
-                mainModule: "codemode.js",
-                modules: {
-                  "codemode.js": ISOLATE_MODULE,
-                  // The Worker's compiled module: isolates cannot compile wasm.
-                  "quickjs.wasm": { wasm: cloudflareQuickJSWasm as WebAssembly.Module },
-                },
-                // The limits are the isolate's, whatever a client asks for.
-                env: {
-                  MAX_INTERRUPT_BUDGET: interruptBudget,
-                  MAX_MEMORY_LIMIT_BYTES: memoryLimitBytes,
-                },
-                globalOutbound: null,
-              }),
-            );
-            return new RemoteCodemodeSandbox({
-              timeoutMs: options.timeoutMs ?? 60_000,
-              interruptBudget,
-              memoryLimitBytes,
-              remote: () => isolate.getEntrypoint() as unknown as CodemodeRemote,
-            });
+            ]),
+          );
+          const isolate = yield* loader.get(
+            `${ISOLATE_VERSION}-${interruptBudget}-${memoryLimitBytes}`,
+            () => ({
+              compatibilityDate: options.compatibilityDate ?? "2026-01-28",
+              mainModule: "codemode.js",
+              modules: {
+                "codemode.js": ISOLATE_MODULE,
+                // The Worker's compiled module: isolates cannot compile wasm.
+                "quickjs.wasm": { wasm: cloudflareQuickJSWasm as WebAssembly.Module },
+              },
+              // The limits are the isolate's, whatever a client asks for.
+              env: {
+                MAX_INTERRUPT_BUDGET: interruptBudget,
+                MAX_MEMORY_LIMIT_BYTES: memoryLimitBytes,
+              },
+              globalOutbound: null,
+            }),
+          );
+          return new RemoteCodemodeSandbox({
+            timeoutMs: options.timeoutMs ?? 60_000,
+            interruptBudget,
+            memoryLimitBytes,
+            // The sandbox is not Effect code: it calls the isolate's own entrypoint, which answers with promises.
+            remote: () => isolate.getEntrypoint().raw as unknown as CodemodeRemote,
           });
         }),
       );
@@ -251,9 +237,11 @@ type CallOutcome =
   | { readonly ok: true; readonly value: unknown }
   | { readonly ok: false; readonly message: string };
 
-/** The entrypoint of the module `isolateModule` writes. */
+/** The entrypoint of the module `isolateModule` writes, as the binding's stub gives it. */
 interface ProgramIsolate {
-  run(call: (tool: string, args: unknown) => Promise<CallOutcome>): Promise<Evaluation>;
+  readonly run: (
+    call: (tool: string, args: unknown) => Promise<CallOutcome>,
+  ) => Effect.Effect<Evaluation, RpcCallError>;
 }
 
 const messageOf = (cause: unknown): string =>
@@ -315,22 +303,3 @@ ${script}
   }
 }
 `;
-
-const loaderOf = (env: unknown, name: string): RawWorkerLoader | undefined =>
-  (env as Record<string, unknown> | undefined)?.[name] as RawWorkerLoader | undefined;
-
-/** The `worker_loader` binding as the Workers runtime hands it over. */
-interface RawWorkerLoader {
-  get(
-    id: string,
-    code: () => {
-      readonly compatibilityDate: string;
-      readonly mainModule: string;
-      readonly modules: Record<string, string | { readonly wasm: WebAssembly.Module }>;
-      readonly env: Record<string, unknown>;
-      readonly globalOutbound: null;
-    },
-  ): { getEntrypoint(): unknown };
-}
-
-/** What one session's Durable Object answers. */

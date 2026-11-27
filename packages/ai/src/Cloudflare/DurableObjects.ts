@@ -17,6 +17,7 @@ import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Host from "../Host.ts";
 
+/** What one session's Durable Object answers. */
 interface SessionObject {
   readonly call: (
     key: string,
