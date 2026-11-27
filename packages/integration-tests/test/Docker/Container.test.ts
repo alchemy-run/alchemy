@@ -251,19 +251,26 @@ test.provider(
     Effect.gen(function* () {
       const docker = yield* Docker.Docker;
       const hostPort = yield* findAvailablePort();
-      const deploy = (hostIp: string) =>
+      const rangeEnd = yield* findAvailablePort();
+      const rangeStart = rangeEnd - 1;
+      const deploy = (hostIp: string, legacy = false) =>
         Docker.Container("host-bound-ports", {
           image: "alpine:3.22",
           command: ["sleep", "3600"],
           stopTimeout: "1 second",
           start: true,
           ports: [
-            { external: hostPort, internal: 8080, hostIp },
+            legacy
+              ? { external: `${hostIp}:${hostPort}`, internal: 8080 }
+              : { external: hostPort, internal: 8080, hostIp },
             { external: "0", internal: 8081, hostIp, protocol: "udp" },
+            { external: `${rangeStart}-${rangeEnd}`, internal: 8082, hostIp },
           ],
         });
       const loopback = deploy("127.0.0.1");
+      const legacy = yield* stack.deploy(deploy("127.0.0.1", true));
       const first = yield* stack.deploy(loopback);
+      expect(first.id).toBe(legacy.id);
       const live = yield* docker.container.inspect(first.id);
       expect(live.NetworkSettings.Ports?.["8080/tcp"]).toEqual([
         { HostIp: "127.0.0.1", HostPort: String(hostPort) },
@@ -272,6 +279,12 @@ test.provider(
       expect(assigned).toBeGreaterThan(0);
       expect(live.NetworkSettings.Ports?.["8081/udp"]).toEqual([
         { HostIp: "127.0.0.1", HostPort: String(assigned) },
+      ]);
+      const ranged = first.ports["8082/tcp"];
+      expect(ranged).toBeGreaterThanOrEqual(rangeStart);
+      expect(ranged).toBeLessThanOrEqual(rangeEnd);
+      expect(live.NetworkSettings.Ports?.["8082/tcp"]).toEqual([
+        { HostIp: "127.0.0.1", HostPort: String(ranged) },
       ]);
       const unchanged = yield* stack.deploy(loopback);
       expect(unchanged.id).toBe(first.id);
@@ -302,6 +315,8 @@ test.provider(
       expect(configured?.["8080/tcp"]?.[0]?.HostIp).toBe("::1");
       expect(configured?.["8081/tcp"]).toEqual([{ HostIp: "0.0.0.0", HostPort: String(hostPort) }]);
       expect(configured?.["8082/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "9000-9002" }]);
+      expect(stopped.ports["8082/tcp"]).toBeUndefined();
+      expect(stopped.ports["8083/tcp"]).toBe(9003);
       expect(configured?.["8083/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "9003" }]);
       expect(configured?.["8084/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "9004" }]);
       expect(configured?.["8085/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "" }]);
@@ -513,6 +528,21 @@ test.provider(
           options: { ports: [{ external: "0-0", internal: "80-81", hostIp: "127.0.0.1" }] },
           reason: "ports[0].external",
         },
+        {
+          options: { ports: [{ external: 0, internal: 0, hostIp: "127.0.0.1" }] },
+          reason: "ports[0].internal",
+        },
+        {
+          options: { ports: [{ external: "0-1", internal: 80, hostIp: "127.0.0.1" }] },
+          reason: "ports[0].external",
+        },
+        {
+          options: {
+            networkMode: "none" as const,
+            ports: [{ external: 0, internal: 80, hostIp: "127.0.0.1" }],
+          },
+          reason: "ports[0].hostIp",
+        },
         { options: { sharedMemorySize: "0" }, reason: "sharedMemorySize" },
         { options: { sharedMemorySize: "-1m" }, reason: "sharedMemorySize" },
         { options: { sharedMemorySize: "1e999m" }, reason: "sharedMemorySize" },
@@ -605,6 +635,40 @@ test.provider(
       expect(
         inspected.HostConfig.SecurityOpt?.some((opt) => opt.startsWith("no-new-privileges")),
       ).toBe(true);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "replaces a legacy wildcard container before claiming a loopback binding on adoption",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const name = `alchemy-test-loopback-adoption-${stack.stage}`;
+      const { stdout } = yield* docker.run([
+        "container",
+        "create",
+        "--name",
+        name,
+        "-p",
+        "0.0.0.0:8080:80",
+        "alpine:3.22",
+      ]);
+      const original = stdout.trim();
+      yield* Effect.addFinalizer(() => docker.container.remove(original, true).pipe(Effect.ignore));
+      const resource = Docker.Container("loopback-adoption", {
+        name,
+        image: "alpine:3.22",
+        ports: [{ external: 8080, internal: 80, hostIp: "127.0.0.1" }],
+      });
+      const replacement = yield* stack.deploy(resource);
+      expect(replacement.id).not.toBe(original);
+      const inspected = yield* docker.container.inspect(replacement.id);
+      expect(inspected.HostConfig.PortBindings?.["80/tcp"]).toEqual([
+        { HostIp: "127.0.0.1", HostPort: "8080" },
+      ]);
+      expect((yield* stack.deploy(resource)).id).toBe(replacement.id);
       yield* stack.destroy();
     }),
   { tags: ["provider:docker", "provider:docker:container", "local"] },

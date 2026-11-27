@@ -1382,6 +1382,56 @@ const invalidContainerMapEntry = (entries: Record<string, string> | undefined) =
     ([key, value]) => !key.trim() || key.includes("=") || !value.trim(),
   );
 
+const validatePublishedPorts = (news: ContainerProps) => {
+  for (const [index, port] of (news.ports ?? []).entries()) {
+    if (port.hostIp === undefined) continue;
+    if (Result.isFailure(parseIpAddress(port.hostIp))) {
+      return invalidContainerOption(
+        `ports[${index}].hostIp`,
+        "must be an IPv4 or IPv6 address, without brackets",
+      );
+    }
+    // Validate only the structured form; legacy compound strings go to Docker.
+    const hostPort = String(port.external);
+    const external = parseDecimalRange(hostPort, isPortNumber);
+    if (!external || (external[0] === 0 && external[1] > 0)) {
+      return invalidContainerOption(
+        `ports[${index}].external`,
+        "must be a port number or range when hostIp is set (1–65535, ascending), or 0 for automatic allocation",
+      );
+    }
+    const internal = parseDecimalRange(String(port.internal), isPortNumber);
+    if (!internal || internal[0] === 0) {
+      return invalidContainerOption(
+        `ports[${index}].internal`,
+        "must be a port number or range from 1 to 65535 when hostIp is set",
+      );
+    }
+    const [firstInternal, lastInternal] = internal;
+    const [firstExternal, lastExternal] = external;
+    // Docker allows a host allocation range for a single container port.
+    // A container range instead maps one-to-one, except with automatic ports.
+    const internalSpan = lastInternal - firstInternal;
+    if (
+      internalSpan > 0 &&
+      !isAutomaticHostPort(hostPort) &&
+      lastExternal - firstExternal !== internalSpan
+    ) {
+      return invalidContainerOption(
+        `ports[${index}].external`,
+        "must match the size of the internal port range or be 0 for automatic allocation",
+      );
+    }
+    if (news.networkMode === "host" || news.networkMode === "none") {
+      return invalidContainerOption(
+        `ports[${index}].hostIp`,
+        "requires a network mode that supports port publishing",
+      );
+    }
+  }
+  return Effect.void;
+};
+
 const validateContainerValues = (news: ContainerProps) => {
   if (Object.keys(news.labels ?? {}).some((key) => key.startsWith("alchemy::"))) {
     return invalidContainerOption("labels", "must not use the reserved alchemy:: prefix");
@@ -1454,46 +1504,6 @@ const validateContainerValues = (news: ContainerProps) => {
     news.ipcNamespace !== "shareable"
   ) {
     return invalidContainerOption("sharedMemorySize", "requires private or shareable ipcNamespace");
-  }
-  for (const [index, port] of (news.ports ?? []).entries()) {
-    if (port.hostIp === undefined) continue;
-    if (Result.isFailure(parseIpAddress(port.hostIp))) {
-      return invalidContainerOption(
-        `ports[${index}].hostIp`,
-        "must be an IPv4 or IPv6 address, without brackets",
-      );
-    }
-    // Validate only the structured form; legacy compound strings go to Docker.
-    const hostPort = String(port.external);
-    const external = parseDecimalRange(hostPort, isPortNumber);
-    const internal = parseDecimalRange(String(port.internal), isPortNumber);
-    if (!external || !internal) {
-      return invalidContainerOption(
-        `ports[${index}].${external ? "internal" : "external"}`,
-        "must be a port number or range when hostIp is set (0–65535, ascending)",
-      );
-    }
-    const [firstInternal, lastInternal] = internal;
-    const [firstExternal, lastExternal] = external;
-    // Docker allows a host allocation range for a single container port.
-    // A container range instead maps one-to-one, except with automatic ports.
-    const internalSpan = lastInternal - firstInternal;
-    if (
-      internalSpan > 0 &&
-      !isAutomaticHostPort(hostPort) &&
-      lastExternal - firstExternal !== internalSpan
-    ) {
-      return invalidContainerOption(
-        `ports[${index}].external`,
-        "must match the size of the internal port range or be 0 for automatic allocation",
-      );
-    }
-    if (news.networkMode === "host") {
-      return invalidContainerOption(
-        `ports[${index}].hostIp`,
-        "requires a network mode that supports port publishing",
-      );
-    }
   }
   for (const [index, value] of (news.dns ?? []).entries()) {
     if (Result.isFailure(parseIpAddress(value))) {
@@ -1696,6 +1706,7 @@ const validateContainerMounts = (news: ContainerProps) => {
 const validateContainerOptions = (news: ContainerProps) =>
   Effect.gen(function* () {
     yield* validateContainerValues(news);
+    yield* validatePublishedPorts(news);
     yield* validateContainerNetworks(news);
     yield* validateContainerRuntime(news);
     yield* validateContainerMounts(news);
@@ -1710,8 +1721,9 @@ const boundHostPort = (
 ): number | undefined => {
   for (const binding of bindings ?? []) {
     if (!binding.HostPort) continue;
-    const port = Number.parseInt(binding.HostPort, 10);
-    if (Number.isInteger(port) && port > 0) return port;
+    // A requested allocation range is not an assigned port.
+    const port = Number(binding.HostPort);
+    if (isPortNumber(port) && port > 0) return port;
   }
   return undefined;
 };

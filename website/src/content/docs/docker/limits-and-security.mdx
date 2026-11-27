@@ -41,7 +41,7 @@ const worker = yield* Docker.Container("worker", {
 
 ## Pin execution and memory allocation
 
-On a Linux Docker engine with CPU-set support, `cpuSet: "0,2-4"` restricts execution to the listed CPUs, while `memoryNodes: "0"` restricts allocation to that NUMA node. Use IDs available to the target daemon. These settings are independent of `cpus`, which limits CPU time without choosing where the container runs.
+On a Linux Docker engine with CPU-set support, `cpuSet: "0,2-4"` restricts execution to the listed CPUs, while `memoryNodes: "0"` restricts allocation to that NUMA node. Use IDs available to the target daemon. Alchemy validates the list syntax; only the daemon can validate availability. Check the target before changing these settings on a running container, since Alchemy replaces it. These settings are independent of `cpus`, which limits CPU time without choosing where the container runs.
 
 ## Drop privileges
 
