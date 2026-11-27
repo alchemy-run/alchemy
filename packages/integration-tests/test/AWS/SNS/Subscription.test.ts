@@ -106,6 +106,57 @@ test.provider(
   },
 );
 
+// Renaming the topic replaces it. The subscription's diff sees an unresolved
+// `topicArn` and updates in place, so reconcile must move it to the new topic.
+test.provider(
+  "follows a replaced topic",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployWith = (topicName: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const topic = yield* AWS.SNS.Topic("FollowTopic", { topicName });
+            const queue = yield* AWS.SQS.Queue("FollowQueue");
+            const subscription = yield* Subscription("FollowSubscription", {
+              topicArn: topic.topicArn,
+              protocol: "sqs",
+              endpoint: queue.queueArn,
+              returnSubscriptionArn: true,
+            });
+            return { topic, subscription };
+          }),
+        );
+
+      const initial = yield* deployWith("alchemy-test-sns-follow-a");
+      const replaced = yield* deployWith("alchemy-test-sns-follow-b");
+
+      expect(replaced.topic.topicArn).not.toEqual(initial.topic.topicArn);
+      expect(replaced.subscription.topicArn).toEqual(replaced.topic.topicArn);
+
+      const attributes = yield* SNS.getSubscriptionAttributes({
+        SubscriptionArn: replaced.subscription.subscriptionArn,
+      });
+      expect(attributes.Attributes?.TopicArn).toBe(replaced.topic.topicArn);
+
+      const subscribers = yield* SNS.listSubscriptionsByTopic({
+        TopicArn: replaced.topic.topicArn,
+      });
+      expect(subscribers.Subscriptions?.map((s) => s.SubscriptionArn)).toContain(
+        replaced.subscription.subscriptionArn,
+      );
+
+      yield* stack.destroy();
+      yield* assertSubscriptionDeleted(initial.subscription.subscriptionArn);
+      yield* assertSubscriptionDeleted(replaced.subscription.subscriptionArn);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:sns", "provider:aws:sqs", "live"],
+    timeout: 180_000,
+  },
+);
+
 class SubscriptionStillExists extends Data.TaggedError("SubscriptionStillExists") {}
 
 const assertSubscriptionDeleted = Effect.fn(function* (subscriptionArn: string) {
