@@ -1273,6 +1273,7 @@ const base: ReadonlyArray<Group> = [
       `(() => { const seen = MutableHashSet.fromIterable(members); MutableHashSet.add(seen, a); MutableHashSet.remove(seen, 2); return [MutableHashSet.size(seen), MutableHashSet.has(seen, a)]; })()`,
       `(() => { const seen = MutableHashSet.make(a); MutableHashSet.clear(seen); return MutableHashSet.size(seen); })()`,
       `MutableHashSet.size(MutableHashSet.empty())`,
+      `[...HashSet.make({ n: a }, { m: 1 })].length`,
     ],
   },
   {
@@ -3733,6 +3734,7 @@ const rest: ReadonlyArray<Group> = [
     ...numbers,
     effectful: true,
     prelude: [
+      `export class Format extends Context.Reference<(n: number) => string>("test/Format", { defaultValue: () => (n) => "" + n * 2 }) {}`,
       `import * as Layer from "effect/Layer";`,
       `import * as Context from "effect/Context";`,
       `export class Rate extends Context.Service<Rate, { readonly percent: number }>()("test/Rate") {}`,
@@ -3788,6 +3790,7 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const outer = yield* Step; const inner = yield* Effect.provideService(Step, Step, a); return [outer, inner, yield* Step]; })`,
       `priced.pipe(Effect.provide(Layer.fresh(Layer.mergeAll(Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee, { flat: 0 }), Layer.effectDiscard(Effect.void), Layer.empty))))`,
       `Effect.succeed([Bytes.concat(new Uint8Array([1, 2]), new Uint8Array([3])).length, Bytes.Equivalence(new Uint8Array([1]), new Uint8Array([1])), Bytes.Order(new Uint8Array([1]), new Uint8Array([2])), new Uint8Array(3).length, a])`,
+      `Effect.map(Format, (format) => format(4).length + a)`,
     ],
     unread: [
       [
@@ -4477,6 +4480,10 @@ const shapes: ReadonlyArray<Group> = [
       body(
         `switch (shape.kind._tag) { case "Good": return shape.kind.grams; case "Service": return shape.kind.minutes; default: return 0; }`,
       ),
+    ],
+    unread: [
+      [`shape.label ?? missingName`, /missingName/],
+      [`Option.getOrElse(shape.note, () => missingName)`, /missingName/],
     ],
   },
   {

@@ -28,7 +28,10 @@ export const files: Readonly<Record<string, string>> = {
     `export namespace Space { export const inside = 21; }`,
     `export class Counter { constructor(readonly n: number) {} }`,
     `export default function byDefault(n: number) { return n - 1; }`,
+    `export const { length: stamp } = new Intl.NumberFormat("en-US").format(1234);`,
+    `export const { format: grouped } = new Intl.NumberFormat("en-US");`,
   ].join("\n"),
+  "data.json": `{ "n": 3 }`,
   "value.ts": [`const value = 9;`, `export default value;`].join("\n"),
   "arrow.ts": `export default (n: number) => n + 10;`,
   "more.ts": [
@@ -74,6 +77,11 @@ export const imports: ReadonlyArray<string> = [
   `import { uno, double as barrelDouble, four, plus, deepest, packed, theDefault, triple as barrelTriple } from "./barrel.ts";`,
   `import * as Barrel from "./barrel.ts";`,
   `import { round } from "./loop-a.ts";`,
+  `import { stamp, grouped } from "./lib.ts";`,
+  `import data from "./data.json" with { type: "json" };`,
+  `import * as NodePath from "node:path";`,
+  `import * as NodeOs from "os";`,
+  `import vitestPackage from "vitest/package.json" with { type: "json" };`,
 ];
 
 /** The aggregate's own top-level lines. */
@@ -158,6 +166,22 @@ export const cases: ReadonlyArray<Case> = [
   read("ExportedPlainClass", `new Lib.Counter(a).n`),
   // A name a file declares and does not export is not on its namespace.
   read("NotExported", `Lib.hidden === undefined ? a : -1`),
+  // An export the prover does not read is the value the file's module holds.
+  read("ExportedReadFromTheModule", `stamp + a`),
+  // A function the module holds whose source is not a function the file writes is not read.
+  unread(
+    "CallsAFunctionOfTheModule",
+    `grouped(1234).length + a`,
+    /calls grouped, which is outside the code the prover reads/,
+  ),
+  unread("ImportedJson", `data.n + a`, /./),
+  unread(
+    "ImportedPackageJson",
+    `vitestPackage.name.length + a`,
+    /applies \+ to values the prover cannot do arithmetic on/,
+  ),
+  unread("ImportedBareBuiltin", `NodeOs.EOL.length + a`, /./),
+  unread("ImportedNodeModule", `NodePath.basename("x/y") + a`, /./),
   read("NotExportedOfBarrel", `[Barrel.one, Barrel.hidden, Barrel.half].length + a`),
 ];
 

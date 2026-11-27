@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Exit from "effect/Exit";
+import { identity } from "effect/Function";
 import * as Random from "effect/Random";
 import { Instant, type Timekeeping } from "../../internal.ts";
 import type { Eval, Run, Site, Stop, V } from "./Value.ts";
@@ -39,7 +40,7 @@ export class Timeline {
     const text = (time: Time): string => (typeof time === "number" ? String(time) : time);
     const keeping: Timekeeping<Time> = {
       zero: 0,
-      of: (millis) => millis,
+      of: identity,
       add: (time, span) =>
         typeof time === "number" && typeof span === "number"
           ? time + span
@@ -247,14 +248,16 @@ const MAX_WAITS = 10_000;
  * as a handler's does: the time it reads is the time the command is handled
  * at, however long it waits. A sleep is the timeline's.
  */
+/** What every reading of the handler's clock in nanoseconds gives: it does not move. */
+const zeroNanos = (): bigint => 0n;
 const clockOf = (timeline: Timeline, site: Site): Clock.Clock => {
   let waits = 0;
   return {
     currentTimeMillisUnsafe: () => 0,
     currentTimeMillis: Effect.succeed(0),
-    currentTimeNanosUnsafe: () => 0n,
+    currentTimeNanosUnsafe: zeroNanos,
     currentTimeNanos: Effect.succeed(0n),
-    monotonicTimeNanosUnsafe: () => 0n,
+    monotonicTimeNanosUnsafe: zeroNanos,
     monotonicTimeNanos: Effect.succeed(0n),
     sleep: (duration) => {
       if (++waits <= MAX_WAITS) return timeline.instant.sleep(Duration.toMillis(duration));

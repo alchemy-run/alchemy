@@ -453,7 +453,6 @@ export const make = (given: Loader, run: Run): Interpreter => {
     load: (file) => Timeline.outside(given.load(file)),
     resolve: (from, specifier) => Timeline.outside(given.resolve(from, specifier)),
     runtime: (from, specifier) => Timeline.outside(given.runtime(from, specifier)),
-    parse: (file, text) => Timeline.outside(given.parse(file, text)),
   };
   const current: Interpreter["current"] = { run };
 
@@ -2882,14 +2881,12 @@ export const make = (given: Loader, run: Run): Interpreter => {
         if (typeof node.bigint === "string") return { _tag: "Big", value: BigInt(node.bigint) };
         // A regular expression: the language's own, made each time the code comes to it.
         if (node.regex)
-          return yield* Effect.try({
-            try: (): V => ({
-              _tag: "Host",
-              value: new RegExp(node.regex.pattern, node.regex.flags),
-              name: "a regular expression",
-            }),
-            catch: () => Value.notTranslated(site, "writes a regular expression that is not one"),
-          });
+          // The file was imported before it is read, so the language took the expression already.
+          return {
+            _tag: "Host",
+            value: new RegExp(node.regex.pattern, node.regex.flags),
+            name: "a regular expression",
+          } satisfies V;
         return value === null && node.raw === "null"
           ? Value.nil
           : yield* fail(site, "uses a literal the prover does not read");
