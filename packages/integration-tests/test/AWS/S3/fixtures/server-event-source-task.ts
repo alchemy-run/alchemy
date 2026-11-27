@@ -78,7 +78,6 @@ export default class ServerEventTask extends AWS.ECS.Task<ServerEventTask>()(
   "S3ServerEventTask",
   {
     main: import.meta.filename,
-    image: "oven/bun:1",
     cpu: 256,
     memory: 512,
     container: {

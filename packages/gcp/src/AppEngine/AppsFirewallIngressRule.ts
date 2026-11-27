@@ -208,15 +208,7 @@ export const AppsFirewallIngressRuleProvider = () =>
 
       if (current === undefined) {
         const created = yield* appengine
-          .createAppsFirewallIngressRules({
-            appsId,
-            body: {
-              priority,
-              action,
-              sourceRange,
-              description,
-            },
-          })
+          .createAppsFirewallIngressRules({ priority, action, sourceRange, description, appsId })
           .pipe(Effect.catchTag("Conflict", () => getByPriority(appsId, priority)));
         current = created ?? undefined;
       }
@@ -239,15 +231,13 @@ export const AppsFirewallIngressRuleProvider = () =>
       );
       if (updateMask.length > 0) {
         current = yield* appengine.patchAppsFirewallIngressRules({
+          priority: observedPriority,
+          action,
+          sourceRange,
+          description,
           appsId,
           ingressRulesId: String(observedPriority),
           updateMask,
-          body: {
-            priority: observedPriority,
-            action,
-            sourceRange,
-            description,
-          },
         });
       }
 

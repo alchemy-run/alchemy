@@ -236,12 +236,10 @@ export const EnvironmentsKeyvaluemapProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsEnvironmentsKeyvaluemaps({
+            name: keyvaluemapId,
+            encrypted: news.encrypted !== false,
+            maskedValues: desiredMasked ? true : undefined,
             parent,
-            body: {
-              name: keyvaluemapId,
-              encrypted: news.encrypted !== false,
-              maskedValues: desiredMasked ? true : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -253,12 +251,9 @@ export const EnvironmentsKeyvaluemapProvider = () =>
 
       if ((current.maskedValues === true) !== desiredMasked) {
         current = yield* apigee.updateOrganizationsEnvironmentsKeyvaluemaps({
+          encrypted: current.encrypted !== false,
+          maskedValues: desiredMasked ? true : undefined,
           name,
-          body: {
-            name: keyvaluemapId,
-            encrypted: current.encrypted !== false,
-            maskedValues: desiredMasked ? true : undefined,
-          },
         });
       }
 

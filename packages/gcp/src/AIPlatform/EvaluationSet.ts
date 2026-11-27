@@ -285,13 +285,11 @@ export const EvaluationSetProvider = () =>
       if (current === undefined) {
         current = yield* aiplatform
           .createProjectsLocationsEvaluationSets({
+            displayName,
+            evaluationItems,
+            agentConfigs: news.agentConfigs,
+            metadata: desiredMetadata,
             parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              displayName,
-              evaluationItems,
-              agentConfigs: news.agentConfigs,
-              metadata: desiredMetadata,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, location)));
       }
@@ -319,13 +317,10 @@ export const EvaluationSetProvider = () =>
 
         current = yield* aiplatform
           .patchProjectsLocationsEvaluationSets({
+            evaluationItems,
+            agentConfigs: news.agentConfigs,
             name: resolvedName,
             updateMask: updateMask.join(","),
-            body: {
-              name: resolvedName,
-              evaluationItems,
-              agentConfigs: news.agentConfigs,
-            },
           })
           .pipe(
             Effect.retry({

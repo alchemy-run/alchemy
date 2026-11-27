@@ -172,10 +172,7 @@ export const KeyvaluemapsEntryProvider = () =>
 
       if (current === undefined) {
         const created = yield* apigee
-          .createOrganizationsKeyvaluemapsEntries({
-            parent,
-            body: { name: entryId, value: desiredValue },
-          })
+          .createOrganizationsKeyvaluemapsEntries({ name: entryId, value: desiredValue, parent })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -186,8 +183,8 @@ export const KeyvaluemapsEntryProvider = () =>
 
       if ((current.value ?? "") !== desiredValue) {
         current = yield* apigee.updateOrganizationsKeyvaluemapsEntries({
+          value: desiredValue,
           name: current.name?.includes("/") ? current.name : name,
-          body: { name: entryId, value: desiredValue },
         });
       }
 

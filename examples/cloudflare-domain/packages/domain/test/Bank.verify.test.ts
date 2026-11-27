@@ -25,6 +25,8 @@ it.effect(
       const report = yield* Verify.model(Bank, {
         apis: [CustomerApi, SupportApi],
         story,
+        // Each rule as it is written is kept in this file: one taken out, or made to say less, fails.
+        lock: "./Bank.lock.json",
         // An account's own rules have to stay proved: one that slips to checked fails this.
         require: {
           proved: [
@@ -53,6 +55,7 @@ it.effect(
         "Account.OnlyAnAgentChangesTheOwner": "proved",
         // Registering is a decision across a customer and a username: its rules are proved too.
         "UsernameClaim.AClaimedNameStaysWithItsHolder": "proved",
+        "ContactDetails.AnAddressIsSealedForItsCustomer": "proved",
         "RegisterCustomer.TheNameGoesToWhoRegistered": "proved",
         "RegisterCustomer.OnlyAFreeNameIsClaimed": "proved",
         // These are about several instances: no sequence of two commands breaks them.
@@ -63,9 +66,18 @@ it.effect(
         "Bank.AClaimedNameBelongsToItsCustomer": "proved",
         "Bank.ARegisteredCustomerHoldsTheirName": "proved",
         "Bank.EveryTransferEnds": "checked",
+        // What the bank must be able to do: a sequence of commands gets there.
+        "Bank.AnAccountHoldsMoney": "reached",
       });
+      // The proofs are of what the prover read: the real code did the same on every path compared.
+      expect(report.explored.agreement.compared).toBeGreaterThan(50);
+      expect(report.explored.disagreements).toEqual([]);
       // Every sequence found ran on the real bank, with its policies, saga, views and
       // projections, and so did the walks of commands picked at random.
+      // Its rewrites are part of what it promises: each is proved to break no rule of its aggregate.
+      expect(
+        Object.fromEntries(report.changes.map((change) => [change.name, change.standing])),
+      ).toEqual({ ForgetOwner: "proved", ReleaseUsername: "proved", DeleteCustomer: "proved" });
       expect(report.runs.length - report.walked).toBeGreaterThan(20);
       expect(report.walked).toBeGreaterThan(50);
       expect(report.explored.projections).toEqual(["Ledger"]);
@@ -84,6 +96,9 @@ it.effect(
 
 it.effect(
   "an account keeps its rules",
-  () => Verify.aggregate(Account).pipe(Effect.provide(NodeServices.layer)),
+  () =>
+    Verify.aggregate(Account, { lock: "./Bank.lock.json" }).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
   120_000,
 );

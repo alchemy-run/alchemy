@@ -249,7 +249,7 @@ const commitTransfer = Effect.fn(function* (params: {
         [params.className]: {
           type: "durable-object",
           state: "transferred",
-          transferred_to: params.toScript,
+          transferredTo: params.toScript,
         },
       },
     },

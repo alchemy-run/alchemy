@@ -7,6 +7,7 @@ import {
   type IgnoreRules,
   type WalkEntryType,
 } from "@alchemy.run/node-utils/ignore-rules";
+import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -221,10 +222,15 @@ const hashDirectory = Effect.fn(function* (
   memo: MemoOptions | undefined,
   /** Always excluded (gitignore syntax), whatever `memo` says. */
   alwaysExclude: ReadonlyArray<string>,
+  /** Alchemy's runtime directory (absolute): its files are never hashed. */
+  runtimeDir: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const files = yield* listInputFiles(rootDir, memo, alwaysExclude);
+  const files = (yield* listInputFiles(rootDir, memo, alwaysExclude)).filter((file) => {
+    const relative = path.relative(runtimeDir, path.join(rootDir, file));
+    return relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
+  });
   if (memo?.lockfile ?? !(memo?.include || memo?.exclude)) {
     const lockfile = yield* findUp(rootDir, LOCKFILE_NAMES);
     if (lockfile !== undefined) {
@@ -279,6 +285,9 @@ export const hashInput = Effect.fn(function* (params: {
   const path = yield* Path.Path;
   // Dependency trees, VCS metadata, alchemy's state and the framework's own
   // build output (hashing it would make every build bust its memo).
+  // `ALCHEMY_DIR` can move alchemy's state under any name, so each tree drops
+  // the files inside it by path, not by an ignore rule.
+  const runtimeDir = path.resolve(yield* dotAlchemyDirectory);
   const alwaysExclude = [
     "node_modules/",
     ".git/",
@@ -306,9 +315,12 @@ export const hashInput = Effect.fn(function* (params: {
           .map((dir) => ({ dir }));
   const [root, ...workspaceHashes] = yield* Effect.all(
     [
-      hashDirectory(params.rootDir, params.memo, alwaysExclude),
+      hashDirectory(params.rootDir, params.memo, alwaysExclude, runtimeDir),
       ...workspaces.map(({ dir, memo }) =>
-        Effect.map(hashDirectory(dir, memo, alwaysExclude), (hash) => `${relative(dir)}:${hash}`),
+        Effect.map(
+          hashDirectory(dir, memo, alwaysExclude, runtimeDir),
+          (hash) => `${relative(dir)}:${hash}`,
+        ),
       ),
     ],
     { concurrency: 4 },

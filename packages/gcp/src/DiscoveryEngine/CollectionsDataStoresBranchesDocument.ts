@@ -249,15 +249,13 @@ export const CollectionsDataStoresBranchesDocumentProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsDataStoresBranchesDocuments({
+            jsonData,
+            structData: news.structData,
+            content: news.content,
+            parentDocumentId: news.parentDocumentId,
+            schemaId: news.schemaId,
             parent,
             documentId,
-            body: {
-              jsonData,
-              structData: news.structData,
-              content: news.content,
-              parentDocumentId: news.parentDocumentId,
-              schemaId: news.schemaId,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -279,15 +277,12 @@ export const CollectionsDataStoresBranchesDocumentProvider = () =>
       if (jsonChanged || structChanged || contentChanged || parentChanged || schemaChanged) {
         current =
           yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresBranchesDocuments({
+            jsonData,
+            structData: news.structData,
+            content: news.content,
+            parentDocumentId: news.parentDocumentId,
+            schemaId: news.schemaId,
             name: resource,
-            body: {
-              name: resource,
-              jsonData,
-              structData: news.structData,
-              content: news.content,
-              parentDocumentId: news.parentDocumentId,
-              schemaId: news.schemaId,
-            },
           });
       }
 

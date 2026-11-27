@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -7,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
@@ -14,6 +16,7 @@ import * as Aggregate from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
 import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
+import * as Compaction from "./Compaction.ts";
 import type * as Decision from "./Decision.ts";
 import {
   DecisionsUnsupported,
@@ -21,12 +24,16 @@ import {
   UnhandledCommand,
   ForeignAppend,
   LazyViewNeedsOneSource,
+  MissingRewriteHandler,
   MissingWorkflowEngine,
+  ReservedMember,
   UnvalidatedRead,
 } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import * as Key from "./Key.ts";
+import * as Mention from "./Mention.ts";
+import type * as Middleware from "./Middleware.ts";
 import {
   type Accepted,
   type AggregateStore,
@@ -39,6 +46,7 @@ import {
   Platform,
   type PolicyStore,
   type ProjectionStore,
+  type Revised,
   type StoredEvent,
   type StreamEntry,
   type StreamMeta,
@@ -55,9 +63,11 @@ import * as Query from "./Query.ts";
 import * as Read from "./Read.ts";
 import type * as Relation from "./Relation.ts";
 import * as RequestContext from "./RequestContext.ts";
+import * as Rewrite from "./Rewrite.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
+import * as Vault from "./Vault.ts";
 import * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
@@ -123,8 +133,17 @@ export interface Members<
   G extends ReadonlyArray<Saga.Any> = readonly [],
   Q extends ReadonlyArray<Query.Any> = readonly [],
   D extends ReadonlyArray<Decision.Any> = readonly [],
+  C extends ReadonlyArray<Compaction.Any> = readonly [],
 > {
   readonly aggregates: A;
+  /**
+   * The rewrites that may be run on the model's aggregates. A projection
+   * given events one of them changes needs a `rewrite` handler in its Layer:
+   * the model fails to build without it.
+   */
+  readonly rewrites?: ReadonlyArray<Rewrite.Any>;
+  /** The compactions of the model's aggregates. `layer` requires each one's Layer. */
+  readonly compactions?: C;
   /**
    * The decisions that implement commands across several aggregates. Each
    * command has one implementation: listing a decision for a command an
@@ -165,6 +184,15 @@ export interface Members<
    * one that ends without it.
    */
   readonly eventually?: {
+    readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
+  };
+  /**
+   * What must be able to happen. Every other rule says what the model never
+   * does, and a model that refuses every command keeps them all. Each of
+   * these is named and given what an invariant is, and `Verify.model` looks
+   * for a sequence of commands that makes it true: it fails when none does.
+   */
+  readonly sometimes?: {
     readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
   };
 }
@@ -234,6 +262,8 @@ export interface ModelClass<
   readonly invariants: { readonly [name: string]: (model: never) => boolean };
   /** What holds once everything has run its course, by name. */
   readonly eventually: { readonly [name: string]: (model: never) => boolean };
+  /** What must be able to happen, by name. */
+  readonly sometimes: { readonly [name: string]: (model: never) => boolean };
   /** The model's relations, by name. */
   readonly relations: { readonly [name: string]: Relation.Any };
   readonly definitions: Kernel.Definitions;
@@ -356,6 +386,58 @@ type ProvidedBy<
   | Saga.Identifier<G[number]>
   | Projection.ProgressIdentifier<J[number]>;
 
+/** The middleware among `Ms` that checks something, where one that provides request context only says who is calling. */
+type Checks<Ms extends Middleware.List> = Ms[number] extends infer M
+  ? M extends RpcMiddleware.AnyService
+    ? [RpcMiddleware.Provides<M["Identifier"]>] extends [never]
+      ? M["Identifier"]
+      : never
+    : never
+  : never;
+
+/**
+ * A mention of something behind the middleware `Ms`: running the process
+ * requires the hosted model and a Layer for each middleware that checks
+ * something, and a session is started as the request context the others
+ * provide.
+ */
+type MentionBehind<Provided, Ms extends Middleware.List> = Mention.Mention<
+  Provided | Checks<Ms>,
+  Middleware.Provides<Ms>
+>;
+
+/**
+ * What an `AI.Process` mentions of a model, as members of its class: each
+ * command by its tag, each aggregate by its name (every command it takes),
+ * and each view by its name (its state for a key).
+ */
+export type Mentions<
+  Provided,
+  A extends ReadonlyArray<Aggregate.Any>,
+  V extends ReadonlyArray<View.Any>,
+  D extends ReadonlyArray<Decision.Any> = readonly [],
+> = {
+  readonly [
+    C in A[number]["definition"]["commands"][number] | D[number]["command"] as Named<C["tag"]>
+  ]: MentionBehind<Provided, C["middleware"]>;
+} & {
+  readonly [K in A[number] as Named<K["aggregateName"]>]: MentionBehind<
+    Provided,
+    K["definition"]["commands"][number]["middleware"]
+  >;
+} & {
+  readonly [K in V[number] as Named<K["viewName"]>]: MentionBehind<
+    Provided,
+    Read.MiddlewareOf<K["definition"]>
+  >;
+};
+
+/**
+ * A name known as one literal. A model whose members were widened, or
+ * named by a pattern (`Balance\${number}`), has no member to mention for them.
+ */
+type Named<Name extends string> = {} extends Record<Name, unknown> ? never : Name;
+
 /** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
 export interface LayerOptions<Views extends string = string> {
   /** What the hosted model records in traces. See {@link Telemetry.Options}. */
@@ -402,9 +484,11 @@ type HandledBy<
   Q extends ReadonlyArray<Query.Any> = readonly [],
   V extends ReadonlyArray<View.Any> = readonly [],
   S extends ReadonlyArray<DomainStream.Any> = readonly [],
+  C extends ReadonlyArray<Compaction.Any> = readonly [],
 > =
   | Identifier<P[number]>
   | Identifier<J[number]>
+  | Compaction.Identifier<C[number]>
   | Saga.ImplementationIdentifier<G[number]>
   | Query.Identifier<Q[number]>
   | ValidatorOf<V[number]>
@@ -434,6 +518,25 @@ type HandledBy<
  * export const BankInMemory = Bank.layer(MainAccountProvisioningLive).pipe(
  *   Layer.provide(Domain.InMemory),
  * );
+ * ```
+ *
+ * ### Checking the declaration
+ * Building the Layer checks the definitions first: a view consuming a source
+ * keyed by another aggregate without `keyOf`, a view with `state` but no
+ * `initial`, a policy listening for an event no source emits, a stream with
+ * two writers, a schema with no JSON form. It dies with a
+ * `Domain.DefinitionError` for each problem, all in one Cause, so a test
+ * that builds the Layer reports every one. Problems that depend on what a
+ * handler returns, such as `decide` returning an event its command does not
+ * declare, surface when the handler runs.
+ *
+ * **Example:** A unit test for the whole Model
+ * ```typescript
+ * import { it } from "@effect/vitest";
+ * import * as Layer from "effect/Layer";
+ * import { BankInMemory } from "./Bank.ts";
+ *
+ * it.effect("the model is well defined", () => Layer.build(BankInMemory));
  * ```
  *
  * ### Deciding across aggregates
@@ -480,16 +583,18 @@ export const make = <
   const G extends ReadonlyArray<Saga.Any> = readonly [],
   const Q extends ReadonlyArray<Query.Any> = readonly [],
   const D extends ReadonlyArray<Decision.Any> = readonly [],
+  const C extends ReadonlyArray<Compaction.Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, P, J, S, G, Q, D>,
+  members: Members<A, V, P, J, S, G, Q, D, C>,
   annotations: Annotations = {},
 ): ModelClass<
   Name,
   ProvidedBy<A, V, J, S, G, D>,
-  HandledBy<P, J, G, Q, V, S>,
+  HandledBy<P, J, G, Q, V, S, C>,
   ServableBy<A, V, S, Q, D>
-> => {
+> &
+  Mentions<ProvidedBy<A, V, J, S, G, D>, A, V, D> => {
   const decisions = (members.decisions ?? []) as ReadonlyArray<Decision.Any>;
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
@@ -499,8 +604,10 @@ export const make = <
     projections: members.projections ?? [],
     streams: members.streams ?? [],
     queries: members.queries ?? [],
+    rewrites: members.rewrites ?? [],
+    compactions: members.compactions ?? [],
   };
-  return class {
+  const model = class {
     static readonly kind = "Model" as const;
     static readonly annotations: Annotations = annotations;
     static readonly modelName: Name = name;
@@ -510,6 +617,9 @@ export const make = <
       readonly [name: string]: (model: never) => boolean;
     };
     static readonly eventually = (members.eventually ?? {}) as {
+      readonly [name: string]: (model: never) => boolean;
+    };
+    static readonly sometimes = (members.sometimes ?? {}) as {
       readonly [name: string]: (model: never) => boolean;
     };
     static readonly relations = members.relations ?? {};
@@ -525,7 +635,7 @@ export const make = <
     static readonly streams = definitions.streams;
     static readonly queries: ReadonlyArray<Query.Any> = members.queries ?? [];
     static layer<E, R>(
-      handlers: Layer.Layer<HandledBy<P, J, G, Q, V, S>, E, R>,
+      handlers: Layer.Layer<HandledBy<P, J, G, Q, V, S, C>, E, R>,
       options?: LayerOptions,
     ) {
       return Layer.effectContext(
@@ -544,34 +654,44 @@ export const make = <
   } as unknown as ModelClass<
     Name,
     ProvidedBy<A, V, J, S, G, D>,
-    HandledBy<P, J, G, Q, V, S>,
+    HandledBy<P, J, G, Q, V, S, C>,
     ServableBy<A, V, S, Q, D>
-  >;
+  > &
+    Mentions<ProvidedBy<A, V, J, S, G, D>, A, V, D>;
+  // What a process mentions: each command, each aggregate (every command it
+  // takes) and each view, by name, on the model that hosts it.
+  const mentioned: ReadonlyArray<readonly [string, Mention.Entries]> = [
+    ...model.commands.map((command) => [command.tag, { commands: [command.tag] }] as const),
+    ...definitions.aggregates.map(
+      (aggregate) =>
+        [
+          aggregate.aggregateName,
+          { commands: aggregate.definition.commands.map((command) => command.tag) },
+        ] as const,
+    ),
+    ...definitions.views.map((view) => [view.viewName, { views: [view.viewName] }] as const),
+  ];
+  // A command, an aggregate or a view may share a name: one member gives them all.
+  const merged = new Map<string, Mention.Entries>();
+  for (const [member, entries] of mentioned) {
+    const before = merged.get(member);
+    merged.set(member, {
+      commands: [...(before?.commands ?? []), ...(entries.commands ?? [])],
+      views: [...(before?.views ?? []), ...(entries.views ?? [])],
+    });
+  }
+  for (const [member, entries] of merged) {
+    if (member in model) {
+      throw new DefinitionError({ reason: new ReservedMember({ model: name, member }) });
+    }
+    let mention: Mention.Mention<unknown, unknown> | undefined;
+    Object.defineProperty(model, member, {
+      enumerable: true,
+      get: () => (mention ??= Mention.of(model as unknown as Any, entries)),
+    });
+  }
+  return model;
 };
-
-/**
- * Check a Model's definitions without hosting it: every problem that would
- * otherwise fail its Layer's build, such as a view consuming a source keyed
- * by another aggregate without `keyOf`, a view with `state` but no
- * `initial`, a policy listening for an event no source emits, or a stream
- * with two writers. Returns all of them, in definition order; an empty
- * array means the Model is valid. Problems that depend on what a handler
- * returns, such as `decide` returning an event its command does not
- * declare, still surface when the handler runs.
- *
- * **Example:** A unit test for the whole Model
- * ```typescript
- * import * as Domain from "@alchemy.run/domain";
- * import { expect, it } from "vitest";
- * import { Bank } from "./Bank.model.ts";
- *
- * it("the model is well defined", () => {
- *   expect(Domain.verify(Bank)).toEqual([]);
- * });
- * ```
- */
-export const verify = (model: Any): ReadonlyArray<Kernel.DefinitionError> =>
-  Kernel.verify(model.definitions);
 
 /**
  * Trace one projection batch. A batch merges events from many commits, so it
@@ -581,16 +701,7 @@ const observeProjection =
   (name: string, key: string, batch: ReadonlyArray<Accepted>) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) => {
     const tags = { "domain.kind": "projection", "domain.consumer": name };
-    const links = batch.flatMap(({ delivery }) =>
-      delivery.envelope.trace
-        ? [{ span: Telemetry.spanOf(delivery.envelope.trace), attributes: {} }]
-        : [],
-    );
-    const correlations = [
-      ...new Set(
-        batch.map(({ delivery }) => delivery.envelope.correlationId ?? delivery.envelope.commandId),
-      ),
-    ];
+    const { links, correlations } = Telemetry.batch(batch.map(({ delivery }) => delivery.envelope));
     return effect.pipe(
       Effect.onExit((exit) =>
         Effect.gen(function* () {
@@ -614,6 +725,7 @@ const observeProjection =
           "domain.key": key,
           "domain.batch": batch.length,
           ...(correlations.length === 1 ? { "domain.correlation_id": correlations[0] } : {}),
+          "domain.correlation_ids": correlations,
         },
       }),
     );
@@ -639,6 +751,10 @@ const build = <A, E, R>(
     });
     const kernel = yield* Kernel.make(definitions, telemetry);
     const random = yield* SecureRandom.SecureRandom;
+    // A command's values that wait to be sealed are sealed here, before the command is stored.
+    const vault = yield* Effect.serviceOption(Vault.Vault);
+    const settle: Settle = <A>(json: A) =>
+      Effect.orDie(Vault.settle(json, vault)) as Effect.Effect<A>;
 
     const aggregateStores = new Map<string, AggregateStore>();
     const viewStores = new Map<string, ViewStore>();
@@ -742,6 +858,8 @@ const build = <A, E, R>(
         aggregate,
         aggregateStores.get(aggregate.aggregateName)!,
         random,
+        settle,
+        { views: viewStores, projections: projectionStores },
       );
       hosts = Context.add(hosts, aggregate, client);
       for (const command of aggregate.definition.commands) commands.set(command.tag, client);
@@ -752,6 +870,7 @@ const build = <A, E, R>(
         decision,
         decisionStores.get(decision.decisionName)!,
         random,
+        settle,
       );
       hosts = Context.add(hosts, decision, client);
       // An Api and a story send every command the same way.
@@ -767,7 +886,11 @@ const build = <A, E, R>(
           })),
         schedule: () => Effect.die(new Error(`${decision.decisionName} cannot be scheduled`)),
         unschedule: () => Effect.die(new Error(`${decision.decisionName} cannot be scheduled`)),
+        import: () => Effect.die(new Error(`${decision.decisionName} cannot import events`)),
         get: () => Effect.die(new Error(`${decision.decisionName} has no state`)),
+        rewrite: () => Effect.die(new Error(`${decision.decisionName} has no events to rewrite`)),
+        rewritten: () => Effect.die(new Error(`${decision.decisionName} has no events to rewrite`)),
+        compact: () => Effect.die(new Error(`${decision.decisionName} has no events to compact`)),
       });
     }
     const viewHosts = new Map<string, View.Host<unknown, Key.Any, unknown>>();
@@ -863,35 +986,98 @@ const build = <A, E, R>(
       const version = implementationOf(projection).options.version;
       if (version) kernel.setVersion(`projection:${projection.projectionName}`, version);
     }
+    // A rewrite changes what a projection was given: its Layer says what that means.
+    const unhandled = (definitions.rewrites ?? []).flatMap((rewrite) =>
+      kernel
+        .rewriteReach(rewrite)
+        .filter(
+          (name) =>
+            implementationOf(definitions.projections.find((p) => p.projectionName === name)!)
+              .rewrite === undefined,
+        )
+        .map(
+          (projection) =>
+            new DefinitionError({
+              reason: new MissingRewriteHandler({ projection, rewrite: rewrite.rewriteName }),
+            }),
+        ),
+    );
+    if (unhandled.length > 0) {
+      return yield* Effect.failCause(Cause.fromReasons(unhandled.map(Cause.makeDieReason)));
+    }
+    for (const compaction of definitions.compactions ?? []) {
+      const implementation = Context.getUnsafe(
+        implementations as Context.Context<unknown>,
+        compaction as Context.Key<unknown, Compaction.Implementation<Aggregate.Any>>,
+      );
+      const aggregate = compaction.definition.of.aggregateName;
+      kernel.setCompaction(compaction.compactionName, {
+        afterEvents: implementation.options.after?.events,
+        archive: (id, rows) =>
+          Effect.gen(function* () {
+            const events = yield* Effect.forEach(rows, kernel.decodeStored);
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
+            yield* implementation.handle({
+              id,
+              stream: `${aggregate}/${id}`,
+              events,
+            } as never) as Effect.Effect<void>;
+          }).pipe(
+            Effect.withSpan(`Domain.compaction ${compaction.compactionName}`, {
+              attributes: {
+                "domain.aggregate": aggregate,
+                "domain.id": id,
+                "domain.events": rows.length,
+              },
+            }),
+          ),
+      });
+    }
     for (const projection of definitions.projections) {
       const implementation = implementationOf(projection);
       const writes = (projection.definition.writes ?? []).map((stream) =>
         streamStores.get(stream.streamName)!,
       );
+      const generation = kernel.generationOf("projection", projection.projectionName);
       projectionStores.set(
         projection.projectionName,
         yield* platform.projection(projection, {
           name: projection.projectionName,
           options: { batch: Projection.batchMillis(implementation.options) },
-          generation: kernel.generationOf("projection", projection.projectionName),
+          generation,
           singleSource: kernel.singleSource(`projection:${projection.projectionName}`),
           history: kernel.history,
           run: (key, batch) =>
             Effect.gen(function* () {
               // Platforms run handlers inside their runtime (a Durable Object, or this process).
-              const inputs = yield* kernel.projectionInputs(projection, key, batch);
-              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
-              yield* implementation.handle(inputs) as Effect.Effect<void>;
+              // A rewrite's revisions go to `rewrite`, in order with the key's other inputs.
+              for (const run of projectionRuns(batch)) {
+                if (run.kind === "apply") {
+                  const inputs = yield* kernel.projectionInputs(projection, key, run.rows);
+                  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
+                  yield* implementation.handle(inputs) as Effect.Effect<void>;
+                  continue;
+                }
+                const rewrite = implementation.rewrite;
+                if (rewrite === undefined) continue;
+                const inputs = yield* kernel.projectionRewrites(projection, key, run.rows);
+                // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
+                yield* rewrite(inputs as ReadonlyArray<never>) as Effect.Effect<void>;
+              }
               // What this run handled, so stream reads `atLeast` a receipt see it.
               if (writes.length === 0) return;
               const checkpoints: Record<string, number> = {};
+              const roots: Record<string, number> = {};
               for (const { delivery } of batch) {
                 checkpoints[delivery.source] = Math.max(
                   checkpoints[delivery.source] ?? 0,
                   delivery.seq,
                 );
+                const root = Kernel.rootOf(delivery);
+                roots[root.source] = Math.max(roots[root.source] ?? 0, root.seq);
               }
-              yield* Effect.forEach(writes, (store) => store.advance(key, checkpoints), {
+              const handled = { generation, checkpoints, roots };
+              yield* Effect.forEach(writes, (store) => store.advance(key, handled), {
                 discard: true,
               });
             }).pipe(observeProjection(projection.projectionName, key, batch)),
@@ -899,10 +1085,11 @@ const build = <A, E, R>(
       );
     }
     for (const policy of definitions.policies) {
+      // Platforms run handlers inside their runtime (a Durable Object, or this process).
       const handler = Context.getUnsafe(
         implementations as Context.Context<unknown>,
         policy as Context.Key<unknown, Policy.Handler<unknown>>,
-      );
+      ) as (trigger: unknown) => Effect.Effect<void>;
       policyStores.set(
         policy.policyName,
         yield* platform.policy(policy, kernel.policyKit(policy, handler)),
@@ -974,11 +1161,122 @@ const build = <A, E, R>(
     });
   });
 
+/**
+ * A run of a projection key's input log as its handlers take it: runs of
+ * ordinary inputs for `write` and runs of revisions for `rewrite`, in order.
+ * A row that only marks progress (a rewrite's `done`, an input a rewrite
+ * removed before it was handled) is in neither.
+ */
+const projectionRuns = (batch: ReadonlyArray<Accepted>) => {
+  const runs: Array<{ readonly kind: "apply" | "rewrite"; readonly rows: Array<Accepted> }> = [];
+  for (const row of batch) {
+    const revision = row.delivery.revision;
+    if (revision !== undefined && revision.before === undefined) continue;
+    const kind = revision === undefined ? "apply" : "rewrite";
+    const last = runs[runs.length - 1];
+    if (last?.kind === kind) last.rows.push(row);
+    else runs.push({ kind, rows: [row] });
+  }
+  return runs;
+};
+
+/** The stores a rewrite's revisions reach on their way from an instance. */
+interface Consumers {
+  readonly views: ReadonlyMap<string, ViewStore>;
+  readonly projections: ReadonlyMap<string, ProjectionStore>;
+}
+
+/**
+ * Wait until everything built from a rewritten instance reflects the
+ * rewrite: follow its revisions from the instance through every view key
+ * they reach to the projections, waiting for each on the way. Every wait
+ * shares one `timeout`.
+ */
+const rewriteSettled = (
+  store: AggregateStore,
+  consumers: Consumers,
+  receipt: Rewrite.Receipt,
+  timeout: Duration.Input | undefined,
+) =>
+  Effect.gen(function* () {
+    const [aggregate = "", ...rest] = receipt.stream.split("/");
+    const id = rest.join("/");
+    const root = `${receipt.stream}#${receipt.rewriteId}`;
+    const deadline =
+      (yield* Clock.currentTimeMillis) +
+      Duration.toMillis(Duration.fromInputUnsafe(timeout ?? "10 seconds"));
+    const until = <A>(
+      check: Effect.Effect<A, "stale">,
+      view: string,
+      key: string,
+      stream: string,
+    ) =>
+      Effect.flatMap(Clock.currentTimeMillis, (now) =>
+        waitUntil(check, Duration.millis(Math.max(0, deadline - now)), () =>
+          View.ConsistencyTimeout.make({ view, key, stream, version: 0 }),
+        ),
+      );
+    const visit = (
+      revised: Revised,
+      source: string,
+    ): Effect.Effect<void, View.ConsistencyTimeout> =>
+      Effect.suspend(() => {
+        if (revised.kind === "projection") {
+          const settled = consumers.projections.get(revised.name)?.revised;
+          if (settled === undefined) return Effect.void;
+          return until(
+            Effect.flatMap(settled(revised.key, root, source), (done) =>
+              done ? Effect.void : Effect.fail("stale" as const),
+            ),
+            revised.name,
+            revised.key,
+            source,
+          );
+        }
+        const settled = consumers.views.get(revised.name)?.revised;
+        if (settled === undefined) return Effect.void;
+        return until(
+          Effect.flatMap(settled(revised.key, root, source), (sent) =>
+            sent === undefined ? Effect.fail("stale" as const) : Effect.succeed(sent),
+          ),
+          revised.name,
+          revised.key,
+          source,
+        ).pipe(
+          Effect.flatMap((sent) =>
+            Effect.forEach(sent, (next) => visit(next, `${revised.name}/${revised.key}`), {
+              concurrency: "unbounded",
+              discard: true,
+            }),
+          ),
+        );
+      });
+    const status = store.rewriteStatus;
+    if (status === undefined) return;
+    const { sent } = yield* until(
+      Effect.flatMap(status(id, receipt.rewriteId), (found) =>
+        found?.done ? Effect.succeed(found) : Effect.fail("stale" as const),
+      ),
+      aggregate,
+      id,
+      receipt.stream,
+    );
+    yield* Effect.forEach(sent, (revised) => visit(revised, receipt.stream), {
+      concurrency: "unbounded",
+      discard: true,
+    });
+  }).pipe(Effect.withSpan("Domain.rewritten", { attributes: { "domain.stream": receipt.stream } }));
+
+/** Seals what waits to be sealed in an encoded command; dies when it can't. */
+type Settle = <A>(json: A) => Effect.Effect<A>;
+
 const aggregateClient = (
   kernel: Kernel.Kernel,
   aggregate: Aggregate.Any,
   store: AggregateStore,
   random: SecureRandom.SecureRandom["Service"],
+  settle: Settle,
+  consumers: Consumers,
 ): Aggregate.ClientImpl => {
   /** What a send carries besides the command: its id, context, flow and trace. */
   const metaFor = (
@@ -1036,7 +1334,7 @@ const aggregateClient = (
         // The span records a rejection as an outcome; the caller still fails with it.
         const result = yield* Effect.gen(function* () {
           const { id, meta } = yield* metaFor(target, command, options, false);
-          const encoded = yield* kernel.encodeCommand(aggregate, command);
+          const encoded = yield* settle(yield* kernel.encodeCommand(aggregate, command));
           const result = yield* store.send(id, encoded, meta);
           yield* Effect.annotateCurrentSpan(
             "domain.outcome",
@@ -1067,7 +1365,7 @@ const aggregateClient = (
         const at = yield* store.schedule(
           id,
           name,
-          yield* kernel.encodeCommand(aggregate, command),
+          yield* settle(yield* kernel.encodeCommand(aggregate, command)),
           meta,
           options.at !== undefined
             ? { at: DateTime.toEpochMillis(options.at) }
@@ -1087,10 +1385,134 @@ const aggregateClient = (
           attributes: { ...spanOptions(target).attributes, "domain.command_id": commandId },
         }),
       ),
+    import: (target, events, options) =>
+      Effect.gen(function* () {
+        const id = Aggregate.targetId(target);
+        if (!store.import) {
+          return yield* Effect.die(
+            new Error(`The platform cannot import events into ${aggregate.aggregateName}`),
+          );
+        }
+        const expected = options.expectedVersion ?? 0;
+        const rows = events.map((row) =>
+          "_tag" in row
+            ? { event: row, at: null }
+            : { event: row.event, at: DateTime.toEpochMillis(row.at) },
+        );
+        const at = rows.map((row) => row.at);
+        const result = yield* store.import(
+          id,
+          yield* Effect.forEach(rows, (row) => kernel.encodeEvent(row.event)),
+          {
+            commandId: options.commandId,
+            expectedVersion: expected,
+            ...(at.some((ms) => ms !== null) ? { at } : {}),
+          },
+        );
+        if (result._tag === "UnexpectedVersion") {
+          return yield* new Aggregate.UnexpectedVersion({
+            aggregate: aggregate.aggregateName,
+            id,
+            commandId: options.commandId,
+            expected,
+            version: result.version,
+          });
+        }
+        if (result._tag === "OutOfOrder") {
+          return yield* new Aggregate.ImportOutOfOrder({
+            aggregate: aggregate.aggregateName,
+            id,
+            commandId: options.commandId,
+            index: result.index,
+            at: DateTime.makeUnsafe(result.at),
+            after: DateTime.makeUnsafe(result.after),
+          });
+        }
+        return {
+          stream: result.receipt.stream,
+          version: result.receipt.version,
+          events: yield* Effect.forEach(result.receipt.events, kernel.decodeEvent),
+          reply: undefined,
+          commits: [{ stream: result.receipt.stream, version: result.receipt.version }],
+        };
+      }).pipe(
+        Effect.withSpan(`Domain.import ${aggregate.aggregateName}`, {
+          ...spanOptions(target),
+          attributes: {
+            ...spanOptions(target).attributes,
+            "domain.command_id": options.commandId,
+            "domain.events": events.length,
+          },
+        }),
+      ),
     get: (target) =>
       store
         .state(Aggregate.targetId(target))
         .pipe(Effect.map(({ state }) => kernel.decodeState(aggregate, state))),
+    rewrite: (target, rewrite, options) =>
+      Effect.gen(function* () {
+        const id = Aggregate.targetId(target);
+        const run = store.rewrite;
+        if (run === undefined) {
+          return yield* Effect.die(
+            new Error(`The platform cannot rewrite ${aggregate.aggregateName}`),
+          );
+        }
+        // Derived like a send's: a saga step that runs again rewrites once.
+        const rewriteId = yield* Aggregate.commandIdFor(
+          options?.rewriteId === undefined ? undefined : { commandId: options.rewriteId },
+          random,
+        );
+        yield* Effect.annotateCurrentSpan("domain.rewrite_id", rewriteId);
+        const result = yield* run(id, {
+          rewriteId,
+          name: rewrite._tag,
+          input: yield* kernel.encodeRewrite(rewrite),
+        });
+        if (result._tag === "InvariantBroken") {
+          return yield* Rewrite.InvariantBroken.make({
+            aggregate: aggregate.aggregateName,
+            id,
+            rewrite: rewrite._tag,
+            invariant: result.invariant,
+          });
+        }
+        return { stream: `${aggregate.aggregateName}/${id}`, rewriteId, changed: result.changed };
+      }).pipe(
+        Effect.withSpan(
+          `Domain.rewrite ${aggregate.aggregateName}.${rewrite._tag}`,
+          spanOptions(target),
+        ),
+      ),
+    rewritten: (receipt, options) => rewriteSettled(store, consumers, receipt, options?.timeout),
+    compact: (target, compaction) =>
+      Effect.gen(function* () {
+        const id = Aggregate.targetId(target);
+        const run = store.compact;
+        if (run === undefined) {
+          return yield* Effect.die(
+            new Error(`The platform cannot compact ${aggregate.aggregateName}`),
+          );
+        }
+        const result = yield* run(id, compaction.compactionName);
+        if (result._tag === "Lossy") {
+          return yield* Compaction.CompactionLossy.make({
+            aggregate: aggregate.aggregateName,
+            id,
+            compaction: compaction.compactionName,
+          });
+        }
+        return {
+          stream: `${aggregate.aggregateName}/${id}`,
+          version: result.version,
+          compacted: result.compacted,
+        };
+      }).pipe(
+        Effect.withSpan(
+          `Domain.compact ${aggregate.aggregateName}.${compaction.compactionName}`,
+          spanOptions(target),
+        ),
+      ),
   };
 };
 
@@ -1099,6 +1521,7 @@ const decisionClient = (
   decision: Decision.Any,
   store: DecisionStore,
   random: SecureRandom.SecureRandom["Service"],
+  settle: Settle,
 ): Decision.ClientImpl => ({
   send: (command, options) =>
     Effect.gen(function* () {
@@ -1112,7 +1535,8 @@ const decisionClient = (
           "domain.correlation_id": correlationId,
         });
         const trace = yield* Telemetry.currentTrace;
-        const result = yield* store.send(yield* kernel.encodeDecisionCommand(decision, command), {
+        const encoded = yield* settle(yield* kernel.encodeDecisionCommand(decision, command));
+        const result = yield* store.send(encoded, {
           commandId,
           context,
           correlationId,
@@ -1431,13 +1855,43 @@ const streamHost = (
           );
         }
         meta.appends += 1;
-        const position: [number, number] = [meta.position, meta.appends];
         return Effect.forEach(events, (event) =>
           kernel.encodeEvent(event as { readonly _tag: string }),
         ).pipe(
           Effect.flatMap((encoded) =>
             store.append(meta.key, {
-              origin: position,
+              generation: meta.generation,
+              origin: [meta.position, meta.appends],
+              root: meta.root,
+              source: meta.source,
+              sourceSeq: meta.sourceSeq,
+              at: meta.at,
+              commandId: meta.commandId,
+              events: encoded,
+            }),
+          ),
+        );
+      }),
+    rewrite: (origin, ...events) =>
+      Effect.suspend(() => {
+        const meta = (origin as unknown as Record<symbol, Kernel.InputMetaValue | undefined>)[
+          Kernel.InputMeta
+        ];
+        const writer = kernel.writerOf(stream);
+        if (!meta || !writer || writer.projectionName !== meta.projection) {
+          return Effect.die(
+            new DefinitionError({ reason: new ForeignAppend({ stream: stream.streamName }) }),
+          );
+        }
+        const revise = store.revise;
+        if (revise === undefined) {
+          return Effect.die(new Error(`The platform cannot rewrite ${stream.streamName}`));
+        }
+        return Effect.forEach(events, (event) =>
+          kernel.encodeEvent(event as { readonly _tag: string }),
+        ).pipe(
+          Effect.flatMap((encoded) =>
+            revise(meta.key, {
               source: meta.source,
               sourceSeq: meta.sourceSeq,
               at: meta.at,
@@ -1819,7 +2273,10 @@ const projectionProgress = (
           let missing: readonly [string, number] = [...streams][0]!;
           return chain.until(
             store()
-              .checkpoints(key)
+              .checkpoints(
+                key,
+                [...streams].map(([stream]) => stream),
+              )
               .pipe(
                 Effect.flatMap((checkpoints) => {
                   const behind = [...streams].find(

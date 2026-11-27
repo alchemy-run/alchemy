@@ -326,15 +326,13 @@ export const PhraseMatcherProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsPhraseMatchers({
+            displayName,
+            type,
+            active,
+            roleMatch: news.roleMatch,
+            versionTag: news.versionTag,
+            phraseMatchRuleGroups,
             parent,
-            body: {
-              displayName,
-              type,
-              active,
-              roleMatch: news.roleMatch,
-              versionTag: news.versionTag,
-              phraseMatchRuleGroups,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(parent, displayName)));
         current = created ?? (yield* findByDisplayName(parent, displayName));
@@ -364,6 +362,12 @@ export const PhraseMatcherProvider = () =>
         groupsChanged
       ) {
         current = yield* cci.patchProjectsLocationsPhraseMatchers({
+          displayName,
+          type,
+          active,
+          roleMatch: news.roleMatch,
+          versionTag: news.versionTag,
+          phraseMatchRuleGroups,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -373,15 +377,6 @@ export const PhraseMatcherProvider = () =>
             versionChanged ? "version_tag" : undefined,
             groupsChanged ? "phrase_match_rule_groups" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            type,
-            active,
-            roleMatch: news.roleMatch,
-            versionTag: news.versionTag,
-            phraseMatchRuleGroups,
-          },
         });
       }
 

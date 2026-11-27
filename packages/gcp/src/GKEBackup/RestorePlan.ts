@@ -469,15 +469,13 @@ export const RestorePlanProvider = () =>
       if (current === undefined) {
         const created = yield* gkebackup
           .createProjectsLocationsRestorePlans({
+            cluster,
+            backupPlan,
+            restoreConfig: news.restoreConfig,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             restorePlanId,
-            body: {
-              cluster,
-              backupPlan,
-              restoreConfig: news.restoreConfig,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -511,14 +509,12 @@ export const RestorePlanProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* gkebackup.patchProjectsLocationsRestorePlans({
+          etag: current.etag,
+          labels: desiredLabels,
+          description: news.description,
+          restoreConfig: news.restoreConfig,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            labels: desiredLabels,
-            description: news.description,
-            restoreConfig: news.restoreConfig,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

@@ -182,24 +182,22 @@ export const CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigP
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigs(
             {
+              name: fallbackName,
+              pushNotificationConfig: {
+                url: news.url,
+                token,
+                id: configId,
+                authentication:
+                  news.schemes !== undefined || news.credentials !== undefined
+                    ? {
+                        schemes: news.schemes,
+                        credentials: news.credentials,
+                      }
+                    : undefined,
+              },
               tenant: news.tenant,
               parent: news.parent,
               configId,
-              body: {
-                name: fallbackName,
-                pushNotificationConfig: {
-                  url: news.url,
-                  token,
-                  id: configId,
-                  authentication:
-                    news.schemes !== undefined || news.credentials !== undefined
-                      ? {
-                          schemes: news.schemes,
-                          credentials: news.credentials,
-                        }
-                      : undefined,
-                },
-              },
             },
           )
           .pipe(Effect.catchTag("Conflict", () => getByName(news.tenant, fallbackName)));

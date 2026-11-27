@@ -59,12 +59,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         beyondcorp.createProjectsLocationsSecurityGateways({
+          displayName: "probe",
+          hubs: { "us-central1": { internetGateway: {} } },
           parent: `projects/${project}/locations/global`,
           securityGatewayId: "alch-probe-sg",
-          body: {
-            displayName: "probe",
-            hubs: { "us-central1": { internetGateway: {} } },
-          },
         }),
       );
       expect(error._tag).toEqual("BadRequest");

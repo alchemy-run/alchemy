@@ -24,7 +24,7 @@ import * as Docker from "./Docker.ts";
 import { Globals, Internet, Loopback, LoopbackServer, Storage } from "./globals/index.ts";
 import * as Paths from "./internal/Paths.ts";
 import * as WorkerProxy from "./proxy/WorkerProxy.ts";
-import { Registry, RegistryProxy } from "./registry/index.ts";
+import { Registry, RegistryProxy, SharedStorage } from "./registry/index.ts";
 import { Access, RemoteBindings, RemoteWorker } from "./remote-bindings/index.ts";
 import * as Runtime from "./Runtime.ts";
 import * as Workerd from "./workerd/Workerd.ts";
@@ -73,6 +73,7 @@ export const layerLocalBindings = () =>
     RateLimit.RateLimitLive,
     SecretsStore.SecretsStoreLive,
     SendEmail.SendEmailLive,
+    SharedStorage.SharedStorageLive,
     Stream.StreamLive,
     Workflows.WorkflowsLive,
   );
@@ -96,6 +97,7 @@ export type BindingServices =
   | RegistryProxy.RegistryProxy
   | SecretsStore.SecretsStore
   | SendEmail.SendEmail
+  | SharedStorage.SharedStorage
   | Stream.Stream
   | Workflows.Workflows;
 

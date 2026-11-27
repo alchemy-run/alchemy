@@ -95,6 +95,42 @@ export const declareDurableObjectApplication = (worker: { LogicalId: string }, c
  * containers API can report the namespace missing for a few seconds before it
  * sees it. Retry creates that attach to it, bounded at ~30s.
  */
+/**
+ * Delete a fleet application attached to `namespaceId` and wait until
+ * Cloudflare no longer lists it, so a Durable Object-managed application can
+ * take the namespace.
+ */
+const releaseFleetApplication = Effect.fn(function* (
+  accountId: string,
+  namespaceId: string,
+  session: { readonly note: (message: string) => Effect.Effect<void> },
+) {
+  const attached = Containers.listContainerApplications({ accountId }).pipe(
+    Effect.map((apps) =>
+      apps.find(
+        (app) =>
+          app.durableObjects?.namespaceId === namespaceId &&
+          app.schedulingPolicy !== "durable_object",
+      ),
+    ),
+  );
+  const fleet = yield* attached;
+  if (fleet === undefined) return;
+  yield* session.note(
+    `Replacing fleet container application ${fleet.name} with Durable Object scheduling...`,
+  );
+  yield* Containers.deleteContainerApplication({ accountId, applicationId: fleet.id }).pipe(
+    Effect.catchTag("ContainerApplicationNotFound", () => Effect.void),
+  );
+  yield* attached.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("1 second"),
+      until: (app) => app === undefined,
+      times: 20,
+    }),
+  );
+});
+
 export const retryNamespacePropagation = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ) =>
@@ -293,6 +329,12 @@ export const LiveDurableObjectApplicationProvider = () =>
 
       // 2. Ensure
       if (!application) {
+        // The class's Containers were fleet-scheduled before: that fleet
+        // application holds the namespace, and Cloudflare cannot change a
+        // policy in place. The namespace is this stack's, so the fleet
+        // application is too. Deleting it frees the namespace; the class's
+        // Durable Objects and their storage stay where they are.
+        yield* releaseFleetApplication(accountId, durableObjects.namespaceId, session);
         yield* session.note(`Creating container application ${name}...`);
         application = yield* retryNamespacePropagation(
           Containers.createDurableObjectContainerApplication({

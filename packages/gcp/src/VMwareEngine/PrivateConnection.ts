@@ -365,15 +365,13 @@ export const PrivateConnectionProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsPrivateConnections({
+            type,
+            vmwareEngineNetwork,
+            serviceNetwork,
+            routingMode,
+            description: desiredDescription,
             parent: parentOf(env.project, location),
             privateConnectionId: connectionId,
-            body: {
-              type,
-              vmwareEngineNetwork,
-              serviceNetwork,
-              routingMode,
-              description: desiredDescription,
-            },
           })
           .pipe(
             Effect.retry({
@@ -405,13 +403,10 @@ export const PrivateConnectionProvider = () =>
       ]);
       if (updateMask.length > 0) {
         const operation = yield* vmwareengine.patchProjectsLocationsPrivateConnections({
+          description: desiredDescription,
+          routingMode,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            description: desiredDescription,
-            routingMode,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

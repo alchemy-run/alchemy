@@ -5,7 +5,6 @@ import {
   oauthCredentials,
   type ResolvedCredentials,
 } from "@distilled.cloud/cloudflare/Credentials";
-import { ConfigError } from "@distilled.cloud/core/errors";
 import * as CredentialsCache from "alchemy/Auth/CredentialsCache";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Effect from "effect/Effect";
@@ -53,7 +52,9 @@ const expiresAt = (creds: CloudflareResolvedCredentials) =>
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    lazyCredentials<CloudflareResolvedCredentials, ConfigError>()(
+    // `Credentials` has no `ConfigError` channel: a failed resolution dies, and
+    // the engine reports it as `CredentialsRequired`.
+    lazyCredentials<CloudflareResolvedCredentials>()(
       CLOUDFLARE_AUTH_PROVIDER_NAME,
       (creds) =>
         Match.value(creds).pipe(
@@ -73,5 +74,5 @@ export const fromAuthProvider = () =>
           Match.exhaustive,
         ),
       { expiresAt },
-    ),
+    ).pipe(Effect.map(Effect.orDie)),
   );

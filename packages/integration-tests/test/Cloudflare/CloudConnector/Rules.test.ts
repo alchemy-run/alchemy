@@ -188,6 +188,57 @@ describe.sequential(
       { timeout: 180_000 },
     );
 
+    test.provider(
+      "routes to S3, GCS, Azure and OCI hosts",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
+
+          yield* stack.destroy();
+          yield* purgeRules(zoneId);
+
+          // cloudflare_r2 needs a live custom domain bound to an R2 bucket in
+          // this zone, so this case does not deploy one.
+          const providerRules = [
+            { provider: "aws_s3", host: HOST_A },
+            { provider: "gcp_storage", host: "storage.googleapis.com" },
+            { provider: "azure_storage", host: "alchemycc.blob.core.windows.net" },
+            {
+              provider: "oci_storage",
+              host: "alchemycc.compat.objectstorage.us-ashburn-1.oraclecloud.com",
+            },
+          ] as const;
+
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.CloudConnector.Rules("Rules", {
+                zoneId,
+                rules: providerRules.map(({ provider, host }) => ({
+                  provider,
+                  host,
+                  expression: `http.request.uri.path wildcard "/alchemy-cc-${provider}/*"`,
+                })),
+              }).pipe(adopt(true));
+            }),
+          );
+
+          expect(deployed.rules.map((rule) => rule.provider)).toEqual(
+            providerRules.map((rule) => rule.provider),
+          );
+
+          const live = yield* listLiveRules(zoneId);
+          expect(live.map((rule) => [rule.provider, rule.parameters?.host])).toEqual(
+            providerRules.map((rule) => [rule.provider, rule.host]),
+          );
+
+          yield* stack.destroy();
+
+          const liveGone = yield* listLiveRules(zoneId);
+          expect(liveGone).toHaveLength(0);
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
     // Canonical `list()` test (zone-scoped singleton): there is no account-wide
     // API for the per-zone Cloud Connector rule list, so `list()` enumerates
     // every zone via `listAllZones` and reads its rules. Deploy a rule on the

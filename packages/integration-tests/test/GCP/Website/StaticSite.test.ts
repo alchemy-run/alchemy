@@ -1,9 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import {
@@ -37,6 +39,7 @@ test.provider(
               path: cwd,
               build: { command: "bash build.sh", output: "dist" },
               memo: { include: ["src/**", "build.sh"] },
+              env: { SITE_MODE: "blog", SITE_TOKEN: Redacted.make("site-s3cret") },
             });
             return { site };
           }),
@@ -50,6 +53,20 @@ test.provider(
         timeout: "180 seconds",
         label: "static v1",
       });
+
+      // A `Redacted` env value is read from Secret Manager; the revision
+      // never holds it.
+      const deployed = yield* cloudrun.getProjectsLocationsServices({
+        name: first.site.service!.name,
+      });
+      const env = deployed.template?.containers?.[0]?.env ?? [];
+      const token = env.find((entry) => entry.name === "SITE_TOKEN");
+      expect(token?.value).toBeUndefined();
+      expect(token?.valueSource?.secretKeyRef?.secret).toMatch(
+        /^alch-[0-9a-f]{12}-main-SITE_TOKEN$/,
+      );
+      expect(JSON.stringify(deployed.template)).not.toContain("site-s3cret");
+      expect(env.find((entry) => entry.name === "SITE_MODE")?.value).toBe("blog");
 
       const index = path.join(cwd, "src/index.html");
       yield* fs.writeFileString(

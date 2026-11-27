@@ -15,8 +15,8 @@ import S3ControlBindingsFunctionLive, {
 } from "./fixtures/bindings-handler.ts";
 import S3ControlMrapBindingsFunctionLive, {
   S3ControlMrapBindingsFunction,
-  SECOND_REGION,
   secondRegionBucketName,
+  secondRegionFor,
 } from "./fixtures/mrap-bindings-handler.ts";
 
 const testOptions = { providers: AWS.providers() };
@@ -220,9 +220,12 @@ describe.skipIf(!!process.env.FAST).sequential(
     let mrapBaseUrl: string;
 
     const secondBucket = secondRegionBucketName(mrapStack.stage);
-    const inSecondRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    const inSecondRegion = <A, E, R>(effect: (region: string) => Effect.Effect<A, E, R>) =>
       Core.withProviders(
-        effect.pipe(Effect.provideService(Region, Effect.succeed(SECOND_REGION))),
+        Effect.gen(function* () {
+          const region = secondRegionFor(yield* yield* Region);
+          return yield* effect(region).pipe(Effect.provideService(Region, Effect.succeed(region)));
+        }),
         testOptions,
         "S3ControlMrapBindings",
       );
@@ -230,9 +233,18 @@ describe.skipIf(!!process.env.FAST).sequential(
     beforeAll(
       Effect.gen(function* () {
         yield* mrapStack.destroy();
-        yield* inSecondRegion(
+        yield* inSecondRegion((region) =>
           s3
-            .createBucket({ Bucket: secondBucket })
+            .createBucket({
+              Bucket: secondBucket,
+              ...(region === "us-east-1"
+                ? {}
+                : {
+                    CreateBucketConfiguration: {
+                      LocationConstraint: region as s3.BucketLocationConstraint,
+                    },
+                  }),
+            })
             .pipe(Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void)),
         );
         const attrs = yield* mrapStack.deploy(
@@ -250,7 +262,7 @@ describe.skipIf(!!process.env.FAST).sequential(
     afterAll(
       mrapStack.destroy().pipe(
         Effect.andThen(
-          inSecondRegion(
+          inSecondRegion(() =>
             // S3 still reports the deleted MRAP as attached for a while.
             s3.deleteBucket({ Bucket: secondBucket }).pipe(
               Effect.retry({

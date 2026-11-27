@@ -16,6 +16,7 @@ import {
   stringifyPolicyDocument,
 } from "../IAM/Policy.ts";
 import { single } from "../internal/Lookup.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -384,7 +385,7 @@ export const FileSystemProvider = () =>
 
       const fileSystemArnOf = Effect.fn(function* (fileSystemId: string) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        return `arn:aws:elasticfilesystem:${region}:${accountId}:file-system/${fileSystemId}`;
+        return `arn:${partitionOf(region)}:elasticfilesystem:${region}:${accountId}:file-system/${fileSystemId}`;
       });
 
       const findByToken = Effect.fn(function* (token: string) {

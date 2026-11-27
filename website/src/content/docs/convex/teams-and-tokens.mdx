@@ -1,0 +1,73 @@
+---
+title: Teams and tokens
+description: How a Convex team holds your projects and deployments, how Alchemy signs in to it with a team access token, and the narrower keys your Stack creates for pushes, CI and runtimes.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything you create on Convex belongs to a **team**: its projects, their deployments, and the people who are members. The team has one plan and one bill, and nothing in one team can see another.
+
+A **team access token** acts on the whole team. Narrower keys act on less: a **deploy key** on one deployment, a **preview deploy key** on one project's previews.
+
+<Tree
+  nodes={[
+    { id: "team", label: "acme", type: "team · members: ana, sam", icon: "brand:convex" },
+    { id: "project", label: "my-app", type: "project", parent: "team", icon: "folder" },
+    { id: "prod", label: "prod", type: "deployment", parent: "project", icon: "server" },
+    { id: "prodtable", label: "messages", type: "table", parent: "prod", icon: "database" },
+    { id: "preview", label: "pr-42", type: "preview deployment", parent: "project", icon: "server" },
+    { id: "previewtable", label: "messages", type: "table", parent: "preview", icon: "database" },
+  ]}
+  scopes={[
+    { on: "team", label: "team access token" },
+    { on: "project", label: "preview deploy key" },
+    { on: "prod", label: "deploy key" },
+  ]}
+  caption="A team access token reaches every project and deployment in its team. A preview deploy key creates previews in one project, and a deploy key acts on one deployment."
+/>
+
+## Sign in with a profile
+
+Alchemy reaches a team through a [profile](/environments/profiles). Create a team access token in your team's settings, then add Convex to your `default` profile and paste it:
+
+<PackageManagers run="alchemy profile edit --add Convex" />
+
+Leave the team ID blank: Alchemy reads it from the token. A token belongs to the person who created it, so Convex recommends creating it as a service account for anything shared, like CI.
+
+See [Setup](/convex/setup).
+
+## Use one profile per team
+
+A [stage](/environments/stages) decides what you deploy. A profile decides where. Give production its own team, with its own profile:
+
+<PackageManagers script={`{run} alchemy profile create prod
+{run} alchemy profile edit --profile prod --add Convex
+{run} alchemy deploy --stage prod --profile prod`} />
+
+Many stages can share one team. Each gets its own preview deployment.
+
+## Access narrower than yours
+
+`Convex.Functions` never pushes with your token. Each push creates a deploy key that may only push and manage environment variables, expires after two hours, and is deleted when the push ends.
+
+Bindings that read a deployment's data, usage or audit log from a Worker or Lambda get a deploy key too, limited to that one read. The bindings that run public functions need no key at all.
+
+For anything else that needs to act on a deployment, declare a key with only the actions it needs:
+
+```typescript title="alchemy.run.ts"
+const key = yield* Convex.DeployKey("Ci", {
+  deployment,
+  allowedActions: ["deployment:deploy"],
+});
+```
+
+See [Deploy keys](/convex/deployments/deploy-keys).
+
+## In CI
+
+When `CONVEX_ACCESS_TOKEN` is set, Alchemy signs in with it instead of a profile. In CI (`CI=true`) there are no profiles, so set it there. `CONVEX_TEAM_ID` is optional: a team token belongs to one team, so setting it only checks that the token is for the team you expect. See [CI](/environments/ci).
+
+## Next
+
+Values your functions read, like an API key, are covered in [Environment variables](/convex/functions/environment-variables).

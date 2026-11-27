@@ -62,11 +62,9 @@ test.provider.skipIf(!!process.env.GCP_TEST_FIREWALL_POLICY)(
 
       const error = yield* Effect.flip(
         compute.insertFirewallPolicies({
+          shortName: "alchemy-fwpol-probe",
+          description: "probe",
           parentId: resource.parent,
-          body: {
-            shortName: "alchemy-fwpol-probe",
-            description: "probe",
-          },
         }),
       );
       expect(error._tag).toBe("Forbidden");

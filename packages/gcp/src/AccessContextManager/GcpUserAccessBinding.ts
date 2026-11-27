@@ -248,15 +248,13 @@ export const GcpUserAccessBindingProvider = () =>
       if (current === undefined) {
         const created = yield* acm
           .createOrganizationsGcpUserAccessBindings({
+            groupKey: news.groupKey,
+            accessLevels: desiredLevels.length > 0 ? desiredLevels : undefined,
+            dryRunAccessLevels: desiredDryRun.length > 0 ? desiredDryRun : undefined,
+            sessionSettings: news.sessionSettings,
+            scopedAccessSettings: news.scopedAccessSettings,
+            restrictedClientApplications: news.restrictedClientApplications,
             parent: organization,
-            body: {
-              groupKey: news.groupKey,
-              accessLevels: desiredLevels.length > 0 ? desiredLevels : undefined,
-              dryRunAccessLevels: desiredDryRun.length > 0 ? desiredDryRun : undefined,
-              sessionSettings: news.sessionSettings,
-              scopedAccessSettings: news.scopedAccessSettings,
-              restrictedClientApplications: news.restrictedClientApplications,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -313,16 +311,13 @@ export const GcpUserAccessBindingProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* acm.patchOrganizationsGcpUserAccessBindings({
+          accessLevels: desiredLevels,
+          dryRunAccessLevels: desiredDryRun,
+          sessionSettings: news.sessionSettings,
+          scopedAccessSettings: news.scopedAccessSettings,
+          restrictedClientApplications: news.restrictedClientApplications,
           name: current.name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name,
-            accessLevels: desiredLevels,
-            dryRunAccessLevels: desiredDryRun,
-            sessionSettings: news.sessionSettings,
-            scopedAccessSettings: news.scopedAccessSettings,
-            restrictedClientApplications: news.restrictedClientApplications,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name), current.name);

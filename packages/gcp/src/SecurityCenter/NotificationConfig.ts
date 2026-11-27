@@ -242,9 +242,9 @@ export const NotificationConfigProvider = () =>
       if (current === undefined) {
         const created = yield* scc
           .createProjectsNotificationConfigs({
+            ...body,
             parent: `projects/${env.project}`,
             configId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -266,12 +266,9 @@ export const NotificationConfigProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchProjectsNotificationConfigs({
+          ...body,
           name: currentName,
           updateMask,
-          body: {
-            ...body,
-            name: currentName,
-          },
         });
       }
 

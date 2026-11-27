@@ -352,9 +352,9 @@ export const AdminTopicProvider = () =>
         }
         const created = yield* pubsublite
           .createAdminProjectsLocationsTopics({
+            ...body,
             parent: parentOf(env.project, location),
             topicId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getTopic(name)));
         current = created ?? undefined;
@@ -388,9 +388,9 @@ export const AdminTopicProvider = () =>
           body.reservationConfig = reservationConfig;
         }
         current = yield* pubsublite.patchAdminProjectsLocationsTopics({
+          ...body,
           name: observedName,
           updateMask: mask,
-          body,
         });
       }
 

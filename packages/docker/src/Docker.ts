@@ -455,6 +455,8 @@ export class Docker extends Context.Service<
         id: string;
         image: string;
         context?: Docker.Target;
+        /** `--force`: replace every task, even when the spec is unchanged. */
+        force?: boolean;
         replicas?: number;
         "endpoint-mode"?: "vip" | "dnsrr";
         /** Networks to detach, by name or id; applied before `network-add`. */

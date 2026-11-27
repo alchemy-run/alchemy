@@ -27,7 +27,7 @@ export default class Worker extends GCP.Run.Container<Worker>()(
       greet: (name: string) => Effect.succeed(`hello ${name}`),
       count: () => Stream.make(1, 2, 3),
       publish: (text: string) =>
-        publish({ body: { messages: [{ data: btoa(text) }] } }).pipe(
+        publish({ messages: [{ data: btoa(text) }] }).pipe(
           Effect.map(({ messageIds }) => messageIds?.length ?? 0),
           Effect.orDie,
         ),

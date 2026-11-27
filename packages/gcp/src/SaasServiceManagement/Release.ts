@@ -346,17 +346,15 @@ export const ReleaseProvider = () =>
       if (current === undefined) {
         const created = yield* saasservicemgmt
           .createProjectsLocationsReleases({
+            unitKind,
+            blueprint,
+            inputVariableDefaults: news.inputVariableDefaults,
+            releaseRequirements:
+              upgradeableFromReleases === undefined ? undefined : { upgradeableFromReleases },
+            labels: desiredLabels,
+            annotations,
             parent: parentOf(env.project, location),
             releaseId,
-            body: {
-              unitKind,
-              blueprint,
-              inputVariableDefaults: news.inputVariableDefaults,
-              releaseRequirements:
-                upgradeableFromReleases === undefined ? undefined : { upgradeableFromReleases },
-              labels: desiredLabels,
-              annotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -388,17 +386,14 @@ export const ReleaseProvider = () =>
 
       if (mask.length > 0) {
         current = yield* saasservicemgmt.patchProjectsLocationsReleases({
+          etag: current.etag,
+          inputVariableDefaults: news.inputVariableDefaults,
+          releaseRequirements:
+            upgradeableFromReleases === undefined ? undefined : { upgradeableFromReleases },
+          labels: desiredLabels,
+          annotations,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            inputVariableDefaults: news.inputVariableDefaults,
-            releaseRequirements:
-              upgradeableFromReleases === undefined ? undefined : { upgradeableFromReleases },
-            labels: desiredLabels,
-            annotations,
-          },
         });
       }
 

@@ -483,9 +483,9 @@ export const CloudVmClusterProvider = () =>
       if (current === undefined) {
         const created = yield* oracle
           .createProjectsLocationsCloudVmClusters({
+            ...toCreateBody(news, desiredLabels, env.project),
             parent: parentOf(env.project, location),
             cloudVmClusterId,
-            body: toCreateBody(news, desiredLabels, env.project),
           })
           .pipe(
             retryQuota,

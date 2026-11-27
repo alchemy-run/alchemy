@@ -339,9 +339,7 @@ export const TagBindingProvider = () =>
 
       if (current === undefined) {
         const created = yield* resourcemanager
-          .createTagBindings({
-            body: createBody(parent, tagValue),
-          })
+          .createTagBindings({ ...createBody(parent, tagValue) })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);

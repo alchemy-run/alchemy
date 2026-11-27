@@ -8,14 +8,16 @@ import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import { type ServerHost } from "alchemy/Runtime/Process";
-import { packEnvValue } from "alchemy/RuntimeContext";
+import { envString, envStrings } from "alchemy/RuntimeContext";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import {
+  collectHostBindings,
   retryActAs,
   serviceAccountUniqueId,
   type AppliedIamGrant,
@@ -29,6 +31,13 @@ import {
   resolveHostIdentity,
 } from "../HostRuntime.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import {
+  deleteSecretEnv,
+  discardSecretEnv,
+  hasSecretEnv,
+  pruneSecretEnv,
+  sealSecretEnv,
+} from "../internal/SecretEnv.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -45,7 +54,7 @@ import {
 } from "./FunctionSource.ts";
 
 const DEFAULT_ENVIRONMENT = "GEN_2";
-const DEFAULT_RUNTIME = "nodejs20";
+const DEFAULT_RUNTIME = "nodejs26";
 const MAX_NAME_LENGTH = 63;
 
 export type StorageSource = {
@@ -85,9 +94,9 @@ export type Source = {
 
 export type BuildConfig = {
   /**
-   * Runtime to build and run (e.g. `nodejs20`, `python312`). Required on
+   * Runtime to build and run (e.g. `nodejs26`, `python312`). Required on
    * create.
-   * @default "nodejs20"
+   * @default "nodejs26"
    */
   runtime?: string;
   /**
@@ -285,7 +294,7 @@ export type FunctionProps = PlatformProps & {
    * event-source listeners) through the Functions Framework. Bindings
    * attach env + IAM onto the runtime service account. Replaces
    * `buildConfig.source` / `entryPoint`; `buildConfig.runtime` defaults to
-   * `nodejs22`.
+   * `nodejs26`.
    */
   main?: string;
   /**
@@ -296,6 +305,10 @@ export type FunctionProps = PlatformProps & {
   /**
    * Additional environment variables for the Effect-native function.
    * Merged after binding-injected `env`.
+   * A `Redacted` value (here, or bound by a capability) is kept out of the
+   * function's configuration: it goes into a Secret Manager secret of the
+   * function's own, which the function reads as a secret environment
+   * variable.
    */
   env?: Record<string, any>;
   /** Bundler configuration for `main`. */
@@ -326,7 +339,7 @@ export type Function = Resource<
     state: string | undefined;
     /** KMS key used for encryption, if any. */
     kmsKeyName: string | undefined;
-    /** Runtime (e.g. `nodejs20`). */
+    /** Runtime (e.g. `nodejs26`). */
     runtime: string | undefined;
     /** Source entry point. */
     entryPoint: string | undefined;
@@ -362,6 +375,11 @@ export type Function = Resource<
     iamGrants: AppliedIamGrant[];
     /** Hash of the bundled `main` program (Effect-native only). */
     codeHash: string | undefined;
+    /**
+     * Secret Manager secrets holding the function's `Redacted` env values,
+     * which it reads as secret environment variables.
+     */
+    secretEnv?: string[];
   },
   GcpHostBinding,
   Providers,
@@ -408,7 +426,7 @@ export type FunctionShape = Main<FunctionServices>;
  * ```typescript
  * const hello = yield* GCP.CloudFunctions.Function("Hello", {
  *   buildConfig: {
- *     runtime: "nodejs20",
+ *     runtime: "nodejs26",
  *     entryPoint: "helloHttp",
  *     source: {
  *       storageSource: {
@@ -428,7 +446,7 @@ export type FunctionShape = Main<FunctionServices>;
  *   description: "HTTP handler",
  *   labels: { env: "prod" },
  *   buildConfig: {
- *     runtime: "nodejs20",
+ *     runtime: "nodejs26",
  *     entryPoint: "helloHttp",
  *     source: {
  *       storageSource: { bucket: "my-source", object: "hello.zip" },
@@ -447,7 +465,7 @@ export type FunctionShape = Main<FunctionServices>;
  * ```typescript
  * const consumer = yield* GCP.CloudFunctions.Function("Consume", {
  *   buildConfig: {
- *     runtime: "nodejs20",
+ *     runtime: "nodejs26",
  *     entryPoint: "onMessage",
  *     source: {
  *       storageSource: { bucket: "my-source", object: "consumer.zip" },
@@ -502,7 +520,7 @@ export type FunctionShape = Main<FunctionServices>;
  * // …provided with Effect.provide(GCP.CloudFunctions.TopicEventSource)
  * ```
  *
- * With `main`, Alchemy bundles the program for Node.js (`nodejs22` by
+ * With `main`, Alchemy bundles the program for Node.js (`nodejs26` by
  * default), uploads it, and serves it through the Functions Framework;
  * `buildConfig.source` and `entryPoint` are managed for you. The runtime
  * authenticates to GCP as the function's service account.
@@ -599,6 +617,19 @@ const toId = (id: string, functionId: string | undefined, existing?: string) =>
 
 const stable = (value: unknown) => JSON.stringify(value ?? null);
 
+/** Secret env entries in one comparable form, whatever order the API returns. */
+const secretEnvKey = (entries: readonly SecretEnvVar[] | undefined, project: string) =>
+  stable(
+    (entries ?? [])
+      .map((entry) => [
+        entry.key ?? "",
+        entry.projectId ?? project,
+        entry.secret ?? "",
+        entry.version ?? "",
+      ])
+      .sort((left, right) => left[0]!.localeCompare(right[0]!)),
+  );
+
 const envMap = (value: Record<string, string | undefined> | null | undefined) => tagRecord(value);
 
 const normalizeGeneration = (generation: string | undefined) =>
@@ -653,6 +684,7 @@ const toAttrs = (
     iamGrants?: AppliedIamGrant[];
     codeHash?: string;
     serviceAccountUniqueId?: string;
+    secretEnv?: string[];
   } = {},
 ): Function["Attributes"] => {
   const name = fn.name ?? "";
@@ -689,6 +721,7 @@ const toAttrs = (
     serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
+    secretEnv: extras.secretEnv ?? [],
   };
 };
 
@@ -900,6 +933,7 @@ export const FunctionProvider = () =>
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
         serviceAccountUniqueId: output?.serviceAccountUniqueId,
+        secretEnv: output?.secretEnv,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -933,42 +967,85 @@ export const FunctionProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
+      const hostBindings = bindings as ResourceBinding<GcpHostBinding>[];
+      const runtimeEnv: Record<string, unknown> = {
+        ...(news.main !== undefined ? yield* alchemyRuntimeEnv : {}),
+        ...collectHostBindings(hostBindings).env,
+        ...news.env,
+      };
+      // The user's own `serviceConfig` entries win over every injected value,
+      // and a name never appears twice (the API rejects duplicates).
+      const explicitEnv = new Set([
+        ...Object.keys(news.serviceConfig?.environmentVariables ?? {}),
+        ...(news.serviceConfig?.secretEnvironmentVariables ?? []).map((entry) => entry.key ?? ""),
+      ]);
+      const plainEnv: Record<string, unknown> = {};
+      const redactedEnv: Array<{ name: string; value: Redacted.Redacted<string> }> = [];
+      for (const [key, value] of Object.entries(runtimeEnv)) {
+        if (explicitEnv.has(key)) continue;
+        const text = envString(value);
+        if (text === undefined) continue;
+        if (Redacted.isRedacted(value)) {
+          redactedEnv.push({ name: key, value: Redacted.make(text) });
+        } else {
+          plainEnv[key] = value;
+        }
+      }
+
+      // `Redacted` env values go to Secret Manager before the service
+      // account is granted to read them, and both before the function's
+      // configuration: its plain `environmentVariables` are returned by
+      // `cloudfunctions.functions.get`.
+      const secretHost = { project: env.project, hostType: HOST_TYPE, resourceName: name };
+      const secretEnv = yield* sealSecretEnv({
+        host: secretHost,
+        id,
+        containers: [{ env: redactedEnv }],
+        previous: output?.secretEnv,
+      });
+      const sealedEnv: SecretEnvVar[] = (secretEnv.containers[0]?.env ?? [])
+        .map((entry) => ({
+          key: entry.name,
+          projectId: env.project,
+          secret: entry.valueSource?.secretKeyRef?.secret,
+          version: entry.valueSource?.secretKeyRef?.version,
+        }))
+        .sort((left, right) => (left.key ?? "").localeCompare(right.key ?? ""));
+      const ownsSecretEnv = hasSecretEnv(secretEnv.secrets, output?.secretEnv);
+
       const identity = yield* resolveHostIdentity({
         project: env.project,
         hostType: HOST_TYPE,
         resourceName: name,
         userServiceAccount: news.serviceConfig?.serviceAccountEmail,
         effectNative: news.main !== undefined,
-        bindings: bindings as ResourceBinding<GcpHostBinding>[],
+        bindings: hostBindings,
         output: output && {
           ...output,
           serviceAccount: output.serviceAccountEmail,
         },
+        grants: secretEnv.grants,
       });
       const serviceAccount = identity.serviceAccount;
-      const collected = identity;
-      const runtimeEnv: Record<string, unknown> = {
-        ...(news.main !== undefined ? yield* alchemyRuntimeEnv : {}),
-        ...collected.env,
-        ...news.env,
-      };
       const serviceConfig = {
         ...news.serviceConfig,
         serviceAccountEmail: serviceAccount,
         environmentVariables: {
-          ...Object.fromEntries(
-            // A string is already an env value: the user's own (deployed
-            // verbatim, like every other host) or one the runtime context
-            // packed when it was bound. Packing it again would quote
-            // `"false"` and double-wrap bound secrets.
-            Object.entries(runtimeEnv).map(([key, value]) => [
-              key,
-              typeof value === "string" ? value : packEnvValue(value),
-            ]),
-          ),
+          ...envStrings(plainEnv),
           ...news.serviceConfig?.environmentVariables,
         },
+        // Left alone on a function that keeps no secret of Alchemy's.
+        secretEnvironmentVariables: ownsSecretEnv
+          ? [...(news.serviceConfig?.secretEnvironmentVariables ?? []), ...sealedEnv]
+          : news.serviceConfig?.secretEnvironmentVariables,
       };
+      // Undo what a failed first deploy made: the engine records no output
+      // for it, so it never deletes them.
+      const cleanup = identity.cleanup.pipe(
+        Effect.andThen(
+          output === undefined ? discardSecretEnv(secretHost, secretEnv.secrets) : Effect.void,
+        ),
+      );
 
       let current = yield* getByName(name);
       if (current?.state === "DELETING") {
@@ -989,7 +1066,7 @@ export const FunctionProvider = () =>
             build: news.build,
             isExternal: news.isExternal,
           })
-          .pipe(Effect.onError(() => identity.cleanup));
+          .pipe(Effect.onError(() => cleanup));
         codeHash = bundled.codeHash;
         const deployed = current?.buildConfig?.source?.storageSource;
         const storageSource =
@@ -1001,7 +1078,7 @@ export const FunctionProvider = () =>
                   files: bundled.files,
                   kmsKeyName: news.kmsKeyName,
                 })
-                .pipe(Effect.onError(() => identity.cleanup));
+                .pipe(Effect.onError(() => cleanup));
         buildConfig = {
           ...news.buildConfig,
           runtime: news.buildConfig?.runtime ?? DEFAULT_NODE_RUNTIME,
@@ -1013,23 +1090,21 @@ export const FunctionProvider = () =>
       if (current === undefined) {
         const created = yield* cloudfunctions
           .createProjectsLocationsFunctions({
+            name,
+            description: news.description,
+            labels: desiredLabels,
+            kmsKeyName: news.kmsKeyName,
+            environment,
+            buildConfig: mergeBuildConfig(buildConfig, undefined),
+            serviceConfig,
+            eventTrigger: news.eventTrigger,
             parent: `projects/${env.project}/locations/${location}`,
             functionId,
-            body: {
-              name,
-              description: news.description,
-              labels: desiredLabels,
-              kmsKeyName: news.kmsKeyName,
-              environment,
-              buildConfig: mergeBuildConfig(buildConfig, undefined),
-              serviceConfig,
-              eventTrigger: news.eventTrigger,
-            },
           })
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.undefined),
-            Effect.onError(() => identity.cleanup),
+            Effect.onError(() => cleanup),
           );
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
@@ -1088,8 +1163,8 @@ export const FunctionProvider = () =>
             (current.serviceConfig?.allTrafficOnLatestRevision ?? true) !==
               desiredService.allTrafficOnLatestRevision) ||
           (desiredService.secretEnvironmentVariables !== undefined &&
-            stable(desiredService.secretEnvironmentVariables) !==
-              stable(current.serviceConfig?.secretEnvironmentVariables)) ||
+            secretEnvKey(desiredService.secretEnvironmentVariables, env.project) !==
+              secretEnvKey(current.serviceConfig?.secretEnvironmentVariables, env.project)) ||
           (desiredService.secretVolumes !== undefined &&
             stable(desiredService.secretVolumes) !==
               stable(current.serviceConfig?.secretVolumes)) ||
@@ -1122,23 +1197,20 @@ export const FunctionProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* cloudfunctions.patchProjectsLocationsFunctions({
+          labels: desiredLabels,
+          description: news.description,
+          kmsKeyName: news.kmsKeyName ?? current.kmsKeyName,
+          buildConfig: desiredBuild ?? current.buildConfig,
+          serviceConfig: {
+            ...current.serviceConfig,
+            ...desiredService,
+            service: undefined,
+            uri: undefined,
+            revision: undefined,
+          },
+          eventTrigger: news.eventTrigger ?? current.eventTrigger,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-            kmsKeyName: news.kmsKeyName ?? current.kmsKeyName,
-            buildConfig: desiredBuild ?? current.buildConfig,
-            serviceConfig: {
-              ...current.serviceConfig,
-              ...desiredService,
-              service: undefined,
-              uri: undefined,
-              revision: undefined,
-            },
-            eventTrigger: news.eventTrigger ?? current.eventTrigger,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(name);
@@ -1147,10 +1219,31 @@ export const FunctionProvider = () =>
         return yield* new FunctionNotResolved({ resourceName: name });
       }
 
+      // The rollout is done: drop the secret versions the function reads no
+      // more. An earlier revision may still serve when traffic is split by
+      // hand, so its versions (and secrets) are kept until the function goes.
+      const pinned = (current.serviceConfig?.allTrafficOnLatestRevision ?? true) === false;
+      if (ownsSecretEnv && !pinned) {
+        const inUse = new Map<string, Set<string>>();
+        for (const entry of sealedEnv) {
+          if (entry.secret === undefined || entry.version === undefined) continue;
+          inUse.set(entry.secret, new Set([entry.version]));
+        }
+        yield* pruneSecretEnv({
+          host: secretHost,
+          secrets: secretEnv.secrets,
+          previous: output?.secretEnv,
+          inUse,
+        });
+      }
+
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
         serviceAccountUniqueId: identity.uniqueId,
+        secretEnv: [
+          ...new Set([...secretEnv.secrets, ...(pinned ? (output?.secretEnv ?? []) : [])]),
+        ].sort(),
       });
     }),
 
@@ -1162,6 +1255,10 @@ export const FunctionProvider = () =>
         yield* waitForOperation(operation, { notFoundOk: true });
       }
       yield* waitUntilGone(output.name);
+      yield* deleteSecretEnv(
+        { project: output.project, hostType: HOST_TYPE, resourceName: output.name },
+        output.secretEnv,
+      );
       yield* releaseHostIdentity({
         ...output,
         serviceAccount: output.serviceAccountEmail,

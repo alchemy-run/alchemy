@@ -1,5 +1,6 @@
 import * as iotfleetwise from "@distilled.cloud/aws/iotfleetwise";
 import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 import { BatchUpdateVehicle } from "./BatchUpdateVehicle.ts";
 import { makeFleetWiseAccountHttpBinding } from "./BindingHttp.ts";
 
@@ -11,6 +12,6 @@ export const BatchUpdateVehicleHttp = Layer.effect(
     // The vehicle names are runtime arguments, so the grant is the
     // account-wide vehicle pattern.
     actions: ["iotfleetwise:BatchUpdateVehicle", "iotfleetwise:UpdateVehicle"],
-    resources: ["arn:aws:iotfleetwise:*:*:vehicle/*"],
+    resources: [AWSBindings.partitionArn("iotfleetwise:*:*:vehicle/*")],
   }),
 );

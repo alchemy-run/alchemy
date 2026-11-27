@@ -305,11 +305,9 @@ export const LocationsJobTriggerProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createProjectsLocationsJobTriggers({
+            triggerId,
+            jobTrigger,
             parent: locationParent(env.project, location),
-            body: {
-              triggerId,
-              jobTrigger,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -333,17 +331,15 @@ export const LocationsJobTriggerProvider = () =>
         triggersChanged
       ) {
         current = yield* dlp.patchProjectsLocationsJobTriggers({
+          updateMask: updateMaskOf(
+            displayChanged ? "displayName" : undefined,
+            descriptionChanged ? "description" : undefined,
+            statusChanged ? "status" : undefined,
+            inspectChanged ? "inspectJob" : undefined,
+            triggersChanged ? "triggers" : undefined,
+          ),
+          jobTrigger,
           name: current.name ?? name,
-          body: {
-            updateMask: updateMaskOf(
-              displayChanged ? "displayName" : undefined,
-              descriptionChanged ? "description" : undefined,
-              statusChanged ? "status" : undefined,
-              inspectChanged ? "inspectJob" : undefined,
-              triggersChanged ? "triggers" : undefined,
-            ),
-            jobTrigger,
-          },
         });
       }
 
