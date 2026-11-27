@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import type { AsyncPlatformWorkerEnv } from "./shared.ts";
+import { type AsyncPlatformWorkerEnv, outboundValues } from "./shared.ts";
 
 /**
  * Async (non-Effect) platform Worker handler. The dispatch namespace is bound
@@ -12,6 +12,21 @@ import type { AsyncPlatformWorkerEnv } from "./shared.ts";
 export default {
   async fetch(request: Request, env: AsyncPlatformWorkerEnv): Promise<Response> {
     const url = new URL(request.url);
+    // `GET /outbound/:scriptName?tenant=…` dispatches through the binding
+    // with an outbound Worker and asks the user Worker to fetch the internet.
+    // A dispatch that throws answers 500 with the error.
+    const outbound = url.pathname.match(/^\/outbound\/([^/]+)$/);
+    if (outbound) {
+      try {
+        return await env.DISPATCH_OUTBOUND.get(
+          outbound[1]!,
+          {},
+          { outbound: outboundValues(url.searchParams) },
+        ).fetch("https://user-worker/egress");
+      } catch (error) {
+        return Response.json({ error: String(error) }, { status: 500 });
+      }
+    }
     const match = url.pathname.match(/^\/dispatch\/([^/]+)(\/.*)?$/);
     if (!match) {
       return new Response("async-platform-worker ok");

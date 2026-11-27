@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isS3Credentials } from "../R2/S3CredentialsBinding.ts";
+import { isDispatchBinding } from "../WorkersForPlatforms/Get.ts";
 import { isSelfUrl } from "./Worker.ts";
 import { isContainerDecl } from "./WorkerAsyncBindings.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
@@ -33,7 +34,13 @@ export const resolveBuildEnv = (
       // values: yielding a Container would resolve the started-instance tag,
       // which only exists inside a Durable Object (#997), and S3Credentials
       // needs the host's `WorkerEnvironment` (#2219).
-      if (isWorkerLoader(value) || isContainerDecl(value) || isS3Credentials(value)) {
+      // A dispatch binding (`WorkersForPlatforms.Get`) is one too.
+      if (
+        isWorkerLoader(value) ||
+        isContainerDecl(value) ||
+        isS3Credentials(value) ||
+        isDispatchBinding(value)
+      ) {
         return [key, undefined];
       }
       if (Effect.isEffect(value)) {

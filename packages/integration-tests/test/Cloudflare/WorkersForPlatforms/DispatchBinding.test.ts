@@ -9,7 +9,14 @@ import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import WfpPlatformWorker from "./fixtures/platform-worker.ts";
-import { AsyncPlatformWorker, DispatchNs, userWorkerScript } from "./fixtures/shared.ts";
+import {
+  AsyncPlatformWorker,
+  DispatchNs,
+  OUTBOUND_REF_STACK,
+  OutboundWorker,
+  RefOutboundWorker,
+  userWorkerScript,
+} from "./fixtures/shared.ts";
 
 /**
  * End-to-end test for the Workers for Platforms dynamic-dispatch binding
@@ -46,6 +53,7 @@ const Stack = Alchemy.Stack(
       namespace: ns.name,
       script: userWorkerScript,
     });
+    yield* OutboundWorker;
     const platformWorker = yield* WfpPlatformWorker;
     const asyncPlatformWorker = yield* AsyncPlatformWorker;
     return {
@@ -54,6 +62,14 @@ const Stack = Alchemy.Stack(
       userWorkerName: userWorker.workerName.as<string>(),
     };
   }),
+);
+
+// Deploys the outbound Worker the platform Worker reaches with
+// `Cloudflare.Worker.ref`. It deploys first and is destroyed last.
+const OutboundRefStack = Alchemy.Stack(
+  OUTBOUND_REF_STACK,
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  RefOutboundWorker.pipe(Effect.asVoid),
 );
 
 class NotReady extends Data.TaggedError("NotReady")<{
@@ -81,7 +97,7 @@ const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse,
 
 const stack = beforeAll(
   WFP_ENABLED
-    ? deploy(Stack)
+    ? deploy(OutboundRefStack).pipe(Effect.andThen(deploy(Stack)))
     : Effect.succeed({
         platformUrl: "",
         asyncPlatformUrl: "",
@@ -89,9 +105,10 @@ const stack = beforeAll(
       }),
   { timeout: HOOK_TIMEOUT },
 );
-afterAll.skipIf(!WFP_ENABLED || !!process.env.NO_DESTROY)(destroy(Stack), {
-  timeout: HOOK_TIMEOUT,
-});
+afterAll.skipIf(!WFP_ENABLED || !!process.env.NO_DESTROY)(
+  destroy(Stack).pipe(Effect.andThen(destroy(OutboundRefStack))),
+  { timeout: HOOK_TIMEOUT },
+);
 
 // Drive one platform worker base URL: dispatch to `scriptName`, assert the
 // request reached the dispatched user worker (not the platform worker's own
@@ -179,4 +196,80 @@ test.skipIf(!WFP_ENABLED)(
     ],
     timeout: TEST_TIMEOUT,
   },
+);
+
+// The user Worker fetches `https://example.com/probe`: the outbound Worker
+// answers it with JSON, where the origin would answer with HTML.
+const assertEgress = (base: string, route: string, via: string) =>
+  Effect.gen(function* () {
+    const { userWorkerName } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* untilOk(client.get(`${base}/${route}/${userWorkerName}?tenant=acme`));
+    expect(yield* res.json).toEqual({ seen: "https://example.com/probe", tenant: "acme", via });
+  }).pipe(logLevel);
+
+const OUTBOUND_OPTIONS = {
+  tags: [
+    "provider:cloudflare",
+    "provider:cloudflare:worker",
+    "provider:cloudflare:workersforplatforms",
+    "live",
+  ],
+  timeout: TEST_TIMEOUT,
+};
+
+test.skipIf(!WFP_ENABLED)(
+  "an outbound Worker receives a user Worker's fetch and the dispatch's values (env binding)",
+  Effect.gen(function* () {
+    yield* assertEgress((yield* stack).asyncPlatformUrl, "outbound", "stack");
+  }),
+  OUTBOUND_OPTIONS,
+);
+
+test.skipIf(!WFP_ENABLED)(
+  "an outbound Worker receives a user Worker's fetch and the dispatch's values (Effect binding)",
+  Effect.gen(function* () {
+    yield* assertEgress((yield* stack).platformUrl, "outbound", "stack");
+  }),
+  OUTBOUND_OPTIONS,
+);
+
+test.skipIf(!WFP_ENABLED)(
+  "an outbound Worker another stack deploys, by Worker.ref",
+  Effect.gen(function* () {
+    yield* assertEgress((yield* stack).platformUrl, "outbound-ref", "ref");
+  }),
+  OUTBOUND_OPTIONS,
+);
+
+// Cloudflare requires every declared outbound value on each dispatch, which
+// is why the types require them. `?probe=omit` bypasses the type.
+test.skipIf(!WFP_ENABLED)(
+  "a dispatch that leaves a declared outbound value out is refused; null passes",
+  Effect.gen(function* () {
+    const { asyncPlatformUrl, platformUrl, userWorkerName } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+    for (const base of [asyncPlatformUrl, platformUrl]) {
+      const none = yield* untilOk(client.get(`${base}/outbound/${userWorkerName}`));
+      expect(yield* none.json).toMatchObject({ tenant: null });
+
+      const omitted = yield* client.get(`${base}/outbound/${userWorkerName}?probe=omit`);
+      expect(omitted.status).toBe(500);
+      expect(((yield* omitted.json) as { error: string }).error).toContain(
+        "Missing one or more required arguments to worker",
+      );
+    }
+  }).pipe(logLevel),
+  OUTBOUND_OPTIONS,
+);
+
+test.skipIf(!WFP_ENABLED)(
+  "an Effect HttpClient calls a dispatched user Worker through its Fetcher",
+  Effect.gen(function* () {
+    const { platformUrl, userWorkerName } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* untilOk(client.get(`${platformUrl}/client/${userWorkerName}`));
+    expect(yield* res.json).toMatchObject({ handledBy: "user-worker", path: "/via-client" });
+  }).pipe(logLevel),
+  OUTBOUND_OPTIONS,
 );

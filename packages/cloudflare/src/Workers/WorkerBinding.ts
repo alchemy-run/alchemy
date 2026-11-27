@@ -31,6 +31,7 @@ import type { StreamBinding } from "../Stream/StreamBinding.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { VpcService } from "../VpcService/VpcService.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
+import type { AnyDispatchBinding } from "../WorkersForPlatforms/Get.ts";
 import type { WorkflowLike, WorkflowLookup } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
@@ -254,6 +255,7 @@ export type WorkerBindingResource =
   // A Worker-only binding lifted by `.pipe(Alchemy.remote())`.
   | AnyBindingEffect
   | DispatchNamespace
+  | AnyDispatchBinding
   | DurableObjectLike<any>
   | WorkflowLike<any>
   | WorkflowLookup<any>

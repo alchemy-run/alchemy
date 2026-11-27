@@ -1171,6 +1171,82 @@ export default {
       { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker", "live"], timeout: 360_000 },
     );
 
+    test.provider(
+      "Vite: a dispatch binding on env reaches the Worker",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-vite-dispatch-",
+            tempRoot,
+            entries: ["index.html", "package.json", "vite.config.ts", "src"],
+          });
+          // A dispatch to a script the namespace doesn't hold: the binding is
+          // Cloudflare's, so it answers "Worker not found.".
+          yield* fs.writeFileString(
+            path.join(rootDir, "src/worker.ts"),
+            `type Env = {
+  ASSETS: { fetch: (req: Request) => Promise<Response> };
+  NS: { get: (name: string) => { fetch: (req: Request) => Promise<Response> } };
+};
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    if (new URL(request.url).pathname === "/api/dispatch") {
+      const message = await env.NS.get("missing").fetch(request).then(
+        () => "answered",
+        (error: Error) => error.message,
+      );
+      return Response.json({ message });
+    }
+    return env.ASSETS.fetch(request);
+  },
+};
+`,
+          );
+          const memoInclude = ["index.html", "src/**", "package.json", "vite.config.ts"];
+
+          // `WorkersForPlatforms.Get` is Effect-shaped, and its Effect-native
+          // client can't be provided to a build.
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              const namespace =
+                yield* Cloudflare.WorkersForPlatforms.DispatchNamespace("ViteDispatchNs");
+              return yield* Cloudflare.Website.Vite("ViteDispatch", {
+                ...viteProps(rootDir, memoInclude),
+                assets: { runWorkerFirst: ["/api/*"] },
+                env: { NS: Cloudflare.WorkersForPlatforms.Get(namespace) },
+              });
+            }),
+          );
+
+          expect(site.url).toBeDefined();
+          yield* expectWorkerExists(site.workerName, accountId);
+
+          const client = yield* HttpClient.HttpClient;
+          const body = yield* client.get(`${site.url!}/api/dispatch`).pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? res.json
+                : Effect.fail(new Error(`/api/dispatch returned ${res.status}`)),
+            ),
+            Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
+          );
+          expect(body).toEqual({ message: "Worker not found." });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      {
+        tags: ["provider:cloudflare:workersforplatforms", "provider:cloudflare:worker", "live"],
+        timeout: 360_000,
+      },
+    );
+
     // The documented interception pattern (solidstart.mdx hand-rolled SSR /
     // static-site.mdx docs-site worker): the client build emits an index.html
     // that would shadow `/` under assets-first routing, so the worker runs

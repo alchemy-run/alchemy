@@ -33,6 +33,7 @@ import type * as R2 from "../R2/index.ts";
 import type * as StreamNs from "../Stream/index.ts";
 import type { VpcService } from "../VpcService/VpcService.ts";
 import type { DispatchNamespace as DispatchNamespaceResource } from "../WorkersForPlatforms/DispatchNamespace.ts";
+import type { DispatchBinding, DispatchNamespaceFor } from "../WorkersForPlatforms/Get.ts";
 import type { WorkflowBinding, WorkflowLike, WorkflowLookup } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
@@ -59,6 +60,12 @@ export type InferEnv<W> =
           };
 
 export type GetBindingType<T> =
+  // A dispatch binding (`WorkersForPlatforms.Get(namespace, …)`) is an Effect
+  // whose `A` is the Effect-native client; on an async Worker's `env` it is
+  // the runtime binding, typed by its values.
+  T extends DispatchBinding<infer P> ? DispatchNamespaceFor<P> : GetResourceBindingType<T>;
+
+type GetResourceBindingType<T> =
   // A named-entrypoint service binding (`Cloudflare.WorkerEntrypoint`).
   // Tested first: the marker *contains* a Worker, so the later Worker
   // branches must never see it.
