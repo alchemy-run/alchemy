@@ -2,6 +2,7 @@ import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
 import * as Provider from "alchemy/Provider";
 import * as Layer from "effect/Layer";
 import { Backfill, BackfillProvider } from "./Backfill.ts";
+import { DomainRetirementLive } from "./Migration.ts";
 
 /** Service tag bundling the providers of Domain models hosted on Cloudflare. */
 export class Providers extends Provider.ProviderCollection<Providers>()("Domain.Cloudflare") {}
@@ -11,7 +12,8 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 /**
  * The providers of Domain models hosted on Cloudflare Durable Objects: the
  * {@link Backfill} a deploy waits on while new views and projections receive
- * their history. Add it next to `Cloudflare.providers()` in any Stack that
+ * their history, and the move of a model's objects out of the classes of an
+ * older Domain layout, which the Worker's deploy runs between its two uploads. Add it next to `Cloudflare.providers()` in any Stack that
  * deploys a Worker built with `DomainCloudflare.layerDurableObjects()`.
  * Without it, the deploy fails: no provider handles `Cloudflare.Domain.Backfill`.
  *
@@ -38,8 +40,10 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Backfill])).pipe(
-    Layer.provide(BackfillProvider()),
-    Layer.provide(CloudflareApiLive()),
-    Layer.orDie,
-  );
+  Layer.mergeAll(
+    Layer.effect(Providers, Provider.collection([Backfill])).pipe(
+      Layer.provide(BackfillProvider()),
+    ),
+    // The Worker deploy moves objects out of a model's old classes through it.
+    DomainRetirementLive,
+  ).pipe(Layer.provide(CloudflareApiLive()), Layer.orDie);

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { reveal, revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 import {
   databaseIdOf,
@@ -139,7 +140,7 @@ const toAttrs = (
     project: parsed.project || project,
     disabled: state === "DISABLED",
     state,
-    securePassword: creds.securePassword ?? securePassword,
+    securePassword: revealOptional(creds.securePassword) ?? securePassword,
     principal: creds.resourceIdentity?.principal,
     createTime: creds.createTime,
     updateTime: creds.updateTime,
@@ -251,7 +252,7 @@ export const DatabasesUserCredProvider = () =>
           );
         current = created ?? undefined;
         if (current?.securePassword !== undefined) {
-          createdPassword = current.securePassword;
+          createdPassword = reveal(current.securePassword);
         }
       }
 

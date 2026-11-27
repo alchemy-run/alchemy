@@ -252,8 +252,50 @@ export interface Host<R = never> {
    * keeps it alive.
    */
   readonly background?: (effect: Effect.Effect<void>) => Effect.Effect<boolean>;
+  /**
+   * Where every object of a model lives, given once the model's objects are
+   * declared: a host that moves a model to another layout finds each object
+   * with it. Optional.
+   */
+  readonly layout?: (model: HostedModel, layout: ModelLayout) => Effect.Effect<void, never, R>;
   /** Models whose names collide on the same key fail to host: one per Worker, pool or class. */
   readonly claimKey: Effect.Effect<object, never, R>;
+}
+
+/**
+ * Where every object of a model lives, by the class names a host declares
+ * (`AccountAggregate`): the model's directory lists every aggregate and view,
+ * and every policy, projection, stream and saga run that has written, and each
+ * source's history names the consumer objects it reached.
+ */
+export interface ModelLayout {
+  /** The class of the model's directory nodes. */
+  readonly directory: string;
+  /**
+   * A directory entry's class, and whether it is a source (an aggregate or a
+   * view, whose history names consumers); `undefined` for one this code
+   * doesn't host.
+   */
+  readonly entry: (
+    ref: Backfill.SourceRef,
+  ) => { readonly name: string; readonly source: boolean } | undefined;
+  /** A consumer's classes: its keys', and its run's (root, relays and scanners). */
+  readonly consumer: (target: Delivery["target"]) => {
+    readonly keys: string;
+    readonly run: string;
+  };
+  /** The classes of the streams a projection writes, keyed like the projection. */
+  readonly streams: (projection: string) => ReadonlyArray<string>;
+  /** Every consumer run's class: its root records the run's history. */
+  readonly runs: () => ReadonlyArray<string>;
+  /** The object of a source instance's scanner, in a consumer's run class. */
+  readonly scanner: (ref: Backfill.SourceRef) => string;
+  /** List an object that isn't a source (a saga run) in the model's directory, before its first write. */
+  readonly register: (
+    source: "Workflow",
+    name: string,
+    id: string,
+  ) => Effect.Effect<void, never, ObjectState>;
 }
 
 const pad = (n: number) => n.toString().padStart(12, "0");
@@ -899,7 +941,7 @@ const TICK_MILLIS = 5_000;
 
 type Random = SecureRandom.SecureRandom["Service"];
 
-const backfillRuntime = Effect.fn(function* (
+export const backfillRuntime = Effect.fn(function* (
   random: Random,
   run: (id: string) => Effect.Effect<void, never, ObjectState | RuntimeContext>,
 ) {
@@ -1170,6 +1212,37 @@ const registerJob = (
     Effect.andThen(source.catchUp),
     Effect.catchCause(() => jobs.schedule(REGISTER_JOB, REGISTER_RETRY_MS)),
   );
+
+/**
+ * A page of the consumer objects a source's stored rows reached, once each, and
+ * where the next page starts (`null` after the last). Rows are numbered without
+ * gaps, so a full page ends at `after + count`.
+ */
+const consumersPage = (
+  deliveries: Effect.Effect<ReadonlyArray<Delivery>>,
+  after: number,
+  count: number,
+  limit: number,
+) =>
+  Effect.map(deliveries, (all) => {
+    const seen = new Map<string, { readonly target: Delivery["target"]; readonly key: string }>();
+    for (const { target, key } of all)
+      seen.set(
+        `${target.kind}:${target.name}#${target.generation ?? 0}${target.inPlace ? "@" : ""}/${key}`,
+        { target, key },
+      );
+    return { consumers: [...seen.values()], next: count < limit ? null : after + count };
+  });
+
+/**
+ * The directory subtree an object that isn't a source lists itself under:
+ * policies, streams, projections and saga runs. Named like their classes
+ * (`NotifyPolicy`), so they never share a subtree with the sources a backfill
+ * reads. With every object of a model listed, a later layout change finds each
+ * one exactly, with no wait on the platform's own listing.
+ */
+export const registryName = (kind: "Policy" | "Stream" | "Projection" | "Workflow", name: string) =>
+  `${name}${kind}`;
 
 /**
  * What an instance holds for a decision until it commits or aborts: the whole
@@ -2256,6 +2329,9 @@ const aggregateObject = Effect.fn(function* (
         const at = "at" in due ? due.at : (yield* Clock.currentTimeMillis) + due.afterMillis;
         yield* state.storage.put(`armed:${name}`, { commandId: meta.commandId, at });
         yield* state.storage.put(`scheduled:${name}`, token);
+        // An instance that has only scheduled a command holds data too: it keeps its
+        // key and is listed in the directory, like one that has committed.
+        yield* listAfterCommit(runtime.jobs, id);
         yield* timers.schedule(name, {
           at,
           payload: { id, command, meta, token, name },
@@ -2358,6 +2434,18 @@ const aggregateObject = Effect.fn(function* (
     // Any code answers these: a run reads its log, and routes it with its own code.
     bfLog: (id: string, after: number, limit: number) =>
       reportDefects(sourceFor(id).log(after, limit)),
+    // A layout change: every consumer object this instance's history reached.
+    mgConsumers: (id: string, after: number, limit: number) =>
+      reportDefects(
+        Effect.flatMap(sourceFor(id).log(after, limit), (rows) =>
+          consumersPage(
+            kit.consumersOf(id, rows as ReadonlyArray<StoredEvent>),
+            after,
+            rows.length,
+            limit,
+          ),
+        ),
+      ),
     bfCursor: (id: string, target: string) => reportDefects(sourceFor(id).cursor(target)),
     bfRead: (id: string, target: string, key: string, after: number, limit: number) =>
       reportDefects(sourceFor(id).read(target, key, after, limit)),
@@ -2795,6 +2883,18 @@ const viewObject = Effect.fn(function* (
     // first: a view or projection catching up never sees it still filling.
     bfLog: (key: string, after: number, limit: number) =>
       reportDefects(Effect.andThen(filled(key), sourceFor(key).log(after, limit))),
+    // A layout change: every consumer object this key's entries reached.
+    mgConsumers: (key: string, after: number, limit: number) =>
+      reportDefects(
+        Effect.flatMap(sourceFor(key).log(after, limit), (rows) =>
+          consumersPage(
+            kit.consumersOf(key, rows as ReadonlyArray<ViewEntry>),
+            after,
+            rows.length,
+            limit,
+          ),
+        ),
+      ),
     bfCursor: (key: string, target: string) =>
       reportDefects(Effect.andThen(filled(key), sourceFor(key).cursor(target))),
     bfRead: (key: string, target: string, reader: string, after: number, limit: number) =>
@@ -2851,7 +2951,7 @@ interface ViewRevisions {
   readonly recalls?: ReadonlyArray<Delivery>;
 }
 
-const policyObject = Effect.fn(function* (kit: PolicyKit, aging: Aging) {
+const policyObject = Effect.fn(function* (kit: PolicyKit, aging: Aging, net: Backfill.Network) {
   const state = yield* ObjectState;
   const inbox = yield* queue<Delivery>("inbox", kit.run);
   return {
@@ -2860,6 +2960,11 @@ const policyObject = Effect.fn(function* (kit: PolicyKit, aging: Aging) {
         Effect.gen(function* () {
           // A rewrite's revision is the past changed: what a policy did has happened.
           if (delivery.revision !== undefined) return;
+          // Listed before its first write.
+          yield* ensureRegistered(net, {
+            source: registryName("Policy", kit.name),
+            id: delivery.key,
+          });
           const id = `${delivery.source}:${delivery.seq}`;
           yield* exclusively(
             state.storage.transaction(
@@ -3288,7 +3393,9 @@ const projectionObject = Effect.fn(function* (
         ),
       after: runtime.provide(Effect.flatMap(Clock.currentTimeMillis, handOn)),
     }));
-  const keep = (key: string) => state.storage.put(ID_KEY, key);
+  // Listed before its first write.
+  const keep = (key: string) =>
+    ensureRegistered(net, { source: registryName("Projection", kit.name), id: key });
   return {
     receive: (key: string, delivery: Delivery) =>
       reportDefects(
@@ -3328,7 +3435,7 @@ const projectionObject = Effect.fn(function* (
 /** Where a stream key indexes the entries it appended for one source event. */
 const fromPrefix = (source: string, seq: number) => `from:${source}|${pad(seq)}:`;
 
-const streamObject = Effect.fn(function* (kit: StreamKit) {
+const streamObject = Effect.fn(function* (kit: StreamKit, net: Backfill.Network) {
   const state = yield* ObjectState;
   const expiry = yield* makeExpiry;
   const readMeta = state.storage
@@ -3347,6 +3454,8 @@ const streamObject = Effect.fn(function* (kit: StreamKit) {
   return {
     append: (key: string, write: StreamWrite) =>
       Effect.gen(function* () {
+        // Listed before its first write.
+        yield* ensureRegistered(net, { source: registryName("Stream", kit.name), id: key });
         const before = yield* readMeta;
         const { meta, appends } = admitStreamWrite(before, write);
         if (!appends) {
@@ -3599,8 +3708,16 @@ export const makePlatform = <R>(
       // Everything of a model is its own: its objects, and its backfill's
       // directory and runs. Models that share a definition never share data.
       const hostFor = Effect.fn(function* (hosted: HostedModel) {
+        /** Every class this code declares for the model. */
+        const declared = new Set<string>();
         const object = (name: string, impl: ObjectImpl) =>
-          host.declare(hosted, name, bindState(impl));
+          Effect.andThen(
+            Effect.sync(() => declared.add(name)),
+            host.declare(hosted, name, bindState(impl)),
+          );
+        /** The stream classes each projection writes, and each projection's keys' class. */
+        const projectionStreams = new Map<string, ReadonlyArray<string>>();
+        const projectionClasses = new Map<string, string>();
         // Every consumer in the model this isolate runs, set once the model is built.
         let model: ReadonlyArray<string> = [];
         let planOf: PlanOf = () => undefined;
@@ -3766,6 +3883,45 @@ export const makePlatform = <R>(
               ),
           },
         };
+        if (host.layout !== undefined)
+          yield* inInit(
+            host.layout(hosted, {
+              directory: "DomainDirectory",
+              entry: (ref) => {
+                const aggregate = `${ref.source}Aggregate`;
+                if (declared.has(aggregate)) return { name: aggregate, source: true };
+                const view = consumerClass(
+                  "view",
+                  ref.source,
+                  ref.generation ?? viewGenerations.get(ref.source) ?? 0,
+                );
+                if (declared.has(view)) return { name: view, source: true };
+                // Listed objects that aren't sources: policies, streams, projections, saga runs.
+                const projection = /^(.*)Projection$/.exec(ref.source);
+                const other = projection ? projectionClasses.get(projection[1]!) : ref.source;
+                return other !== undefined && declared.has(other)
+                  ? { name: other, source: false }
+                  : undefined;
+              },
+              consumer: (target) => {
+                if (target.kind === "policy") {
+                  const policy = `${target.name}Policy`;
+                  return { keys: policy, run: policy };
+                }
+                const keys = consumerClass(
+                  target.kind,
+                  target.name,
+                  generationOfTarget(targetId(target)),
+                );
+                return { keys, run: runClass(keys) };
+              },
+              streams: (projection) => projectionStreams.get(projection) ?? [],
+              runs: () => [...declared].filter((name) => /(View|Projection)(V\d+)?Run$/.test(name)),
+              scanner: scannerName,
+              register: (_, name, id) =>
+                ensureRegistered(net, { source: registryName("Workflow", name), id }),
+            }),
+          );
         directory = yield* inInit(object("DomainDirectory", directoryObject(net, random)));
 
         // A deploy's backfill: the host starts each new consumer's run and waits.
@@ -4082,6 +4238,17 @@ export const makePlatform = <R>(
             inInit(
               Effect.gen(function* () {
                 const cls = consumerClass("projection", projection.projectionName, kit.generation);
+                projectionClasses.set(projection.projectionName, cls);
+                projectionStreams.set(
+                  projection.projectionName,
+                  (
+                    (
+                      projection.definition as {
+                        readonly writes?: ReadonlyArray<{ readonly streamName: string }>;
+                      }
+                    ).writes ?? []
+                  ).map((stream) => `${stream.streamName}Stream`),
+                );
                 const namespace = yield* object(
                   cls,
                   projectionObject(kit, net, consumerPlans, random),
@@ -4108,7 +4275,10 @@ export const makePlatform = <R>(
           stream: (stream, kit) =>
             inInit(
               Effect.gen(function* () {
-                const namespace = yield* object(`${stream.streamName}Stream`, streamObject(kit));
+                const namespace = yield* object(
+                  `${stream.streamName}Stream`,
+                  streamObject(kit, net),
+                );
                 const read = (key: string) =>
                   unwrapDefects<StreamMeta>(namespace.getByName(key).read());
                 const after = (key: string, cursor: number) =>
@@ -4178,7 +4348,7 @@ export const makePlatform = <R>(
               Effect.gen(function* () {
                 const namespace = yield* object(
                   `${policy.policyName}Policy`,
-                  policyObject(kit, aging),
+                  policyObject(kit, aging, net),
                 );
                 return {
                   receive: (delivery) =>

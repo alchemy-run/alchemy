@@ -6,6 +6,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -37,9 +38,9 @@ test.provider(
         project_id: deployed.branch.projectId,
         branch_id: deployed.branch.branchId,
       };
-      expect((yield* SDK.getProjectBranchAiGateway(request)).base_url.replace(/\/$/, "")).toBe(
-        deployed.baseUrl,
-      );
+      expect(
+        (yield* SDKUnstable.getProjectBranchAiGateway(request)).base_url.replace(/\/$/, ""),
+      ).toBe(deployed.baseUrl);
       const http = yield* HttpClient.HttpClient;
       const models = yield* http.execute(
         HttpClientRequest.get(`${deployed.baseUrl}/v1/models`).pipe(
@@ -60,7 +61,7 @@ test.provider(
       yield* Effect.log("Enabled Neon AI Gateway models", {
         models: catalog.data.filter((model) => model.enabled).map((model) => model.id),
       });
-      const list = yield* SDK.listCredentials(request);
+      const list = yield* SDKUnstable.listCredentials(request);
       expect(
         list.credentials.find((entry) => entry.token_id === deployed.credential.tokenId)?.scopes,
       ).toContain("ai_gateway:invoke");

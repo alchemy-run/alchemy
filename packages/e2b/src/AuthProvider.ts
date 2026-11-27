@@ -1,5 +1,4 @@
-import * as auth from "@distilled.cloud/e2b/auth";
-import { credentials as e2bCredentials, DEFAULT_DOMAIN } from "@distilled.cloud/e2b/Credentials";
+import { DEFAULT_DOMAIN } from "@distilled.cloud/e2b/Credentials";
 import {
   AuthError,
   AuthProviderLayer,
@@ -24,8 +23,6 @@ import * as Interaction from "alchemy/Interaction";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -48,7 +45,7 @@ export const E2BAuthConfigSchema = Schema.Union([
     method: Schema.Literal("oauth"),
     email: Schema.String,
     teamId: Schema.String,
-    teamName: Schema.String,
+    teamName: Schema.optional(Schema.String),
     clientId: Schema.String,
     tokenEndpoint: Schema.String,
     revokeEndpoint: Schema.String,
@@ -73,7 +70,7 @@ type OAuthConfig = Extract<E2BAuthConfig, { method: "oauth" }>;
  *
  * `accessToken` reaches every control-plane endpoint, and it is the only
  * credential that can mint API keys, which bindings and `E2B.ApiKey` need.
- * `teamId` is looked up from the token when unset. `apiKey` is a team API
+ * It needs `teamId`: E2B no longer lists a token's teams. `apiKey` is a team API
  * key: enough for resources, not for bindings. `expires` is set for an
  * OAuth access token, so it is refreshed before it lapses.
  */
@@ -94,7 +91,12 @@ const storedFields: ReadonlyArray<ConfigureField> = [
     secret: true,
     optional: true,
   },
-  { name: "teamId", label: "E2B team id, if not your default team", optional: true },
+  {
+    name: "teamId",
+    label: "E2B team id",
+    description: "Required with an access token. Find it in the E2B dashboard's team settings.",
+    optional: true,
+  },
   {
     name: "apiKey",
     label: "E2B API key (e2b_…)",
@@ -132,24 +134,24 @@ const withGrant = (config: OAuthConfig, grant: E2BGrant): OAuthConfig => ({
   expires: grant.expires,
 });
 
-/** The team the token acts on: its default team, as `e2b auth login` picks it. */
-const defaultTeam = (access: Redacted.Redacted<string>, domain: string) =>
-  auth.listTeams({}).pipe(
-    Effect.provide(
-      Layer.mergeAll(e2bCredentials({ accessToken: access, domain }), FetchHttpClient.layer),
-    ),
-    Effect.flatMap((teams) => {
-      const team = teams.find((t) => t.isDefault) ?? (teams.length === 1 ? teams[0] : undefined);
-      return team === undefined
-        ? Effect.fail(AuthError.make({ message: "E2B: the account has no default team" }))
-        : Effect.succeed(team);
-    }),
-    Effect.mapError((cause) =>
-      cause._tag === "AuthError"
-        ? cause
-        : AuthError.make({ message: "E2B: could not list the account's teams", cause }),
-    ),
-  );
+/**
+ * The team a browser login acts on. E2B retired the team listing
+ * (`GET /teams` answers 410), so the user gives the team id.
+ */
+const oauthFields: ReadonlyArray<ConfigureField> = [
+  {
+    name: "teamId",
+    label: "E2B team id",
+    description: "Find it in the E2B dashboard's team settings.",
+  },
+];
+
+const oauthTeamId = (values: StoredValues) => {
+  const teamId = storedValueText(values.teamId);
+  return teamId === undefined
+    ? Effect.fail(AuthError.make({ message: "E2B: the browser login needs a team id" }))
+    : Effect.succeed(teamId);
+};
 
 const readEnvironment = Effect.gen(function* () {
   const apiKey = yield* getEnvRedacted("E2B_API_KEY");
@@ -182,7 +184,7 @@ const readEnvironment = Effect.gen(function* () {
 export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>()(
   E2B_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const browserLogin = Effect.fn(function* (domain: string) {
+    const browserLogin = Effect.fn(function* (domain: string, teamId: string) {
       const grant = yield* Effect.scoped(
         Effect.gen(function* () {
           const login = yield* startLogin(domain);
@@ -194,13 +196,11 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
           });
         }),
       );
-      const team = yield* defaultTeam(grant.access, domain);
-      yield* Interaction.success(`E2B: logged in as ${grant.email} (team ${team.name}).`);
-      return {
+      yield* Interaction.success(`E2B: logged in as ${grant.email} (team ${teamId}).`);
+      const login = {
         method: "oauth" as const,
         email: grant.email,
-        teamId: team.teamID,
-        teamName: team.name,
+        teamId,
         clientId: grant.clientId,
         tokenEndpoint: grant.tokenEndpoint,
         revokeEndpoint: grant.revokeEndpoint,
@@ -209,6 +209,9 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
         expires: grant.expires,
         ...(domain === DEFAULT_DOMAIN ? {} : { domain }),
       } satisfies OAuthConfig;
+      // Widened, so the configure branches (oauth | stored) unify.
+      const config: E2BAuthConfig = login;
+      return config;
     });
 
     const configure = (_profileName: string) =>
@@ -230,7 +233,10 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
         mapPromptCancellation,
         Effect.flatMap((method) =>
           method === "oauth"
-            ? browserLogin(DEFAULT_DOMAIN)
+            ? collectFieldValues(oauthFields).pipe(
+                Effect.flatMap(oauthTeamId),
+                Effect.flatMap((teamId) => browserLogin(DEFAULT_DOMAIN, teamId)),
+              )
             : collectFieldValues(storedFields).pipe(
                 Effect.map(storedConfig),
                 Effect.tap(() => Interaction.success("E2B: credentials saved.")),
@@ -247,7 +253,7 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
       );
 
     const configureMethods: ReadonlyArray<ConfigureMethod> = [
-      { method: "oauth", fields: [] },
+      { method: "oauth", fields: oauthFields },
       { method: "stored", fields: storedFields },
     ];
 
@@ -256,7 +262,9 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
       input: { readonly method: string; readonly values: Record<string, string> },
     ) =>
       input.method === "oauth"
-        ? browserLogin(DEFAULT_DOMAIN).pipe(
+        ? validateFieldValues(E2B_AUTH_PROVIDER_NAME, oauthFields, input.values).pipe(
+            Effect.flatMap(oauthTeamId),
+            Effect.flatMap((teamId) => browserLogin(DEFAULT_DOMAIN, teamId)),
             Effect.mapError((cause) =>
               cause._tag === "AuthError"
                 ? cause
@@ -347,7 +355,9 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
               return undefined;
             }),
           ).pipe(
-            Effect.catchTag("E2BLoginError", () => browserLogin(oauth.domain ?? DEFAULT_DOMAIN)),
+            Effect.catchTag("E2BLoginError", () =>
+              browserLogin(oauth.domain ?? DEFAULT_DOMAIN, oauth.teamId),
+            ),
           ),
         ),
         Match.exhaustive,
@@ -388,8 +398,10 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
             key: "team",
             value:
               config.method === "oauth"
-                ? `${config.teamName} (${config.teamId})`
-                : (creds.teamId ?? "default"),
+                ? config.teamName === undefined
+                  ? config.teamId
+                  : `${config.teamName} (${config.teamId})`
+                : (creds.teamId ?? "none"),
           });
           lines.push({ key: "source", value: creds.source.type });
           return { lines };
@@ -417,7 +429,7 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
         {
           name: "E2B_TEAM_ID",
           required: false,
-          description: "Team id sent with the access token. Defaults to the token's default team.",
+          description: "Team id sent with the access token. Required with E2B_ACCESS_TOKEN.",
         },
         {
           name: "E2B_API_KEY",

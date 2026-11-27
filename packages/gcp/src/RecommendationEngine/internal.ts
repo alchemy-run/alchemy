@@ -1,4 +1,4 @@
-import * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
+import * as recommendationengine from "@distilled.cloud/gcp/unstable/recommendationengine_v1beta1";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";

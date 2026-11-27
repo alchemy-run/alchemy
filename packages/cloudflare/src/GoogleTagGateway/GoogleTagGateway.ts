@@ -284,7 +284,7 @@ type ConfigResponse = NonNullable<
 const toConfig = (response: ConfigResponse): Config => ({
   enabled: response.enabled,
   endpoint: response.endpoint,
-  hideOriginalIp: response.hideOriginalIp,
+  hideOriginalIp: response.hideOriginalIp ?? false,
   measurementId: response.measurementId,
   setUpTag: response.setUpTag ?? undefined,
 });

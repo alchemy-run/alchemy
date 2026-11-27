@@ -20,7 +20,6 @@ import { captureEmit, emit, failureMessage } from "./Events.ts";
 import type { Apply, Plan } from "./Plan.ts";
 import { findProviderByType, Provider } from "./Provider.ts";
 import { stampedMode } from "./ProviderMode.ts";
-import { isProtectedResourceState } from "./RemovalPolicy.ts";
 import { resourceSession } from "./Report.ts";
 import type { ResourceLike } from "./Resource.ts";
 import { ResourceContext } from "./ResourceContext.ts";
@@ -321,7 +320,6 @@ const runDrift = (
           output: undefined,
           session: scopedSession,
           bindings: [] as never,
-          protected: isProtectedResourceState(old),
         })
         .pipe(instrumentLifecycle("create", fqn, resourceType, logicalId, instanceId));
       yield* commit("created", attr, []);
@@ -354,7 +352,6 @@ const runDrift = (
           output: live as never,
           session: scopedSession,
           bindings: old.bindings as never,
-          protected: isProtectedResourceState(old),
         })
         .pipe(
           instrumentLifecycle(

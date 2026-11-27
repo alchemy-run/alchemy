@@ -1186,21 +1186,7 @@ export default { async fetch() { return new Response("v4"); } };
           });
           expect((yield* readUntil(v2.url!, "Meter")).value).toBe(1);
 
-          // Dropping the protection in the deploy that removes the class is
-          // still refused: the stored policy is `protect` until a deploy
-          // without it succeeds.
-          const unprotectAndRemove = yield* scratch
-            .deploy(worker("Meter", { spare: false }))
-            .pipe(Effect.exit);
-          expect(Exit.isFailure(unprotectAndRemove)).toBe(true);
-          expect(String(unprotectAndRemove)).toContain("ProtectedDurableObjectClassDeletion");
-          expect(Object.keys(yield* namespacesOf(v2.workerName)).sort()).toEqual([
-            "Meter",
-            "Spare",
-          ]);
-
-          // Unprotect on its own, then remove the class.
-          yield* scratch.deploy(worker("Meter", { spare: true }));
+          // Dropping `protect()` allows the removal in the same deploy.
           cleanup = ["Meter", { spare: false }];
           const v3 = yield* scratch.deploy(worker("Meter", { spare: false }));
           expect(yield* namespacesOf(v3.workerName)).toEqual({ Meter: before.Counter });
@@ -1912,6 +1898,115 @@ export default { async fetch() { return new Response("${version}"); } };
           yield* scratch.destroy();
         }).pipe(logLevel),
       { timeout: 180_000 },
+    );
+
+    // Reproduces #2976: Cloudflare caps a script's `exports` map at 100
+    // entries, and renaming a class declares both the new live class and a
+    // `renamed` tombstone for the old one. Renaming 55 of 60 classes and
+    // deleting the other 5 in one deploy would declare 115 entries: the
+    // deploy fails before anything is uploaded, and the deployed Worker keeps
+    // serving its data. A tombstone only counts in the deploy that declares
+    // it, so the same renames spread over two deploys go through, and every
+    // renamed namespace keeps its id and data.
+    test.provider(
+      "renaming more classes than fit in 100 exports fails before uploading",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const ids = Array.from({ length: 60 }, (_, i) => `DO_${i}`);
+          const deployClasses = (
+            count: number,
+            className: (i: number) => string,
+            version: string,
+          ) =>
+            scratch.deploy(
+              Effect.gen(function* () {
+                return {
+                  worker: yield* Cloudflare.Worker("worker", {
+                    script: `import { DurableObject } from "cloudflare:workers";
+export class ${className(0)} extends DurableObject {
+  async increment() {
+    const next = ((await this.ctx.storage.get("count")) ?? 0) + 1;
+    await this.ctx.storage.put("count", next);
+    return next;
+  }
+}
+${ids
+  .slice(1, count)
+  .map((_, i) => `export class ${className(i + 1)} extends DurableObject {}`)
+  .join("\n")}
+export default {
+  async fetch(request, env) {
+    if (new URL(request.url).pathname === "/increment") {
+      return Response.json({ value: await env.DO_0.getByName("shared").increment() });
+    }
+    return new Response("${version}");
+  },
+};
+`,
+                    env: Object.fromEntries(
+                      ids
+                        .slice(0, count)
+                        .map((id, i) => [
+                          id,
+                          Cloudflare.DurableObject(id, { className: className(i) }),
+                        ]),
+                    ),
+                  }),
+                };
+              }),
+            );
+
+          const v1 = yield* deployClasses(60, (i) => `Class${i}`, "v1");
+          expect(yield* fetchReady(v1.worker.url!, "v1")).toBe("v1");
+          expect(
+            (yield* fetchJsonReady<{ value: number }>(`${v1.worker.url}/increment`)).value,
+          ).toBe(1);
+
+          const error = yield* deployClasses(55, (i) => `Class${i}V2`, "v2").pipe(Effect.flip);
+          expect(error._tag).toBe("TooManyWorkerExports");
+          expect(error.message).toContain("115 exports");
+          expect(yield* fetchReady(v1.worker.url!, "v1")).toBe("v1");
+
+          // Half the renames first (60 live + 30 tombstones), then the rest
+          // and the deletes (55 live + 25 + 5 tombstones).
+          yield* deployClasses(60, (i) => (i < 30 ? `Class${i}V2` : `Class${i}`), "v2a");
+          const v2 = yield* deployClasses(55, (i) => `Class${i}V2`, "v2");
+          expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
+          expect(
+            (yield* fetchJsonReady<{ value: number }>(`${v2.worker.url}/increment`)).value,
+          ).toBe(2);
+          expect(Object.keys(v2.worker.durableObjectNamespaces)).toHaveLength(55);
+          for (let i = 0; i < 55; i++) {
+            expect(v2.worker.durableObjectNamespaces[`Class${i}V2`]).toBe(
+              v1.worker.durableObjectNamespaces[`Class${i}`],
+            );
+          }
+
+          const namespaces = yield* durableObjects.listNamespaces.items({ accountId }).pipe(
+            Stream.runCollect,
+            Effect.map((namespaces) =>
+              namespaces.filter((ns) => ns.script === v2.worker.workerName),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (namespaces) =>
+                namespaces.length === 55 &&
+                namespaces.every(
+                  (ns) => ns.class != null && v2.worker.durableObjectNamespaces[ns.class] === ns.id,
+                ),
+              times: 8,
+            }),
+          );
+          expect(namespaces.map((ns) => ns.id).sort()).toEqual(
+            Object.values(v2.worker.durableObjectNamespaces).sort(),
+          );
+          expect(namespaces.every((ns) => ns.class?.endsWith("V2"))).toBe(true);
+
+          yield* scratch.destroy();
+        }).pipe(logLevel),
+      { timeout: 240_000 },
     );
 
     // Roll-forward from the legacy tag format: a worker last deployed by an

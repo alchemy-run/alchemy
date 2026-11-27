@@ -42,6 +42,15 @@ import {
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
 import { workerSocketPath } from "./worker-request.ts";
 
+/**
+ * Cloudflare credentials, resolved on first use. Only remote bindings read
+ * them, so a local-only dev server starts without any.
+ */
+const lazyCredentials = Layer.succeed(
+  Credentials.Credentials,
+  Credentials.resolveFromEnv.pipe(Effect.orDie),
+);
+
 export type ServerHandle = Awaited<ReturnType<typeof startServer>>;
 
 export const startServer = async <B extends BindingHooks = BindingHooks>(
@@ -91,7 +100,7 @@ export const createDefaultContext = async (): Promise<
     api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID! },
   }).pipe(
     Layer.provideMerge(PlatformServices),
-    Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
+    Layer.provide(Layer.merge(lazyCredentials, FetchHttpClient.layer)),
     Layer.buildWithScope(scope),
     Effect.runPromise,
   );

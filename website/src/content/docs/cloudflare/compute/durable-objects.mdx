@@ -742,13 +742,10 @@ const worker = yield* Cloudflare.Worker("Api", {
 }).pipe(RemovalPolicy.protect());
 ```
 
-To remove the `Counter` class intentionally, first deploy the unchanged
-Worker **without** `RemovalPolicy.protect()` and let that deployment
-succeed. Remove the class in a **subsequent** deployment. Removing the
-protection and the class in the same deploy is refused, including after an
-interrupted unprotect update. Renaming a class with `renamedFrom`, or moving
-it to another Worker with `transferredFrom`, keeps its namespace and is
-allowed while protected.
+To remove the `Counter` class on purpose, drop `RemovalPolicy.protect()` in
+the same deploy. Renaming a class with `renamedFrom`, or moving it to another
+Worker with `transferredFrom`, keeps its namespace and is allowed while
+protected.
 
 ## Adopt a Worker deployed by Wrangler
 

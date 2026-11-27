@@ -134,7 +134,10 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
                   voice: "default",
                   instructions: "a calm voice",
                 });
-                return { images: image.data.length, audioBytes: speech.byteLength };
+                const audio = speech.body
+                  ? yield* Stream.mkUint8Array(speech.body)
+                  : new Uint8Array();
+                return { images: image.data.length, audioBytes: audio.byteLength };
               }),
             );
           default:

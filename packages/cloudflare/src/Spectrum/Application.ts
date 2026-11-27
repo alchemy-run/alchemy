@@ -433,7 +433,9 @@ type ObservedApp = spectrum.GetAppResponse;
  */
 type FullApp = Extract<ObservedApp, { trafficType: unknown }>;
 type AnyApp = ObservedApp | spectrum.CreateAppResponse | spectrum.UpdateAppResponse;
-const asFull = (app: AnyApp): Partial<FullApp> & AnyApp => app;
+// The pay-as-you-go variant types `trafficType` as any string, so it is left
+// to the union rather than narrowed to the full variant's literals.
+const asFull = (app: AnyApp): Partial<Omit<FullApp, "trafficType">> & AnyApp => app;
 
 /**
  * Read an application by id, mapping "gone" (`SpectrumAppNotFound`,
@@ -504,7 +506,7 @@ const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
   );
 };
 
-const edgeIpsDirty = (o: Partial<FullApp>, desired: EdgeIps): boolean => {
+const edgeIpsDirty = (o: Pick<Partial<FullApp>, "edgeIps">, desired: EdgeIps): boolean => {
   const observed = o.edgeIps ?? {};
   const observedIps = "ips" in observed ? ((observed.ips ?? []) as readonly string[]) : [];
   const observedConnectivity =

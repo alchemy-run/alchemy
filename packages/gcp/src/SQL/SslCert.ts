@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { recoverIfInstanceMissing, waitForSqlOperation } from "./operations.ts";
@@ -363,7 +364,7 @@ export const SslCertProvider = () =>
 
         if (inserted !== undefined) {
           secrets = {
-            privateKey: inserted.clientCert?.certPrivateKey ?? secrets.privateKey,
+            privateKey: revealOptional(inserted.clientCert?.certPrivateKey) ?? secrets.privateKey,
             serverCaCert: inserted.serverCaCert?.cert ?? secrets.serverCaCert,
           };
           const fingerprint = inserted.clientCert?.certInfo?.sha1Fingerprint ?? "";

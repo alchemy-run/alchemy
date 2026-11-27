@@ -918,6 +918,63 @@ if (el) {
     );
 
     test.provider(
+      "Vite: `mode` loads .env.[mode] and a mode change rebuilds",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-vite-mode-",
+            tempRoot,
+            entries: ["index.html", "package.json", "vite.config.ts", "src"],
+          });
+          yield* fs.writeFileString(
+            path.join(rootDir, ".env.sandbox"),
+            "VITE_TEST_MARKER=vite-mode-sandbox\n",
+          );
+          yield* fs.writeFileString(
+            path.join(rootDir, ".env.staging"),
+            "VITE_TEST_MARKER=vite-mode-staging\n",
+          );
+          const memoInclude = ["index.html", "src/**", "package.json", ".env.*"];
+
+          const site1 = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Vite("FixViteMode", {
+                ...viteProps(rootDir, memoInclude),
+                mode: "sandbox",
+              });
+            }),
+          );
+          yield* expectBundleContains(site1.url!, "vite-mode-sandbox", {
+            label: ".env.sandbox loaded for mode sandbox",
+          });
+
+          // No file changes: the mode alone has to move the input hash.
+          const site2 = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Vite("FixViteMode", {
+                ...viteProps(rootDir, memoInclude),
+                mode: "staging",
+              });
+            }),
+          );
+          expect(site2.hash?.input).not.toEqual(site1.hash?.input);
+          yield* expectBundleContains(site2.url!, "vite-mode-staging", {
+            label: ".env.staging loaded for mode staging",
+          });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
+    );
+
+    test.provider(
       "Vite: worker entry can host a local Durable Object binding",
       (stack) =>
         Effect.gen(function* () {

@@ -45,7 +45,6 @@ import {
   tryFindProviderByType,
 } from "./Provider.ts";
 import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
-import { isProtectedResourceState } from "./RemovalPolicy.ts";
 import { resourceSession } from "./Report.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { ResourceContext } from "./ResourceContext.ts";
@@ -580,17 +579,6 @@ interface LifecycleFailure {
   cause: Cause.Cause<unknown>;
 }
 
-/**
- * The removal policy to checkpoint before a change is reconciled. A stored
- * `protect` stays until the change succeeds, so a failed deploy that also
- * drops `protect()` can't leave the row unprotected for its retry.
- */
-const pendingRemovalPolicy = (node: {
-  readonly state?: ResourceState | undefined;
-  readonly resource: { readonly RemovalPolicy: ResourceState["removalPolicy"] };
-}): ResourceState["removalPolicy"] =>
-  isProtectedResourceState(node.state) ? "protect" : node.resource.RemovalPolicy;
-
 const executeNode = (
   fqn: string,
   node: Apply,
@@ -889,7 +877,7 @@ const executeNode = (
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
-          removalPolicy: pendingRemovalPolicy(node),
+          removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
           adoptionBlocked: node.adoptionBlocked,
         });
@@ -941,7 +929,7 @@ const executeNode = (
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
-          removalPolicy: pendingRemovalPolicy(node),
+          removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
           adoptionBlocked: node.adoptionBlocked,
         });
@@ -976,7 +964,7 @@ const executeNode = (
             providerVersion: node.provider.version ?? 0,
             bindings: bindingOutputs,
             downstream: node.downstream,
-            removalPolicy: pendingRemovalPolicy(node),
+            removalPolicy: node.resource.RemovalPolicy,
             providerMode: node.mode,
             adoptionBlocked: node.adoptionBlocked,
           });
@@ -1013,8 +1001,7 @@ const executeNode = (
           session: scopedSession,
           olds: undefined,
           output: attr,
-          protected:
-            node.resource.RemovalPolicy === "protect" || isProtectedResourceState(node.state),
+          protected: node.resource.RemovalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 
@@ -1093,7 +1080,7 @@ const executeNode = (
             ...node.state,
             attr: node.state.attr,
             props: news,
-            removalPolicy: pendingRemovalPolicy(node),
+            removalPolicy: node.resource.RemovalPolicy,
             providerMode: node.mode,
           })
         : commit<UpdatingReourceState>({
@@ -1139,8 +1126,7 @@ const executeNode = (
           session: scopedSession,
           olds: previousProps,
           output: node.state.attr,
-          protected:
-            node.resource.RemovalPolicy === "protect" || isProtectedResourceState(node.state),
+          protected: node.resource.RemovalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
 
@@ -1461,8 +1447,7 @@ const executeNode = (
           session: scopedSession,
           olds: undefined,
           output: attr,
-          protected:
-            node.resource.RemovalPolicy === "protect" || isProtectedResourceState(node.state),
+          protected: node.resource.RemovalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 
@@ -1838,8 +1823,7 @@ const converge = Effect.fn(function* (
           session: scopedSession,
           olds: oldProps,
           output: tracker[fqn].output,
-          protected:
-            node.resource.RemovalPolicy === "protect" || isProtectedResourceState(node.state),
+          protected: node.resource.RemovalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
 

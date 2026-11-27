@@ -64,6 +64,7 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
             // PATCH but silently keeps it false on a free-plan org, so a
             // wiki toggle can never be asserted here.
             hasIssues: false,
+            hasPullRequests: false,
             topics: ["alchemy", "test"],
             squashMergeCommitTitle: "PR_TITLE",
             squashMergeCommitMessage: "BLANK",
@@ -84,6 +85,7 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
       expect(fetched?.description).toEqual("alchemy-effect integration test");
       expect(fetched?.private).toEqual(true);
       expect(fetched?.has_issues).toEqual(false);
+      expect(fetched?.has_pull_requests).toEqual(false);
       expect(fetched?.topics).toEqual(expect.arrayContaining(["alchemy", "test"]));
       expect(fetched?.squash_merge_commit_title).toEqual("PR_TITLE");
       expect(fetched?.squash_merge_commit_message).toEqual("BLANK");
@@ -97,6 +99,7 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
             description: "updated description",
             visibility: "private",
             hasIssues: true,
+            hasPullRequests: true,
             topics: ["alchemy"],
             squashMergeCommitTitle: "COMMIT_OR_PR_TITLE",
             squashMergeCommitMessage: "COMMIT_MESSAGES",
@@ -108,6 +111,7 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
       const afterUpdate = yield* getRepo(name);
       expect(afterUpdate?.description).toEqual("updated description");
       expect(afterUpdate?.has_issues).toEqual(true);
+      expect(afterUpdate?.has_pull_requests).toEqual(true);
       expect(afterUpdate?.topics).toEqual(["alchemy"]);
       expect(afterUpdate?.squash_merge_commit_title).toEqual("COMMIT_OR_PR_TITLE");
       expect(afterUpdate?.squash_merge_commit_message).toEqual("COMMIT_MESSAGES");

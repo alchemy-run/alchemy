@@ -1,4 +1,4 @@
-import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
+import * as firebase from "@distilled.cloud/gcp/unstable/firebase_v1beta1";
 import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
