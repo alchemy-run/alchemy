@@ -258,8 +258,8 @@ const commandService = (api: Api.Any, command: DomainCommand.Any) => {
   const layer = service.toLayer(
     Effect.gen(function* () {
       const client = (yield* Effect.service(api.Client)) as AnyClient;
-      // Services the command client needs (its middleware), and `CommandHeaders` when it is
-      // provided under `layer`, captured once per Layer build.
+      // The context, not the headers, is captured once per Layer build: the services the command
+      // client needs (its middleware), and `CommandHeaders` when it is provided under `layer`.
       const context = yield* Effect.context<never>();
       return (args: { readonly input: unknown; readonly commandId: string }) =>
         Effect.gen(function* () {
@@ -327,7 +327,8 @@ const queryService = (api: Api.Any, query: DomainQuery.Any, options: MakeOptions
           options: DomainQuery.RunOptions & { readonly headers?: Headers.Input | undefined },
         ) => Effect.Effect<unknown, unknown>
       >;
-      // `CommandHeaders` when it is provided under `layer`, captured once per Layer build.
+      // The context, not the headers, is captured once per Layer build: `CommandHeaders` when it
+      // is provided under `layer`.
       const context = yield* Effect.context<never>();
       return ({ input, atLeast, after, take }: QueryArgs<DomainQuery.Any>) =>
         Effect.gen(function* () {

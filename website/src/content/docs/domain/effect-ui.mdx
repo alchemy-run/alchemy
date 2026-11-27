@@ -72,6 +72,29 @@ The adapter converts absent state to `Option.none()`. A new key restarts the wat
 
 `events(key, { after, restartKey, onEntry, onCaughtUp, onFailure, onDefect })` follows an event feed after the cursor `after`. The feed reads `after` when it starts, so a new cursor does not restart it. Change `restartKey` to restart it, for example after a failure. The feed drops repeated entries and allows gaps.
 
+## Test a component with the model
+
+Mount the component with `HtmlPlay` and build the adapter and the Api client inside the component tree:
+
+```typescript
+import { Component } from "@effect/ui";
+import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing";
+import { TestHost } from "@effect/ui/testing";
+
+it.effect("adds to the balance", () =>
+  Effect.gen(function* () {
+    const play = yield* HtmlPlay.make(
+      Panel.pipe(Component.provide(Bank.layer.pipe(Layer.provideMerge(Client)))),
+      {},
+    );
+    yield* play.click(HtmlLocator.role("button", { name: "Deposit" }));
+    yield* play.expect(HtmlLocator.label("Balance")).toHaveText("1000");
+  }).pipe(Effect.scoped, Effect.provide(TestHost.layer())),
+);
+```
+
+`Client` is the Api's in-process client over `Domain.InMemory`. `TestHost.settle` waits only for the fibers of the component tree. A client provided beside `TestHost` runs outside the tree, so under the `TestClock` the View can still show the old value after a click ([Effect-TS/ui#411](https://github.com/Effect-TS/ui/issues/411)). A command that the model schedules for later also needs the in-memory platform on the test clock: until [#3690](https://github.com/alchemy-run/alchemy/issues/3690) lands, build it with `InMemory.make({ now })` from `@alchemy.run/domain/InMemory`.
+
 ## Provide the client and headers
 
 Provide `Bank.layer` and the Api client where the app mounts. Provide `DomainEffectUI.CommandHeaders` under `Bank.layer`:

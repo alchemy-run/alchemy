@@ -210,4 +210,6 @@ $.evolve({ commandIds }).run(
 
 Each Api command is a `Command.Service` and each Api query a `Query.Service` (declare it in a component's `queries`). Each View and Stream has `watch(key, options)` and `events(key, { after, restartKey, ... })`, which return Subscriptions. Provide `Bank.layer` and the Api client where the app mounts, and `CommandHeaders` under `Bank.layer` (`Bank.layer.pipe(Layer.provide(Headers))`), so every query fetch sends them. The failures (`Rejected`, `Denied`, `Unknown`) and the rules for ids and reads are the same as for Foldkit.
 
-More: [Integrate with Effect UI](https://alchemy.run/domain/effect-ui).
+In a component test, build the adapter and the client inside the tree: `HtmlPlay.make(Panel.pipe(Component.provide(Bank.layer.pipe(Layer.provideMerge(Client)))), {})`, with only `TestHost.layer()` outside. `TestHost.settle` waits only for the tree's fibers.
+
+More: [Integrate with Effect UI](https://alchemy.run/domain/effect-ui), [Integrate with Effect UI: Test a component with the model](https://alchemy.run/domain/effect-ui#test-a-component-with-the-model).

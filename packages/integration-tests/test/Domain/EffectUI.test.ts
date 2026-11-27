@@ -1,7 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
 import { describe, expect, it } from "@alchemy.run/test";
-import { Command, Query, Subscription, UiSchema } from "@effect/ui";
+import { Command, Component, Query, Subscription, UiSchema } from "@effect/ui";
 import { Html } from "@effect/ui/html";
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing";
 import { TestHost } from "@effect/ui/testing";
@@ -295,6 +295,37 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
       );
       expect(refused).toEqual({ _tag: "Rejected", rejection: new Limit({ amount: 11 }) });
     }),
+  );
+
+  it.live("forwards a query's read options and headers to the client", () =>
+    Effect.gen(function* () {
+      const client = yield* QueryApi.Client;
+      const sent: Array<unknown> = [];
+      const spy = Layer.succeed(QueryApi.Client, {
+        ...client,
+        Count: (...args: Parameters<typeof client.Count>) => {
+          sent.push(args);
+          return client.Count(...args);
+        },
+      });
+      const headers = Layer.succeed(DomainEffectUI.CommandHeaders, {
+        get: (name) => Effect.succeed({ "x-query": name }),
+      });
+      const atLeast = { stream: "Counter/one", version: 0 };
+      const result = yield* Queries.Count.get({
+        input: { counterId: target },
+        atLeast,
+        take: 5,
+      }).pipe(
+        Effect.provide(
+          Layer.merge(Queries.layer.pipe(Layer.provide(Layer.merge(spy, headers))), Query.layer()),
+        ),
+      );
+      expect(result).toBe(3);
+      expect(sent).toEqual([
+        [{ counterId: target }, { headers: { "x-query": "Count" }, atLeast, take: 5 }],
+      ]);
+    }).pipe(Effect.provide(QueryClient)),
   );
 
   it.live("classifies query middleware refusals, timeouts and transport loss", () =>
@@ -610,18 +641,18 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
       ),
   });
 
-  it.live("runs a command from a component and shows the watched View", () =>
+  // The client is built inside the tree: `TestHost.settle` drains only the tree's fibers, so a
+  // client provided beside `TestHost` leaves the View stale under the TestClock.
+  it.effect("runs a command from a component and shows the watched View", () =>
     Effect.gen(function* () {
-      const play = yield* HtmlPlay.make(Panel, {});
+      const play = yield* HtmlPlay.make(
+        Panel.pipe(Component.provide(Counter.layer.pipe(Layer.provideMerge(Client)))),
+        {},
+      );
       yield* play.expect(HtmlLocator.label("Total")).toHaveText("0");
       yield* play.click(HtmlLocator.role("button", { name: "Add 2" }));
       yield* play.expect(HtmlLocator.label("Total")).toHaveText("2");
-    }).pipe(
-      Effect.scoped,
-      Effect.provide(
-        Layer.mergeAll(TestHost.layer(), Counter.layer).pipe(Layer.provideMerge(Client)),
-      ),
-    ),
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())),
   );
 
   it("types Commands, queries and reads from the Api", () => {
