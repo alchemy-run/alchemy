@@ -26,7 +26,7 @@ Install `@alchemy.run/railway` and finish [Railway setup](/railway/setup).
     { id: "project", label: "Railway project", type: "your project" },
     { id: "env", label: "environment", type: "private network *.railway.internal", parent: "project", dashed: true },
     { id: "db", label: "Database", type: "Railway Postgres", parent: "env", specs: [["data", "volume"]] },
-    { id: "pool", label: "Default", type: "Railway Service · one runner", parent: "env" },
+    { id: "pool", label: "Default", type: "Railway Service · runner replicas", parent: "env" },
     { id: "api", label: "Api", type: "Railway Service", parent: "env" },
   ]}
   caption="The runner reaches Postgres over the private network, and callers in the environment reach the runner's gateway there. Neither has a public endpoint."
@@ -49,15 +49,18 @@ export const Database = ClusterRailway.Database("Cluster", {
 
 ## The pool
 
-`ClusterRailway.ServicePool` runs one Railway Service, built from the bundled runner program, in the database's environment. Railway gives every replica of a Service the same private hostname, so a pool runs one runner. For more runners, declare more pools.
+`ClusterRailway.ServicePool` runs one Railway Service, built from the bundled runner program, in the database's environment. `replicas` sets how many runners it runs, one by default, all in the pool's shard group. Callers reach every replica through the one private hostname, and each runner registers under its own private address, the one it reaches Postgres from.
 
 ```typescript title="src/Cluster.ts"
-export const Default = ClusterRailway.ServicePool("Default", { region: "us-west2" }).pipe(
-  Layer.provide(Database),
-);
+export const Default = ClusterRailway.ServicePool("Default", {
+  replicas: 3,
+  region: "us-west2",
+}).pipe(Layer.provide(Database));
 ```
 
-`Cluster.Database.fromUrl` does not tell the pool where to run. Pass `project` to the pool, and pass `environment` if you are not using the project's primary environment.
+Changing `replicas` updates the same Service, database and shard group in place. Railway replaces every replica in the deployment that applies it. It stops each runner with `SIGTERM`, and the runner hands its shards back before it exits, so the others take them within seconds. A runner that crashes keeps its shards until Railway restarts it at the same address, or until its registration expires.
+
+`Cluster.Database.fromUrl` does not tell the pool where to run. Pass `project` to the pool, and pass `environment` if you are not using the project's primary environment. Such a pool runs one runner, under its Service's hostname.
 
 ## Call it from a Railway Service
 

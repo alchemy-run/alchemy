@@ -51,7 +51,12 @@ import {
   findServiceDomainById,
   type ServiceDomainRecord,
 } from "./ServiceDomain.ts";
-import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
+import {
+  isReplicaCount,
+  placeServiceRegion,
+  readServiceRegion,
+  ServiceInvalidReplicas,
+} from "./ServiceRegion.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
@@ -1064,6 +1069,12 @@ export const ServiceProvider = () =>
             });
           }
           const name = yield* resolveName(id, props.name, output?.name);
+          if (props.replicas !== undefined && !isReplicaCount(props.replicas)) {
+            return yield* new ServiceInvalidReplicas({
+              resourceName: name,
+              replicas: props.replicas,
+            });
+          }
           const source = yield* resolveRailwayServiceSource(props);
           const hostedMain = source.mode === "main" ? source.main : undefined;
           const localContext: RailwayLocalContextSource | undefined =
@@ -1254,16 +1265,23 @@ export const ServiceProvider = () =>
           // Pin `deploy.multiRegionConfig` before the build, then again after,
           // in case the deploy wrote the workspace default back.
           const serviceId = current.id;
-          const placeRegion = () =>
-            syncServiceRegion({
+          const placeRegion = (skipDeploys: boolean) =>
+            placeServiceRegion({
               environmentId,
               projectId,
               serviceId,
               region: props.region,
               legacy: instance?.region,
               fallbackReplicas: instance?.numReplicas,
+              replicas: props.replicas,
+              skipDeploys,
             });
-          let region = yield* placeRegion();
+          // Staged, not deployed: Railway would replace every replica for the
+          // placement alone, and again for the build below. The one deploy
+          // this reconcile runs applies it.
+          const placed = yield* placeRegion(true);
+          let region = placed.region;
+          if (placed.patched) needsDeploy = true;
 
           if (sourceRepo !== undefined) {
             const branchChanged = yield* syncBranch({
@@ -1381,7 +1399,8 @@ export const ServiceProvider = () =>
             instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
           }
 
-          region = yield* placeRegion();
+          // A deploy can write the workspace default back: put it right.
+          region = (yield* placeRegion(false)).region;
 
           return toAttrs({
             service: current,

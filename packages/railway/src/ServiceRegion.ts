@@ -23,6 +23,19 @@ export class ServiceRegionNotApplied extends Data.TaggedError("Railway.ServiceRe
   }
 }
 
+/** `replicas` is not a whole number of at least 1. */
+export class ServiceInvalidReplicas extends Data.TaggedError("Railway.ServiceInvalidReplicas")<{
+  resourceName: string;
+  replicas: number;
+}> {
+  override get message() {
+    return `Railway service ${this.resourceName}: replicas must be a whole number of at least 1, not ${this.replicas}`;
+  }
+}
+
+/** Whether `replicas` is a count Railway can run: a whole number of at least 1. */
+export const isReplicaCount = (replicas: number) => Number.isSafeInteger(replicas) && replicas >= 1;
+
 class ServiceRegionPending extends Data.TaggedError("Railway.ServiceRegionPending")<{
   serviceId: string;
   region: string;
@@ -63,17 +76,24 @@ export const observedRegion = (
 
 /**
  * Patch that leaves `desired` as the only region with replicas.
- * `undefined` when that is already true. An existing count on `desired`
- * is kept; otherwise the current replicas move with the service.
+ * `undefined` when that is already true. With `replicas`, the region runs
+ * exactly that many. Without it, an existing count on `desired` is kept;
+ * otherwise the current replicas move with the service.
  */
 export const regionPlacementPatch = (
   desired: string,
   placement: RegionPlacement,
   fallbackReplicas?: number,
+  replicas?: number,
 ): Record<string, { numReplicas: number } | null> | undefined => {
   const active = activeReplicaRegions(placement);
   const only = active[0];
-  if (active.length === 1 && only !== undefined && only.region === desired) {
+  if (
+    active.length === 1 &&
+    only !== undefined &&
+    only.region === desired &&
+    (replicas === undefined || only.replicas === replicas)
+  ) {
     return undefined;
   }
 
@@ -81,7 +101,7 @@ export const regionPlacementPatch = (
   const moved = active.reduce((sum, row) => sum + row.replicas, 0);
   const fallback =
     typeof fallbackReplicas === "number" && fallbackReplicas >= 1 ? fallbackReplicas : 1;
-  const numReplicas = current ?? (moved > 0 ? moved : fallback);
+  const numReplicas = replicas ?? current ?? (moved > 0 ? moved : fallback);
   const patch: Record<string, { numReplicas: number } | null> = {
     [desired]: { numReplicas },
   };
@@ -121,7 +141,7 @@ const readEnvironmentConfig = Query.fn((args: { id: string; projectId?: string }
 }));
 
 const environmentPatchCommit = Query.fn(
-  (args: { environmentId: string; commitMessage: string; patch: unknown }) =>
+  (args: { environmentId: string; commitMessage: string; patch: unknown; skipDeploys?: boolean }) =>
     Railway.environmentPatchCommit(args),
 );
 
@@ -192,29 +212,49 @@ const waitUntilRegion = (input: {
 
 /**
  * Make `region` the only replica placement, or read the current one when
- * `region` is omitted. Replica moves go through `environmentPatchCommit`
+ * `region` is omitted. With `replicas`, also run exactly that many there;
+ * without `region`, they run in the service's current single region.
+ * Replica moves go through `environmentPatchCommit`
  * (`services[id].deploy.multiRegionConfig`), the same patch Railway's CLI
- * applies for `railway scale`.
+ * applies for `railway scale`. Railway starts a deployment for every such
+ * commit that replaces each replica; with `skipDeploys` the commit only
+ * stages the placement for the caller's own next deploy. `patched` says
+ * whether there was anything to commit.
  */
-export const syncServiceRegion = Effect.fn(function* (input: {
+export const placeServiceRegion = Effect.fn(function* (input: {
   environmentId: string;
   projectId: string;
   serviceId: string;
   region: string | undefined;
   legacy?: string | null;
   fallbackReplicas?: number | null;
+  replicas?: number | undefined;
+  skipDeploys?: boolean | undefined;
 }) {
-  if (input.region === undefined) return yield* readServiceRegion(input);
-  const desired = input.region;
+  if (input.region === undefined && input.replicas === undefined) {
+    return { region: yield* readServiceRegion(input), patched: false };
+  }
+  const desired = input.region ?? (yield* readServiceRegion(input));
+  // Nowhere to count replicas yet (a service never placed, or spread
+  // over several regions): leave the placement as it is.
+  if (desired === undefined) return { region: desired, patched: false };
   const patched = yield* withEnvironmentConfigLock(
     input.environmentId,
     Effect.gen(function* () {
       const placement = yield* readPlacement(input);
-      const patch = regionPlacementPatch(desired, placement, input.fallbackReplicas ?? undefined);
+      const patch = regionPlacementPatch(
+        desired,
+        placement,
+        input.fallbackReplicas ?? undefined,
+        input.replicas,
+      );
       if (patch === undefined) return false;
       yield* environmentPatchCommit({
         environmentId: input.environmentId,
-        commitMessage: `Pin Railway service region to ${desired}`,
+        commitMessage:
+          input.replicas === undefined
+            ? `Pin Railway service region to ${desired}`
+            : `Run ${input.replicas} Railway replica(s) in ${desired}`,
         patch: {
           services: {
             [input.serviceId]: {
@@ -222,10 +262,15 @@ export const syncServiceRegion = Effect.fn(function* (input: {
             },
           },
         },
+        ...(input.skipDeploys === true ? { skipDeploys: true } : {}),
       });
       return true;
     }),
   );
-  if (!patched) return desired;
-  return yield* waitUntilRegion({ ...input, region: desired });
+  if (!patched) return { region: desired, patched };
+  return { region: yield* waitUntilRegion({ ...input, region: desired }), patched };
 });
+
+/** {@link placeServiceRegion}, for the region it leaves the service in. */
+export const syncServiceRegion = (input: Parameters<typeof placeServiceRegion>[0]) =>
+  Effect.map(placeServiceRegion(input), ({ region }) => region);

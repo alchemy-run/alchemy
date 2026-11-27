@@ -7,6 +7,7 @@
  * @internal
  */
 import { spawn } from "node:child_process";
+import { createSocket } from "node:dgram";
 import { lookup } from "node:dns/promises";
 import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
@@ -27,6 +28,7 @@ import {
   RunnerAddress,
   Singleton,
 } from "effect/cluster";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -40,6 +42,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import type { Rpc, RpcGroup } from "effect/rpc";
+import * as Schedule from "effect/Schedule";
 import type { Workflow as EffectWorkflow } from "effect/workflow";
 import type { HostedCron } from "../Cron.ts";
 import { databaseMaxConnections } from "../Database.ts";
@@ -74,20 +77,23 @@ const inIpv4Range = (address: string, range: string) => {
 };
 
 /**
- * The address other runners reach this one at: an explicit
- * `CLUSTER_RUNNER_HOST`, else the local address that
- * `CLUSTER_PEERS` (a DNS name every runner resolves to) lists,
- * else the first non-internal IPv4 address.
+ * The address other runners reach this one at: with
+ * `CLUSTER_RUNNER_ROUTE=database`, the local address its route to the
+ * database leaves from; else an explicit `CLUSTER_RUNNER_HOST`, else the
+ * local address that `CLUSTER_PEERS` (a DNS name every runner resolves to)
+ * lists, else the first non-internal IPv4 address.
  */
 const runnerHost = Effect.gen(function* () {
-  const explicit = env("CLUSTER_RUNNER_HOST");
-  if (explicit) return explicit;
   const local = Object.values(networkInterfaces())
     .flat()
     .filter((iface) => iface !== undefined && !iface.internal)
     .map((iface) => iface!.address)
     // Link-local addresses (an agent's, a metadata endpoint's) aren't reachable.
     .filter((address) => !address.startsWith("169.254.") && !address.startsWith("fe80:"));
+  const route = yield* Config.option(Config.String("CLUSTER_RUNNER_ROUTE"));
+  if (Option.getOrUndefined(route) === "database") return yield* routedAddress(local);
+  const explicit = env("CLUSTER_RUNNER_HOST");
+  if (explicit) return explicit;
   // On a private network with a known range, the address in it.
   const range = env("CLUSTER_RUNNER_NETWORK");
   if (range) {
@@ -123,6 +129,71 @@ const runnerHost = Effect.gen(function* () {
   }
   return local.find((address) => !address.includes(":")) ?? "127.0.0.1";
 });
+
+/** This runner has no address of its own on its route to the database. */
+export class RunnerAddressNotFound extends Data.TaggedError("Cluster.RunnerAddressNotFound")<{
+  readonly route: string;
+  readonly reason: string;
+}> {
+  override get message() {
+    return `No address of this runner routes to ${this.route}: ${this.reason}`;
+  }
+}
+
+/**
+ * The local address the kernel picks to reach the cluster database's host,
+ * IPv6 first: the one interface on the private network the database is on.
+ * Replicas that share a hostname each have one of their own. Connecting a
+ * UDP socket sends nothing. Waits a bounded while for the host to resolve.
+ */
+const routedAddress = Effect.fnUntraced(function* (local: ReadonlyArray<string>) {
+  const route = yield* Config.Redacted("CLUSTER_DATABASE_URL").pipe(
+    Config.map((url) => url.pipe(Redacted.value, urlHost)),
+  );
+  /** The local address a datagram to `target` would leave from. */
+  const source = (target: { address: string; family: number }) => {
+    const socket = createSocket(target.family === 6 ? "udp6" : "udp4");
+    return new Promise<string>((resolve, reject) => {
+      socket.once("error", reject);
+      socket.connect(9, target.address, () => resolve(socket.address().address));
+    }).finally(() => socket.close());
+  };
+  return yield* Effect.tryPromise({
+    try: async () => {
+      const targets = (await lookup(route, { all: true })).toSorted((a, b) => b.family - a.family);
+      const tried: string[] = [];
+      for (const target of targets) {
+        const from = await source(target).catch(() => undefined);
+        if (from !== undefined && local.includes(from)) return from;
+        tried.push(`${target.address} from ${from ?? "nowhere"}`);
+      }
+      throw new Error(
+        `no route leaves from [${local.join(", ")}] (${tried.join("; ") || "unresolved"})`,
+      );
+    },
+    catch: (cause) =>
+      new RunnerAddressNotFound({
+        route,
+        reason: cause instanceof Error ? cause.message : String(cause),
+      }),
+  }).pipe(
+    Effect.tapError((error) => Effect.logWarning(error.message)),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+    Effect.tap((from) =>
+      Effect.logInfo(`Effect Cluster runner address ${from}: routes to ${route}`),
+    ),
+    Effect.orDie,
+  );
+});
+
+/** A URL's host, never its credentials. */
+const urlHost = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^\[(.*)\]$/, "$1");
+  } catch {
+    return "";
+  }
+};
 
 /**
  * Run an existing Effect Cluster program as it is, as its own process, with
@@ -368,8 +439,19 @@ export const bootstrap = (
     );
   }).pipe(Effect.provide(platform), Effect.scoped);
 
+  // `CLUSTER_SHUTDOWN_TIMEOUT_MS`: on SIGTERM or SIGINT, the runner stops
+  // within this budget, handing its shards back and unregistering. Unset, it
+  // has no signal handler, as any process.
+  const shutdown = env("CLUSTER_SHUTDOWN_TIMEOUT_MS");
   return runProcess(
     "Effect Cluster runner",
     Effect.andThen(Effect.sync(loadSecretEnv), program) as Effect.Effect<never, unknown, never>,
+    {
+      managedHttpShutdownTimeoutMs: shutdown
+        ? /^\d+$/.test(shutdown)
+          ? Number(shutdown)
+          : Number.NaN
+        : undefined,
+    },
   );
 };
