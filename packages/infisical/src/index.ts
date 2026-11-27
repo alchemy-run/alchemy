@@ -29,7 +29,8 @@ export {
 export { Providers, providers, type ProviderRequirements } from "./Providers.ts";
 export {
   Secret,
-  SecretError,
+  SecretApprovalPending,
+  SecretNotOwned,
   SecretProvider,
   type SecretAttributes,
   type SecretProps,

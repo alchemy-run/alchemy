@@ -1,11 +1,13 @@
 import * as infisical from "@distilled.cloud/infisical";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
+import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import type { Providers } from "./Providers.ts";
 
@@ -79,10 +81,29 @@ export type Secret = Resource<"Infisical.Secret", SecretProps, SecretAttributes,
  */
 export const Secret = Resource<Secret>("Infisical.Secret");
 
-/** A write is waiting on approval, or the row at the key isn't this stack's. */
-export class SecretError extends Data.TaggedError("SecretError")<{
-  readonly message: string;
-}> {}
+/** Infisical holds a write for approval under the project's change policy. */
+export class SecretApprovalPending extends Data.TaggedError("SecretApprovalPending")<{
+  readonly secretName: string;
+  readonly action: "create" | "update" | "delete";
+  readonly approvalId: string;
+}> {
+  override get message() {
+    return `Infisical secret ${this.secretName}: the ${this.action} waits on approval ${this.approvalId}; approve it in Infisical and deploy again.`;
+  }
+}
+
+/** The row at the key replaced this stack's by hand, so it isn't the stack's. */
+export class SecretNotOwned extends Data.TaggedError("SecretNotOwned")<{
+  readonly secretName: string;
+  readonly rowId: string;
+}> {
+  override get message() {
+    return (
+      `Infisical secret ${this.secretName}: shared row ${this.rowId} was not made by this stack. ` +
+      `Delete it, or run alchemy state rm for this resource and deploy with --adopt.`
+    );
+  }
+}
 
 export const SecretProvider = () =>
   Provider.succeed(Secret, {
@@ -97,22 +118,7 @@ export const SecretProvider = () =>
     }),
     diff: Effect.fn(function* ({ id, instanceId, news, output }) {
       if (!output) return undefined;
-      const path = "path" in news ? news.path : undefined;
-      if (
-        !("project" in news) ||
-        !("environment" in news) ||
-        !("name" in news) ||
-        !isResolved(news.project) ||
-        !isResolved(news.environment) ||
-        !isResolved(path) ||
-        !isResolved(news.name) ||
-        news.project !== output.project ||
-        news.environment !== output.environment ||
-        (path ?? "/") !== output.path ||
-        news.name !== output.name
-      ) {
-        return { action: "replace" } as const;
-      }
+      if (!isSameKey(news, output)) return { action: "replace" } as const;
       if (!isResolved<SecretProps>(news)) return { action: "update" } as const;
       const live = yield* getSecret(output);
       return live && (yield* current(id, instanceId, live, news))
@@ -170,6 +176,16 @@ interface Key {
 /** Marks which resource instance wrote the row, so a replacement keeps it. */
 const instanceTag = "alchemy::instance";
 
+const keyFields = ["project", "environment", "path", "name"] as const;
+
+/** The declared key is resolved and names the row in `output`. */
+const isSameKey = (news: Input<SecretProps>, output: SecretAttributes) =>
+  keyFields.every((field) => {
+    const value = Predicate.hasProperty(news, field) ? news[field] : undefined;
+    if (!isResolved(value)) return false;
+    return (field === "path" ? (value ?? "/") : value) === output[field];
+  });
+
 const keyOf = (props: SecretProps): Key => ({
   project: props.project,
   environment: props.environment,
@@ -218,11 +234,7 @@ const refuseReplacedRow = Effect.fnUntraced(function* (
   output: SecretAttributes | undefined,
 ) {
   if (!output || live.id === output.id || (yield* hasAlchemyTags(id, metadataOf(live)))) return;
-  return yield* new SecretError({
-    message:
-      `Infisical secret ${output.name}: shared row ${live.id} was not made by this stack. ` +
-      `Delete it, or run alchemy state rm for this resource and deploy with --adopt.`,
-  });
+  return yield* new SecretNotOwned({ secretName: output.name, rowId: live.id });
 });
 
 /** The live row holds the declared value and comment, under this instance's tags. */
@@ -244,13 +256,15 @@ const current = Effect.fnUntraced(function* (
 /** Under a change policy, Infisical answers a write with an approval request instead of applying it. */
 const applied = <A>(
   key: Key,
-  action: string,
+  action: SecretApprovalPending["action"],
   response: { readonly secret: A } | { readonly approval: { readonly id: string } },
 ) =>
   "approval" in response
     ? Effect.fail(
-        new SecretError({
-          message: `Infisical secret ${key.name}: the ${action} waits on approval ${response.approval.id}; approve it in Infisical and deploy again.`,
+        new SecretApprovalPending({
+          secretName: key.name,
+          action,
+          approvalId: response.approval.id,
         }),
       )
     : Effect.succeed(response.secret);
