@@ -122,7 +122,13 @@ describe("YAML property display", { tags: ["unit", "local"] }, () => {
       "update",
     )?.lines;
 
-    expect(lines).toEqual(["properties:", "  settings: (redacted)", "  tokens: (redacted)"]);
+    expect(lines).toEqual([
+      "properties:",
+      "-   settings: (hidden)",
+      "+   settings: (redacted)",
+      "-   tokens: (hidden)",
+      "+   tokens: (redacted)",
+    ]);
   });
 
   test("hides previous secret array entries by index and preserves removed entries", () => {
@@ -159,7 +165,8 @@ describe("YAML property display", { tags: ["unit", "local"] }, () => {
     expect(lines).toEqual([
       "properties:",
       "  private:",
-      "    token: (redacted)",
+      "-     token: (hidden)",
+      "+     token: (redacted)",
       "  public:",
       "-     token: shared-value",
       "+     token: changed-public",
@@ -198,6 +205,27 @@ describe("YAML property display", { tags: ["unit", "local"] }, () => {
     expect(lines).not.toContain("legacy-secret");
     expect(lines).not.toContain("new-secret");
     expect(lines).not.toContain("resolved");
+  });
+
+  test("hides previous plaintext behind a value the plan can't see into yet", () => {
+    // A plain value moving onto a generated secret: the plan holds an Output
+    // or an Effect there, which may resolve to a Redacted.
+    const lines = formatDeclaredPropertyYaml(
+      { env: { FROM_OUTPUT: "legacy-output", FROM_EFFECT: "legacy-effect", CFG: "legacy-cfg" } },
+      {
+        env: {
+          FROM_OUTPUT: Output.fromEffect(Effect.succeed(Redacted.make("new"))),
+          FROM_EFFECT: Effect.succeed(Redacted.make("new")),
+          CFG: new (class Config {})(),
+        },
+      },
+      "update",
+    )?.lines.join("\n");
+
+    expect(lines).toContain("FROM_OUTPUT: (hidden)");
+    expect(lines).toContain("FROM_EFFECT: (hidden)");
+    expect(lines).toContain("CFG: (hidden)");
+    expect(lines).not.toContain("legacy-");
   });
 
   test("handles bigint and cycles", () => {

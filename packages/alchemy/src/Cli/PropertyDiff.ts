@@ -116,6 +116,7 @@ export const formatDriftPropertyYaml = (
 };
 
 const REDACTED = "(redacted)";
+const HIDDEN = "(hidden)";
 const KNOWN_AFTER_APPLY = "(known after apply)";
 const COMPUTED = "(computed)";
 const UNDEFINED = "(undefined)";
@@ -132,14 +133,30 @@ export const toYamlDisplayValue = (
   ancestors: WeakSet<object> = new WeakSet(),
 ): YamlDisplayValue => toYamlDisplayValueRedacting(value, undefined, ancestors);
 
-/** Desired secret wrappers also hide legacy plaintext at the same path. */
+/**
+ * Whether the previous value at a path must stay hidden: the desired value is
+ * a secret, or something the plan can't see into yet (an Output, an Effect, an
+ * opaque object), which may resolve to one.
+ */
+const hidesPrevious = (desired: unknown) =>
+  Redacted.isRedacted(desired) ||
+  Effect.isEffect(desired) ||
+  typeof desired === "function" ||
+  (typeof desired === "object" && desired !== null && !isPlainData(desired));
+
+/**
+ * Render previous props beside the desired ones: wherever the desired value
+ * {@link hidesPrevious}, the previous value prints as `(hidden)`, so a value
+ * that is becoming a secret never prints its legacy plaintext.
+ */
 const toYamlDisplayValueRedacting = (
   value: unknown,
   desired: unknown,
   ancestors: WeakSet<object> = new WeakSet(),
 ): YamlDisplayValue => {
   // Output expressions are Effects too, so this order is security-sensitive.
-  if (Redacted.isRedacted(desired) || Redacted.isRedacted(value)) return REDACTED;
+  if (Redacted.isRedacted(value)) return REDACTED;
+  if (hidesPrevious(desired)) return HIDDEN;
   if (Output.isExpr(value)) return KNOWN_AFTER_APPLY;
   if (Effect.isEffect(value) || typeof value === "function") return COMPUTED;
   if (value === undefined) return UNDEFINED;
