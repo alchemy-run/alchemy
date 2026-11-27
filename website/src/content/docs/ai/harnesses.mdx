@@ -54,7 +54,7 @@ A process may mention other models. Those are choices for whoever starts a sessi
 
 ## One harness for a place
 
-Every process provided with the same `AI.Harness` Layer runs on one harness, which opens once with every tool and model those processes mention. Yield processes where the runtime's dependencies are resolved, a Durable Object's outer Effect, so the harness knows all of them before its first session.
+Every process provided with the same `AI.Harness` Layer runs on one harness, which opens once with every tool and model those processes mention. A model that lists a process builds its Layer in each session's object. Outside a model, yield processes where the runtime's dependencies are resolved, a Durable Object's outer Effect, so the harness knows all of them before its first session.
 
 ## What a harness adds
 

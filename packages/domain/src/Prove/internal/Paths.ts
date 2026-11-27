@@ -737,26 +737,26 @@ export const decisionIn = Effect.fn(function* (
 ) {
   for (const module of modules) {
     if (!Object.values(module.exports).includes(decision)) continue;
-    const calls: Array<Node> = [];
+    const calls: Array<{ readonly call: Node; readonly props: Node }> = [];
     const visit = (node: unknown): void => {
       if (Array.isArray(node)) return node.forEach(visit);
       if (typeof node !== "object" || node === null) return;
       const n = node as Node;
+      const props = n.type === "CallExpression" ? propsOf(n.arguments?.[1] as Node) : undefined;
       if (
-        n.type === "CallExpression" &&
-        n.arguments?.[1]?.type === "ObjectExpression" &&
+        props !== undefined &&
         ["reads", "keyOf", "decide"].every((key) =>
-          (n.arguments[1].properties as ReadonlyArray<Node>).some(
+          (props.properties as ReadonlyArray<Node>).some(
             (p) => p.type === "Property" && !p.computed && (p.key.name ?? p.key.value) === key,
           ),
         )
       )
-        calls.push(n);
+        calls.push({ call: n, props });
       for (const [key, value] of Object.entries(n))
         if (key !== "type" && typeof value === "object") visit(value);
     };
     visit(module.program);
-    for (const call of calls) {
+    for (const { call, props } of calls) {
       const command = yield* interpreter
         .evaluate(call.arguments[0] as Node, interpreter.moduleEnv(module))
         .pipe(Effect.result);
@@ -767,7 +767,7 @@ export const decisionIn = Effect.fn(function* (
       ) {
         const found: DecisionDefinition = {
           module,
-          node: call.arguments[1] as Node,
+          node: props,
           name: decision.decisionName,
         };
         return found;
@@ -1045,10 +1045,22 @@ export const unread = (
 };
 
 /**
+ * The props a declaration was given: the object itself, or the one a thunk
+ * returns (`() => ({ ... })`).
+ */
+const propsOf = (node: Node | undefined): Node | undefined => {
+  if (node?.type === "ParenthesizedExpression") return propsOf(node.expression as Node);
+  if (node?.type === "ObjectExpression") return node;
+  if (node?.type === "ArrowFunctionExpression" && (node.params as ReadonlyArray<Node>).length === 0)
+    return propsOf(node.body as Node);
+  return undefined;
+};
+
+/**
  * The object passed to `Domain.Aggregate(name, { ... })`,
- * `Domain.Model(name, { ... })` or `Domain.View(name, { ... })` in a file: the
- * one with the property `key`, which an event or a command of the same name
- * does not have.
+ * `Domain.Model(name, { ... })` or `Domain.View(name, { ... })` in a file,
+ * directly or returned by a thunk: the one with the property `key`, which
+ * an event or a command of the same name does not have.
  */
 export const find = (
   program: Node,
@@ -1066,16 +1078,19 @@ export const find = (
     }
     if (typeof node !== "object" || node === null) return undefined;
     const n = node as Node;
-    if (
+    const props =
       n.type === "CallExpression" &&
       n.arguments?.[0]?.type === "Literal" &&
-      n.arguments[0].value === name &&
-      n.arguments[1]?.type === "ObjectExpression" &&
-      (n.arguments[1].properties as ReadonlyArray<Node>).some(
+      n.arguments[0].value === name
+        ? propsOf(n.arguments[1] as Node | undefined)
+        : undefined;
+    if (
+      props !== undefined &&
+      (props.properties as ReadonlyArray<Node>).some(
         (p) => p.type === "Property" && !p.computed && (p.key.name ?? p.key.value) === key,
       )
     )
-      return n.arguments[1] as Node;
+      return props;
     for (const [key, value] of Object.entries(n)) {
       if (key === "type" || typeof value !== "object") continue;
       const found = visit(value);

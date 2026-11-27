@@ -15,7 +15,7 @@ In [Part 3](/ai/tutorial/part-3) a session labeled an issue from its title. This
 
 ## Give each session a sandbox
 
-The harness runs in a Durable Object, which has no files and no shell. Tools that need them work in a sandbox. This Layer starts one for each session, from a snapshot that already has the repository:
+The harness runs in the session's Durable Object, which has no files and no shell. Tools that need them work in a sandbox. This Layer starts one for each session, from a snapshot that already has the repository:
 
 ```typescript title="src/Sandbox.ts"
 import * as AIBoat from "@alchemy.run/ai/Boat";
@@ -41,6 +41,7 @@ See [Sandboxes](/ai/sandboxes) for the other platforms.
 `AI.Grep` and `AI.Read` are names every harness has a tool for. Mention them:
 
 ```diff lang="typescript" title="src/Triage.process.ts"
+import * as AI from "@alchemy.run/ai";
 import { Board } from "./Board/Board.model.ts";
 
 -  You look after one issue of a GitHub repository. Your first message says
@@ -48,13 +49,13 @@ import { Board } from "./Board/Board.model.ts";
 +  You look after one issue of a GitHub repository. Your first message says
 +  which. The repository is checked out at ~/repo in your sandbox.
 
--  Get the issue with ${Board.IssueDetail}: its key is the issue. Then send
--  ${Board.LabelIssue}: bug when something is broken, feature when something
+-  Get the issue with ${() => Board.IssueDetail}: its key is the issue. Then send
+-  ${() => Board.LabelIssue}: bug when something is broken, feature when something
 -  new is asked for, question otherwise.
-+  Get the issue with ${Board.IssueDetail}: its key is the issue. Find the
++  Get the issue with ${() => Board.IssueDetail}: its key is the issue. Find the
 +  code it is about with ${AI.Grep} and ${AI.Read}. Never change a file.
 +
-+  Then send ${Board.LabelIssue}: bug when something is broken, feature when
++  Then send ${() => Board.LabelIssue}: bug when something is broken, feature when
 +  something new is asked for, question otherwise.
 ```
 
@@ -64,21 +65,20 @@ import { Board } from "./Board/Board.model.ts";
 
 `Pi.CodingTools` is Pi's own implementation of those names, working in the session's sandbox:
 
-```diff lang="typescript" title="src/Agents.ts"
+```diff lang="typescript" title="src/Sessions.ts"
 import * as AI from "@alchemy.run/ai";
 +import * as Boat from "@alchemy.run/boat";
-import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 
-import { SmartLlama, Smart } from "./Models.ts";
+import { Smart, SmartLlama } from "./Models.ts";
 +import { SandboxLive } from "./Sandbox.ts";
-import { Triage } from "./Triage.process.ts";
 
 -const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObjectStorage));
 +const HarnessLive = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools).pipe(
 +  Layer.provide(PiCloudflare.DurableObjectStorage),
 +);
 
-const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
+const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
 -  Layer.provide(SmartLlama),
 +  Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
 +  Layer.provide(Boat.CreateSandboxHttp),
@@ -216,7 +216,6 @@ A session that mentions `Answering` always sees its description, and reads its p
 import * as AI from "@alchemy.run/ai";
 +import { Answering } from "./Answering.process.ts";
 import { Board } from "./Board/Board.model.ts";
-import { IssueId } from "./Board/Issue.id.ts";
 +import { PostAnswer } from "./PostAnswer.tool.ts";
 +import { SearchIssues } from "./SearchIssues.tool.ts";
 
@@ -227,33 +226,32 @@ import { IssueId } from "./Board/Issue.id.ts";
 +  code it is about with ${AI.Grep} and ${AI.Read}, and look for duplicates
 +  with ${SearchIssues}. Never change a file.
 
--  Then send ${Board.LabelIssue}: bug when something is broken, feature when
+-  Then send ${() => Board.LabelIssue}: bug when something is broken, feature when
 -  something new is asked for, question otherwise.
 +  Then follow ${Answering} and post your answer with ${PostAnswer}. Last,
-+  send ${Board.LabelIssue}: bug when something is broken, feature when
++  send ${() => Board.LabelIssue}: bug when something is broken, feature when
 +  something new is asked for, question otherwise.
 
--  Later messages are replies on the issue. Send ${Board.LabelIssue} again
+-  Later messages are replies on the issue. Send ${() => Board.LabelIssue} again
 -  when a reply changes what kind of issue it is.
 +  Later messages are replies on the issue. Answer each the same way, and
-+  send ${Board.LabelIssue} again when a reply changes what kind of issue it is.
++  send ${() => Board.LabelIssue} again when a reply changes what kind of issue it is.
 ```
 
 ## Provide the tools
 
-```diff lang="typescript" title="src/Agents.ts"
-import { SandboxLive } from "./Sandbox.ts";
+```diff lang="typescript" title="src/Sessions.ts"
+import { Smart, SmartLlama } from "./Models.ts";
 +import { PostAnswerLive } from "./PostAnswer.tool.ts";
+import { SandboxLive } from "./Sandbox.ts";
 +import { SearchIssuesLive } from "./SearchIssues.tool.ts";
-import { Triage } from "./Triage.process.ts";
 
--const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
-+const Live = Layer.mergeAll(
+-const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
++const Agents = Layer.mergeAll(
 +  HarnessLive,
 +  AI.DefaultModel(Smart),
 +  SearchIssuesLive,
 +  PostAnswerLive,
-+  boardOver(own),
 +).pipe(
   Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
 ```
@@ -286,9 +284,9 @@ curl "$URL/issues/2"
 
 ## Run it on OpenCode
 
-Every session so far ran on Pi. The harness is one constant in `Agents.ts`:
+Every session so far ran on Pi. The harness is one constant in `src/Sessions.ts`:
 
-```diff lang="typescript" title="src/Agents.ts"
+```diff lang="typescript" title="src/Sessions.ts"
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 -import * as Pi from "@alchemy.run/pi";
 -import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
@@ -307,10 +305,10 @@ The process, its prose, the board, the policy and the tools are unchanged. Sessi
 
 ## What you built
 
-- A board that models the work: issues, replies, labels.
-- A policy that decides when an issue is looked after, and an object for each issue that answers.
+- A board that models the work: issues, replies, labels, and the process that looks after them.
+- A policy that decides when an issue is looked after, by sending its session a message.
 - A process that says how the work is done, in prose that mentions what it uses.
-- A harness you chose in one line.
+- Layers underneath that say where it all runs: Durable Objects, a harness you chose in one line, a sandbox.
 
 ## Where next
 
@@ -318,7 +316,7 @@ The process, its prose, the board, the policy and the tools are unchanged. Sessi
 - [Processes](/ai/processes): sessions and the two ways to declare one.
 - [Processes that use processes](/ai/process-graphs): following, starting, and models.
 - [Processes and Domain models](/ai/domain): mentioning commands and views, who a session acts as, and policies that ask for work.
-- [Where sessions run](/ai/hosting): one object for each session or one for many, and reaching them.
+- [Where sessions run](/ai/hosting): how a process is hosted, and how to read a session from outside it.
 
 ## Tear down
 

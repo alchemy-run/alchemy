@@ -578,4 +578,6 @@ export const BankHandlers = Layer.mergeAll(
 
 `Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()`.
 
-More: [Domain Model: Declare the model](https://alchemy.run/domain/model#declare-the-model).
+An AI process is not a member, and Domain knows nothing of one. A policy holds it (`yield* Assistant`), so the policy's Layer requires it. A host gives it each session, `AICloudflare.layerDurableObjects` or `AI.layerInMemory`, and is given the model its prose mentions. That prose and the model lead to each other, so the model takes its members as a thunk, `Domain.Model("Bank", () => ({ ... }))`. See the `alchemy-ai` skill's `references/domain.md`.
+
+More: [Domain Model: Declare the model](https://alchemy.run/domain/model#declare-the-model), [Processes and Domain models](https://alchemy.run/ai/domain).

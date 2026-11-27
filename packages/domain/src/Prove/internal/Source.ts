@@ -97,6 +97,9 @@ const isPlain = (value: unknown): value is Readonly<Record<string, unknown>> => 
   return prototype === Object.prototype || prototype === null || Array.isArray(value);
 };
 
+/** What every function has, and no class lists. */
+const unlisted = new Set(["length", "name", "prototype", "caller", "arguments"]);
+
 /** The domain classes a class lists, each with where it is listed. */
 const listed = (root: unknown): ReadonlyArray<readonly [string, unknown]> => {
   const made: Array<readonly [string, unknown]> = [];
@@ -105,14 +108,17 @@ const listed = (root: unknown): ReadonlyArray<readonly [string, unknown]> => {
     else if (depth < 4 && isPlain(value))
       for (const [key, field] of Object.entries(value)) visit(field, `${at}.${key}`, depth + 1);
   };
-  // `class Bank extends Domain.Model(...)` has its fields on the class it extends.
+  // `class Bank extends Domain.Model(...)` has its fields on the class it
+  // extends. A field read from props given as a thunk is a getter, which
+  // `Object.entries` leaves out: every own property is read.
   const fields = new Map<string, unknown>();
   for (
     let cls: unknown = root;
     typeof cls === "function" && cls !== Function.prototype;
     cls = Object.getPrototypeOf(cls)
   )
-    for (const [key, field] of Object.entries(cls)) if (!fields.has(key)) fields.set(key, field);
+    for (const key of Object.getOwnPropertyNames(cls))
+      if (!fields.has(key) && !unlisted.has(key)) fields.set(key, Reflect.get(cls as object, key));
   for (const [key, field] of fields) visit(field, key, 0);
   return made;
 };

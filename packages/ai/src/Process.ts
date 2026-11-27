@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { isCodeMode, type CodeModeConvention, type CodeModeGroup } from "./CodeMode.ts";
@@ -18,6 +19,7 @@ import {
 } from "./Harness.ts";
 import { isMcpServer, type McpServerClass } from "./McpServer.ts";
 import { isModel, type AnyModel, type ModelClass } from "./Model.ts";
+import type { SessionState } from "./Session.ts";
 import {
   isToolGroup,
   Tool,
@@ -32,6 +34,8 @@ import {
 
 const ProcessTypeId = "~alchemy/AI/Process" as const;
 const SelfTypeId = "~alchemy/AI/Self" as const;
+/** The key under which a process says how its sessions are hosted, each in an instance of its own. */
+export const HostedTypeId = "~alchemy/AI/Hosted" as const;
 /** The key under which a term of another package says what mentioning it gives. */
 export const MentionTypeId = "~alchemy/AI/Mention" as const;
 
@@ -86,6 +90,41 @@ export class Acting extends Context.Service<Acting, { readonly as: Stored }>()("
 const isMentionable = (u: unknown): u is Mentionable<unknown> =>
   (typeof u === "object" || typeof u === "function") && u !== null && MentionTypeId in u;
 
+/**
+ * A mention written as `() => Board.LabelIssue`: an arrow function, which
+ * has no prototype, and none of the terms a mention may be. It is read when
+ * the prose is first used, so the prose can mention a module that imports
+ * the prose's own.
+ */
+const isThunk = (u: unknown): u is () => unknown =>
+  typeof u === "function" &&
+  u.length === 0 &&
+  !Object.hasOwn(u, "prototype") &&
+  !isMentionable(u) &&
+  !(ProcessTypeId in u) &&
+  !(SelfTypeId in u);
+
+/**
+ * A process's prose. Each mention written as a thunk is read once, when the
+ * prose is first used.
+ */
+const define = (
+  name: string,
+  description: string,
+  strings: ReadonlyArray<string>,
+  refs: ReadonlyArray<unknown>,
+): Definition => {
+  let read: ReadonlyArray<unknown> | undefined;
+  return {
+    name,
+    description,
+    strings: [...strings],
+    get refs() {
+      return (read ??= refs.map((ref) => (isThunk(ref) ? ref() : ref)));
+    },
+  };
+};
+
 /** A session that acts as someone was sent a message before it was started. */
 export class NotStarted extends Data.TaggedError("NotStarted")<{
   readonly process: string;
@@ -126,6 +165,11 @@ export interface Session {
   readonly events: (options?: {
     readonly after?: number;
   }) => Stream.Stream<SessionEvent, HarnessError, RuntimeContext>;
+  /**
+   * Where the session stands now: whether it is working, and what is
+   * queued. A session nobody sent anything is idle.
+   */
+  readonly status: Effect.Effect<SessionState, HarnessError, RuntimeContext>;
   /** A page of the transcript: the items the session has stored. */
   readonly history: (
     options?: HistoryOptions,
@@ -183,7 +227,57 @@ export type ProcessService<As = never> = ProcessClient<As> & {
   readonly "~definition"?: Definition;
   /** @internal Whether the harness has the session with this key. */
   readonly "~exists"?: (key: string) => Effect.Effect<boolean, HarnessError, RuntimeContext>;
+  /** @internal A model the process may run on, by name. */
+  readonly "~model"?: (name: string) => AnyModel | undefined;
+  /** @internal What a session started with `as` acts as, in the form that is stored. */
+  readonly "~stored"?: (as: Context.Context<never>) => Effect.Effect<Stored | undefined>;
 };
+
+/** A process declared by name, as a host reads it. */
+export interface DeclaredProcess extends Context.Key<unknown, ProcessService<any>> {
+  readonly processName: string;
+  readonly [HostedTypeId]: Hosted;
+}
+
+/**
+ * Every process declared by name in this program, by its key. A host is
+ * given a Layer, which does not say which processes it provides: it finds
+ * them here.
+ *
+ * @internal
+ */
+export const declared = new Map<string, DeclaredProcess>();
+
+/** A value that crosses from a session's object to its callers. */
+type Wire = unknown;
+
+/** How a process's client reaches the instances of its sessions. */
+interface Remote {
+  readonly call: (
+    key: string,
+    method: string,
+    ...args: ReadonlyArray<Wire>
+  ) => Effect.Effect<Wire, never, RuntimeContext>;
+}
+
+/**
+ * How a host runs a process with each session in an instance of its own
+ * (`AI.layerInMemory`, `AICloudflare.layerDurableObjects`). `serve` is one
+ * session's methods inside its instance, and `client` what everything else
+ * holds.
+ *
+ * @internal
+ */
+export interface Hosted {
+  readonly name: string;
+  readonly serve: (
+    service: unknown,
+    key: string,
+  ) => Readonly<
+    Record<string, (...args: ReadonlyArray<any>) => Effect.Effect<Wire, never, RuntimeContext>>
+  >;
+  readonly client: (remote: Remote, local: () => unknown) => unknown;
+}
 
 type ToolRequires<T> =
   T extends CodeModeGroup<infer Inner>
@@ -213,14 +307,18 @@ export type Requires<M> = M extends Self | string | number
               readonly [MentionTypeId]: { readonly tools: Effect.Effect<any, any, infer R> };
             }
           ? R
-          : ToolRequires<M>;
+          : M extends () => infer Mentioned
+            ? Requires<Mentioned>
+            : ToolRequires<M>;
 
 /** What a session of a process that mentions `M` must be started as. */
 export type Acts<M> = M extends { readonly "~acts": infer As }
   ? As
   : M extends { readonly [MentionTypeId]: unknown; readonly "~as"?: infer As }
     ? Exclude<As, undefined>
-    : never;
+    : M extends () => infer Mentioned
+      ? Acts<Mentioned>
+      : never;
 
 /** The model sessions run on when nobody chose one. */
 export interface DefaultModel {
@@ -281,10 +379,16 @@ export interface ProcessTag<Service, Name extends string, As = never> extends Co
   readonly "~process": Service;
   /** Phantom: what a session of the process must be started as. */
   readonly "~acts": As;
+  /** @internal How a domain model hosts the process. */
+  readonly [HostedTypeId]: Hosted;
   /**
    * Give the process its prose. Each Layer is one way to carry the process
    * out: its own words, tools, models and other processes. It requires
    * what the prose mentions.
+   *
+   * A mention may be a thunk, `${() => Board.LabelIssue}`, read when the
+   * prose is first used. Write one when the mentioned module imports this
+   * one, as a Domain model whose policy holds the process does.
    */
   toLayer(options: {
     /** When to follow or start this process: what another process's model reads to choose it. */
@@ -702,6 +806,14 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
     service = {
       "~definition": definition,
       "~exists": (key: string) => Effect.flatMap(sessionOf(key), (session) => session.exists),
+      "~model": (name: string) => state.models.get(name),
+      "~stored": (as: Context.Context<never>) =>
+        encoders.length === 0
+          ? Effect.succeed(undefined)
+          : Effect.map(
+              Effect.forEach(encoders, (encode) => encode(as)),
+              (stored): Stored => Object.assign({}, ...stored),
+            ),
       start: (key: string, options?: StartWith) =>
         Effect.gen(function* () {
           const engine = yield* harness.open;
@@ -744,6 +856,13 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
               return session.events(options);
             }),
           ),
+        status: Effect.gen(function* () {
+          const session = yield* sessionOf(key);
+          if (!(yield* session.exists)) return IDLE;
+          // The first event of a session's stream is where it stands.
+          const first = Option.getOrUndefined(yield* Stream.runHead(session.events()));
+          return first?.type === "status" ? { status: first.status, queued: first.queued } : IDLE;
+        }),
         history: (options) => Effect.flatMap(sessionOf(key), (session) => session.history(options)),
         prompt: (text, options) =>
           Effect.flatMap(started(key), (session) => session.prompt(text, options)),
@@ -752,6 +871,150 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
     state.services.set(definition, service);
     return service;
   });
+
+/** Where a session nobody sent anything stands. */
+const IDLE: SessionState = { status: "idle", queued: [] };
+
+/** What a call to a session's object answers: its value, or the error it failed with. */
+type Answer =
+  | { readonly ok: Wire }
+  | {
+      readonly error:
+        | { readonly _tag: "HarnessError"; readonly message: string }
+        | { readonly _tag: "NotStarted"; readonly process: string; readonly key: string };
+    };
+
+/** Options as they cross to a session's object: a model by its name. */
+interface WireOptions {
+  readonly requestId?: string;
+  readonly model?: string;
+}
+
+const wireOptions = (options: SendOptions | undefined): WireOptions => ({
+  ...(options?.requestId === undefined ? {} : { requestId: options.requestId }),
+  ...(options?.model === undefined ? {} : { model: options.model.modelName }),
+});
+
+/** How a host runs the process named `name`. */
+const hostedAs = (name: string): Hosted => {
+  const answer = <A>(
+    effect: Effect.Effect<A, NotStarted | HarnessError, RuntimeContext>,
+  ): Effect.Effect<Answer, never, RuntimeContext> =>
+    effect.pipe(
+      Effect.map((ok): Answer => ({ ok: ok ?? null })),
+      Effect.catch((error) =>
+        Effect.succeed<Answer>({
+          error:
+            error._tag === "NotStarted"
+              ? { _tag: "NotStarted", process: error.process, key: error.key }
+              : { _tag: "HarnessError", message: error.message },
+        }),
+      ),
+    );
+  return {
+    name,
+    serve: (given, key) => {
+      const service = given as ProcessService<any>;
+      const session = service.get(key);
+      /** The options as the session takes them: its model by name. */
+      const sendOptions = (
+        options: WireOptions | undefined,
+      ): Effect.Effect<SendOptions, HarnessError> => {
+        const { model: named, ...rest } = options ?? {};
+        if (named === undefined) return Effect.succeed(rest);
+        const model = service["~model"]?.(named);
+        return model === undefined
+          ? Effect.fail(new HarnessError({ message: `There is no model named ${named}.` }))
+          : Effect.succeed({ ...rest, model });
+      };
+      const start = service.start as (
+        key: string,
+        options: StartWith,
+      ) => Effect.Effect<void, HarnessError, RuntimeContext>;
+      return {
+        start: (options?: { readonly model?: string; readonly as?: Stored }) =>
+          answer(
+            Effect.flatMap(sendOptions({ model: options?.model }), ({ model }) =>
+              start(key, {
+                ...(model === undefined ? {} : { model }),
+                ...(options?.as === undefined ? {} : { [STORED]: options.as }),
+              }),
+            ),
+          ),
+        send: (text: string, options?: WireOptions) =>
+          answer(Effect.flatMap(sendOptions(options), (options) => session.send(text, options))),
+        steer: (text: string, options?: WireOptions) =>
+          answer(Effect.flatMap(sendOptions(options), (options) => session.steer(text, options))),
+        prompt: (text: string, options?: WireOptions) =>
+          answer(Effect.flatMap(sendOptions(options), (options) => session.prompt(text, options))),
+        withdraw: (id: string) => answer(session.withdraw(id)),
+        interrupt: () => answer(session.interrupt),
+        status: () => answer(session.status),
+        history: (options?: HistoryOptions) => answer(session.history(options)),
+        exists: () => answer(service["~exists"]?.(key) ?? Effect.succeed(true)),
+      };
+    },
+    client: (remote, local): ProcessService<any> => {
+      const call = <A>(
+        key: string,
+        method: string,
+        ...args: ReadonlyArray<Wire>
+      ): Effect.Effect<A, NotStarted | HarnessError, RuntimeContext> =>
+        Effect.flatMap(remote.call(key, method, ...args), (given) => {
+          const answered = given as Answer;
+          if ("ok" in answered) return Effect.succeed(answered.ok as A);
+          return Effect.fail(
+            answered.error._tag === "NotStarted"
+              ? new NotStarted({ process: answered.error.process, key: answered.error.key })
+              : new HarnessError({ message: answered.error.message }),
+          );
+        });
+      /** A call that can't fail with `NotStarted`. */
+      const sure = <A>(effect: Effect.Effect<A, NotStarted | HarnessError, RuntimeContext>) =>
+        Effect.catchTag(effect, "NotStarted", (error) =>
+          Effect.fail(
+            new HarnessError({ message: `${error.process}/${error.key} was not started.` }),
+          ),
+        );
+      return {
+        "~exists": (key) => sure(call<boolean>(key, "exists")),
+        start: (key: string, options?: StartWith) =>
+          Effect.gen(function* () {
+            const as =
+              options?.[STORED] ??
+              (options?.as === undefined
+                ? undefined
+                : yield* (
+                    (local() as ProcessService<any>)["~stored"]?.(options.as) ??
+                    Effect.succeed(undefined)
+                  ));
+            yield* sure(
+              call<void>(key, "start", {
+                ...(options?.model === undefined ? {} : { model: options.model.modelName }),
+                ...(as === undefined ? {} : { as }),
+              }),
+            );
+          }),
+        get: (key: string): Session => ({
+          send: (text, options) => call(key, "send", text, wireOptions(options)),
+          steer: (text, options) => call(key, "steer", text, wireOptions(options)),
+          prompt: (text, options) => call(key, "prompt", text, wireOptions(options)),
+          withdraw: (id) => sure(call(key, "withdraw", id)),
+          interrupt: sure(call(key, "interrupt")),
+          status: sure(call(key, "status")),
+          history: (options) => sure(call(key, "history", options ?? {})),
+          // A session's live events stay in its instance.
+          events: () =>
+            Stream.die(
+              new HarnessError({
+                message: `A session of ${name} lives in an instance of its own, where its live events stay. From outside it, read \`status\` and \`history({ after })\`.`,
+              }),
+            ),
+        }),
+      };
+    },
+  };
+};
 
 /**
  * Declare a process: prose that says how to carry out a piece of work with
@@ -797,6 +1060,11 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
  * yield* engineer.get("task-7").send("Rename the config flag.");
  * const reply = yield* engineer.get("task-7").prompt("Also update the docs.");
  * ```
+ *
+ * Yielded like this, a session lives wherever the process's Layer was
+ * built. To give each session an instance of its own, hand the Layer to a
+ * host: `AI.layerInMemory`, or `AICloudflare.layerDurableObjects` for a
+ * Durable Object per session.
  */
 export const Process = (() =>
   (
@@ -809,12 +1077,7 @@ export const Process = (() =>
     const key = Context.Service<unknown, ProcessService<any>>(`AI.Process/${name}`);
     /** Called as a template tag, it is the inline form; extended, it is the tag. */
     function Declared(strings: TemplateStringsArray, ...refs: ReadonlyArray<unknown>) {
-      const definition: Definition = {
-        name,
-        description: options.description ?? name,
-        strings: [...strings],
-        refs,
-      };
+      const definition = define(name, options.description ?? name, strings, refs);
       function Inline() {}
       Object.assign(Inline, { [ProcessTypeId]: "inline", processName: name, definition });
       // Yielding the class compiles its prose where it is yielded.
@@ -825,19 +1088,16 @@ export const Process = (() =>
     }
     Object.assign(Declared, {
       [ProcessTypeId]: "tag",
+      [HostedTypeId]: hostedAs(name),
       processName: name,
       description: options.description,
       toLayer:
         (layer: { readonly description: string }) =>
         (strings: TemplateStringsArray, ...refs: ReadonlyArray<unknown>) => {
-          const definition: Definition = {
-            name,
-            description: layer.description,
-            strings: [...strings],
-            refs,
-          };
+          const definition = define(name, layer.description, strings, refs);
           return Layer.effect(key, compile(definition));
         },
     });
+    declared.set(key.key, Declared as unknown as DeclaredProcess);
     return Object.setPrototypeOf(Declared, key);
   }) as unknown as ProcessConstructor;

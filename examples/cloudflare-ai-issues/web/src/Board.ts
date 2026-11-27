@@ -1,8 +1,10 @@
-import { QueuedMessage, SessionEntry } from "@alchemy.run/ai/Session";
+import { QueuedMessage, SessionEntry, SessionStatus } from "@alchemy.run/ai/Session";
 import type * as Domain from "@alchemy.run/domain";
 import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
@@ -11,14 +13,27 @@ import { modifyFields } from "foldkit/struct";
 import { IssueId } from "../../src/Board/Issue.id.ts";
 import { ALL } from "../../src/Board/IssueList.view.ts";
 import { Label } from "../../src/Board/LabelIssue.command.ts";
-import { Status } from "../../src/Board/RecordActivity.command.ts";
 import { replied } from "../../src/Board/Said.ts";
 import { WebApi } from "../../src/Board/WebApi.api.ts";
+import type { SessionRead } from "../../src/SessionRead.ts";
 import { issueIn, urlOf } from "./Location.ts";
 
 export type Board = Domain.Api.ClientKey<"WebApi">;
 /** One Command per command of the Api, and a read namespace per view and stream. */
 export const BoardClient = DomainFoldkit.make(WebApi);
+
+/**
+ * How the page reads an issue's session: where it stands, and the transcript
+ * items after `after`. In a browser it is a request to `/sessions/<issue>`;
+ * a test gives the session itself.
+ */
+export class Sessions extends Context.Service<
+  Sessions,
+  { readonly read: (issueId: IssueId, after: number) => Effect.Effect<SessionRead, unknown> }
+>()("Sessions") {}
+
+/** How often the open issue's session is read. */
+const POLL = "1 second";
 
 // MODEL
 
@@ -48,7 +63,7 @@ export const Thread = Schema.Struct({
     Schema.Struct({ title: Schema.String, body: Schema.String, label: Schema.NullOr(Label) }),
   ),
   /** Whether its agent is working, and what is queued for it. */
-  status: Status,
+  status: SessionStatus,
   queued: Schema.Array(QueuedMessage),
   /** The agent's transcript so far, and where to resume reading it. */
   items: Schema.Array(SessionEntry),
@@ -181,8 +196,8 @@ export const Message = defineMessageUnion({
   ReceivedBoardResult: { result: BoardClient.Message },
   ReceivedIssues: { issues: Schema.Array(Listed) },
   ReceivedIssue: { issueId: IssueId, detail: Thread.fields.detail },
-  ReceivedStatus: { issueId: IssueId, status: Status, queued: Schema.Array(QueuedMessage) },
-  ReceivedItem: { issueId: IssueId, entry: SessionEntry, cursor: Schema.Number },
+  ReceivedStatus: { issueId: IssueId, status: SessionStatus, queued: Schema.Array(QueuedMessage) },
+  ReceivedItems: { issueId: IssueId, entries: Schema.Array(SessionEntry), cursor: Schema.Number },
   CaughtUpTranscript: { issueId: IssueId, cursor: Schema.Number },
   FailedRead: { reason: Schema.String },
 });
@@ -393,18 +408,21 @@ export const update = (model: Model, message: Message) =>
         status,
       })),
     }),
-    ReceivedItem: ({ issueId, entry, cursor }) => {
-      const read = thread(model, issueId, (known) =>
-        known.items.some((item) => item.seq === entry.seq)
-          ? known
-          : { ...known, items: [...known.items, entry], cursor: Option.some(cursor) },
-      );
+    ReceivedItems: ({ issueId, entries, cursor }) => {
+      const read = thread(model, issueId, (known) => ({
+        ...known,
+        items: [
+          ...known.items,
+          ...entries.filter((entry) => !known.items.some((item) => item.seq === entry.seq)),
+        ],
+        cursor: Option.some(cursor),
+      }));
       // The agent has it: the page's own copy of the reply, or of the issue, is done.
-      const text = entry.item.type === "user" ? entry.item.text : undefined;
+      const texts = entries.flatMap(({ item }) => (item.type === "user" ? [item.text] : []));
       const arrived = read.pending.find(
         (pending) =>
           pending.issueId === issueId &&
-          (pending.kind === "issue" ? text !== undefined : text === replied(pending.text)),
+          (pending.kind === "issue" ? texts.length > 0 : texts.includes(replied(pending.text))),
       );
       return {
         model:
@@ -455,7 +473,7 @@ const failed = (error: { readonly _tag: string }): Message =>
   Message.FailedRead({ reason: error._tag });
 const defect = (): Message => Message.FailedRead({ reason: "The board could not be read" });
 
-export const subscriptions = Subscription.make<Model, Message, Board>()((entry) => ({
+export const subscriptions = Subscription.make<Model, Message, Board | Sessions>()((entry) => ({
   // Back and forward open the issue their address names.
   address: entry(
     {},
@@ -480,7 +498,8 @@ export const subscriptions = Subscription.make<Model, Message, Board>()((entry) 
               const issue = list.issues[issueId];
               return issue === undefined
                 ? []
-                : [{ issueId, ...issue, working: list.working.includes(issueId) }];
+                : // Whether an agent is working is its session's to say, not the board's.
+                  [{ issueId, ...issue, working: false }];
             }),
         }),
       }),
@@ -498,29 +517,36 @@ export const subscriptions = Subscription.make<Model, Message, Board>()((entry) 
     onFailure: failed,
     onDefect: defect,
   }),
-  status: BoardClient.SessionStatus.watch({
-    key: open,
-    isEnabled: isOpen,
-    toMessage: ({ state }, issueId): Message =>
-      Message.ReceivedStatus({
-        issueId,
-        ...Option.getOrElse(state, () => ({ status: "idle" as const, queued: [] })),
-      }),
-    onFailure: failed,
-    onDefect: defect,
-  }),
-  transcript: BoardClient.Transcript.events({
-    key: open,
-    isEnabled: isOpen,
-    cursor: (model) => threadOf(model).cursor,
-    onEntry: ({ event, envelope }): Message =>
-      Message.ReceivedItem({
-        issueId: IssueId.make(envelope.id),
-        entry: { seq: event.seq, item: event.item },
-        cursor: envelope.seq,
-      }),
-    onCaughtUp: (cursor, issueId): Message => Message.CaughtUpTranscript({ issueId, cursor }),
-    onFailure: failed,
-    onDefect: defect,
-  }),
+  // The open issue's session, read again every second: where it stands,
+  // then each transcript item the page does not have yet.
+  session: entry(
+    { issueId: IssueId, isEnabled: Schema.Boolean },
+    {
+      modelToDependencies: (model) => ({ issueId: open(model), isEnabled: isOpen(model) }),
+      dependenciesToStream: ({ issueId, isEnabled }) => {
+        if (!isEnabled) return Stream.empty;
+        // The last item this stream handed over: the next read asks for what came after.
+        let after = 0;
+        const read = Effect.gen(function* () {
+          const sessions = yield* Sessions;
+          const { status, queued, items, next } = yield* sessions.read(issueId, after);
+          after = items.at(-1)?.seq ?? after;
+          return [
+            Message.ReceivedStatus({ issueId, status, queued }),
+            ...(items.length === 0
+              ? []
+              : [Message.ReceivedItems({ issueId, entries: items, cursor: after })]),
+            // The last page: what arrives from now on is new.
+            ...(next === undefined ? [Message.CaughtUpTranscript({ issueId, cursor: after })] : []),
+          ];
+        }).pipe(
+          // A read that fails is tried again at the next tick.
+          Effect.catchCause(() => Effect.succeed<ReadonlyArray<Message>>([])),
+        );
+        return Stream.fromEffectSchedule(read, Schedule.spaced(POLL)).pipe(
+          Stream.flatMap((messages) => Stream.fromIterable(messages)),
+        );
+      },
+    },
+  ),
 }));
