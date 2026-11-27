@@ -135,14 +135,14 @@ export const toYamlDisplayValue = (
 
 /**
  * Whether the previous value at a path must stay hidden: the desired value is
- * a secret, or something the plan can't see into yet (an Output, an Effect, an
- * opaque object), which may resolve to one.
+ * a secret, or not resolved yet (an Output or an Effect), so it may become one.
+ * Opaque leaves such as Duration or Date never hold a secret and stay visible.
  */
 const hidesPrevious = (desired: unknown) =>
   Redacted.isRedacted(desired) ||
+  Output.isExpr(desired) ||
   Effect.isEffect(desired) ||
-  typeof desired === "function" ||
-  (typeof desired === "object" && desired !== null && !isPlainData(desired));
+  typeof desired === "function";
 
 /**
  * Render previous props beside the desired ones: wherever the desired value

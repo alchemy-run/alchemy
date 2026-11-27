@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@alchemy.run/test";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -211,12 +212,11 @@ describe("YAML property display", { tags: ["unit", "local"] }, () => {
     // A plain value moving onto a generated secret: the plan holds an Output
     // or an Effect there, which may resolve to a Redacted.
     const lines = formatDeclaredPropertyYaml(
-      { env: { FROM_OUTPUT: "legacy-output", FROM_EFFECT: "legacy-effect", CFG: "legacy-cfg" } },
+      { env: { FROM_OUTPUT: "legacy-output", FROM_EFFECT: "legacy-effect" } },
       {
         env: {
           FROM_OUTPUT: Output.fromEffect(Effect.succeed(Redacted.make("new"))),
           FROM_EFFECT: Effect.succeed(Redacted.make("new")),
-          CFG: new (class Config {})(),
         },
       },
       "update",
@@ -224,8 +224,25 @@ describe("YAML property display", { tags: ["unit", "local"] }, () => {
 
     expect(lines).toContain("FROM_OUTPUT: (hidden)");
     expect(lines).toContain("FROM_EFFECT: (hidden)");
-    expect(lines).toContain("CFG: (hidden)");
     expect(lines).not.toContain("legacy-");
+  });
+
+  test("keeps unchanged opaque leaves as context while another prop changes", () => {
+    const timeout = Duration.seconds(5);
+    const at = new Date(0);
+    const lines = formatDeclaredPropertyYaml(
+      { name: "a", timeout, at },
+      { name: "b", timeout, at },
+      "update",
+    )?.lines;
+
+    expect(lines).toEqual([
+      "properties:",
+      "  at: (opaque)",
+      "-   name: a",
+      "+   name: b",
+      "  timeout: (opaque)",
+    ]);
   });
 
   test("handles bigint and cycles", () => {
