@@ -2890,6 +2890,11 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * namespace handle. Call `getByName` or `getById` to get a typed RPC
  * stub, then call its methods from your runtime handlers.
  *
+ * `RemovalPolicy.protect()` on the Worker also refuses deletion of inline
+ * Durable Object classes during a normal in-place update. To delete a class
+ * on purpose, drop `protect()` in the same deploy. `renamedFrom` preserves
+ * existing data when renaming a class and remains allowed while protected.
+ *
  * **Example:** Using a Durable Object
  * ```typescript
  * // Construction
