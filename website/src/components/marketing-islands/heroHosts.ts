@@ -4,8 +4,10 @@
  * process, and the model's rules. The bank is the model the rest of the
  * page uses.
  *
- * The aggregate comes last: its lines are short, which leaves the card's
- * bottom-right corner free for the terminal that sits over it.
+ * The terminal sits over the card's right side from the line after the
+ * process's opening, so every line below that one is kept under 44
+ * columns: the prose wraps early, and the aggregate folds its handler to
+ * its name.
  *
  * Props are plain objects: a prop accepts the resource's Effect directly
  * (`cluster: Cluster`), so nothing has to be yielded first.
@@ -24,24 +26,20 @@ export const HOST_TEMPLATE = `export default ⟨0⟩(
 
 export class FraudReview extends AI.Process<FraudReview>()(
   "FraudReview",
-  { description: "Review one risky withdrawal." },
+  { description: "Review a withdrawal." },
 )\`
-  Read the account with \${Bank.AccountSummary}.
-  If it looks stolen, send \${Bank.FreezeAccount}.
+  Read \${Bank.AccountSummary}. If it looks
+  stolen, send \${Bank.FreezeAccount}.
 \` {}
 
-export class Account extends Domain.Aggregate("Account", {
-  decide: {
-    WithdrawMoney: (account, { amount }) =>
-      amount > account.balance
-        ? new InsufficientFunds()
-        : [new MoneyWithdrawn({ amount })],
-  },
-  invariants: {
-    NeverOverdrawn: ({ balance }) =>
-      balance >= 0,
-  },
-}) {}`;
+export class Account extends
+  Domain.Aggregate("Account", {
+    decide: { WithdrawMoney },
+    invariants: {
+      NeverOverdrawn: ({ balance }) =>
+        balance >= 0,
+    },
+  }) {}`;
 
 export interface HostResource {
   id: string;
