@@ -12,7 +12,11 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import { projectServices as fetchProjectServices } from "./GraphQL.ts";
+import {
+  environmentPatchCommit,
+  projectServices as fetchProjectServices,
+  readEnvironmentConfig,
+} from "./GraphQL.ts";
 import { sanitizeRailwayName } from "./Metadata.ts";
 import { ownedProjects, projectEnvironmentIds } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -44,10 +48,6 @@ const endpointFields = <E>(endpoint: Query<RailwayPrivateNetworkEndpoint, E>) =>
 });
 type PrivateNetworkEndpointValue = UnwrapPlan<ReturnType<typeof endpointFields>>;
 
-const readEnvironmentConfig = Query.fn((id: string) => ({
-  config: Railway.environment({ id }).config,
-}));
-
 const readPrivateNetworks = Query.fn((environmentId: string) =>
   Railway.privateNetworks({ environmentId }).pipe(Query.map(networkFields)),
 );
@@ -62,11 +62,6 @@ const readServiceName = Query.fn((id: string) => ({ name: Railway.service({ id }
 const endpointNameAvailable = Query.fn(
   (input: { environmentId: string; privateNetworkId: string; prefix: string }) =>
     Railway.privateNetworkEndpointNameAvailable(input),
-);
-
-const environmentPatchCommit = Query.fn(
-  (input: { environmentId: string; commitMessage: string; patch: unknown }) =>
-    Railway.environmentPatchCommit(input),
 );
 
 /**
@@ -92,7 +87,7 @@ const NetworkConfig = Schema.Struct({
 });
 
 const readNetworkConfig = Effect.fn(function* (environmentId: string) {
-  const environment = yield* readEnvironmentConfig(environmentId);
+  const environment = yield* readEnvironmentConfig({ id: environmentId });
   return yield* Schema.decodeUnknownEffect(NetworkConfig)(environment.config);
 });
 

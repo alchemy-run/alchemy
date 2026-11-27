@@ -4,7 +4,7 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { waitUntilDeleted } from "./GraphQL.ts";
+import { environmentPatchCommit, waitUntilDeleted } from "./GraphQL.ts";
 import { sanitizeRailwayName } from "./Metadata.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 
@@ -42,11 +42,6 @@ const serviceDomainUpdate = Query.fn(
 );
 
 const serviceDomainDelete = Query.fn((id: string) => Railway.serviceDomainDelete({ id }));
-
-const environmentPatchCommit = Query.fn(
-  (input: { environmentId: string; commitMessage: string; patch: Record<string, unknown> }) =>
-    Railway.environmentPatchCommit(input),
-);
 
 /**
  * A Railway-generated `*.up.railway.app` hostname on a Service. Created

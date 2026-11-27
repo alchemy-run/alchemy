@@ -15,6 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import {
+  environmentPatchCommit,
   waitUntilDeleted,
   projectServices as fetchProjectServices,
   projectBuckets as fetchProjectBuckets,
@@ -78,11 +79,6 @@ const readEnvironment = Query.fn((id: string, projectId: string) => {
     canvasGroupRefs: environment.canvasGroupRefs,
   };
 });
-
-const environmentPatchCommit = Query.fn(
-  (input: { environmentId: string; commitMessage: string; patch: unknown }) =>
-    Railway.environmentPatchCommit(input),
-);
 
 const canvasViewMergePreview = Query.fn(
   (sourceEnvironmentId: string, targetEnvironmentId: string) => ({
