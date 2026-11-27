@@ -402,6 +402,8 @@ export const FORMS: ReadonlyArray<Form> = [
   ),
   form("ImportNamespaceSpecifier", kind("ImportNamespaceSpecifier")),
   form("ImportDefaultSpecifier", kind("ImportDefaultSpecifier")),
+  // `with { type: "json" }`: how the runtime loads what is imported.
+  form("ImportAttribute", kind("ImportAttribute")),
   form(
     "ExportNamedDeclaration: a declaration",
     (n) => n.type === "ExportNamedDeclaration" && Boolean(n.declaration),

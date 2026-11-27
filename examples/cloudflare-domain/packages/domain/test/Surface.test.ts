@@ -89,8 +89,10 @@ it.effect("every form of the language is in a table: read and compared, or repor
     }
     // The files of the module table: what is imported, exported and declared at the top of a file.
     const files = new Set<string>();
-    for (const source of Object.values(Modules.sources()))
-      for (const form of yield* formsOf(source.replace("// @ts-nocheck", ""))) files.add(form);
+    for (const [name, source] of Object.entries(Modules.sources()))
+      // A JSON file is data the aggregate imports, not code of the language.
+      if (!name.endsWith(".json"))
+        for (const form of yield* formsOf(source.replace("// @ts-nocheck", ""))) files.add(form);
     const written = new Set([...read, ...stopped, ...files]);
     // Nothing a table is written with is missing from the list.
     expect([...written].filter((form) => form.startsWith("undeclared"))).toEqual([]);

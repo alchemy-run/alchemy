@@ -3539,7 +3539,7 @@ export const search = Effect.fn(function* (
           const error = ran.failure;
           if (error._tag === "NotTranslated") {
             // A path no input takes says nothing of the code: what stopped the prover on it is never met.
-            const reached = yield* values(sequence, run, "true");
+            const reached = yield* Check.solve(solver, run, "false");
             if (reached._tag === "Unsat") {
               sequences++;
               continue;
