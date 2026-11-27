@@ -1,6 +1,6 @@
 import { Credentials } from "@distilled.cloud/coolify/Credentials";
-import { ConfigError } from "@distilled.cloud/core/errors";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { COOLIFY_AUTH_PROVIDER_NAME, type CoolifyResolvedCredentials } from "./AuthProvider.ts";
 
@@ -18,11 +18,10 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    lazyCredentials<CoolifyResolvedCredentials, ConfigError>()(
-      COOLIFY_AUTH_PROVIDER_NAME,
-      (creds) => ({
-        apiKey: creds.token,
-        apiBaseUrl: creds.apiBaseUrl,
-      }),
-    ),
+    // `Credentials` has no error channel: a failed resolution dies, and the
+    // engine reports it as `CredentialsRequired`.
+    lazyCredentials<CoolifyResolvedCredentials>()(COOLIFY_AUTH_PROVIDER_NAME, (creds) => ({
+      apiKey: creds.token,
+      apiBaseUrl: creds.apiBaseUrl,
+    })).pipe(Effect.map(Effect.orDie)),
   );
