@@ -2155,6 +2155,95 @@ export const FunctionProvider = () =>
         yield* syncLogGroupRetention({ logGroupName, retention });
       });
 
+      /**
+       * Release the execution role and log group a failed precreate created.
+       *
+       * A failed precreate records no Attributes, so destroy's recovery `read`
+       * finds no function and drops the row — anything precreate created
+       * before the failure would be stranded. Only the instance-scoped
+       * resources this precreate owns are removed, and only while no function
+       * exists: a concurrent or ambiguous create that did land leaves a
+       * function that still needs its role.
+       */
+      const releasePrecreatedRole = ({
+        id,
+        roleName,
+        functionName,
+      }: {
+        id: string;
+        roleName: string;
+        functionName: string;
+      }) =>
+        Effect.gen(function* () {
+          const existing = yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+          );
+          if (existing !== undefined) return;
+
+          const role = yield* iam
+            .getRole({ RoleName: roleName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
+          // A role without this instance's ownership tags is not ours to delete.
+          if (role === undefined || !(yield* hasAlchemyTags(id, role.Role.Tags))) return;
+
+          const attached = yield* iam
+            .listAttachedRolePolicies({ RoleName: roleName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
+          yield* Effect.forEach(
+            attached?.AttachedPolicies ?? [],
+            (policy) =>
+              iam
+                .detachRolePolicy({ RoleName: roleName, PolicyArn: policy.PolicyArn! })
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+            { discard: true },
+          );
+
+          const inline = yield* iam
+            .listRolePolicies({ RoleName: roleName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
+          yield* Effect.forEach(
+            inline?.PolicyNames ?? [],
+            (policyName) =>
+              iam
+                .deleteRolePolicy({ RoleName: roleName, PolicyName: policyName })
+                .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+            { discard: true },
+          );
+
+          // IAM can briefly report a just-detached role as still in use.
+          yield* iam.deleteRole({ RoleName: roleName }).pipe(
+            Effect.catchTag("NoSuchEntityException", () => Effect.void),
+            Effect.retry({
+              while: (error) =>
+                error._tag === "DeleteConflictException" ||
+                error._tag === "ConcurrentModificationException",
+              schedule: Schedule.spaced("2 seconds"),
+              times: 5,
+            }),
+          );
+
+          const logGroupName = `/aws/lambda/${functionName}`;
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const logGroupTags = yield* logs
+            .listTagsForResource({
+              resourceArn: `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`,
+            })
+            .pipe(
+              Effect.map((response) => response.tags),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+            );
+          if (logGroupTags === undefined || !(yield* hasAlchemyTags(id, logGroupTags))) return;
+          yield* logs
+            .deleteLogGroup({ logGroupName })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+        }).pipe(
+          // Cleanup must never replace the failure that triggered it.
+          Effect.ignoreCause({
+            log: "Warn",
+            message: `Failed to release the execution role ${roleName} of a failed precreate`,
+          }),
+        );
+
       const withNodeSourceMaps = (
         env: Record<string, string> | undefined,
         props: FunctionZipProps,
@@ -3540,31 +3629,39 @@ export const FunctionProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const { roleName, functionName, roleArn } = yield* createNames(id, news.functionName);
 
-          const role = yield* createRoleIfNotExists({
-            id,
-            roleName,
-            vpc: news.vpc,
-          });
-          yield* syncLogGroupGuard({ roleName, functionName });
-          yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
+          const prepared = yield* Effect.gen(function* () {
+            const role = yield* createRoleIfNotExists({
+              id,
+              roleName,
+              vpc: news.vpc,
+            });
+            yield* syncLogGroupGuard({ roleName, functionName });
+            yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
-          const prepared = yield* preparePrecreatedFunctionCode({
-            id,
-            props: news,
-            session,
-          });
+            const prepared = yield* preparePrecreatedFunctionCode({
+              id,
+              props: news,
+              session,
+            });
 
-          yield* createOrUpdateFunction({
-            id,
-            news,
-            roleArn: role.Role.Arn,
-            code: prepared.deployment,
-            functionName,
-            env: alchemyEnv,
-            session,
-            // `observe` (or `read`) has already admitted an existing function.
-            preferUpdate: true,
-          });
+            yield* createOrUpdateFunction({
+              id,
+              news,
+              roleArn: role.Role.Arn,
+              code: prepared.deployment,
+              functionName,
+              env: alchemyEnv,
+              session,
+              // `observe` (or `read`) has already admitted an existing function.
+              preferUpdate: true,
+            });
+            return prepared;
+          }).pipe(
+            // A failed precreate records no Attributes, so destroy's recovery
+            // `read` finds no function and drops the row. Release the
+            // instance-scoped role and log group now, or they are stranded.
+            Effect.onError(() => releasePrecreatedRole({ id, roleName, functionName })),
+          );
 
           const functionArn = `arn:${partitionOf(region)}:lambda:${region}:${accountId}:function:${functionName}`;
           // Consumers in a cycle with this Function wire the alias before
