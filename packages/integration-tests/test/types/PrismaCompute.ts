@@ -23,7 +23,7 @@ export class PrismaComputeApi extends Prisma.Compute<PrismaComputeApi, ApiShape>
 export const PrismaComputeApiLive = PrismaComputeApi.make(
   {
     project: "project-1",
-    appName: "api",
+    serviceName: "api",
     main: import.meta.filename,
   },
   Effect.gen(function* () {

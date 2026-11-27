@@ -1,25 +1,34 @@
 ---
 title: Apps
-description: Prisma Compute apps as Stack resources — framework builds or Effect-native services, env wiring, custom domains, and a local dev command.
+description: Deploy an app to Prisma Compute with Prisma.Compute — builds, static sites, Effect-native services, environment variables, custom domains, and a local dev command.
 ---
 
-`Prisma.Compute` deploys an application onto Prisma's managed
-runtime. One resource covers the whole path: optional build, artifact
-upload, deployment, health check, and promotion — see
-[Deployments](/prisma/compute/deployments) for the lifecycle.
+`Prisma.Compute` deploys an application onto Prisma's managed runtime. It
+declares the resources a deploy needs, the same ones described in
+[Services and versions](/prisma/compute/deployments), and reports their
+outputs as its own:
+
+| Resource | Logical ID | Declared |
+| --- | --- | --- |
+| `Prisma.ComputeService` | `api/Service` | unless you pass `service` |
+| `Prisma.EnvironmentVariable` | `api/Env/<KEY>` | one per key of `env` and of the bindings |
+| `Prisma.ComputeArtifact` | `api/Artifact` | unless you pass `artifactPath` or `skipCodeUpload` |
+| `Prisma.ComputeVersion` | `api/Version` | always |
+
+`alchemy deploy` lists each of them in the plan. The service's logical ID on
+the platform is the Compute's own, `api`.
 
 ## Framework apps
 
 For frontend frameworks, prefer the [`Prisma.Website` family](/prisma/frontend/websites).
 It provides framework-specific builds and native dev servers with the
 same `rootDir`, `env`, `assets`, `dev`, and `domain` vocabulary as other
-providers. Its output still runs on Bun in Compute, including static
-sites. Use `Prisma.Compute` directly for custom builds, server apps,
-and the Effect-native handlers below.
+providers, and deploys through `Prisma.Compute`. Use `Prisma.Compute`
+directly for custom builds, server apps, and Effect-native handlers.
 
-Point `path` at the app. With `build: "auto"`, alchemy detects the
-framework, builds it, archives the output, and deploys the correct
-server entrypoint:
+Point `path` at the app. With `build: "auto"`, Alchemy detects the
+framework, builds it, archives the output, and deploys the server
+entrypoint:
 
 ```typescript
 const app = yield* Prisma.Compute("api", {
@@ -27,30 +36,40 @@ const app = yield* Prisma.Compute("api", {
   path: "./app",
   build: "auto",
   healthCheck: { path: "/api/health" },
-  destroyOldDeployment: true,
 });
 ```
 
-The server must listen on `PORT` (injected at runtime). Auto-build
-supports Bun, Next.js, Nuxt, Astro, TanStack Start, Vite, and NestJS. Generic
-Vite projects are deployed as static SPAs. Use an
-explicit build object when an app needs a custom command, output
-directory, or entrypoint.
+The server must listen on `PORT`. Auto-build supports Bun, Next.js, Nuxt,
+Astro, TanStack Start, Vite, and NestJS. Generic Vite projects are deployed
+as static SPAs. Use an explicit build object when an app needs a custom
+command, output directory, or entrypoint.
 
-When `Prisma.Project` creates its default database, Prisma injects
-system-managed `DATABASE_URL` and `DATABASE_URL_POOLED` values into
-Compute deployments. Leave those keys out of `env`. For a standalone
-`Prisma.Postgres` database, create a `Prisma.Connection` and pass its
-outputs explicitly as shown in [Connections](/prisma/data/connections).
+`app.url` is the service's stable URL.
 
-`app.url` is the deployed endpoint.
+## Rebuilds
+
+The build runs again only when its inputs change: the files under the
+build's working directory that git does not ignore, the nearest lockfile,
+and the build props. An unchanged deploy creates no new version. When the
+build reads a sibling workspace package, list it in `memo`:
+
+```typescript
+const app = yield* Prisma.Compute("api", {
+  project,
+  path: "./apps/api",
+  build: { command: "bun run build", outdir: "dist", entrypoint: "server.js" },
+  memo: { include: ["src/**", "package.json", "../../packages/shared/src/**"], lockfile: true },
+});
+```
+
+The process environment is not hashed: pass what the build reads in
+`build.env`.
 
 ## Static sites
 
-Generic Vite apps work with `build: "auto"`. To deploy a directory that already
-contains static files, set `build.type` to `"static"` and point `outdir` at it.
-Alchemy packages the files with the HTTP entrypoint Prisma Compute requires;
-the application does not need its own server file or runtime dependency:
+To deploy a directory that already contains static files, set `build.type`
+to `"static"` and point `outdir` at it. Alchemy packages the files with the
+HTTP entrypoint Prisma Compute requires:
 
 ```typescript
 const site = yield* Prisma.Compute("web", {
@@ -91,7 +110,7 @@ deployment.
 ## Effect-native apps
 
 Pass `main` and an Effect body instead of a build, and the app is
-bundled from your Stack file — same shape as an Effect-native
+bundled from your Stack file, the same shape as an Effect-native
 Cloudflare Worker or Lambda:
 
 ```typescript
@@ -112,45 +131,181 @@ export default Prisma.Compute(
 );
 ```
 
+The bundle is compared on every deploy, so a change in any module it
+imports ships a new version.
+
+## Environment variables
+
+Each key in `env` becomes a `Prisma.EnvironmentVariable`, written before the
+version is created. A changed value ships a new version. `null` declares no
+variable, and so does a value that resolves to `undefined`:
+
+```typescript
+const app = yield* Prisma.Compute("api", {
+  project,
+  path: "./app",
+  env: {
+    LOG_LEVEL: "info",
+    API_TOKEN: yield* Config.redacted("API_TOKEN"),
+    LEGACY_FLAG: null,
+  },
+});
+```
+
+Removing a key deletes its variable after the new version is created, so
+that version still has it until a later deploy creates another version. To
+have the running app lose the key, deploy again with a changed `triggers`
+value once the key is removed.
+
+A variable belongs to the project and the service's Branch, not to one
+service: every service on that Branch reads it. Two Computes on one Branch
+cannot declare the same key.
+
+When `Prisma.Project` creates its default database, Prisma injects
+system-managed `DATABASE_URL` and `DATABASE_URL_POOLED` values into
+Compute versions. Leave those keys out of `env`. For a standalone
+`Prisma.Postgres` database, create a `Prisma.Connection` and pass its
+outputs explicitly as shown in [Connections](/prisma/data/connections).
+
+## A service's own URL
+
+To put a service's own URL, or another service's, into the environment,
+declare the services first and pass each to its Compute:
+
+```typescript
+const webService = yield* Prisma.ComputeService("web-service", { project });
+const apiService = yield* Prisma.ComputeService("api-service", { project });
+
+yield* Prisma.Compute("web", {
+  service: webService,
+  path: "./apps/web",
+  env: { PUBLIC_URL: webService.url, API_URL: apiService.url },
+});
+yield* Prisma.Compute("api", {
+  service: apiService,
+  path: "./apps/api",
+  env: { WEB_URL: webService.url },
+});
+```
+
+With `service`, the Compute declares no service, and `project`,
+`serviceName`, `regionId`, the Branch and `envClass` belong to the service.
+
+## Versions
+
+A new version replaces the previous one, which is kept on the platform for
+rollback. See [Services and versions](/prisma/compute/deployments) to roll
+back and to check versions. Set `destroyOldDeployment: true` to delete
+replaced versions instead, whatever removal policy the stack uses:
+
+```typescript
+const app = yield* Prisma.Compute("api", {
+  project,
+  path: "./app",
+  destroyOldDeployment: true,
+});
+```
+
+Set `skipPromote: true` to create versions without serving them. `app.url`
+is then the version's preview URL.
+
+## Removal policies
+
+A decoration piped onto `yield* Prisma.Compute(...)` reaches every resource
+it declares except the version, which always keeps replaced versions, or
+deletes them with `destroyOldDeployment`. The version the service serves is
+never deleted on its own: with `RemovalPolicy.retain()`, `alchemy destroy`
+keeps the service, and it keeps serving.
+
+```typescript
+const app = yield* Prisma.Compute("api", {
+  project,
+  path: "./app",
+}).pipe(RemovalPolicy.retain());
+```
+
+For a class declared with `Prisma.Compute<Api>()("api")`, pipe the
+decoration around `Effect.provide` of its Layer. Piped onto `yield*` of the
+class alone, it reaches nothing. The class's module is the bundle's entry,
+so its Layer is the module's default export:
+
+```typescript
+// src/Api.ts
+import * as Prisma from "@alchemy.run/prisma";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Project } from "./Project.ts";
+
+export class Api extends Prisma.Compute<Api>()("api") {}
+
+export default Api.make(
+  Effect.gen(function* () {
+    return { project: yield* Project, main: import.meta.filename };
+  }),
+  Effect.succeed({ fetch: Effect.succeed(HttpServerResponse.text("ok")) }),
+);
+```
+
+```typescript
+// alchemy.run.ts
+import * as Prisma from "@alchemy.run/prisma";
+import * as Alchemy from "alchemy";
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
+import * as Effect from "effect/Effect";
+import ApiLive, { Api } from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "App",
+  { providers: Prisma.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api.pipe(Effect.provide(ApiLive), RemovalPolicy.retain());
+    return { url: api.url };
+  }),
+);
+```
+
 ## Custom domains
 
-Creating the resource starts DNS and certificate
-provisioning; use `domain.dnsRecords` to configure DNS and inspect
-`domain.status` before directing production traffic:
+Creating the resource starts DNS and certificate provisioning; use
+`domain.dnsRecords` to configure DNS and inspect `domain.status` before
+directing production traffic:
 
 ```typescript
 const domain = yield* Prisma.CustomDomain("api-domain", {
-  app,
+  service: app,
   hostname: "api.example.com",
 });
 ```
 
-Changing the hostname or app in place is intentionally rejected.
-Create a second domain, verify DNS and TLS, cut traffic over, and then
-remove the old resource.
+A new version keeps the domain. Changing the hostname or service in place
+is rejected: create a second domain, verify DNS and TLS, cut traffic over,
+and then remove the old resource.
 
 ## Local dev
 
-Under `alchemy dev`, `dev.command` runs your app locally (e.g.
-`vite dev`) with the same env the deployed app would see — including
-connection bindings, which resolve to the local
-[dev database](/prisma/data/postgres#local-dev):
+Under `alchemy dev`, `dev.command` runs your app locally with the same env
+the deployed app would see, including connection bindings, which resolve to
+the local [dev database](/prisma/data/postgres#local-dev). No cloud resource
+is created:
 
 ```typescript
 const app = yield* Prisma.Compute("web", {
   project,
   path: ".",
-  dev: { command: "bun run dev" },
+  dev: { command: "bun run dev", port: 5173 },
   env: { DATABASE_URL: connection.databaseUrl },
 });
 ```
 
+With `port`, Alchemy sets `PORT` and waits until the port accepts a
+connection before the Compute is ready. `app.url` is `http://localhost:5173`.
+
 ## Where next
 
-- [Deployments](/prisma/compute/deployments) — health-checked
-  promotion, rollback, and deployment reuse.
-- [Connections](/prisma/data/connections) — the env and binding
-  wiring in detail.
+- [Services and versions](/prisma/compute/deployments): active versions,
+  rollback, and upgrading from the earlier resource names.
+- [Connections](/prisma/data/connections): the env and binding wiring in
+  detail.
 
 Reference:
 

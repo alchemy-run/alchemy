@@ -118,8 +118,10 @@ This read-only API rejects writes with HTTP 405.
       destroyOldDeployment: true,
 ```
 
-Prisma checks this route when starting the service. It verifies that the HTTP
-process is responding, independently of the database added in Part 3.
+Alchemy checks this route on the new version's preview URL, then on the
+service's stable URL after it starts serving the version. It verifies that
+the HTTP process is responding, independently of the database added in
+Part 3.
 
 ## Deploy the API
 

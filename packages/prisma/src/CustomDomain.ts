@@ -7,7 +7,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import type { App } from "./App.ts";
 import {
   PrismaApiError,
   PrismaClient,
@@ -16,8 +15,16 @@ import {
   type PrismaManagementClient,
 } from "./Client.ts";
 import type { Compute } from "./Compute.ts";
+import type { ComputeService } from "./ComputeService.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
-import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./internal/Refs.ts";
+import {
+  concreteIdOf,
+  concreteIdsChanged,
+  isInputObject,
+  isPrismaDevId,
+  serviceIdUnavailable,
+} from "./internal/Refs.ts";
+import { updateRowSavedBeforeRename } from "./internal/RenamedState.ts";
 import type { Providers } from "./Providers.ts";
 import type { CustomDomain as ApiCustomDomain } from "./Types.ts";
 
@@ -43,15 +50,16 @@ export class CustomDomainUnexpectedResponse extends Data.TaggedError(
   readonly cause?: unknown;
 }> {}
 
-type AppReference = string | App | Compute;
+type ServiceReference = string | ComputeService | Compute;
 
 export interface CustomDomainProps {
   /**
-   * App ID or Compute output that owns the domain.
+   * Compute service ID, `Prisma.ComputeService`, or `Prisma.Compute` that owns the
+   * domain.
    */
-  app: AppReference;
+  service: ServiceReference;
   /**
-   * Hostname to attach to the app.
+   * Hostname to attach to the service.
    */
   hostname: string;
 }
@@ -65,13 +73,13 @@ export interface CustomDomain extends Resource<
      */
     customDomainId: string;
     /**
-     * Hostname attached to the app.
+     * Hostname attached to the service.
      */
     hostname: string;
     /**
-     * Current app ID that owns the domain.
+     * ID of the Compute service that owns the domain.
      */
-    appId: string;
+    serviceId: string;
     /**
      * Prisma normalized custom domain provisioning status.
      */
@@ -110,23 +118,41 @@ export interface CustomDomain extends Resource<
 > {}
 
 /**
- * A Prisma app custom domain.
+ * A custom domain on a Prisma Compute service.
  *
- * Prisma verifies the hostname's `CNAME` to the app's regional switchboard
+ * Prisma verifies the hostname's `CNAME` to the service's regional switchboard
  * (`switchboard.{region}.prisma.build`, listed in `dnsRecords`) when the
  * domain is created, so publish it first. Creation then starts asynchronous
  * certificate provisioning; inspect `status`, `foundryStatus`, and
  * `failureReason` before routing production traffic.
  *
- * App and hostname changes are intentionally rejected because the Management
+ * Service and hostname changes are intentionally rejected because the Management
  * API cannot replace a live domain atomically. Create a second resource,
  * verify DNS and TLS, cut traffic over, and then remove the old resource.
  *
+ * `service` takes a service ID, a `Prisma.ComputeService`, or a
+ * `Prisma.Compute`, whose service it uses. A new version of that service
+ * keeps the domain.
+ *
  * ### Creating a Custom Domain
- * **Example:** Attach a hostname to an app
+ * **Example:** Attach a hostname to a Compute
+ * ```typescript
+ * const api = yield* Prisma.Compute("api", {
+ *   project,
+ *   path: "./apps/api",
+ *   entrypoint: "server.ts",
+ * });
+ * const domain = yield* Prisma.CustomDomain("api-domain", {
+ *   service: api,
+ *   hostname: "api.example.com",
+ * });
+ * // Publish domain.dnsRecords, then wait for domain.status to be "active".
+ * ```
+ *
+ * **Example:** Attach a hostname to a service by ID
  * ```typescript
  * const domain = yield* Prisma.CustomDomain("api-domain", {
- *   app: api.appId,
+ *   service: "cps_cmabc123def456ghi789jkl0",
  *   hostname: "api.example.com",
  * });
  * ```
@@ -136,10 +162,36 @@ export interface CustomDomain extends Resource<
  */
 export const CustomDomain = Resource<CustomDomain>("Prisma.CustomDomain");
 
+/** Attributes saved before `appId` became `serviceId`. */
+interface LegacyCustomDomainAttributes extends Omit<CustomDomain["Attributes"], "serviceId"> {
+  appId: string;
+}
+
+type SavedAttributes = CustomDomain["Attributes"] | LegacyCustomDomainAttributes;
+
+/** Read attributes saved before or after the rename under the current names. */
+function currentAttributes(saved: SavedAttributes): CustomDomain["Attributes"] {
+  if ("serviceId" in saved) return saved;
+  const { appId, ...rest } = saved;
+  return { ...rest, serviceId: appId };
+}
+
+/** Props as saved before `app` became `service`. */
+type LegacyCustomDomainProps = Omit<CustomDomainProps, "service"> & {
+  app: CustomDomainProps["service"];
+};
+
+/** Read props saved before or after the rename under the current names. */
+const currentProps = (olds: CustomDomainProps | LegacyCustomDomainProps) => {
+  if ("service" in olds) return olds;
+  const { app, ...rest } = olds;
+  return { ...rest, service: app };
+};
+
 const attrsFrom = (domain: ApiCustomDomain): CustomDomain["Attributes"] => ({
   customDomainId: domain.id,
   hostname: domain.hostname,
-  appId: domain.appId,
+  serviceId: domain.appId,
   status: domain.status,
   foundryStatus: domain.foundryStatus,
   failureReason: domain.failureReason,
@@ -161,31 +213,31 @@ export class PrismaCustomDomainAdoptionRequired extends Data.TaggedError(
   readonly message: string;
 }> {}
 
-const adoptionRequiredError = (hostname: string, appId: string, detail: string) =>
+const adoptionRequiredError = (hostname: string, serviceId: string, detail: string) =>
   new PrismaCustomDomainAdoptionRequired({
-    message: `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
+    message: `Prisma custom domain '${hostname}' ${detail} on Compute service '${serviceId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
   });
 
-const appIdValue = (app: AppReference | undefined) => (typeof app === "string" ? app : app?.appId);
+const serviceIdValue = (service: ServiceReference | undefined) =>
+  typeof service === "string" ? service : service?.serviceId;
 
-const unresolvedAppIdOf = (app: AppReference | undefined) => concreteIdOf(appIdValue(app));
+const unresolvedServiceIdOf = (service: ServiceReference | undefined) =>
+  concreteIdOf(serviceIdValue(service));
 
-const resolveAppId = (app: AppReference) => {
-  const value = appIdValue(app);
-  return typeof value === "string"
-    ? Effect.succeed(value)
-    : Effect.fail(new CustomDomainOperationFailed({ message: "Unable to resolve Prisma app id." }));
+const resolveServiceId = (service: ServiceReference) => {
+  const value = serviceIdValue(service);
+  return typeof value === "string" ? Effect.succeed(value) : Effect.fail(serviceIdUnavailable());
 };
 
-const findDomain = (client: PrismaManagementClient, appId: string, hostname: string) =>
-  client.listAppDomains(appId).pipe(
+const findDomain = (client: PrismaManagementClient, serviceId: string, hostname: string) =>
+  client.listAppDomains(serviceId).pipe(
     Effect.catchIf(isNotFound, () => Effect.succeed([])),
     Effect.flatMap((domains) => {
       const matches = domains.filter((domain) => sameHostname(domain.hostname, hostname));
       return matches.length > 1
         ? Effect.fail(
             new CustomDomainConflict({
-              message: `Prisma app '${appId}' has multiple custom domains matching '${hostname}'; refusing to select one arbitrarily.`,
+              message: `Prisma Compute service '${serviceId}' has multiple custom domains matching '${hostname}'; refusing to select one arbitrarily.`,
             }),
           )
         : Effect.succeed(matches[0]);
@@ -291,41 +343,54 @@ const ProviderLive = () =>
           );
           return domains.flat().map(attrsFrom);
         }),
-        diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isInputObject(news)) return undefined;
-          if (isPrismaDevId(output?.customDomainId)) {
-            return { action: "update" } as const;
-          }
-          const oldAppId = output?.appId ?? unresolvedAppIdOf(olds.app);
-          const newAppId = isResolved(news.app)
-            ? unresolvedAppIdOf(news.app as AppReference)
-            : undefined;
-          const oldHostname = normalizeHostname(output?.hostname ?? olds.hostname);
-          const newHostname = isResolved(news.hostname)
-            ? normalizeHostname(news.hostname)
-            : undefined;
-          if (
-            concreteIdsChanged(oldAppId, newAppId) ||
-            (newHostname !== undefined && newHostname !== oldHostname)
-          ) {
-            return yield* new CustomDomainInvalidProps({
-              message: `Prisma cannot atomically replace custom domain '${oldHostname}' without risking traffic before the new domain is active. Create a second Prisma.CustomDomain logical resource, verify DNS/TLS and cut traffic over explicitly, then remove this resource.`,
-            });
-          }
-          // A live failed Foundry attempt reaches the canonical retry endpoint
-          // below. Each reconcile performs at most one retry and never polls.
-          if (output?.status === "failed") {
-            return { action: "update" } as const;
-          }
-          return undefined;
-        }),
-        read: Effect.fn(function* ({ output, olds }) {
+        diff: Effect.fn(
+          function* ({ olds: savedProps, news, output: saved }) {
+            if (!isInputObject(news)) return undefined;
+            const output = saved && currentAttributes(saved);
+            const olds = currentProps(savedProps);
+            if (isPrismaDevId(output?.customDomainId)) {
+              return { action: "update" } as const;
+            }
+            const oldServiceId = output?.serviceId ?? unresolvedServiceIdOf(olds.service);
+            const newServiceId = isResolved(news.service)
+              ? unresolvedServiceIdOf(news.service as ServiceReference)
+              : undefined;
+            const oldHostname = normalizeHostname(output?.hostname ?? olds.hostname);
+            const newHostname = isResolved(news.hostname)
+              ? normalizeHostname(news.hostname)
+              : undefined;
+            if (
+              concreteIdsChanged(oldServiceId, newServiceId) ||
+              (newHostname !== undefined && newHostname !== oldHostname)
+            ) {
+              return yield* new CustomDomainInvalidProps({
+                message: `Prisma cannot atomically replace custom domain '${oldHostname}' without risking traffic before the new domain is active. Create a second Prisma.CustomDomain logical resource, verify DNS/TLS and cut traffic over explicitly, then remove this resource.`,
+              });
+            }
+            // A live failed Foundry attempt reaches the canonical retry endpoint
+            // below. Each reconcile performs at most one retry and never polls.
+            if (output?.status === "failed") {
+              return { action: "update" } as const;
+            }
+            return undefined;
+          },
+          (effect, { output: saved }) =>
+            effect.pipe(
+              Effect.map((diff) =>
+                updateRowSavedBeforeRename(saved !== undefined && !("serviceId" in saved), diff, [
+                  "customDomainId",
+                ]),
+              ),
+            ),
+        ),
+        read: Effect.fn(function* ({ output, olds: savedProps }) {
+          const olds = currentProps(savedProps);
           const customDomainId = isPrismaDevId(output?.customDomainId)
             ? undefined
             : output?.customDomainId;
           const findDomainInApp = Effect.gen(function* () {
-            const appId = unresolvedAppIdOf(olds.app);
-            return appId ? yield* findDomain(client, appId, olds.hostname) : undefined;
+            const serviceId = unresolvedServiceIdOf(olds.service);
+            return serviceId ? yield* findDomain(client, serviceId, olds.hostname) : undefined;
           });
           const domain = customDomainId
             ? yield* client
@@ -337,7 +402,7 @@ const ProviderLive = () =>
           return customDomainId === undefined ? Unowned(attrs) : attrs;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
-          const appId = yield* resolveAppId(news.app);
+          const serviceId = yield* resolveServiceId(news.service);
           const hostname = normalizeHostname(news.hostname);
           const customDomainId = isPrismaDevId(output?.customDomainId)
             ? undefined
@@ -346,16 +411,16 @@ const ProviderLive = () =>
             ? yield* client
                 .getCustomDomain(customDomainId)
                 .pipe(Effect.catchIf(isNotFound, () => Effect.undefined))
-            : yield* findDomain(client, appId, hostname);
+            : yield* findDomain(client, serviceId, hostname);
           const identityMatches = (domain: ApiCustomDomain) =>
-            domain.appId === appId && sameHostname(domain.hostname, hostname);
+            domain.appId === serviceId && sameHostname(domain.hostname, hostname);
           if (domain && !identityMatches(domain)) {
             return yield* new CustomDomainConflict({
-              message: `Prisma custom domain '${customDomainId}' resolves to app '${domain.appId}' and hostname '${domain.hostname}', not requested app '${appId}' and hostname '${hostname}'. Refusing to claim convergence; replace the mismatched domain.`,
+              message: `Prisma custom domain '${customDomainId}' resolves to service '${domain.appId}' and hostname '${domain.hostname}', not requested service '${serviceId}' and hostname '${hostname}'. Refusing to claim convergence; replace the mismatched domain.`,
             });
           }
           if (domain && customDomainId === undefined) {
-            return yield* adoptionRequiredError(hostname, appId, "already exists");
+            return yield* adoptionRequiredError(hostname, serviceId, "already exists");
           }
           if (!domain) {
             yield* waitForAuthoritativeCname(hostname);
@@ -364,7 +429,7 @@ const ProviderLive = () =>
             ? domain.status === "failed"
               ? yield* client.retryCustomDomain(domain.id)
               : domain
-            : yield* client.createAppDomain(appId, { hostname }).pipe(
+            : yield* client.createAppDomain(serviceId, { hostname }).pipe(
                 Effect.retry({
                   while: isDnsNotConfigured,
                   schedule: Schedule.spaced("5 seconds"),
@@ -372,7 +437,7 @@ const ProviderLive = () =>
                 }),
                 Effect.catchIf(isConflict, () =>
                   Effect.fail(
-                    adoptionRequiredError(hostname, appId, "appeared after the adoption check"),
+                    adoptionRequiredError(hostname, serviceId, "appeared after the adoption check"),
                   ),
                 ),
                 Effect.flatMap((result) =>
@@ -381,7 +446,7 @@ const ProviderLive = () =>
                     : Effect.fail(
                         adoptionRequiredError(
                           hostname,
-                          appId,
+                          serviceId,
                           "was returned as already registered by the create request",
                         ),
                       ),
@@ -389,21 +454,25 @@ const ProviderLive = () =>
               );
           if (!identityMatches(reconciled)) {
             return yield* new CustomDomainUnexpectedResponse({
-              message: `Prisma custom domain '${reconciled.id}' retry/create response resolves to app '${reconciled.appId}' and hostname '${reconciled.hostname}', not requested app '${appId}' and hostname '${hostname}'. Refusing to persist mismatched identity.`,
+              message: `Prisma custom domain '${reconciled.id}' retry/create response resolves to service '${reconciled.appId}' and hostname '${reconciled.hostname}', not requested service '${serviceId}' and hostname '${hostname}'. Refusing to persist mismatched identity.`,
             });
           }
           return attrsFrom(reconciled);
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output: saved }) {
+          const output = saved && currentAttributes(saved);
           const customDomainId = concreteIdOf(output.customDomainId);
           if (customDomainId === undefined) return;
           const domain = yield* client
             .getCustomDomain(customDomainId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.undefined));
           if (!domain) return;
-          if (domain.appId !== output.appId || !sameHostname(domain.hostname, output.hostname)) {
+          if (
+            domain.appId !== output.serviceId ||
+            !sameHostname(domain.hostname, output.hostname)
+          ) {
             return yield* new CustomDomainConflict({
-              message: `Prisma custom domain '${customDomainId}' no longer matches app '${output.appId}' and hostname '${output.hostname}'. Refusing to delete a mismatched domain.`,
+              message: `Prisma custom domain '${customDomainId}' no longer matches service '${output.serviceId}' and hostname '${output.hostname}'. Refusing to delete a mismatched domain.`,
             });
           }
           yield* client
@@ -415,26 +484,31 @@ const ProviderLive = () =>
   );
 
 const ProviderLocal = () =>
-  devProvider(CustomDomain, ["customDomainId"], ({ id, news }) => ({
-    customDomainId: devId("custom-domain", id),
-    hostname: news.hostname,
-    appId: attrOrString(news.app, "appId"),
-    status: "active",
-    foundryStatus: "active",
-    failureReason: null,
-    failureCategory: null,
-    certExpiresAt: null,
-    dnsRecords: [
-      {
-        type: "CNAME" as const,
-        name: news.hostname,
-        value: "localhost",
-        ttl: null,
-      },
-    ],
-    createdAt: DEV_TIMESTAMP,
-    updatedAt: DEV_TIMESTAMP,
-  }));
+  devProvider(
+    CustomDomain,
+    ["customDomainId"],
+    ({ id, news }) => ({
+      customDomainId: devId("custom-domain", id),
+      hostname: news.hostname,
+      serviceId: attrOrString(news.service, "serviceId"),
+      status: "active",
+      foundryStatus: "active",
+      failureReason: null,
+      failureCategory: null,
+      certExpiresAt: null,
+      dnsRecords: [
+        {
+          type: "CNAME" as const,
+          name: news.hostname,
+          value: "localhost",
+          ttl: null,
+        },
+      ],
+      createdAt: DEV_TIMESTAMP,
+      updatedAt: DEV_TIMESTAMP,
+    }),
+    { oldAttributes: ["appId"], keptStables: ["customDomainId"] },
+  );
 
 export const CustomDomainProvider = () =>
   ProviderLayer.dual(CustomDomain, {

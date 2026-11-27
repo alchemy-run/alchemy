@@ -55,13 +55,13 @@ test.provider(
       expect(site.compute).toBeDefined();
       expect(site.project).toBeDefined();
       const projectId = site.compute!.projectId;
-      const appId = site.compute!.appId;
+      const serviceId = site.compute!.serviceId;
       expect((yield* getProject({ id: projectId })).data.id).toBe(projectId);
-      expect((yield* getService({ serviceId: appId })).data.id).toBe(appId);
+      expect((yield* getService({ serviceId: serviceId })).data.id).toBe(serviceId);
       yield* bodyContaining(`${site.url}/client/route`, "Prisma Website fixture");
       yield* stack.destroy();
       expect(
-        yield* getService({ serviceId: appId }).pipe(
+        yield* getService({ serviceId: serviceId }).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         ),

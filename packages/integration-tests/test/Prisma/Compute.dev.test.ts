@@ -20,7 +20,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Prisma.Compute("App", {
             project: "project-dev",
-            appName: "api",
+            serviceName: "api",
             port: 8787,
             dev: { url: "http://localhost:8787" },
           });
@@ -29,7 +29,7 @@ test.provider(
 
       expect(app.local).toBe(true);
       expect(app.url).toBe("http://localhost:8787");
-      expect(app.appId).toContain("dev:");
+      expect(app.serviceId).toContain("dev:");
 
       yield* stack.destroy();
     }),
@@ -50,7 +50,7 @@ test.provider(
           });
           const app = yield* Prisma.Compute("AppWithProject", {
             project,
-            appName: "api",
+            serviceName: "api",
             port: 8787,
             dev: { url: "http://localhost:8787" },
           });
@@ -88,7 +88,7 @@ test.provider(
             "App",
             {
               project,
-              appName: "api",
+              serviceName: "api",
               main: import.meta.filename,
               dev: { url: "http://localhost:8787" },
             },
@@ -157,13 +157,13 @@ test.provider(
             gitName: "main",
             isDefault: true,
           });
-          const appResource = yield* Prisma.App("App", {
+          const appResource = yield* Prisma.ComputeService("App", {
             project,
             displayName: "api",
             branchId: branch.branchId,
           });
-          const deployment = yield* Prisma.Deployment("Deployment", {
-            app: appResource,
+          const deployment = yield* Prisma.ComputeVersion("Deployment", {
+            service: appResource,
             portMapping: { http: 3000 },
           });
           const env = yield* Prisma.EnvironmentVariable("Environment", {
@@ -189,10 +189,10 @@ test.provider(
       expect(output.branch.isDefault).toBe(true);
       expect(output.appResource.projectId).toBe(output.project.projectId);
       expect(output.appResource.branchId).toBe(output.branch.branchId);
-      expect(output.deployment.appId).toBe(output.appResource.appId);
+      expect(output.deployment.serviceId).toBe(output.appResource.serviceId);
       expect(output.env.projectId).toBe(output.project.projectId);
       expect(output.env.key).toBe("TOKEN");
-      expect(Redacted.value(output.env.value)).toBe("secret");
+      expect(Redacted.value(output.env.value!)).toBe("secret");
       expect(output.repo.projectId).toBe(output.project.projectId);
       expect(output.repo.repoId).toBe(123);
 
@@ -201,12 +201,12 @@ test.provider(
   {
     tags: [
       "provider:prisma",
-      "provider:prisma:app",
+      "provider:prisma:computeservice",
       "provider:prisma:branch",
       "provider:prisma:compute",
       "provider:prisma:connection",
       "provider:prisma:database",
-      "provider:prisma:deployment",
+      "provider:prisma:computeversion",
       "provider:prisma:environmentvariable",
       "provider:prisma:project",
       "provider:prisma:sourcerepository",
@@ -229,12 +229,15 @@ test.provider(
       const outputPath = path.join(root, "dev-output.json");
       const stoppedPath = path.join(root, "dev-stopped.txt");
 
+      // `Command.Dev` is ready once the port accepts a connection.
       yield* fs.writeFileString(
         scriptPath,
         [
-          "trap 'printf stopped > dev-stopped.txt; exit 0' TERM INT",
+          "trap 'printf stopped > dev-stopped.txt; kill $SERVER; exit 0' TERM INT",
           'printf \'{"port":"%s","greeting":"%s","nodeEnv":"%s"}\' "$PORT" "$GREETING" "$NODE_ENV" > dev-output.json',
-          "while true; do sleep 1; done",
+          `"${process.execPath}" -e 'Bun.serve({ port: Number(process.env.PORT), fetch: () => new Response("ok") })' &`,
+          "SERVER=$!",
+          "wait $SERVER",
           "",
         ].join("\n"),
       );
@@ -243,7 +246,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Prisma.Compute("AppWithCommand", {
             project: "project-dev",
-            appName: "api",
+            serviceName: "api",
             path: root,
             port: 8788,
             env: { GREETING: "hello-dev" },
@@ -255,11 +258,8 @@ test.provider(
       expect(app.local).toBe(true);
       expect(app.url).toBe("http://localhost:8789");
 
-      const output = yield* fs.readFileString(outputPath).pipe(
-        Effect.retry({
-          schedule: Schedule.max([Schedule.fixed("50 millis"), Schedule.recurs(40)]),
-        }),
-      );
+      // The Compute is ready only once its dev process is: its output exists already.
+      const output = yield* fs.readFileString(outputPath);
 
       expect(JSON.parse(output)).toEqual({
         port: "8789",

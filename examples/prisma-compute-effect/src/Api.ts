@@ -3,7 +3,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { Connection, Project, region, appNameConfig } from "./Database.ts";
+import { Connection, Project, region, serviceNameConfig } from "./Database.ts";
 
 const messageConfig = Config.String("PRISMA_EFFECT_MESSAGE").pipe(
   Effect.orElseSucceed(() => "hello from Effect-native Prisma Compute"),
@@ -16,7 +16,7 @@ export default class Api extends Prisma.Compute<Api>()(
 
     return {
       project,
-      appName: yield* appNameConfig,
+      serviceName: yield* serviceNameConfig,
       regionId: region,
       branchGitName: "main",
       main: import.meta.filename,

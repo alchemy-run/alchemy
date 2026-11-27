@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants, type BigIntStats } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
+import { createGunzip, type Gunzip } from "node:zlib";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -211,3 +212,185 @@ export const readArtifactFile = (artifact: ArtifactFile) =>
     }
     return bytes;
   });
+
+/** What `findArchiveManifest` found at the root of a `tar.gz` artifact. */
+export type ArchiveManifestCheck =
+  | { readonly _tag: "NotGzip" }
+  | { readonly _tag: "Corrupt" }
+  | { readonly _tag: "Missing" }
+  | { readonly _tag: "Invalid"; readonly reason: string }
+  | { readonly _tag: "Found"; readonly entrypoint: string };
+
+const MANIFEST_NAME = "compute.manifest.json";
+const MAX_MANIFEST_BYTES = 64 * 1024;
+
+const tarString = (block: Uint8Array, start: number, length: number) => {
+  const field = block.subarray(start, start + length);
+  const end = field.indexOf(0);
+  return new TextDecoder().decode(end === -1 ? field : field.subarray(0, end));
+};
+
+const tarEntryName = (header: Uint8Array) => {
+  const name = tarString(header, 0, 100);
+  // Only a POSIX ustar header ("ustar\0") has a name prefix there; old GNU
+  // headers ("ustar  ") keep timestamps in those bytes.
+  const prefix = tarString(header, 257, 6) === "ustar" ? tarString(header, 345, 155) : "";
+  const full = prefix.length > 0 ? `${prefix}/${name}` : name;
+  return full.replace(/^\.\//, "");
+};
+
+const manifestCheck = (text: string): ArchiveManifestCheck => {
+  try {
+    const parsed = JSON.parse(text) as { manifestVersion?: unknown; entrypoint?: unknown };
+    if (typeof parsed.manifestVersion !== "string") {
+      return { _tag: "Invalid", reason: "it has no string manifestVersion" };
+    }
+    if (typeof parsed.entrypoint !== "string" || parsed.entrypoint.length === 0) {
+      return { _tag: "Invalid", reason: "it has no entrypoint" };
+    }
+    return { _tag: "Found", entrypoint: parsed.entrypoint };
+  } catch {
+    return { _tag: "Invalid", reason: "it is not valid JSON" };
+  }
+};
+
+/**
+ * A tar reader fed decompressed bytes in order. `push` returns whether it
+ * needs more; `result` is what it found.
+ */
+const manifestReader = () => {
+  let buffered = new Uint8Array(0);
+  let skip = 0;
+  let manifestRemaining = -1;
+  let manifest: Uint8Array[] = [];
+  let result: ArchiveManifestCheck = { _tag: "Missing" };
+  let done = false;
+  const push = (chunk: Uint8Array): boolean => {
+    const next = new Uint8Array(buffered.length + chunk.length);
+    next.set(buffered);
+    next.set(chunk, buffered.length);
+    buffered = next;
+    while (!done) {
+      if (manifestRemaining >= 0) {
+        const take = Math.min(manifestRemaining, buffered.length);
+        manifest.push(buffered.slice(0, take));
+        buffered = buffered.subarray(take);
+        manifestRemaining -= take;
+        if (manifestRemaining > 0) return true;
+        result = manifestCheck(Buffer.concat(manifest).toString("utf8"));
+        done = true;
+        break;
+      }
+      if (skip > 0) {
+        const take = Math.min(skip, buffered.length);
+        buffered = buffered.subarray(take);
+        skip -= take;
+        if (skip > 0) return true;
+      }
+      if (buffered.length < 512) return true;
+      const header = buffered.subarray(0, 512);
+      buffered = buffered.subarray(512);
+      if (header.every((byte) => byte === 0)) {
+        done = true;
+        break;
+      }
+      const size = Number.parseInt(tarString(header, 124, 12).trim() || "0", 8);
+      if (tarEntryName(header) === MANIFEST_NAME && header[156] !== 0x35) {
+        if (size > MAX_MANIFEST_BYTES) {
+          result = { _tag: "Invalid", reason: "it is larger than 64 KiB" };
+          done = true;
+          break;
+        }
+        manifestRemaining = size;
+        manifest = [];
+        continue;
+      }
+      skip = Math.ceil(size / 512) * 512;
+    }
+    return false;
+  };
+  return { push, result: () => result };
+};
+
+const isGzip = (chunk: Uint8Array) => chunk[0] === 0x1f && chunk[1] === 0x8b;
+
+const readError = toArtifactFileError(
+  "Failed to read the Prisma deployment artifact as a tar.gz archive.",
+);
+
+/**
+ * Read a `tar.gz` artifact's entries until `compute.manifest.json` at its root,
+ * without unpacking it. The read stops at the manifest, and the file is closed
+ * and the decompressor destroyed before this returns.
+ *
+ * Each file chunk is handed to the decompressor and its output consumed as it
+ * is produced, so the decompressor never applies backpressure. Every wait ends
+ * when the decompressor fails or closes, so none can outlive its stream.
+ */
+/**
+ * Run `start` and wait until it calls `done`, or the stream fails or closes.
+ * Bun does not call a write's callback after a decompression error, so the
+ * stream's own events end the wait too.
+ */
+const settle = (stream: Gunzip, start: (done: () => void) => void) =>
+  Effect.callback<void>((resume) => {
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      stream.off("error", done);
+      stream.off("close", done);
+      resume(Effect.void);
+    };
+    stream.once("error", done);
+    stream.once("close", done);
+    if (stream.destroyed) done();
+    else start(done);
+  });
+
+export const findArchiveManifest = (artifact: VerifiedFile) =>
+  Effect.gen(function* () {
+    const reader = manifestReader();
+    let needsMore = true;
+    let notGzip = false;
+    let corrupt: unknown;
+    const gunzip = yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const stream = createGunzip();
+        stream.on("data", (chunk: Uint8Array) => {
+          if (needsMore) needsMore = reader.push(chunk);
+        });
+        stream.on("error", (error) => {
+          corrupt ??= error;
+        });
+        return stream;
+      }),
+      (stream) => Effect.sync(() => stream.destroy()),
+    );
+    const settled = () => !needsMore || corrupt !== undefined;
+    let first = true;
+    yield* Stream.runForEachWhile(
+      Stream.fromAsyncIterable(readVerifiedChunks(artifact), readError),
+      (chunk) =>
+        Effect.gen(function* () {
+          if (first) {
+            first = false;
+            if (!isGzip(chunk)) {
+              notGzip = true;
+              return false;
+            }
+          }
+          yield* settle(gunzip, (done) => gunzip.write(chunk, done));
+          return !settled();
+        }),
+    );
+    if (notGzip || first) return { _tag: "NotGzip" } as const;
+    if (!settled()) {
+      yield* settle(gunzip, (done) => {
+        gunzip.once("end", done);
+        gunzip.end();
+      });
+    }
+    if (!needsMore || corrupt === undefined) return reader.result();
+    return { _tag: "Corrupt" } as const;
+  }).pipe(Effect.scoped);

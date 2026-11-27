@@ -1,129 +1,298 @@
 ---
-title: Deployments
-description: The fail-closed Compute deployment lifecycle — health-checked promotion, rollback recovery, old-generation cleanup, and env-only redeploys.
+title: Services and versions
+description: Serve a version on a Compute service's stable URL, ship new versions, keep the old ones for rollback, and upgrade stacks from the earlier resource names.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 import Timeline from "../../../../components/diagrams/Timeline.astro";
 
-When the artifact or deployment configuration changes,
-`Prisma.Compute` creates a new generation and walks it through a
-fail-closed sequence: upload the artifact, start the candidate, verify
-its preview health endpoint, promote it, confirm the app reports it as
-latest, verify the stable endpoint — and only then touch the previous
-deployment.
+A Compute service is your application: it has a stable URL and lives for as
+long as the app does. A version is one immutable build of the app, uploaded
+to the service, started, and reachable on its own preview URL. The service
+serves one version on its stable URL, its active version.
+
+Deploying new code creates a new version and makes it the active one. The
+version it replaces stays on the platform, where it scales to zero, so the
+platform's rollback can serve it again in seconds.
 
 <Timeline
   end={10}
   lanes={[
-    { id: "old", label: "previous", type: "stable deployment" },
-    { id: "new", label: "candidate", type: "new generation" },
+    { id: "a", label: "version A", type: "first deploy" },
+    { id: "b", label: "version B", type: "second deploy" },
   ]}
   bars={[
-    { lane: "old", start: 0, end: 7.6, label: "serving the stable endpoint" },
-    { lane: "old", start: 7.6, end: 9, label: "removed", tone: "muted" },
-    { lane: "new", start: 0.6, end: 2, label: "upload", tone: "default" },
-    { lane: "new", start: 2, end: 3.2, label: "start", tone: "warn" },
-    { lane: "new", start: 3.2, end: 5, label: "health", tone: "default" },
-    { lane: "new", start: 5, end: 10, label: "promoted · serving" },
+    { lane: "a", start: 0, end: 6, label: "active · stable URL" },
+    { lane: "a", start: 6, end: 10, label: "kept · scaled to zero", tone: "muted" },
+    { lane: "b", start: 2.5, end: 3.6, label: "upload · start", tone: "default" },
+    { lane: "b", start: 3.6, end: 6, label: "preview URL checked", tone: "default" },
+    { lane: "b", start: 6, end: 10, label: "active · stable URL" },
   ]}
-  marks={[{ at: 5, label: "promote" }, { at: 7.6, label: "stable endpoint verified" }]}
-  caption="The previous deployment keeps serving until the candidate is healthy, promoted, and verified on the stable endpoint. Only then is the old one touched."
+  marks={[{ at: 6, label: "promote, then check the stable URL" }]}
+  caption="Version A serves until version B passes its own check and is promoted. A is kept, so a rollback returns to it."
 />
 
-## Health checks and promotion
+`Prisma.Compute` declares the service and its versions for you, from `Prisma.ComputeService`, `Prisma.ComputeVersion` and `Prisma.ComputeArtifact`. You can also declare them yourself.
 
-`healthCheck.path` gates promotion. If the candidate never becomes
-healthy, alchemy attempts to destroy it without changing the stable
-deployment. When a previous deployment exists, it keeps serving:
+## Build an archive
+
+A version runs a `tar.gz` archive with `compute.manifest.json` at its root,
+next to the files it names. The platform runs `entrypoint` with Bun and sets
+`PORT`:
+
+```json
+{ "manifestVersion": "1", "entrypoint": "server.js" }
+```
+
+An archive without the manifest fails before a version is created. Let `Prisma.ComputeArtifact` build it, or build one with `createComputeArchive`:
 
 ```typescript
-const app = yield* Prisma.Compute("api", {
-  project,
-  path: "./app",
-  port: 3000,
+// scripts/archive.ts
+import { createComputeArchive } from "@alchemy.run/prisma/ComputeArchive";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+
+const writeArchive = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const archive = yield* createComputeArchive({ directory: "./build", entrypoint: "server.js" });
+  yield* fs.writeFile("./dist/app.tar.gz", archive);
+});
+
+Effect.runPromise(writeArchive.pipe(Effect.provide(NodeServices.layer)));
+```
+
+## Serve a version
+
+Declare the service, a version of it, and attach the version as the
+service's active version:
+
+```typescript
+const project = yield* Prisma.Project("project", { createDatabase: false });
+const service = yield* Prisma.ComputeService("web", { project });
+const version = yield* Prisma.ComputeVersion("web-version", {
+  service: service.serviceId,
+  artifactPath: "./dist/app.tar.gz",
+  artifactContentType: "application/gzip",
+});
+yield* Prisma.activateVersion(service, version);
+```
+
+Run `alchemy deploy`. `service.url` serves the version, and `version.url`
+is the version's own preview URL. A service takes one active version:
+attaching a second fails the plan with `ComputeServiceTooManyActiveVersions`.
+
+## Check the version, then the service
+
+The version waits until its preview URL answers, and with `healthCheck`
+until that path returns an accepted status:
+
+```typescript
+const version = yield* Prisma.ComputeVersion("web-version", {
+  service: service.serviceId,
+  artifactPath: "./dist/app.tar.gz",
+  artifactContentType: "application/gzip",
   healthCheck: { path: "/api/health" },
 });
 ```
 
-When promotion succeeds but the stable endpoint fails verification,
-alchemy attempts to restore the previous deployment. If recovery
-converges, it cleans up the failed candidate. If recovery cannot
-converge—or no safe rollback target exists—alchemy fails the deploy,
-preserves the generations needed for recovery, and retries recovery
-before making further cloud changes. Terminally failed deployments
-are never restarted or selected as rollback targets.
+The version waits up to `timeoutSeconds` (120 by default) to run, then up
+to `urlReadinessTimeoutSeconds` (60 by default) for its URL.
 
-## Old-generation cleanup
+A new version that fails its check is stopped and deleted, and the service
+keeps serving what it served. A version that already existed is left as it
+is. Alchemy waits up to 30 seconds, or `timeoutSeconds` when that is
+shorter, for the version to stop.
 
-By default the previous deployment is kept (stopped) after a
-successful promotion. `destroyOldDeployment: true` deletes it once
-the replacement is fully promoted and healthy:
+The platform sometimes keeps a stopped version in `stopping` for many
+minutes, and only a stopped version can be deleted. The deploy then fails
+with `ComputeVersionNotRemoved`. Its message starts with the check that
+failed and names the version left behind. That version is not served, and
+Alchemy no longer tracks it, so a later deploy does not remove it. Delete it
+in the Prisma Console once it has stopped.
+
+Deleting a service stops and deletes its versions first, waiting up to the
+service's `timeoutSeconds` (60 by default) for each to stop: the versions it
+does not serve, then the one it serves, then the service. When a version is
+still stopping, `alchemy destroy` fails with `DeleteInProgress`. If that
+version is not the served one, the service keeps serving. Run
+`alchemy destroy` again once the version has stopped.
+
+After promoting, the service checks its stable URL:
 
 ```typescript
-const app = yield* Prisma.Compute("api", {
+const service = yield* Prisma.ComputeService("web", {
   project,
-  path: "./app",
-  destroyOldDeployment: true,
+  healthCheck: { path: "/api/health" },
 });
 ```
 
-If cleanup fails, alchemy records the pending action in state and
-retries it before creating another generation.
+When that check fails, the service is restored to the version it served
+before, and the deploy fails with `ComputeServiceEndpointCheckFailed`. If
+the platform refuses the rollback, the deploy fails with
+`ComputeServiceRollbackFailed`, naming the version the service serves now.
 
-## Env-only redeploys
+## Ship new code
 
-`skipCodeUpload: true` creates the next deployment from the currently
-promoted artifact. It requires an existing promoted deployment and is
-useful when only environment variables changed:
+Point the version at a new artifact. The next deploy creates a new version,
+checks it, and promotes it. When another resource builds the artifact in
+the same deploy, a new version is created whenever that artifact may have
+changed.
+
+Build the artifact with `Prisma.ComputeArtifact`, which skips the build when
+its inputs are unchanged:
 
 ```typescript
-const app = yield* Prisma.Compute("api", {
-  project,
-  skipCodeUpload: true,
-  env: { FEATURE_FLAG: "on" },
+const artifact = yield* Prisma.ComputeArtifact("web-artifact", {
+  path: "./apps/web",
+  build: { command: "bun run build", outdir: "dist", entrypoint: "server.js" },
+});
+const version = yield* Prisma.ComputeVersion("web-version", {
+  service: service.serviceId,
+  artifactPath: artifact.artifactPath,
+  artifactContentType: "application/gzip",
+  portMapping: { http: artifact.defaultPort },
 });
 ```
 
-## Redeploying for changed inputs
+The artifact hashes the files under the build's working directory that git
+does not ignore, the nearest lockfile, and its props with `build.env`
+resolved. An Effect-native `main` is compared by its bundle. The process
+environment is not hashed. Set `memo` to choose the files, as on
+`Command.Build`.
 
-The low-level `Prisma.Deployment` resource owns no environment
-variables, so it cannot see an env-value change on its own. Prisma
-also snapshots environment variables into a deployment when the
-deployment is created, so changing only a value updates the
-platform's variable record but never reaches the running app.
+The archive is named by its SHA-256, so an unchanged build keeps its version
+on a machine that never built it, such as a CI runner.
 
-Declare the values the deployment must be recreated for with
-`triggers`. When the resolved value changes, the next deploy
-replaces the deployment (create-before-delete) even though the
-artifact is unchanged:
+## Roll back
+
+The replaced version is kept. Roll the service back to it in the Prisma
+Console, or call the Management API's `createServiceRollback` from
+`@distilled.cloud/prisma/management` with the service's ID and the kept
+version's ID, which `getServiceDeployments` lists. The stable URL serves the kept version within seconds. The next deploy
+promotes the declared version again.
+
+## Delete replaced versions
+
+To delete a replaced version instead of keeping it, set its removal policy:
 
 ```typescript
-const deployment = yield* Prisma.Deployment("web", {
-  app,
+const version = yield* Prisma.ComputeVersion("web-version", {
+  service: service.serviceId,
   artifactPath: "./dist/app.tar.gz",
-  triggers: { DATABASE_URL: Redacted.make(databaseUrl) },
-  start: true,
-  promote: true,
+  artifactContentType: "application/gzip",
+}).pipe(RemovalPolicy.destroy());
+```
+
+On `Prisma.Compute`, set `destroyOldDeployment: true`. The service's own
+delete removes all its versions.
+
+The version the service serves is never deleted on its own, whatever its
+removal policy: Alchemy forgets it, and deleting the service removes it. So a
+service kept with `RemovalPolicy.retain()` keeps serving after
+`alchemy destroy`.
+
+## Ship a changed environment variable
+
+Prisma copies the Branch's variables into a version when it creates it. A
+changed value reaches the app only in a new version, so list it in
+`triggers`, and order the version after the variable:
+
+```typescript
+const logLevel = "debug";
+const variable = yield* Prisma.EnvironmentVariable("log-level", {
+  project,
+  class: "production",
+  key: "LOG_LEVEL",
+  value: Redacted.make(logLevel),
+});
+const version = yield* Prisma.ComputeVersion("web-version", {
+  service: Output.map(
+    Output.all(service.serviceId, Output.of(variable)),
+    ([serviceId]) => serviceId,
+  ),
+  artifactPath: "./dist/app.tar.gz",
+  artifactContentType: "application/gzip",
+  triggers: { LOG_LEVEL: logLevel },
 });
 ```
 
-The values are folded into the deployment fingerprint as a salted
-hash and persisted `Redacted`; the plaintext never lands in state.
-`Prisma.Compute` needs no equivalent — it owns `env` and already
-folds those values into its own fingerprint.
+`triggers` is stored in Alchemy state, so pass a digest of a secret, not the
+secret. `Prisma.Compute` does both for the variables it declares.
 
-## No-op convergence
+## Reuse the active version's code
 
-Deploys are hash-driven: when the built artifact and configuration
-are unchanged, reconcile reuses the same healthy deployment instead
-of creating a new generation — repeat deploys converge to exactly
-one active deployment.
+`skipCodeUpload: true` creates the next version from the code the service
+serves now, without an upload. The service must already serve a version:
+
+```typescript
+const version = yield* Prisma.ComputeVersion("web-config", {
+  service: service.serviceId,
+  skipCodeUpload: true,
+  triggers: { LOG_LEVEL: logLevel },
+});
+```
+
+## Upgrade from earlier versions
+
+`Prisma.App` is now `Prisma.ComputeService`, and `Prisma.Deployment` is now
+`Prisma.ComputeVersion`. State saved under the old names is read and
+rewritten on the next deploy. Their props and attributes follow:
+
+```diff lang="typescript"
+// alchemy.run.ts
+-const app = yield* Prisma.App("web", { project });
+-const deployment = yield* Prisma.Deployment("web-deployment", {
+-  app: app.appId,
+-  artifactPath: "./dist/app.tar.gz",
+-  promote: true,
+-});
++const service = yield* Prisma.ComputeService("web", { project });
++const version = yield* Prisma.ComputeVersion("web-version", {
++  service: service.serviceId,
++  artifactPath: "./dist/app.tar.gz",
++});
++yield* Prisma.activateVersion(service, version);
+```
+
+A service saved as `Prisma.App` that is attached with `activateVersion` in
+its first deploy after the upgrade stops with `ComputeServiceIdUnavailable`,
+and nothing changes on the platform. Deploy once without `activateVersion`,
+then add it back. When that deploy does not change the version, running it
+again also works.
+
+A stack deployed with `Prisma.Compute` from an earlier release of
+`@alchemy.run/prisma`, which kept the service inside that one resource,
+stops with `ComputeCannotUpgradeInPlace`. A deploy stops while planning and
+changes nothing. Removing the Compute from the program, or `alchemy destroy`,
+applies the run's other changes and leaves the old service as it is.
+
+To keep the stack as it is, use the last release before this change. To move
+to a new service with a new URL, forget the old one with the
+`alchemy state delete` command the error prints. It names the Compute's
+full address, such as:
+
+<PackageManagers run="alchemy state delete MyStack/dev/Site/api" />
+
+If the Compute sets `serviceName`, change it: a Branch cannot hold two
+services with one name. Then deploy with `--adopt`, so the new environment
+variables take over the old service's variables of the same key. Without
+`--adopt`, the deploy creates the new service and then stops at the first
+variable the old service holds; deploying again with `--adopt` continues. The old
+service keeps running with its URL and versions: move its custom domains to
+the new service, and delete it in the Prisma Console when nothing uses it.
+
+To destroy the stack instead, run the same `alchemy state delete` command, then
+`alchemy destroy`. When the stack also declares the project, deleting the
+project deletes the old service with it; otherwise delete the old service in
+the Prisma Console.
 
 ## Where next
 
-- [Apps](/prisma/compute/apps) — builds, Effect-native services,
-  and local dev.
+- [Apps](/prisma/compute/apps): builds, Effect-native services, and local dev.
 
 Reference:
 
 - [Compute API reference](/providers/prisma/compute)
-- [Deployment API reference](/providers/prisma/deployment)
+- [ComputeService API reference](/providers/prisma/computeservice)
+- [ComputeVersion API reference](/providers/prisma/computeversion)
+- [ComputeArtifact API reference](/providers/prisma/computeartifact)

@@ -2,6 +2,7 @@ import * as Provider from "alchemy/Provider";
 import type { ResourceClass, ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { updateRowSavedBeforeRename } from "./RenamedState.ts";
 
 /**
  * Shared helpers for the Prisma providers' local (`alchemy dev`) variants.
@@ -41,32 +42,71 @@ export const attrOrRedactedString = (value: unknown, key: string) => {
       : undefined;
 };
 
+export interface DevRename {
+  /** Attribute names the resource saved before it was renamed. */
+  readonly oldAttributes: readonly string[];
+  /** Stable attributes whose names did not change. */
+  readonly keptStables?: string[];
+}
+
+const withoutKeys = (record: DevRecord, keys: readonly string[]) =>
+  Object.fromEntries(Object.entries(record).filter(([key]) => !keys.includes(key)));
+
 /**
  * Build a stateless local provider stub: reconcile merges the previous
  * outputs with freshly fabricated attributes, read echoes persisted state,
- * and delete is a no-op.
+ * and delete is a no-op. With `rename`, a row saved under the old attribute
+ * names is planned as {@link updateRowSavedBeforeRename} plans it, and the old
+ * names are dropped when the row is rewritten.
  */
 export const devProvider = <R extends ResourceLike>(
   resource: ResourceClass<R>,
   stables: Extract<keyof R["Attributes"], string>[],
-  attrs: (input: { id: string; fqn: string; news: DevRecord; output?: DevRecord }) => DevRecord,
-) =>
-  Provider.succeed(resource, {
+  attrs: (input: {
+    id: string;
+    fqn: string;
+    news: DevRecord;
+    output?: DevRecord;
+    bindings: ReadonlyArray<{ sid: string; data: unknown }>;
+  }) => DevRecord,
+  rename?: DevRename,
+  options?: {
+    /** Create the stub before its cycle peers, as the live provider's `precreate` does. */
+    readonly precreate?: boolean;
+  },
+) => {
+  const oldAttributes = rename?.oldAttributes ?? [];
+  const savedBeforeRename = (output: unknown) =>
+    isRecord(output) && oldAttributes.some((key) => key in output);
+  return Provider.succeed(resource, {
     stables,
     list: () => Effect.succeed([]),
-    diff: Effect.fn(function* () {
-      return { action: "update" } as const;
+    diff: Effect.fn(function* ({ output }) {
+      return updateRowSavedBeforeRename(
+        savedBeforeRename(output),
+        { action: "update" } as const,
+        rename?.keptStables,
+      );
     }),
     read: Effect.fn(function* ({ output }) {
       return output;
     }),
-    reconcile: Effect.fn(function* ({ id, fqn, news, output }) {
+    ...(options?.precreate
+      ? {
+          precreate: Effect.fn(function* ({ id, fqn, news }) {
+            const newsRecord = isRecord(news) ? news : {};
+            return attrs({ id, fqn, news: newsRecord, bindings: [] }) as R["Attributes"];
+          }),
+        }
+      : {}),
+    reconcile: Effect.fn(function* ({ id, fqn, news, output, bindings }) {
       const newsRecord = isRecord(news) ? news : {};
-      const outputRecord = isRecord(output) ? output : undefined;
+      const outputRecord = isRecord(output) ? withoutKeys(output, oldAttributes) : undefined;
       return {
         ...outputRecord,
-        ...attrs({ id, fqn, news: newsRecord, output: outputRecord }),
+        ...attrs({ id, fqn, news: newsRecord, output: outputRecord, bindings }),
       } as R["Attributes"];
     }),
     delete: Effect.fn(function* () {}),
   });
+};

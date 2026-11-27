@@ -1892,7 +1892,7 @@ export default defineConfig({
               label: "Compute",
               items: [
                 { label: "Apps", link: "/prisma/compute/apps" },
-                { label: "Deployments", link: "/prisma/compute/deployments" },
+                { label: "Services and versions", link: "/prisma/compute/deployments" },
               ],
             },
             {

@@ -9,17 +9,18 @@ import { PlatformServices } from "alchemy/Util/PlatformServices";
 import { Server, ServerProvider } from "alchemy/Website/Server";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import { App, AppProvider } from "./App.ts";
 import { PrismaAuth } from "./AuthProvider.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
 import { Bucket, BucketProvider } from "./Bucket.ts";
 import { BucketAccessKey, BucketAccessKeyProvider } from "./BucketAccessKey.ts";
 import { PrismaClientLive } from "./Client.ts";
 import { Compute, ComputeProvider } from "./Compute.ts";
+import { ComputeArtifact, ComputeArtifactProvider } from "./ComputeArtifact.ts";
+import { ComputeService, ComputeServiceProvider } from "./ComputeService.ts";
+import { ComputeVersion, ComputeVersionProvider } from "./ComputeVersion.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
 import { Database, DatabaseProvider } from "./Database.ts";
-import { Deployment, DeploymentProvider } from "./Deployment.ts";
 import { EnvironmentVariable, EnvironmentVariableProvider } from "./EnvironmentVariable.ts";
 import * as Credentials from "./internal/Credentials.ts";
 import { PrismaHttpClientLive, PrismaUploadClientLive } from "./internal/HttpClient.ts";
@@ -113,14 +114,14 @@ const stackManagementApiLayer = () =>
  * ```
  *
  * This layer covers the operation helpers. The lifecycle helpers
- * (`destroyApp`, `destroyDeployment`, `destroyProjectApps`,
- * `waitForDeploymentStatus`, `syncComputeEnvironment`) also need an
+ * (`destroyComputeService`, `destroyComputeVersion`, `destroyProjectComputeServices`,
+ * `waitForComputeVersionStatus`) also need an
  * `HttpClient` from the caller, because the Prisma-scoped node transport is
  * `Layer.provide`d privately here — see the comment on the private provide
  * above for why it must not reach the surrounding stack. Add one, e.g.:
  *
  * ```typescript
- * yield* Prisma.destroyApp(appId).pipe(
+ * yield* Prisma.destroyComputeService(serviceId).pipe(
  *   Effect.provide(Prisma.managementApi()),
  *   Effect.provide(FetchHttpClient.layer),
  * );
@@ -179,8 +180,9 @@ export const providers = () =>
       Bucket,
       BucketAccessKey,
       Compute,
-      App,
-      Deployment,
+      ComputeService,
+      ComputeVersion,
+      ComputeArtifact,
       CustomDomain,
       EnvironmentVariable,
       SourceRepository,
@@ -199,8 +201,9 @@ export const providers = () =>
         BucketProvider(),
         BucketAccessKeyProvider(),
         ComputeProvider(),
-        AppProvider(),
-        DeploymentProvider(),
+        ComputeServiceProvider(),
+        ComputeVersionProvider(),
+        ComputeArtifactProvider(),
         CustomDomainProvider(),
         EnvironmentVariableProvider(),
         SourceRepositoryProvider(),

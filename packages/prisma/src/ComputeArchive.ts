@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
+import { ALWAYS_IGNORED_PATTERNS } from "./internal/ArchiveIgnore.ts";
 import {
   type ArchivePlatformError,
   isArchivedRegularFile,
@@ -93,31 +94,6 @@ export interface ComputeArchiveOptions {
    */
   output?: "bytes" | "file";
 }
-
-const ALWAYS_IGNORED_PATTERNS = [
-  ".git",
-  "**/.git",
-  ".alchemy",
-  "**/.alchemy",
-  ".env",
-  "**/.env",
-  ".env.*",
-  "**/.env.*",
-  ".envrc",
-  "**/.envrc",
-  ".npmrc",
-  "**/.npmrc",
-  ".yarnrc*",
-  "**/.yarnrc*",
-  ".netrc",
-  "**/.netrc",
-  ".pypirc",
-  "**/.pypirc",
-  ".aws",
-  "**/.aws",
-  ".ssh",
-  "**/.ssh",
-] as const;
 
 interface ArchiveBudget {
   readonly ignore: readonly RegExp[];

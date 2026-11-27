@@ -2,8 +2,8 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type { App } from "../App.ts";
 import type { Bucket } from "../Bucket.ts";
+import type { ComputeService } from "../ComputeService.ts";
 import type { Database } from "../Database.ts";
 import type { Project } from "../Project.ts";
 
@@ -56,8 +56,30 @@ export const unresolvedBucketIdOf = (bucket: string | Bucket | undefined) =>
 export const resolveBucketId = (bucket: string | Bucket) =>
   resolveId("bucket id", typeof bucket === "string" ? bucket : (bucket.bucketId as unknown));
 
-export const unresolvedAppIdOf = (app: string | App | undefined) =>
-  concreteIdOf(typeof app === "string" ? app : (app?.appId as unknown));
+export const unresolvedServiceIdOf = (service: string | ComputeService | undefined) =>
+  concreteIdOf(typeof service === "string" ? service : (service?.serviceId as unknown));
 
-export const resolveAppId = (app: string | App) =>
-  resolveId("app id", typeof app === "string" ? app : (app.appId as unknown));
+/**
+ * A resource received no Compute service ID. On the first deploy after the
+ * upgrade that renamed `Prisma.App`, a service whose saved state predates the
+ * rename has no `serviceId` until it is reconciled once, and a version
+ * attached with `Prisma.activateVersion` reads it before that.
+ */
+export class ComputeServiceIdUnavailable extends Data.TaggedError("ComputeServiceIdUnavailable")<{
+  readonly message: string;
+}> {}
+
+export const serviceIdUnavailable = () =>
+  new ComputeServiceIdUnavailable({
+    message:
+      "This resource received no Compute service ID: the service's saved state still has the names from before Prisma.App was renamed Prisma.ComputeService, and this deploy attaches a version with Prisma.activateVersion before that state is rewritten. Nothing was changed on the platform. Deploy once without Prisma.activateVersion, so the service's state is rewritten, then add Prisma.activateVersion back and deploy again. When this deploy does not change the version, running the same deploy again also works.",
+  });
+
+export const resolveServiceId = (service: string | ComputeService | undefined) =>
+  service === undefined
+    ? Effect.fail(serviceIdUnavailable())
+    : typeof service === "string"
+      ? Effect.succeed(service)
+      : typeof service.serviceId === "string"
+        ? Effect.succeed(service.serviceId)
+        : Effect.fail(serviceIdUnavailable());
