@@ -1,0 +1,325 @@
+---
+title: "Part 4: The repository, and another harness"
+description: Give each session a sandbox with the repository, coding tools to read it, tools of your own to search and answer, and a process to follow. Then run the same sessions on OpenCode.
+sidebar:
+  order: 4
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+In [Part 3](/ai/tutorial/part-3) a session labeled an issue from its title. This part lets it read the code and answer on the issue: a sandbox with the repository, coding tools, two tools of your own, and a second process it follows when it writes. The last step runs all of it on another harness.
+
+## Install
+
+<PackageManagers add="@alchemy.run/boat @alchemy.run/opencode" />
+
+## Give each session a sandbox
+
+The harness runs in a Durable Object, which has no files and no shell. Tools that need them work in a sandbox. This Layer starts one for each session, from a snapshot that already has the repository:
+
+```typescript title="src/Sandbox.ts"
+import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as Boat from "@alchemy.run/boat";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import { Repo } from "./Repo.ts";
+
+export const SandboxLive = AIBoat.Sandboxes(
+  Effect.gen(function* () {
+    const repo = yield* Repo;
+    return yield* Boat.Snapshot("Checkout", {
+      run: [Output.interpolate`git clone ${repo.cloneUrl} ~/repo`],
+    });
+  }),
+);
+```
+
+See [Sandboxes](/ai/sandboxes) for the other platforms.
+
+## Let the session read the code
+
+`AI.Grep` and `AI.Read` are names every harness has a tool for. Mention them:
+
+```diff lang="typescript" title="src/Triage.process.ts"
+import { Board } from "./Board/Board.model.ts";
+
+-  You look after one issue of a GitHub repository. Your first message says
+-  which.
++  You look after one issue of a GitHub repository. Your first message says
++  which. The repository is checked out at ~/repo in your sandbox.
+
+-  Get the issue with ${Board.IssueDetail}: its key is the issue. Then send
+-  ${Board.LabelIssue}: bug when something is broken, feature when something
+-  new is asked for, question otherwise.
++  Get the issue with ${Board.IssueDetail}: its key is the issue. Find the
++  code it is about with ${AI.Grep} and ${AI.Read}. Never change a file.
++
++  Then send ${Board.LabelIssue}: bug when something is broken, feature when
++  something new is asked for, question otherwise.
+```
+
+`Triage` now requires a Layer for each of the two tools.
+
+## Provide the coding tools and the sandbox
+
+`Pi.CodingTools` is Pi's own implementation of those names, working in the session's sandbox:
+
+```diff lang="typescript" title="src/Agents.ts"
+import * as AI from "@alchemy.run/ai";
++import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+import { SmartLlama, Smart } from "./Models.ts";
++import { SandboxLive } from "./Sandbox.ts";
+import { Triage } from "./Triage.process.ts";
+
+-const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObjectStorage));
++const HarnessLive = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools).pipe(
++  Layer.provide(PiCloudflare.DurableObjectStorage),
++);
+
+const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
+-  Layer.provide(SmartLlama),
++  Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
++  Layer.provide(Boat.CreateSandboxHttp),
+);
+```
+
+## Declare a tool to search issues
+
+A tool is a contract and a Layer that implements it, together in a file named after the tool. This one finds duplicates:
+
+```typescript title="src/SearchIssues.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import { Repo } from "./Repo.ts";
+
+export class SearchIssues extends AI.Tool<SearchIssues>()("search_issues", {
+  description:
+    "Search this repository's issues and pull requests. Use it to find duplicates or related work.",
+  parameters: Schema.Struct({ query: Schema.String }),
+  success: Schema.Struct({
+    issues: Schema.Array(
+      Schema.Struct({ number: Schema.Number, title: Schema.String, state: Schema.String }),
+    ),
+  }),
+}) {}
+
+export const SearchIssuesLive = SearchIssues.make(
+  Effect.gen(function* () {
+    const search = yield* GitHub.SearchIssues(yield* Repo);
+
+    return Effect.fn(function* ({ query }) {
+      const found = yield* search({ q: query, per_page: 10 }).pipe(Effect.orDie);
+      return {
+        issues: found.items.map((issue) => ({
+          number: issue.number,
+          title: issue.title,
+          state: issue.state,
+        })),
+      };
+    });
+  }),
+).pipe(Layer.provide(GitHub.SearchIssuesHttp));
+```
+
+## Declare a tool to answer
+
+The session answers by posting a comment. Each tool has its own file, with its contract and its Layer. `MARKER` is hidden in each comment, so the session's own comments can be told from a person's:
+
+```typescript title="src/PostAnswer.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import { Repo } from "./Repo.ts";
+
+export const MARKER = "<!-- ai-issues -->";
+
+export class PostAnswer extends AI.Tool<PostAnswer>()("post_answer", {
+  description: "Post your answer on the issue as a comment, in Markdown.",
+  parameters: Schema.Struct({ issue: Schema.String, markdown: Schema.String }),
+  success: Schema.Struct({ url: Schema.String }),
+}) {}
+
+export const PostAnswerLive = PostAnswer.make(
+  Effect.gen(function* () {
+    const comment = yield* GitHub.CreateIssueComment(yield* Repo);
+
+    return Effect.fn(function* ({ issue, markdown }) {
+      const posted = yield* comment({
+        issue_number: Number(issue),
+        body: `${markdown}\n\n${MARKER}`,
+      }).pipe(Effect.orDie);
+      return { url: posted.html_url };
+    });
+  }),
+).pipe(Layer.provide(GitHub.CreateIssueCommentHttp));
+```
+
+## Ignore the session's own comments
+
+A comment the session posts arrives as an event too:
+
+```diff lang="typescript" title="src/GitHubIssues.ts"
+import { owner, repository } from "./Repo.ts";
++import { MARKER } from "./PostAnswer.tool.ts";
+
+        Match.when({ name: "issue_comment", payload: { action: "created" } }, ({ payload }) =>
+-          issues.send(
+-            new CommentOnIssue({
+-              issueId,
+-              commentId: String(payload.comment.id),
+-              body: payload.comment.body,
+-            }),
+-            once,
+-          ),
++          payload.comment.body.includes(MARKER)
++            ? Effect.void
++            : issues.send(
++                new CommentOnIssue({
++                  issueId,
++                  commentId: String(payload.comment.id),
++                  body: payload.comment.body,
++                }),
++                once,
++              ),
+        ),
+```
+
+## Describe how an answer reads
+
+How to write an answer is its own process. It is prose with a description, and nothing else:
+
+```typescript title="src/Answering.process.ts"
+import * as AI from "@alchemy.run/ai";
+
+export class Answering extends AI.Process<Answering>()("Answering", {
+  description: "How to write an answer on an issue. Follow it before you post one.",
+})`
+  Write the answer in Markdown and keep it under two hundred words.
+  Start with the answer itself, in one sentence.
+  Name each file you read as a path in backticks, with a line number where it helps.
+  Say what you did not check. Never promise a fix or a date.
+` {}
+```
+
+## Mention the tools and the process
+
+A session that mentions `Answering` always sees its description, and reads its prose only when it follows it:
+
+```diff lang="typescript" title="src/Triage.process.ts"
+import * as AI from "@alchemy.run/ai";
++import { Answering } from "./Answering.process.ts";
+import { Board } from "./Board/Board.model.ts";
+import { IssueId } from "./Board/Issue.id.ts";
++import { PostAnswer } from "./PostAnswer.tool.ts";
++import { SearchIssues } from "./SearchIssues.tool.ts";
+
+-  description: "Say what kind of issue this is.",
++  description: "Answer one issue of the repository and say what kind of issue it is.",
+
+-  code it is about with ${AI.Grep} and ${AI.Read}. Never change a file.
++  code it is about with ${AI.Grep} and ${AI.Read}, and look for duplicates
++  with ${SearchIssues}. Never change a file.
+
+-  Then send ${Board.LabelIssue}: bug when something is broken, feature when
+-  something new is asked for, question otherwise.
++  Then follow ${Answering} and post your answer with ${PostAnswer}. Last,
++  send ${Board.LabelIssue}: bug when something is broken, feature when
++  something new is asked for, question otherwise.
+
+-  Later messages are replies on the issue. Send ${Board.LabelIssue} again
+-  when a reply changes what kind of issue it is.
++  Later messages are replies on the issue. Answer each the same way, and
++  send ${Board.LabelIssue} again when a reply changes what kind of issue it is.
+```
+
+## Provide the tools
+
+```diff lang="typescript" title="src/Agents.ts"
+import { SandboxLive } from "./Sandbox.ts";
++import { PostAnswerLive } from "./PostAnswer.tool.ts";
++import { SearchIssuesLive } from "./SearchIssues.tool.ts";
+import { Triage } from "./Triage.process.ts";
+
+-const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
++const Live = Layer.mergeAll(
++  HarnessLive,
++  AI.DefaultModel(Smart),
++  SearchIssuesLive,
++  PostAnswerLive,
++  boardOver(own),
++).pipe(
+  Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
+```
+
+`Answering` needs no Layer: its prose is on the class, and it mentions nothing.
+
+## Add Boat's providers
+
+```diff lang="typescript" title="alchemy.run.ts"
++import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+      DomainCloudflare.providers(),
++      Boat.providers(),
+      GitHub.providers(),
+```
+
+<PackageManagers run="alchemy deploy" />
+
+## Try it
+
+Open an issue that asks about the code. A minute later it has an answer and a label:
+
+```sh
+gh issue create -R my-org/issue-board --title "What does this repository contain?" --body "What files are in it?"
+
+gh issue view 2 -R my-org/issue-board --comments
+curl "$URL/issues/2"
+```
+
+## Run it on OpenCode
+
+Every session so far ran on Pi. The harness is one constant in `Agents.ts`:
+
+```diff lang="typescript" title="src/Agents.ts"
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+-import * as Pi from "@alchemy.run/pi";
+-import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
++import * as OpenCode from "@alchemy.run/opencode";
++import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
+
+-const HarnessLive = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools).pipe(
+-  Layer.provide(PiCloudflare.DurableObjectStorage),
+-);
++const HarnessLive = Layer.mergeAll(OpenCode.HarnessLive, OpenCode.CodingTools).pipe(
++  Layer.provide(OpenCodeCloudflare.DurableObjectStorage),
++);
+```
+
+The process, its prose, the board, the policy and the tools are unchanged. Sessions that already started on Pi stay in Pi's storage; a new harness starts with none.
+
+## What you built
+
+- A board that models the work: issues, replies, labels.
+- A policy that decides when an issue is looked after, and an object for each issue that answers.
+- A process that says how the work is done, in prose that mentions what it uses.
+- A harness you chose in one line.
+
+## Where next
+
+- [Part 5](/ai/tutorial/part-5): prove that no command a session sends can break the board's rules.
+- [Processes](/ai/processes): sessions and the two ways to declare one.
+- [Processes that use processes](/ai/process-graphs): following, starting, and models.
+- [Processes and Domain models](/ai/domain): mentioning commands and views, who a session acts as, and policies that ask for work.
+- [Where sessions run](/ai/hosting): one object for each session or one for many, and reaching them.
+
+## Tear down
+
+<PackageManagers run="alchemy destroy" />

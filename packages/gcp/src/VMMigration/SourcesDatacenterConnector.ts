@@ -306,13 +306,11 @@ export const SourcesDatacenterConnectorProvider = () =>
       if (current === undefined) {
         const created = yield* vm
           .createProjectsLocationsSourcesDatacenterConnectors({
+            registrationId,
+            version,
+            serviceAccount: news.serviceAccount,
             parent: source,
             datacenterConnectorId,
-            body: {
-              registrationId,
-              version,
-              serviceAccount: news.serviceAccount,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

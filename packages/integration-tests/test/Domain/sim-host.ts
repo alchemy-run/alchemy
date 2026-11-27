@@ -1,6 +1,7 @@
 import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { type InputGateShape, makeInputGate } from "alchemy/Workers/InputGate";
+import { storageCallbacks } from "alchemy/Workers/StorageCallbacks";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -13,12 +14,28 @@ import * as Semaphore from "effect/Semaphore";
 /** Rows the objects of one host read from storage. */
 export interface Stats {
   rowsRead: number;
+  /** When set, counts what each put writes: the key's and the value's JSON length. */
+  bytesWritten?: number;
 }
 
+/** Answers true for a key a put should fail to write, as a storage error would. */
+export type FailPut = (key: string) => boolean;
+
 /** Sorted key-value storage that counts the rows it reads, as Durable Object billing does. */
-const makeStorage = (stats: Stats, data: Map<string, unknown>): DurableObjects.ObjectStorage => {
+const makeStorage = (
+  stats: Stats,
+  data: Map<string, unknown>,
+  failPut?: FailPut,
+): DurableObjects.ObjectStorage => {
   const sortedKeys = () => [...data.keys()].sort();
   const clone = <T>(value: T): T => (value === undefined ? value : structuredClone(value));
+  const write = (key: string, value: unknown) => {
+    if (failPut?.(key)) throw new Error(`injected: writing ${key} failed`);
+    if (stats.bytesWritten !== undefined) {
+      stats.bytesWritten += key.length + (value === undefined ? 0 : JSON.stringify(value).length);
+    }
+    data.set(key, clone(value));
+  };
   const storage: DurableObjects.ObjectStorage = {
     get: <T>(key: string) =>
       Effect.sync(() => {
@@ -27,8 +44,10 @@ const makeStorage = (stats: Stats, data: Map<string, unknown>): DurableObjects.O
       }),
     put: ((keyOrEntries: string | Record<string, unknown>, value?: unknown) =>
       Effect.sync(() => {
-        if (typeof keyOrEntries === "string") data.set(keyOrEntries, clone(value));
-        else for (const [key, entry] of Object.entries(keyOrEntries)) data.set(key, clone(entry));
+        if (typeof keyOrEntries === "string") write(keyOrEntries, value);
+        // Cloudflare's storage takes at most 128 keys a put.
+        else if (Object.keys(keyOrEntries).length > 128) throw new Error("more than 128 keys");
+        else for (const [key, entry] of Object.entries(keyOrEntries)) write(key, entry);
       })) as DurableObjects.ObjectStorage["put"],
     delete: ((keyOrKeys: string | ReadonlyArray<string>) =>
       Effect.sync(() => {
@@ -117,6 +136,8 @@ export const simHost = (
     readonly intercept?: Intercept;
     /** Give each instance Rivet's input gate: construction and each call are calls of their own. */
     readonly inputGate?: boolean;
+    /** Fail the puts it answers true for, inside or outside a transaction. */
+    readonly failPut?: FailPut;
   } = {},
 ) => {
   const disk = options.disk ?? { objects: new Map() };
@@ -132,7 +153,7 @@ export const simHost = (
       const inputGate = options.inputGate ? Effect.runSync(makeInputGate) : undefined;
       const asCall = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         inputGate === undefined ? effect : inputGate.call(effect);
-      const stored = makeStorage(stats, saved.data);
+      const stored = makeStorage(stats, saved.data, options.failPut);
       const storage = inputGate === undefined ? stored : gatedStorage(stored, inputGate);
       const gate = Semaphore.makeUnsafe(1);
       const scope = Scope.makeUnsafe();
@@ -142,8 +163,12 @@ export const simHost = (
         const set = (at: number) =>
           Effect.gen(function* () {
             const previous = timer;
-            const now = yield* Clock.currentTimeMillis;
-            const fiber = yield* Effect.sleep(Math.max(0, at - now)).pipe(
+            // Due at `at` on the instance's clock, also when a test moves that clock on.
+            const due: Effect.Effect<void> = Effect.gen(function* () {
+              const now = yield* Clock.currentTimeMillis;
+              if (now < at) yield* Effect.andThen(Effect.sleep(Math.min(at - now, 50)), due);
+            });
+            const fiber = yield* due.pipe(
               Effect.andThen(
                 Effect.suspend(() => {
                   timer = undefined;
@@ -164,7 +189,7 @@ export const simHost = (
             saved.alarm = at;
             if (previous) yield* Fiber.interrupt(previous.fiber);
           });
-        const callbacks = DurableObjects.alarmCallbacks(storage, {
+        const callbacks = storageCallbacks(storage, {
           get: Effect.sync(() => timer?.at ?? null),
           set,
         });
@@ -262,6 +287,14 @@ export const simHost = (
     instances.clear();
     yield* wake;
   });
+  /** Call a method of one object directly, as another object would: JSON in, JSON out. */
+  const call = (cls: string, name: string, method: string, ...args: ReadonlyArray<unknown>) =>
+    (
+      namespace(cls).getByName(name) as unknown as Record<
+        string,
+        (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown, unknown>
+      >
+    )[method]!(...args);
   const host: DurableObjects.Host = {
     declare: (model, cls, impl) =>
       Effect.sync(() => {
@@ -272,5 +305,5 @@ export const simHost = (
     lookup: (model, cls) => namespace(DurableObjects.className(model.modelName, cls)),
     claimKey: Effect.sync(() => ({})),
   };
-  return { host, evict, wake, disk };
+  return { host, evict, wake, disk, call };
 };

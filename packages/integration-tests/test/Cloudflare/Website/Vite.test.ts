@@ -918,6 +918,63 @@ if (el) {
     );
 
     test.provider(
+      "Vite: `mode` loads .env.[mode] and a mode change rebuilds",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-vite-mode-",
+            tempRoot,
+            entries: ["index.html", "package.json", "vite.config.ts", "src"],
+          });
+          yield* fs.writeFileString(
+            path.join(rootDir, ".env.sandbox"),
+            "VITE_TEST_MARKER=vite-mode-sandbox\n",
+          );
+          yield* fs.writeFileString(
+            path.join(rootDir, ".env.staging"),
+            "VITE_TEST_MARKER=vite-mode-staging\n",
+          );
+          const memoInclude = ["index.html", "src/**", "package.json", ".env.*"];
+
+          const site1 = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Vite("FixViteMode", {
+                ...viteProps(rootDir, memoInclude),
+                mode: "sandbox",
+              });
+            }),
+          );
+          yield* expectBundleContains(site1.url!, "vite-mode-sandbox", {
+            label: ".env.sandbox loaded for mode sandbox",
+          });
+
+          // No file changes: the mode alone has to move the input hash.
+          const site2 = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Vite("FixViteMode", {
+                ...viteProps(rootDir, memoInclude),
+                mode: "staging",
+              });
+            }),
+          );
+          expect(site2.hash?.input).not.toEqual(site1.hash?.input);
+          yield* expectBundleContains(site2.url!, "vite-mode-staging", {
+            label: ".env.staging loaded for mode staging",
+          });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:worker", "live"], timeout: 360_000 },
+    );
+
+    test.provider(
       "Vite: worker entry can host a local Durable Object binding",
       (stack) =>
         Effect.gen(function* () {
@@ -1040,6 +1097,78 @@ if (el) {
         tags: ["provider:cloudflare:container", "provider:cloudflare:worker", "live"],
         timeout: 600_000,
       },
+    );
+
+    test.provider(
+      "Vite: R2 S3Credentials on env binds the credentials secret (#2219)",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-vite-s3-",
+            tempRoot,
+            entries: ["index.html", "package.json", "vite.config.ts", "src"],
+          });
+          // Report which credential fields reached the Worker, never their values.
+          yield* fs.writeFileString(
+            path.join(rootDir, "src/worker.ts"),
+            `type Env = {
+  ASSETS: { fetch: (req: Request) => Promise<Response> };
+  STORAGE_S3: string;
+};
+export default {
+  fetch(request: Request, env: Env): Promise<Response> {
+    if (new URL(request.url).pathname === "/api/s3") {
+      return Response.json({ keys: Object.keys(JSON.parse(env.STORAGE_S3)).sort() });
+    }
+    return env.ASSETS.fetch(request);
+  },
+};
+`,
+          );
+          const memoInclude = ["index.html", "src/**", "package.json", "vite.config.ts"];
+
+          // `S3Credentials` is Effect-shaped; before #2219 the Vite build's
+          // env resolution ran it as an inlined env Effect and the deploy
+          // died with "Service not found: Cloudflare.Workers.WorkerEnvironment".
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              const bucket = yield* Cloudflare.R2.Bucket("ViteS3Bucket", { forceDestroy: true });
+              return yield* Cloudflare.Website.Vite("ViteS3", {
+                ...viteProps(rootDir, memoInclude),
+                assets: { runWorkerFirst: ["/api/*"] },
+                env: {
+                  STORAGE_S3: Cloudflare.R2.S3Credentials(bucket, { access: "read-write" }),
+                },
+              });
+            }),
+          );
+
+          expect(site.url).toBeDefined();
+          yield* expectWorkerExists(site.workerName, accountId);
+
+          const client = yield* HttpClient.HttpClient;
+          const body = yield* client.get(`${site.url!}/api/s3`).pipe(
+            Effect.flatMap((res) =>
+              res.status === 200
+                ? res.json
+                : Effect.fail(new Error(`/api/s3 returned ${res.status}`)),
+            ),
+            Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
+          );
+          expect(body).toEqual({
+            keys: ["accessKeyId", "bucketName", "endpoint", "region", "secretAccessKey"],
+          });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker", "live"], timeout: 360_000 },
     );
 
     // The documented interception pattern (solidstart.mdx hand-rolled SSR /

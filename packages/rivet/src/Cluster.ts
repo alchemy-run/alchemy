@@ -4,42 +4,19 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
+import type { Network as AwsNetwork } from "./AWS/Network.ts";
+import type { Network as DockerNetwork } from "./Docker/Network.ts";
+import type { Network as GcpNetwork } from "./GCP/Network.ts";
+import type { Network as KubernetesNetwork } from "./Kubernetes/Network.ts";
 import { Namespace } from "./Namespace.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
- * The private network a node must join to reach {@link ClusterShape.nodeEndpoint}.
- * A host Layer matches on `kind` and refuses a network it cannot join.
+ * The private network a node must join to reach {@link ClusterShape.nodeEndpoint}:
+ * `RivetGCP.Network`, `RivetAWS.Network`, `RivetDocker.Network` or
+ * `RivetKubernetes.Network`. A host Layer refuses a network it cannot join.
  */
-export type ClusterNetwork =
-  | {
-      /** A Docker network; the node's container joins it by name. */
-      readonly kind: "docker";
-      readonly name: Input<string>;
-    }
-  | {
-      /** A Kubernetes cluster; nodes run in its namespace and reach {@link ClusterShape.nodeEndpoint}. */
-      readonly kind: "kubernetes";
-      /** The cluster (a `Kubernetes.ClusterLike`). */
-      readonly cluster: unknown;
-      readonly namespace: string;
-    }
-  | {
-      /** A GCP VPC network; nodes on Compute Engine run in its subnetwork. */
-      readonly kind: "gcp";
-      readonly network: Input<string>;
-      readonly subnetwork: Input<string>;
-      readonly region: string;
-    }
-  | {
-      /** An AWS VPC; nodes run in its subnets with its node security group. */
-      readonly kind: "aws";
-      readonly vpcId: Input<string>;
-      /** Subnets with a route to the internet, for nodes that need no NAT. */
-      readonly subnetIds: ReadonlyArray<Input<string>>;
-      /** The security group nodes run with. */
-      readonly securityGroupId: Input<string>;
-    };
+export type ClusterNetwork = GcpNetwork | AwsNetwork | DockerNetwork | KubernetesNetwork;
 
 /** What pools and clients need to reach a Rivet control plane. */
 export interface ClusterShape {
@@ -80,15 +57,29 @@ export interface ClusterShape {
 export class Cluster extends Context.Service<Cluster, ClusterShape>()("Rivet.Cluster") {}
 
 export interface ControlPlaneProps {
-  /** The control plane's API URL. */
-  endpoint: string;
+  /** The control plane's API URL, used by deploys, callers and nodes off {@link network}. */
+  endpoint: Input<string>;
   /** The control plane's admin token (`auth.admin_token`). */
-  token: Redacted.Redacted<string> | Config.Config<Redacted.Redacted<string>>;
+  token: Input<Redacted.Redacted<string>> | Config.Config<Redacted.Redacted<string>>;
   /**
    * An existing namespace to use. Omit it to create a namespace for this
    * stage.
    */
-  namespace?: string;
+  namespace?: Input<string>;
+  /**
+   * A private address of the control plane that nodes on {@link network}
+   * connect to instead of `endpoint`.
+   * @default endpoint
+   */
+  nodeEndpoint?: Input<string>;
+  /**
+   * The private network {@link nodeEndpoint} is on, made from the cloud's
+   * own resources: `RivetGCP.Network(subnetwork)`, `RivetAWS.Network(vpc,
+   * securityGroup)`, `RivetDocker.Network(network)` or
+   * `RivetKubernetes.Network({ cluster, namespace })`. Pools on that cloud
+   * run their nodes there; pools anywhere else connect to `endpoint`.
+   */
+  network?: ClusterNetwork;
 }
 
 /**
@@ -105,6 +96,20 @@ export interface ControlPlaneProps {
  * });
  * ```
  *
+ * ### Reaching it at a private address
+ * **Example:** Nodes on its GCP network connect to its private address
+ * ```typescript
+ * export const Cluster = Rivet.ControlPlane("Rivet", {
+ *   endpoint: "https://rivet.example.com",
+ *   token: Config.Redacted("RIVET_TOKEN"),
+ *   nodeEndpoint: "http://10.0.0.2:6420",
+ *   network: RivetGCP.Network(GCP.Compute.Subnetwork.lookup({ subnetworkName: "rivet" })),
+ * });
+ *
+ * // Joins the "rivet" subnetwork's network and connects its nodes to nodeEndpoint.
+ * export const Default = RivetGCP.CloudRunPool("Default").pipe(Layer.provide(Cluster));
+ * ```
+ *
  * @primitive
  */
 export const ControlPlane = (
@@ -115,12 +120,19 @@ export const ControlPlane = (
     Cluster,
     Effect.gen(function* () {
       const token = Config.isConfig(props.token) ? yield* props.token : props.token;
+      const { endpoint, nodeEndpoint, network } = props;
       if (globalThis.__ALCHEMY_RUNTIME__ || props.namespace !== undefined) {
         // At runtime a node or client reads its endpoint and namespace from its own
         // environment; the cluster is only consulted while deploying.
-        return { endpoint: props.endpoint, token, namespace: props.namespace ?? "default" };
+        return {
+          endpoint,
+          nodeEndpoint,
+          network,
+          token,
+          namespace: props.namespace ?? "default",
+        };
       }
-      const namespace = yield* Namespace(`${id}Namespace`, { endpoint: props.endpoint, token });
-      return { endpoint: props.endpoint, token, namespace: namespace.name };
+      const namespace = yield* Namespace(`${id}Namespace`, { endpoint, token });
+      return { endpoint, nodeEndpoint, network, token, namespace: namespace.name };
     }),
   );

@@ -3,13 +3,19 @@
  * aggregate that rejects, a view, a projection fed by that view, a policy
  * that starts a saga, a saga that writes to another aggregate, a policy that
  * schedules and cancels a command, and a decision that commits across two
- * instances, plus a view that refuses every reader and a command that dies.
+ * instances, plus a view that refuses every reader, a view behind a
+ * middleware whose verdict runs out, a command that dies, and a policy that
+ * relays a command from one aggregate instance to the next.
  * Between them the platform hosts every kind of object, runs its workflow
  * engine and its durable timers, and commits atomically across instances.
  */
 import * as Domain from "@alchemy.run/domain";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";
 import { latencyAggregates, latencyViews } from "./latency-model.ts";
@@ -114,6 +120,40 @@ export class CounterTotal extends Domain.View("CounterTotal", {
   },
 }) {}
 
+/**
+ * The same fold as {@link CounterTotal}, added by the model's next version
+ * ({@link ConformanceV1}): deployed after the counters have recorded events,
+ * it is backfilled from their history.
+ */
+export class CounterReplay extends Domain.View("CounterReplay", {
+  from: [Counter],
+  key: Counter,
+  state: Schema.Struct({ total: Schema.Int, increments: Schema.Int }),
+  initial: { total: 0, increments: 0 },
+  evolve: {
+    Incremented: (view, event) => ({
+      total: view.total + event.by,
+      increments: view.increments + 1,
+    }),
+    Taken: (view, event) => ({ ...view, total: view.total - event.by }),
+    Received: (view, event) => ({ ...view, total: view.total + event.by }),
+  },
+}) {}
+
+/** When a counter's first and latest events were committed, in epoch milliseconds. */
+export class CounterTimes extends Domain.View("CounterTimes", {
+  from: [Counter],
+  key: Counter,
+  state: Schema.Struct({ first: Schema.Number, last: Schema.Number }),
+  initial: { first: 0, last: 0 },
+  evolve: {
+    Incremented: (view, _, { at }) => ({
+      first: view.first === 0 ? DateTime.toEpochMillis(at) : view.first,
+      last: DateTime.toEpochMillis(at),
+    }),
+  },
+}) {}
+
 export class Hidden extends Domain.Rejection("Hidden") {}
 
 /** A counter's total no caller may read: `validate` refuses everyone. */
@@ -135,6 +175,44 @@ const HiddenTotalLive = HiddenTotal.toLayer(
     }),
   ),
 );
+
+export class Expired extends Domain.Rejection("Expired") {}
+
+/**
+ * A caller's ticket, as a session middleware checks its token: the
+ * `x-ticket` header says how long it holds. `until:<epoch ms>` expires then
+ * (a token's own expiry), and `for:<ms>` holds that long from each check (a
+ * session still signed in, checked again on every connect).
+ */
+export class Ticket extends RpcMiddleware.Service<Ticket>()("Conformance/Ticket", {
+  error: Expired,
+}) {}
+
+export const TicketLive = Layer.succeed(
+  Ticket,
+  Effect.fn(function* (effect, { headers }) {
+    const now = yield* Clock.currentTimeMillis;
+    const [kind, value] = (headers["x-ticket"] ?? "").split(":");
+    const until = kind === "until" ? Number(value) : kind === "for" ? now + Number(value) : NaN;
+    if (!(until > now)) return yield* new Expired();
+    // After the read is judged, as `Effect.tap`: the expiry counts wherever it is set.
+    return yield* effect.pipe(Effect.tap(Domain.setExpiry(until)));
+  }),
+);
+
+/** A counter's total for callers with a ticket. */
+export class TicketedTotal extends Domain.View("TicketedTotal", {
+  from: [Counter],
+  key: Counter,
+  middleware: [Ticket],
+  state: Schema.Struct({ total: Schema.Int }),
+  initial: { total: 0 },
+  evolve: {
+    Incremented: (view, event) => ({ total: view.total + event.by }),
+  },
+}) {}
+
+const TicketedTotalLive = TicketedTotal.toLayer(Effect.succeed(() => Effect.void));
 
 export class TotalRecorded extends Domain.Event("TotalRecorded", { total: Schema.Int }) {}
 
@@ -167,11 +245,116 @@ const TotalWriterLive = TotalWriter.toLayer(
   }),
 );
 
-/** Mirrors a counter's first increment onto its Echo; one run per counter. */
+export class Tallied extends Domain.Event("Tallied", { by: Schema.Int }) {}
+
+/** A run's tally key, for a counter of the rebuild case (`<run>~<counter>`); other counters have none. */
+export const tallyKey = (counter: string): string | undefined =>
+  counter.includes("~") ? counter.split("~")[0] : undefined;
+
+/** Every change to the counters of one run, keyed by the run (see {@link tallyKey}). */
+export class Tallies extends Domain.Stream("Tallies", {
+  key: Schema.String,
+  entries: [Tallied],
+}) {}
+
+/** Tallies increments and what a decision takes, through the view. */
+export class TallyWriter extends Domain.Projection("TallyWriter", {
+  from: [CounterTotal],
+  key: Schema.String,
+  keyOf: {
+    Incremented: ({ source }) => tallyKey(source.id),
+    Taken: ({ source }) => tallyKey(source.id),
+  },
+  on: [Incremented, Taken],
+  writes: [Tallies],
+}) {}
+
+/**
+ * The next version of {@link TallyWriter}: increments only. Bumped to 1, it
+ * is rebuilt from the history, which now gives each run fewer inputs than
+ * the version before it handled.
+ */
+export class TallyWriterV1 extends Domain.Projection("TallyWriter", {
+  from: [CounterTotal],
+  key: Schema.String,
+  keyOf: { Incremented: ({ source }) => tallyKey(source.id) },
+  on: [Incremented],
+  writes: [Tallies],
+}) {}
+
+const TallyWriterLive = TallyWriter.toLayer(
+  Effect.gen(function* () {
+    const tallies = yield* Tallies;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        const by = input.event._tag === "Taken" ? -input.event.by : input.event.by;
+        yield* tallies.append(input, new Tallied({ by }));
+      }
+    });
+  }),
+);
+
+const TallyWriterV1Live = TallyWriterV1.toLayer(
+  Effect.gen(function* () {
+    const tallies = yield* Tallies;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) yield* tallies.append(input, new Tallied({ by: input.event.by }));
+    });
+  }),
+  { version: 1 },
+);
+
+/** A backlog run's key, for a counter of the backlog case (`<run>.<n>`); other counters have none. */
+export const backlogKey = (counter: string): string | undefined =>
+  counter.startsWith("backlog-") && counter.includes(".") ? counter.split(".")[0] : undefined;
+
+export class BacklogHandled extends Domain.Event("BacklogHandled", { counter: Schema.String }) {}
+
+/** Which counters of a backlog run its key has handled, in the order it handled them. */
+export class Drained extends Domain.Stream("Drained", {
+  key: Schema.String,
+  entries: [BacklogHandled],
+}) {}
+
+/**
+ * Every counter of a backlog run feeds one key, which takes {@link BACKLOG_DELAY}
+ * over each input: a backlog that takes minutes to drain, with nothing else arriving.
+ */
+export class BacklogWriter extends Domain.Projection("BacklogWriter", {
+  from: [Counter],
+  key: Schema.String,
+  keyOf: { Incremented: ({ source }) => backlogKey(source.id) },
+  on: [Incremented],
+  writes: [Drained],
+}) {}
+
+/** How long the backlog's key takes over each input. */
+export const BACKLOG_DELAY = "1 second";
+
+const BacklogWriterLive = BacklogWriter.toLayer(
+  Effect.gen(function* () {
+    const drained = yield* Drained;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        yield* Effect.sleep(BACKLOG_DELAY);
+        yield* drained.append(input, new BacklogHandled({ counter: input.source.id }));
+      }
+    });
+  }),
+);
+
+/**
+ * Mirrors a counter's first increment onto its Echo; one run per counter.
+ * Its step fails its first attempt after it sends, so the step runs again:
+ * the second attempt sends the same command, which must commit once.
+ */
 export class MirrorFirst extends Domain.Saga("MirrorFirst", {
   key: Schema.String,
   input: { by: Schema.Int },
 }) {}
+
+/** The first attempt of {@link MirrorFirst}'s step fails after its send. */
+export class MirrorFlaky extends Schema.TaggedError<MirrorFlaky>()("MirrorFlaky", {}) {}
 
 const MirrorFirstLive = MirrorFirst.toLayer(
   Effect.gen(function* () {
@@ -179,8 +362,12 @@ const MirrorFirstLive = MirrorFirst.toLayer(
     return Effect.fn(function* ({ key, by }) {
       yield* Activity.make({
         name: "mirror",
-        execute: echoes.send(new Mirror({ id: key, by })).pipe(Effect.orDie),
-      });
+        error: MirrorFlaky,
+        execute: Effect.gen(function* () {
+          yield* echoes.send(new Mirror({ id: key, by })).pipe(Effect.orDie);
+          if ((yield* Activity.CurrentAttempt) === 1) return yield* new MirrorFlaky();
+        }),
+      }).pipe(Activity.retry({ times: 2 }), Effect.orDie);
     });
   }),
 );
@@ -201,6 +388,13 @@ const StartMirrorLive = StartMirror.toLayer(
 
 /** How long a hold lasts before it expires, unless it is released first. */
 export const HOLD_WINDOW = "4 seconds";
+
+/**
+ * How long every platform's front keeps command receipts: short, so the
+ * retention case sees one expire. Long enough that nothing else in the
+ * suite sends a command again after it.
+ */
+export const RECEIPT_RETENTION = "30 seconds";
 /** The command id a hold's expiry is scheduled under. */
 export const EXPIRY = "expire";
 
@@ -268,21 +462,147 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
   }),
 );
 
-export class Conformance extends Domain.Model("Conformance", {
-  aggregates: [Counter, Echo, Hold, ...latencyAggregates],
-  decisions: [Giving],
-  views: [CounterTotal, HiddenTotal, ...latencyViews],
-  projections: [TotalWriter],
-  streams: [Recorded],
-  policies: [StartMirror, HoldDeadline],
-  sagas: [MirrorFirst],
+// ---------------------------------------------------------------- a memo, rewritten and compacted
+
+const MemoState = Schema.Struct({ lines: Schema.Array(Schema.String) });
+export class Written extends Domain.Event("Written", { text: Schema.String }) {}
+export class MemoBroughtForward extends Domain.Event("MemoBroughtForward", {
+  state: MemoState,
+}) {}
+export class Write extends Domain.Command("Write", {
+  input: { id: Schema.String, text: Schema.String },
+  events: [Written],
 }) {}
 
-/** The model's Api: its counter and view, served at the front's `/api`. */
+/** Lines of text: what the rewrite and compaction cases change the history of. */
+export class Memo extends Domain.Aggregate("Memo", {
+  id: Schema.String,
+  state: MemoState,
+  initial: { lines: [] },
+  commands: [Write],
+  events: [MemoBroughtForward],
+  keyOf: (command) => command.id,
+  decide: { Write: (_, { text }) => [new Written({ text })] },
+  evolve: {
+    Written: (memo, e) => ({ lines: [...memo.lines, e.text] }),
+    MemoBroughtForward: (_, e) => e.state,
+  },
+}) {}
+
+/** A memo as a client reads it: its lines, joined. */
+export class MemoText extends Domain.View("MemoText", {
+  from: [Memo],
+  key: Memo,
+  state: Schema.Struct({ text: Schema.String }),
+  initial: { text: "" },
+  evolve: {
+    Written: (memo, e) => ({ text: memo.text === "" ? e.text : `${memo.text}|${e.text}` }),
+    MemoBroughtForward: (_, e) => ({ text: e.state.lines.join("|") }),
+  },
+}) {}
+
+/** Blanks every line that mentions a word. */
+export class Redact extends Domain.Rewrite("Redact", {
+  of: Memo,
+  input: { word: Schema.String },
+  events: {
+    Written: (event, { word }) => (event.text.includes(word) ? new Written({ text: "" }) : event),
+    // What a compacted memo holds: the same lines, in its roll-up.
+    MemoBroughtForward: (event, { word }) =>
+      event.state.lines.some((line) => line.includes(word))
+        ? new MemoBroughtForward({
+            state: { lines: event.state.lines.map((line) => (line.includes(word) ? "" : line)) },
+          })
+        : event,
+  },
+}) {}
+
+/** Replaces a memo's history with one event carrying its lines. */
+export class MemoForward extends Domain.Compaction("MemoForward", {
+  of: Memo,
+  rollup: (memo) => [new MemoBroughtForward({ state: memo })],
+}) {}
+
+/** The replaced events go nowhere: the case checks what the instance keeps. */
+const MemoForwardLive = MemoForward.toLayer(
+  Effect.succeed(Effect.fn(function* (_batch: Domain.Compaction.Batch<typeof Memo>) {})),
+);
+
+// ---------------------------------------------------------------- a relay of hops
+
+export class Passed extends Domain.Event("Passed", { chain: Schema.String, left: Schema.Int }) {}
+
+export class Pass extends Domain.Command("Pass", {
+  input: { id: Schema.String, chain: Schema.String, left: Schema.Int },
+  events: [Passed],
+}) {}
+
+/** One hop of a relay, `<chain>-<left>`: hop 0 is the last. */
+export class Hop extends Domain.Aggregate("Hop", {
+  id: Schema.String,
+  state: Schema.Struct({ passed: Schema.Boolean }),
+  initial: { passed: false },
+  commands: [Pass],
+  keyOf: (command) => command.id,
+  decide: { Pass: (_, { chain, left }) => [new Passed({ chain, left })] },
+  evolve: { Passed: () => ({ passed: true }) },
+}) {}
+
+/** Passes the relay on to the next hop, until none are left. */
+export class PassOn extends Domain.Policy("PassOn", { from: Hop, on: [Passed] }) {}
+
+const PassOnLive = PassOn.toLayer(
+  Effect.gen(function* () {
+    const hops = yield* Hop;
+    return Effect.fn(function* ({ event }) {
+      if (event.left === 0) return;
+      const left = event.left - 1;
+      yield* hops.send(new Pass({ id: `${event.chain}-${left}`, chain: event.chain, left }));
+    });
+  }),
+);
+
+export class Conformance extends Domain.Model("Conformance", {
+  aggregates: [Counter, Echo, Hold, Hop, Memo, ...latencyAggregates],
+  decisions: [Giving],
+  views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, MemoText, ...latencyViews],
+  projections: [TotalWriter, TallyWriter, BacklogWriter],
+  streams: [Recorded, Tallies, Drained],
+  policies: [StartMirror, HoldDeadline, PassOn],
+  sagas: [MirrorFirst],
+  rewrites: [Redact],
+  compactions: [MemoForward],
+}) {}
+
+/**
+ * The model's next version: {@link TallyWriterV1} in place of {@link TallyWriter},
+ * and a view it adds, {@link CounterReplay}.
+ */
+export class ConformanceV1 extends Domain.Model("Conformance", {
+  aggregates: [Counter, Echo, Hold, Hop, Memo, ...latencyAggregates],
+  decisions: [Giving],
+  views: [
+    CounterTotal,
+    CounterTimes,
+    HiddenTotal,
+    TicketedTotal,
+    MemoText,
+    CounterReplay,
+    ...latencyViews,
+  ],
+  projections: [TotalWriter, TallyWriterV1, BacklogWriter],
+  streams: [Recorded, Tallies, Drained],
+  policies: [StartMirror, HoldDeadline, PassOn],
+  sagas: [MirrorFirst],
+  rewrites: [Redact],
+  compactions: [MemoForward],
+}) {}
+
+/** The model's Api: its counter and views, served at the front's `/api` (with {@link TicketLive}). */
 export class ConformanceApi extends Domain.Api("ConformanceApi", {
   model: Conformance,
   commands: ["Increment", "Explode", "Give"],
-  views: ["CounterTotal", "HiddenTotal"],
+  views: ["CounterTotal", "HiddenTotal", "TicketedTotal"],
 }) {}
 
 /** What the latency benchmark sends and reads: see `latency-model.ts`. */
@@ -292,13 +612,37 @@ export class LatencyApi extends Domain.Api("LatencyApi", {
   views: ["CounterTotal", "OneView", "ChainSecond", "SharedByGroup"],
 }) {}
 
-/** The model's Layer, given the platform it runs on. */
-export const ConformanceLive = Conformance.layer(
-  Layer.mergeAll(
-    StartMirrorLive,
-    MirrorFirstLive,
-    HoldDeadlineLive,
-    HiddenTotalLive,
-    TotalWriterLive,
+const handlers = Layer.mergeAll(
+  StartMirrorLive,
+  MirrorFirstLive,
+  HoldDeadlineLive,
+  PassOnLive,
+  HiddenTotalLive,
+  TicketedTotalLive,
+  TotalWriterLive,
+  BacklogWriterLive,
+  MemoForwardLive,
+);
+
+/**
+ * A Vault whose keys live on the model's own host, one object per subject,
+ * each wrapped under a root key.
+ */
+const ConformanceVault = Domain.VaultLive.pipe(
+  Layer.provide(
+    Layer.merge(Domain.HostKeyStore, Domain.RootKeyWrap(Redacted.make("c0".repeat(32)))),
   ),
+);
+
+/** The model's Layer, given the platform it runs on. */
+export const ConformanceLive = Conformance.layer(Layer.merge(handlers, TallyWriterLive)).pipe(
+  Layer.provideMerge(ConformanceVault),
+);
+
+/**
+ * The next version's Layer: deployed over {@link ConformanceLive}, it rebuilds
+ * the tallies and backfills {@link CounterReplay}.
+ */
+export const ConformanceLiveV1 = ConformanceV1.layer(Layer.merge(handlers, TallyWriterV1Live)).pipe(
+  Layer.provideMerge(ConformanceVault),
 );

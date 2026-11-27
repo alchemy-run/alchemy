@@ -1,4 +1,5 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as NetworkActions from "@distilled.cloud/hetzner/network_actions";
+import * as Networks from "@distilled.cloud/hetzner/networks";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -358,23 +359,21 @@ const cidrContains = (outer: string, inner: string): boolean => {
 };
 
 const getById = (id: number) =>
-  Hetzner.networks.getNetwork({ id }).pipe(
+  Networks.getNetwork({ id }).pipe(
     Effect.map(({ network }) => network),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
-  Hetzner.networks
-    .listNetworks({ name, per_page: 50 })
-    .pipe(Effect.map(({ networks }) => networks.find((item) => item.name === name)));
+  Networks.listNetworks({ name, per_page: 50 }).pipe(
+    Effect.map(({ networks }) => networks.find((item) => item.name === name)),
+  );
 
 const findByLabels = (labels: Record<string, string>) =>
-  Hetzner.networks
-    .listNetworks({
-      label_selector: labelSelector(labels),
-      per_page: 50,
-    })
-    .pipe(Effect.map(({ networks }) => networks[0]));
+  Networks.listNetworks({
+    label_selector: labelSelector(labels),
+    per_page: 50,
+  }).pipe(Effect.map(({ networks }) => networks[0]));
 
 const observe = (networkId: number | undefined, name: string, id: string) =>
   Effect.gen(function* () {
@@ -399,7 +398,7 @@ const syncIpRange = (networkId: number, observed: string, desired: string) =>
   Effect.gen(function* () {
     if (observed === desired) return;
     yield* runAction(
-      Hetzner.networkActions.changeNetworkIpRange({
+      NetworkActions.changeNetworkIpRange({
         id: networkId,
         ip_range: desired,
       }),
@@ -420,14 +419,12 @@ const syncMetadata = (args: {
     const nameChanged = args.observed.name !== args.name;
     const exposeChanged = args.observed.expose_routes_to_vswitch !== args.exposeRoutesToVswitch;
     if (!labelsChanged && !nameChanged && !exposeChanged) return;
-    yield* Hetzner.networks
-      .updateNetwork({
-        id: args.networkId,
-        name: nameChanged ? args.name : undefined,
-        expose_routes_to_vswitch: exposeChanged ? args.exposeRoutesToVswitch : undefined,
-        labels: labelsChanged ? args.labels : undefined,
-      })
-      .pipe(Effect.retry(busyRetry));
+    yield* Networks.updateNetwork({
+      id: args.networkId,
+      name: nameChanged ? args.name : undefined,
+      expose_routes_to_vswitch: exposeChanged ? args.exposeRoutesToVswitch : undefined,
+      labels: labelsChanged ? args.labels : undefined,
+    }).pipe(Effect.retry(busyRetry));
   });
 
 const syncSubnets = (
@@ -473,7 +470,7 @@ const syncSubnets = (
       if (kept.has(subnetKey(subnet))) continue;
       if (subnet.ipRange === undefined) continue;
       yield* runAction(
-        Hetzner.networkActions.deleteNetworkSubnet({
+        NetworkActions.deleteNetworkSubnet({
           id: networkId,
           ip_range: subnet.ipRange,
         }),
@@ -483,7 +480,7 @@ const syncSubnets = (
     for (const subnet of desired) {
       if (satisfied.has(subnet)) continue;
       yield* runAction(
-        Hetzner.networkActions.addNetworkSubnet({
+        NetworkActions.addNetworkSubnet({
           id: networkId,
           type: subnet.type,
           ip_range: subnet.ipRange,
@@ -506,7 +503,7 @@ const syncRoutes = (
     for (const route of observed) {
       if (desiredKeys.has(routeKey(route))) continue;
       yield* runAction(
-        Hetzner.networkActions.deleteNetworkRoute({
+        NetworkActions.deleteNetworkRoute({
           id: networkId,
           destination: route.destination,
           gateway: route.gateway,
@@ -517,7 +514,7 @@ const syncRoutes = (
     for (const route of desired) {
       if (observedKeys.has(routeKey(route))) continue;
       yield* runAction(
-        Hetzner.networkActions.addNetworkRoute({
+        NetworkActions.addNetworkRoute({
           id: networkId,
           destination: route.destination,
           gateway: route.gateway,
@@ -530,7 +527,7 @@ const syncProtection = (networkId: number, observed: boolean, desired: boolean) 
   Effect.gen(function* () {
     if (observed === desired) return;
     yield* runAction(
-      Hetzner.networkActions.changeNetworkProtection({
+      NetworkActions.changeNetworkProtection({
         id: networkId,
         delete: desired,
       }),
@@ -542,7 +539,7 @@ export const NetworkProvider = () =>
     stables: ["networkId", "created"],
 
     list: Effect.fn(function* () {
-      return yield* Hetzner.networks.listNetworks
+      return yield* Networks.listNetworks
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -618,32 +615,30 @@ export const NetworkProvider = () =>
       // Ensure — create when missing. A name-collision race is treated as
       // the peer winning; we pick that row up and continue into sync.
       if (current === undefined) {
-        const created = yield* Hetzner.networks
-          .createNetwork({
-            name,
-            ip_range: news.ipRange,
-            labels: desiredLabels,
-            // Creating a Network takes ranged subnets only; the rest are
-            // added below, where Hetzner picks the first free `/24`.
-            subnets: desiredSubnets
-              .filter((subnet) => subnet.ipRange !== undefined)
-              .map((subnet) => ({
-                type: subnet.type,
-                ip_range: subnet.ipRange,
-                network_zone: subnet.networkZone,
-                vswitch_id: subnet.vswitchId,
-              })),
-            routes: desiredRoutes.map((route) => ({
-              destination: route.destination,
-              gateway: route.gateway,
+        const created = yield* Networks.createNetwork({
+          name,
+          ip_range: news.ipRange,
+          labels: desiredLabels,
+          // Creating a Network takes ranged subnets only; the rest are
+          // added below, where Hetzner picks the first free `/24`.
+          subnets: desiredSubnets
+            .filter((subnet) => subnet.ipRange !== undefined)
+            .map((subnet) => ({
+              type: subnet.type,
+              ip_range: subnet.ipRange,
+              network_zone: subnet.networkZone,
+              vswitch_id: subnet.vswitchId,
             })),
-            expose_routes_to_vswitch: exposeRoutesToVswitch,
-          })
-          .pipe(
-            Effect.retry(busyRetry),
-            Effect.map((response) => response.network),
-            Effect.catchIf(nameTaken, () => findByName(name)),
-          );
+          routes: desiredRoutes.map((route) => ({
+            destination: route.destination,
+            gateway: route.gateway,
+          })),
+          expose_routes_to_vswitch: exposeRoutesToVswitch,
+        }).pipe(
+          Effect.retry(busyRetry),
+          Effect.map((response) => response.network),
+          Effect.catchIf(nameTaken, () => findByName(name)),
+        );
         current = created;
       }
 
@@ -684,13 +679,13 @@ export const NetworkProvider = () =>
           });
         }
         yield* runAction(
-          Hetzner.networkActions.changeNetworkProtection({
+          NetworkActions.changeNetworkProtection({
             id: output.networkId,
             delete: false,
           }),
         ).pipe(Effect.catchIf(alreadyGone, () => Effect.void));
       }
-      yield* Hetzner.networks.deleteNetwork({ id: output.networkId }).pipe(
+      yield* Networks.deleteNetwork({ id: output.networkId }).pipe(
         Effect.retry(busyRetry),
         Effect.catchTag("NotFound", () => Effect.void),
       );

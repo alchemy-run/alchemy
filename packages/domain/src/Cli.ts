@@ -87,7 +87,7 @@ export interface Options<A extends Cliable, E = never, R = never> {
   /**
    * Headers sent with every call, such as a bearer token for the session
    * middleware that runs on the server. An Effect runs once per call, so it
-   * can read the token from the environment (`Config.redacted("TOKEN")`).
+   * can read the token from the environment (`Config.Redacted("TOKEN")`).
    */
   readonly headers?: Headers.Input | Effect.Effect<Headers.Input, E, R>;
 }
@@ -467,7 +467,7 @@ const commandOf = <E, R>(
  * const bank = toCli(CustomerApi, {
  *   name: "bank",
  *   expose: ["DepositMoney", "AccountLedger", "AccountSummary.get"],
- *   headers: Config.redacted("BANK_TOKEN").pipe(
+ *   headers: Config.Redacted("BANK_TOKEN").pipe(
  *     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
  *   ),
  * });

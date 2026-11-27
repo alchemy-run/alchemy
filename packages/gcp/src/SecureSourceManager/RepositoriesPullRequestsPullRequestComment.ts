@@ -422,8 +422,8 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
       if (current === undefined) {
         const created = yield* ssm
           .createProjectsLocationsRepositoriesPullRequestsPullRequestComments({
+            ...encoded,
             parent: pullRequest,
-            body: encoded,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -449,9 +449,9 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
       if (!sameText(ownershipBodyOf(current), desiredBody(news))) {
         const operation =
           yield* ssm.patchProjectsLocationsRepositoriesPullRequestsPullRequestComments({
+            ...encoded,
             name: currentName,
             updateMask: "body",
-            body: encoded,
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(currentName), currentName);

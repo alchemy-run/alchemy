@@ -63,6 +63,12 @@ Each pool's gateway checks a token on every request, except `/health`, which loa
 
 The token stays the same across deploys. Anyone holding it can call every class on that pool, so treat it like any other secret. On Docker, and on Kubernetes unless you set `serviceType`, the gateway is only reachable on the cluster's own network.
 
+The token travels in every request's `Authorization` header, so serve a gateway that crosses the internet over HTTPS. On AWS, give the pool a [domain or CloudFront](/cluster/aws#choose-the-gateway).
+
+## Long calls
+
+A call holds its HTTP request open until the entity answers, and a stream until its last value. While a call is open and silent, the gateway writes a keep-alive line every 15 seconds, so proxies that cut quiet connections, like CloudFront, keep it open. The client skips those lines.
+
 
 ## Typed errors and streams
 

@@ -7,10 +7,12 @@ import * as Effect from "effect/Effect";
  * undefined>`) into a plain `Record<string, string>`.
  */
 export const toTagRecord = (
-  tags: { [key: string]: string | undefined } | undefined,
+  tags: { [key: string]: string | null | undefined } | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    Object.entries(tags ?? {}).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined && entry[1] !== null,
+    ),
   );
 
 /**

@@ -164,13 +164,11 @@ const MIGRATIONS_PASSWORD = "AlchemyTest1";
 const appliedMigrations = (instance: string) =>
   alloydb
     .executeSqlProjectsLocationsClustersInstances({
+      database: "postgres",
+      user: "postgres",
+      password: MIGRATIONS_PASSWORD,
+      sqlStatement: "SELECT name FROM __alchemy_migrations ORDER BY id",
       instance,
-      body: {
-        database: "postgres",
-        user: "postgres",
-        password: MIGRATIONS_PASSWORD,
-        sqlStatement: "SELECT name FROM __alchemy_migrations ORDER BY id",
-      },
     })
     .pipe(
       Effect.map((response) => {

@@ -5,6 +5,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -18,7 +19,7 @@ import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
-import { type RefCycleError, UnsatisfiedResourceCycle } from "@/Plan";
+import { type DeclarationCycleError, type RefCycleError, UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
@@ -47,6 +48,7 @@ import {
   BindingTarget,
   Bucket,
   capturedConfigHost,
+  HookHost,
   Function,
   inDev,
   KindStablesResource,
@@ -4216,6 +4218,102 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
     }),
   );
 
+  // Two resources whose props Effects yield each other: declaring one
+  // re-enters the other's declaration while it is still running.
+  describe("props Effects that yield each other", () => {
+    const A: Effect.Effect<TestResource, never, Provider.Provider<TestResource>> = TestResource(
+      "A",
+      Effect.gen(function* () {
+        const b = yield* B;
+        return { string: "a", stringArray: [b.string] };
+      }),
+    );
+    const B: Effect.Effect<TestResource, never, Provider.Provider<TestResource>> = TestResource(
+      "B",
+      Effect.gen(function* () {
+        const a = yield* A;
+        return { string: "b", stringArray: [a.string] };
+      }),
+    );
+
+    test(
+      "fail the plan naming the cycle and the form that breaks it, never hang",
+      Effect.gen(function* () {
+        const exit = yield* Effect.gen(function* () {
+          yield* A;
+          yield* B;
+        }).pipe(makePlan, Effect.timeout("5 seconds"), Effect.exit);
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const error = Cause.squash(exit.cause) as DeclarationCycleError;
+          expect(error._tag).toBe("DeclarationCycleError");
+          expect(error.cycle).toEqual(["A", "B", "A"]);
+          expect(error.message).toContain("A -> B -> A");
+          expect(error.message).toContain("/infrastructure-as-effects/circular-bindings");
+          // The other way out, for resources that aren't Effect-native runtimes.
+          expect(error.message).toContain(".ref(id)");
+          expect(error.message).toContain("/infrastructure-as-code/references");
+        }
+      }),
+    );
+  });
+
+  test(
+    "a three-resource cycle prints its path",
+    Effect.gen(function* () {
+      const A: Effect.Effect<TestResource, never, Provider.Provider<TestResource>> = TestResource(
+        "A",
+        Effect.gen(function* () {
+          const c = yield* C;
+          return { string: "a", stringArray: [c.string] };
+        }),
+      );
+      const B: Effect.Effect<TestResource, never, Provider.Provider<TestResource>> = TestResource(
+        "B",
+        Effect.gen(function* () {
+          const a = yield* A;
+          return { string: "b", stringArray: [a.string] };
+        }),
+      );
+      const C: Effect.Effect<TestResource, never, Provider.Provider<TestResource>> = TestResource(
+        "C",
+        Effect.gen(function* () {
+          const b = yield* B;
+          return { string: "c", stringArray: [b.string] };
+        }),
+      );
+      const exit = yield* Effect.gen(function* () {
+        yield* A;
+        yield* B;
+        yield* C;
+      }).pipe(makePlan, Effect.timeout("5 seconds"), Effect.exit);
+      const error = Exit.isFailure(exit)
+        ? (Cause.squash(exit.cause) as DeclarationCycleError)
+        : undefined;
+      expect(error?._tag).toBe("DeclarationCycleError");
+      expect(error?.cycle).toEqual(["A", "C", "B", "A"]);
+    }),
+  );
+
+  test(
+    "a resource whose props yield itself fails the plan, never hangs",
+    Effect.gen(function* () {
+      const A: Effect.Effect<TestResource, never, Provider.Provider<TestResource>> = TestResource(
+        "A",
+        Effect.gen(function* () {
+          const a = yield* A;
+          return { string: "a", stringArray: [a.string] };
+        }),
+      );
+      const exit = yield* A.pipe(makePlan, Effect.timeout("5 seconds"), Effect.exit);
+      const error = Exit.isFailure(exit)
+        ? (Cause.squash(exit.cause) as DeclarationCycleError)
+        : undefined;
+      expect(error?._tag).toBe("DeclarationCycleError");
+      expect(error?.cycle).toEqual(["A", "A"]);
+    }),
+  );
+
   // #3112: two resources that reference each other, one through a ref,
   // deadlocked the plan.
   describe("a ref that closes a cycle (#3112)", () => {
@@ -4247,6 +4345,7 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
             expect(error.owner).toBe("Auth");
             expect(error.target).toBe("Api");
             expect(error.message).toContain("Auth -> Api -> Auth");
+            expect(error.cycle).toEqual(["Auth", "Api", "Auth"]);
           }
         }),
       );
@@ -5633,6 +5732,79 @@ describe("renamed resources (renamedFrom)", { tags: ["unit", "local"] }, () => {
         const die = exit.cause.reasons.find(Cause.isDieReason);
         expect(String(die?.defect)).toContain("both claim former FQN 'Shared'");
       }
+    }),
+  );
+
+  test(
+    "resources declared by a renamed resource's props do not inherit its former ids (#2219)",
+    Effect.gen(function* () {
+      yield* seed({ "Site/Worker": bucketRow("Site/Worker") });
+
+      // A Website's Worker is `renamedFrom(`${id}/Worker`)`, and its props
+      // can declare resources of their own (the API token behind
+      // `R2.S3Credentials`). Only the Worker claims the former FQN.
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket(
+          "Site",
+          Effect.gen(function* () {
+            yield* Bucket("SiteToken", { name: "t" });
+            return { name: "b" };
+          }),
+        ).pipe(renamedFrom("Site/Worker"));
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.Site?.renamedFrom).toEqual(["Site/Worker"]);
+      expect(plan.resources.SiteToken?.action).toEqual("create");
+      expect(plan.resources.SiteToken?.renamedFrom).toBeUndefined();
+    }),
+  );
+
+  const hostRow = (fqn: string): ResourceState => ({
+    ...bucketRow(fqn),
+    resourceType: "Test.HookHost",
+    props: { main: "index.ts" },
+    attr: { ok: true },
+  });
+
+  test(
+    "resources a renamed Platform's onCreate hook declares do not inherit its former ids (#2219)",
+    Effect.gen(function* () {
+      yield* seed({ "Site/Worker": hostRow("Site/Worker") });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* HookHost("Site", { main: "index.ts" }).pipe(renamedFrom("Site/Worker"));
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.Site?.renamedFrom).toEqual(["Site/Worker"]);
+      expect(plan.resources.SiteToken?.action).toEqual("create");
+      expect(plan.resources.SiteToken?.renamedFrom).toBeUndefined();
+    }),
+  );
+
+  test(
+    "resources a renamed Platform's hook and init declare do not inherit its former ids (#2219)",
+    Effect.gen(function* () {
+      yield* seed({ "Site/Worker": hostRow("Site/Worker") });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* HookHost(
+          "Site",
+          { main: "index.ts" },
+          Effect.gen(function* () {
+            yield* Bucket("SiteInit", { name: "init" });
+            return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+          }),
+        ).pipe(renamedFrom("Site/Worker"));
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.Site?.renamedFrom).toEqual(["Site/Worker"]);
+      expect(plan.resources.SiteToken?.action).toEqual("create");
+      expect(plan.resources.SiteToken?.renamedFrom).toBeUndefined();
+      expect(plan.resources.SiteInit?.action).toEqual("create");
+      expect(plan.resources.SiteInit?.renamedFrom).toBeUndefined();
     }),
   );
 });

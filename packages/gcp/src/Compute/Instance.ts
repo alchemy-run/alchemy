@@ -675,6 +675,22 @@ export const InstanceProvider = () =>
     stables: ["instanceName", "instanceId", "project", "zone", "selfLink", "creationTimestamp"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
+      // A VM this stack declared without an account, now given one created
+      // (or changed) in this same deploy: the email is unknown until apply,
+      // but it can't be the account the VM runs as, and an update can't
+      // switch it.
+      const nextAccount =
+        typeof news === "object" && news !== null && "serviceAccount" in news
+          ? news.serviceAccount
+          : undefined;
+      if (
+        olds !== undefined &&
+        olds.serviceAccount === undefined &&
+        nextAccount !== undefined &&
+        !isResolved(nextAccount)
+      ) {
+        return { action: "replace" as const, deleteFirst: true };
+      }
       if (!isResolved(news)) return undefined;
       const previousZone = olds?.zone ?? output?.zone ?? DEFAULT_ZONE;
       const nextZone = news.zone ?? DEFAULT_ZONE;
@@ -695,11 +711,16 @@ export const InstanceProvider = () =>
       // on a TERMINATED VM, and we never stop a user's VM, so these replace.
       // When the previous props never declared them, diff against the
       // observed VM instead so spelling out what already runs is a no-op.
+      // The observed account counts too: a VM whose account an update could
+      // not switch still runs as the old one.
       const serviceAccountChanged =
-        olds?.serviceAccount !== undefined
+        (olds?.serviceAccount !== undefined
           ? olds.serviceAccount !== (news.serviceAccount ?? "")
           : news.serviceAccount !== undefined &&
-            !sameServiceAccount(output?.serviceAccount, news.serviceAccount);
+            !sameServiceAccount(output?.serviceAccount, news.serviceAccount)) ||
+        (news.serviceAccount !== undefined &&
+          output?.serviceAccount !== undefined &&
+          !sameServiceAccount(output.serviceAccount, news.serviceAccount));
       const oauthScopesChanged =
         olds?.oauthScopes !== undefined
           ? !sameTags(olds.oauthScopes, news.oauthScopes ?? [])
@@ -792,9 +813,9 @@ export const InstanceProvider = () =>
           env.project,
           zone,
           compute.insertInstances({
+            ...insertBody(news, instanceName, zone, desiredLabels),
             project: env.project,
             zone,
-            body: insertBody(news, instanceName, zone, desiredLabels),
           }),
           { ignore: ["RESOURCE_ALREADY_EXISTS"] },
         ).pipe(Effect.catchTag("Conflict", () => Effect.void));
@@ -823,13 +844,11 @@ export const InstanceProvider = () =>
           env.project,
           zone,
           compute.setLabelsInstances({
+            labels: desiredLabels,
+            labelFingerprint: current.labelFingerprint,
             project: env.project,
             zone,
             instance: instanceName,
-            body: {
-              labels: desiredLabels,
-              labelFingerprint: current.labelFingerprint,
-            },
           }),
         );
         current = (yield* getByName(env.project, zone, instanceName)) ?? current;
@@ -842,13 +861,11 @@ export const InstanceProvider = () =>
             env.project,
             zone,
             compute.setTagsInstances({
+              items: news.tags,
+              fingerprint: current.tags?.fingerprint,
               project: env.project,
               zone,
               instance: instanceName,
-              body: {
-                items: news.tags,
-                fingerprint: current.tags?.fingerprint,
-              },
             }),
           );
           current = (yield* getByName(env.project, zone, instanceName)) ?? current;
@@ -862,16 +879,14 @@ export const InstanceProvider = () =>
             env.project,
             zone,
             compute.setMetadataInstances({
+              fingerprint: current.metadata?.fingerprint,
+              items: Object.entries(news.metadata).map(([key, value]) => ({
+                key,
+                value,
+              })),
               project: env.project,
               zone,
               instance: instanceName,
-              body: {
-                fingerprint: current.metadata?.fingerprint,
-                items: Object.entries(news.metadata).map(([key, value]) => ({
-                  key,
-                  value,
-                })),
-              },
             }),
           );
           current = (yield* getByName(env.project, zone, instanceName)) ?? current;
@@ -907,11 +922,11 @@ export const InstanceProvider = () =>
             env.project,
             zone,
             compute.addAccessConfigInstances({
+              ...config,
               project: env.project,
               zone,
               instance: instanceName,
               networkInterface: nicName,
-              body: config,
             }),
           );
         }
@@ -941,10 +956,10 @@ export const InstanceProvider = () =>
           env.project,
           zone,
           compute.attachDiskInstances({
+            ...desiredAttachedDisk(disk),
             project: env.project,
             zone,
             instance: instanceName,
-            body: desiredAttachedDisk(disk),
           }),
         );
       }
@@ -976,12 +991,11 @@ export const InstanceProvider = () =>
           env.project,
           zone,
           compute.setSchedulingInstances({
+            ...current.scheduling,
+            ...scheduling,
             project: env.project,
             zone,
             instance: instanceName,
-            // Merge onto observed scheduling so the create-time fields
-            // (provisioningModel, preemptible) are preserved verbatim.
-            body: { ...current.scheduling, ...scheduling },
           }),
         );
         current = (yield* getByName(env.project, zone, instanceName)) ?? current;
@@ -996,11 +1010,12 @@ export const InstanceProvider = () =>
           env.project,
           zone,
           compute.updateInstances({
+            ...current,
+            description: news.description ?? "",
             project: env.project,
             zone,
             instance: instanceName,
             mostDisruptiveAllowedAction: "REFRESH",
-            body: { ...current, description: news.description ?? "" },
           }),
         );
         current = (yield* getByName(env.project, zone, instanceName)) ?? current;

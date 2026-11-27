@@ -536,6 +536,60 @@ describe(
         { timeout: 150_000 },
       );
 
+      test.provider(
+        "keeps a recurring job pending and delivers it on each run",
+        (_stack) =>
+          Effect.gen(function* () {
+            const id = `${SCHEDULE_PREFIX}recurring`;
+            const scheduled = yield* call(
+              HttpClientRequest.post(`${baseUrl}/callbacks/${id}?every=10`),
+            );
+            expect(scheduled.message).toBeUndefined();
+            const first = scheduled.status!.scheduledAt;
+
+            const delivered = (body: any) =>
+              body.marker === "alch-schedtest-callback" && body.id === id;
+            yield* receiveMatching(cronQueueUrl, delivered, { times: 90 });
+            yield* receiveMatching(cronQueueUrl, delivered, { times: 90 });
+
+            // Still pending, moved on to a later run.
+            const pending = yield* call(HttpClientRequest.get(`${baseUrl}/callbacks/${id}`));
+            expect(pending.status!.scheduledAt).toBeGreaterThan(first);
+            const cancelled = yield* call(HttpClientRequest.delete(`${baseUrl}/callbacks/${id}`));
+            expect(cancelled.message).toBeUndefined();
+            const read = yield* call(HttpClientRequest.get(`${baseUrl}/callbacks/${id}`));
+            expect(read.status).toBeNull();
+          }),
+        { timeout: 240_000 },
+      );
+
+      test.provider(
+        "redelivers a recurring run whose handler dies, then keeps the job pending",
+        (_stack) =>
+          Effect.gen(function* () {
+            const id = `${SCHEDULE_PREFIX}flaky-recurring`;
+            const scheduled = yield* call(
+              HttpClientRequest.post(`${baseUrl}/flaky/${id}?every=60`),
+            );
+            expect(scheduled.message).toBeUndefined();
+
+            // The first run dies; the job's recovery wake delivers it again
+            // about a minute later, and that delivery forwards.
+            const delivered = yield* receiveMatching(
+              cronQueueUrl,
+              (body) => body.marker === "alch-schedtest-callback" && body.id === id,
+              { times: 150 },
+            );
+            expect(delivered.retried).toBe(true);
+
+            const pending = yield* call(HttpClientRequest.get(`${baseUrl}/flaky/${id}`));
+            expect(pending.status).not.toBeNull();
+            const cancelled = yield* call(HttpClientRequest.delete(`${baseUrl}/flaky/${id}`));
+            expect(cancelled.message).toBeUndefined();
+          }),
+        { timeout: 300_000 },
+      );
+
       test.provider("replaces and cancels a pending job", (_stack) =>
         Effect.gen(function* () {
           const id = `${SCHEDULE_PREFIX}pending`;

@@ -422,7 +422,8 @@ export type Snapshot<State> = Readonly<{
 export interface WatchOptions<Model, Message, V extends ReadEntry> {
   readonly key: (model: Model) => ReadKey<V>;
   readonly isEnabled?: (model: Model) => boolean;
-  readonly toMessage: (snapshot: Snapshot<StateOf<V>>) => Message;
+  /** The snapshot, and the key it is of: a Model that keeps several keys files it under this one. */
+  readonly toMessage: (snapshot: Snapshot<StateOf<V>>, key: ReadKey<V>) => Message;
   readonly onFailure: (error: ErrorOf<V>) => Message;
   /** Handle unexpected read defects. Interruption does not call this callback. */
   readonly onDefect: (cause: Cause.Cause<unknown>) => Message;
@@ -454,7 +455,7 @@ function watchRead(
             ),
           ).pipe(
             Stream.map(({ state, cursor }) =>
-              options.toMessage({ state: Option.fromNullishOr(state), cursor }),
+              options.toMessage({ state: Option.fromNullishOr(state), cursor }, key),
             ),
             Stream.catchCause((cause) => {
               if (Cause.hasDies(cause)) {
@@ -477,7 +478,8 @@ export interface EventsOptions<Model, Message, V extends ReadEntry> {
   readonly isEnabled?: (model: Model) => boolean;
   readonly restartKey?: (model: Model) => number;
   readonly onEntry: (entry: EntryOf<V>) => Message;
-  readonly onCaughtUp: (cursor: number) => Message;
+  /** Every stored entry of `key` has been delivered: what follows is live. */
+  readonly onCaughtUp: (cursor: number, key: ReadKey<V>) => Message;
   readonly onFailure: (error: ErrorOf<V>) => Message;
   /** Handle unexpected read defects. Interruption does not call this callback. */
   readonly onDefect: (cause: Cause.Cause<unknown>) => Message;
@@ -585,7 +587,7 @@ function readEvents(
             return true;
           }),
           Stream.map((frame) =>
-            Read.isCaughtUp(frame) ? options.onCaughtUp(frame.cursor) : options.onEntry(frame),
+            Read.isCaughtUp(frame) ? options.onCaughtUp(frame.cursor, key) : options.onEntry(frame),
           ),
           Stream.catchCause((cause) => {
             if (Cause.hasDies(cause)) {

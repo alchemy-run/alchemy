@@ -28,8 +28,10 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./AWS": "./src/AWS/index.ts",
     "./Cloudflare": "./src/Cloudflare/index.ts",
     "./EffectCluster": "./src/EffectCluster/index.ts",
+    "./GCP": "./src/GCP/index.ts",
     "./Rivet": "./src/Rivet/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -41,6 +43,11 @@
         "bun": "./src/index.ts",
         "default": "./lib/index.js"
       },
+      "./AWS": {
+        "types": "./lib/AWS/index.d.ts",
+        "bun": "./src/AWS/index.ts",
+        "default": "./lib/AWS/index.js"
+      },
       "./Cloudflare": {
         "types": "./lib/Cloudflare/index.d.ts",
         "bun": "./src/Cloudflare/index.ts",
@@ -51,6 +58,11 @@
         "bun": "./src/EffectCluster/index.ts",
         "default": "./lib/EffectCluster/index.js"
       },
+      "./GCP": {
+        "types": "./lib/GCP/index.d.ts",
+        "bun": "./src/GCP/index.ts",
+        "default": "./lib/GCP/index.js"
+      },
       "./Rivet": {
         "types": "./lib/Rivet/index.d.ts",
         "bun": "./src/Rivet/index.ts",
@@ -58,7 +70,9 @@
       },
       "./Explore/internal/*": null,
       "./Prove/internal/*": null,
+      "./Verify/internal/*": null,
       "./internal": null,
+      "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",
@@ -77,8 +91,10 @@
     "z3-solver": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/effect-cluster": "workspace:*",
+    "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/rivet": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/sql-pg": "catalog:",
@@ -90,8 +106,10 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/effect-cluster": "workspace:*",
+    "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/rivet": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/sql-pg": "catalog:",
@@ -100,10 +118,16 @@
     "foldkit": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/aws": {
+      "optional": true
+    },
     "@alchemy.run/cloudflare": {
       "optional": true
     },
     "@alchemy.run/effect-cluster": {
+      "optional": true
+    },
+    "@alchemy.run/gcp": {
       "optional": true
     },
     "@alchemy.run/rivet": {

@@ -40,8 +40,10 @@ env:
 
 concurrency:
   # Label events get a group per label so adding an unrelated label (such as
-  # `deploy-website`) never cancels the run for the latest push.
-  group: pkg-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'labeled' && format('-{0}', github.event.label.name) || '' }}
+  # `deploy-website`) never cancels the run for the latest push. `force-ci`
+  # publishes, so it shares the pull request's group: two runs publishing the
+  # same `pr:N` tags at once could leave them on the older commit.
+  group: pkg-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'force-ci' && format('-{0}', github.event.label.name) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -90,7 +92,7 @@ jobs:
           ${{ contains(github.event.pull_request.labels.*.name, 'force-ci') && '--all' || '' }}
           --rebuild-all-path 'scripts/package-build.ts'
           --group 'alchemy=./packages/alchemy'
-          --group '@alchemy.run[Collapsed]=./packages/{better-auth,git,drizzle,sqlite,acme,archil,boat,axiom,doppler,infisical,1password,turso,e2b,daytona,modal,planetscale,neon,prisma,hetzner,digitalocean,railway,fly,github,stripe,cloudflare,gcp,aws,domain,kubernetes,docker,redis,sql,cloudflare-runtime,frontend-frameworks,node-utils,pkg}'
+          --group '@alchemy.run[Collapsed]=./packages/{better-auth,git,drizzle,sqlite,acme,archil,boat,axiom,doppler,infisical,1password,turso,convex,e2b,daytona,modal,planetscale,neon,prisma,hetzner,digitalocean,railway,fly,github,stripe,cloudflare,gcp,aws,domain,kubernetes,docker,redis,sql,cloudflare-runtime,frontend-frameworks,node-utils,pkg}'
 
       - name: Vouch for the manifest
         if: steps.pack.outputs.package-count != '0'

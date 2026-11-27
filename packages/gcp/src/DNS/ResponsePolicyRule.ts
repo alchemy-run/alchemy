@@ -387,11 +387,7 @@ export const ResponsePolicyRuleProvider = () =>
 
       if (current === undefined) {
         const created = yield* dns
-          .createResponsePolicyRules({
-            project: env.project,
-            responsePolicy,
-            body: desired,
-          })
+          .createResponsePolicyRules({ ...desired, project: env.project, responsePolicy })
           .pipe(
             Effect.catchTag("Conflict", () => getByName(env.project, responsePolicy, ruleName)),
           );
@@ -411,10 +407,10 @@ export const ResponsePolicyRuleProvider = () =>
 
       if (dnsChanged || localChanged || behaviorChanged) {
         const patched = yield* dns.patchResponsePolicyRules({
+          ...desired,
           project: env.project,
           responsePolicy,
           responsePolicyRule: ruleName,
-          body: desired,
         });
         current =
           patched.responsePolicyRule ??

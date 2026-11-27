@@ -47,6 +47,8 @@ export const Database = ClusterGCP.Database("Cluster", {
 });
 ```
 
+The Postgres password is kept in a Secret Manager secret that only the instance's service account can read. The instance's metadata names its version, never its value.
+
 ## The pool
 
 `ComputeEnginePool` runs one instance per runner, spread across the region's zones. Each fetches the pool's program from a Cloud Storage bucket and runs it on the host network; a change to the program reaches every runner through its metadata.
@@ -62,6 +64,8 @@ export const Default = ClusterGCP.ComputeEnginePool("Default", {
   machineType: "e2-standard-2",
 }).pipe(Layer.provide(Database));
 ```
+
+The database URL, the gateway token, and every other secret bound into the runners are kept in Secret Manager secrets of the pool's own. A runner reads them when it starts; its metadata names their versions, never their values.
 
 Cloud Run can't run runners: runners take connections from each other, and Cloud Run instances can't.
 

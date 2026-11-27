@@ -527,36 +527,32 @@ export const BackendServiceProvider = () =>
       if (current === undefined) {
         const inserted = yield* compute
           .insertBackendServices({
+            name,
+            description: desiredDescription,
+            protocol,
+            loadBalancingScheme,
+            timeoutSec,
+            portName: news.portName,
+            enableCDN,
+            sessionAffinity: news.sessionAffinity,
+            affinityCookieTtlSec: news.affinityCookieTtlSec,
+            healthChecks: (news.healthChecks?.length ?? 0) > 0 ? news.healthChecks : undefined,
+            backends: desiredBackends.length > 0 ? desiredBackends : undefined,
+            connectionDraining:
+              news.connectionDrainingTimeoutSec !== undefined
+                ? {
+                    drainingTimeoutSec: news.connectionDrainingTimeoutSec,
+                  }
+                : undefined,
+            compressionMode: news.compressionMode,
+            customRequestHeaders:
+              (news.customRequestHeaders?.length ?? 0) > 0 ? news.customRequestHeaders : undefined,
+            customResponseHeaders:
+              (news.customResponseHeaders?.length ?? 0) > 0
+                ? news.customResponseHeaders
+                : undefined,
+            logConfig: news.logConfig,
             project: env.project,
-            body: {
-              name,
-              description: desiredDescription,
-              protocol,
-              loadBalancingScheme,
-              timeoutSec,
-              portName: news.portName,
-              enableCDN,
-              sessionAffinity: news.sessionAffinity,
-              affinityCookieTtlSec: news.affinityCookieTtlSec,
-              healthChecks: (news.healthChecks?.length ?? 0) > 0 ? news.healthChecks : undefined,
-              backends: desiredBackends.length > 0 ? desiredBackends : undefined,
-              connectionDraining:
-                news.connectionDrainingTimeoutSec !== undefined
-                  ? {
-                      drainingTimeoutSec: news.connectionDrainingTimeoutSec,
-                    }
-                  : undefined,
-              compressionMode: news.compressionMode,
-              customRequestHeaders:
-                (news.customRequestHeaders?.length ?? 0) > 0
-                  ? news.customRequestHeaders
-                  : undefined,
-              customResponseHeaders:
-                (news.customResponseHeaders?.length ?? 0) > 0
-                  ? news.customResponseHeaders
-                  : undefined,
-              logConfig: news.logConfig,
-            },
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
@@ -645,11 +641,7 @@ export const BackendServiceProvider = () =>
         if (logConfigChanged) patch.logConfig = news.logConfig;
 
         yield* compute
-          .patchBackendServices({
-            project: env.project,
-            backendService: name,
-            body: patch,
-          })
+          .patchBackendServices({ ...patch, project: env.project, backendService: name })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* awaitResource(env.project, name);
         if (current === undefined) {

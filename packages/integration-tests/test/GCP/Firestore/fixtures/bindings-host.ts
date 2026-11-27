@@ -40,8 +40,8 @@ export default class FirestoreBindingsHost extends GCP.Function<FirestoreBinding
     return {
       fetch: serveProbes({
         patchDocument: patchDocument({
+          fields: { name: { stringValue: "Alice" } },
           documentPath: PATCHED,
-          body: { fields: { name: { stringValue: "Alice" } } },
         }),
         getDocument: getDocument({ documentPath: SEEDED_GET }),
         deleteDocument: deleteDocument({ documentPath: SEEDED_DELETE }),

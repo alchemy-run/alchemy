@@ -420,15 +420,13 @@ export const PostureDeploymentProvider = () =>
       if (current === undefined) {
         const created = yield* securityposture
           .createOrganizationsLocationsPostureDeployments({
+            targetResource,
+            postureId: news.postureId,
+            postureRevisionId: news.postureRevisionId,
+            description: news.description,
+            annotations: desiredAnnotations,
             parent,
             postureDeploymentId,
-            body: {
-              targetResource,
-              postureId: news.postureId,
-              postureRevisionId: news.postureRevisionId,
-              description: news.description,
-              annotations: desiredAnnotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -453,15 +451,12 @@ export const PostureDeploymentProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* securityposture.patchOrganizationsLocationsPostureDeployments({
+          postureId: news.postureId,
+          postureRevisionId: news.postureRevisionId,
+          description: news.description,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            postureId: news.postureId,
-            postureRevisionId: news.postureRevisionId,
-            description: news.description,
-            etag: current.etag,
-          },
         });
         yield* waitDeploymentOperation(operation);
         current = yield* waitUntilSettled(current.name ?? name);

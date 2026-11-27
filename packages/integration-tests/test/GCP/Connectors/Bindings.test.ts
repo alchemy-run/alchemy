@@ -64,8 +64,8 @@ describe.skipIf(ENTITY_TYPE_PARENT.length === 0)(
             // Connectors has no resource-level IAM for entities.
             const { project } = yield* GcpEnvironment.current;
             const policy = yield* crm.getIamPolicyProjects({
+              options: { requestedPolicyVersion: 3 },
               resource: `projects/${project}`,
-              body: { options: { requestedPolicyVersion: 3 } },
             });
             const roles = (policy.bindings ?? [])
               .filter((binding) =>

@@ -1,0 +1,101 @@
+---
+title: Where sessions run
+description: A session lives in the Durable Object that yields its process. Give each session an object of its own or keep many in one, and reach them from a Worker or from a Domain policy.
+---
+
+A session needs somewhere to keep its conversation and to wake up again after an eviction. On Cloudflare that is a Durable Object. You write the object: it yields the process, and its methods are what the rest of your app may ask of a session.
+
+## Yield a process in a Durable Object
+
+Yield the process in the object's outer Effect and provide its Layers once:
+
+```typescript title="src/Engineers.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { Engineer } from "./Engineer.process.ts";
+import { Live } from "./Layers.ts";
+
+export default class Engineers extends Cloudflare.DurableObject<Engineers>()(
+  "Engineers",
+  Effect.gen(function* () {
+    const engineer = yield* Engineer;
+
+    return Effect.succeed({
+      start: (id: string, task: string) =>
+        engineer.get(id).send(task, { requestId: "start" }).pipe(Effect.orDie),
+      tell: Effect.fn(function* (id: string, text: string) {
+        const reply = yield* engineer.get(id).prompt(text);
+        return reply.text;
+      }, Effect.orDie),
+    });
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+`Live` holds everything the process mentions and [the harness](/ai/harnesses). The harness opens in this object, on its storage.
+
+## One object for each session
+
+Name the object after the session's key, and each session has its own storage, its own alarm and its own sandbox:
+
+```typescript
+const engineers = yield* Engineers;
+
+yield* engineers.getByName("task-7").start("task-7", "Rename the config flag");
+```
+
+Sessions in different objects run at the same time and never wait for each other.
+
+## One object for many sessions
+
+A session's key is not the object's name. One object can hold every session of a user, a repository or a team:
+
+```typescript
+const team = engineers.getByName("team-blue");
+
+yield* team.start("task-7", "Rename the config flag");
+yield* team.start("task-8", "Remove the old flag");
+```
+
+Sessions [started by another session](/ai/process-graphs#start-a-process) always live in the object of the session that started them.
+
+## Reach it from a Worker
+
+A Worker yields the object's class and calls its methods:
+
+```typescript title="src/Api.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Engineers from "./Engineers.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const engineers = yield* Engineers;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const id = new URL(request.url, "http://api").pathname.slice(1);
+        yield* engineers.getByName(id).start(id, yield* request.text);
+        return HttpServerResponse.text("started");
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+## Reach it from a browser
+
+Serve the session as an RPC group, and a browser follows it and acts on it over one WebSocket. See [Connect a front end](/ai/front-end).
+
+## Reach it from a Domain policy
+
+A policy runs in the model's own Durable Objects, and reaches a session's object the same way. See [Processes and Domain models](/ai/domain#let-a-policy-ask-for-the-work).
+
+## A session survives its object
+
+A harness arms the object's alarm while a session has work to do. An object that is evicted in the middle of a tool call wakes up, and the session carries on. See [Surviving a crash](/pi/durability) for Pi and [Sessions & prompts](/opencode/sessions) for OpenCode.

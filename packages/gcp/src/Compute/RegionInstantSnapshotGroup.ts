@@ -416,14 +416,11 @@ export const RegionInstantSnapshotGroupProvider = () =>
       if (current === undefined) {
         const inserted = yield* compute
           .insertRegionInstantSnapshotGroups({
+            name: instantSnapshotGroupName,
+            description: desiredDescription,
             project: env.project,
             region,
             sourceConsistencyGroup: desiredSource,
-            body: {
-              name: instantSnapshotGroupName,
-              description: desiredDescription,
-              sourceConsistencyGroup: desiredSource,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {

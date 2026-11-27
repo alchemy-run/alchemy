@@ -38,27 +38,25 @@ export default class FirebaseRulesBindingsHost extends GCP.Function<FirebaseRule
     return {
       fetch: serveProbes({
         testRuleset: testRuleset({
-          body: {
-            testSuite: {
-              testCases: [
-                {
-                  expectation: "DENY",
-                  request: {
-                    auth: null,
-                    path: "/databases/(default)/documents/notes/a",
-                    method: "get",
-                  },
+          testSuite: {
+            testCases: [
+              {
+                expectation: "DENY",
+                request: {
+                  auth: null,
+                  path: "/databases/(default)/documents/notes/a",
+                  method: "get",
                 },
-                {
-                  expectation: "ALLOW",
-                  request: {
-                    auth: null,
-                    path: "/databases/(default)/documents/notes/a",
-                    method: "get",
-                  },
+              },
+              {
+                expectation: "ALLOW",
+                request: {
+                  auth: null,
+                  path: "/databases/(default)/documents/notes/a",
+                  method: "get",
                 },
-              ],
-            },
+              },
+            ],
           },
         }),
         getReleaseExecutable: getExecutable(),
