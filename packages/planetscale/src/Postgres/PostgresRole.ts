@@ -179,7 +179,7 @@ export interface PostgresRoleAttributes {
  * });
  * ```
  *
- * ### Drift permissions
+ * ### Drift permissions <!-- api-prose -->
  * `alchemy drift` reads each role directly. A `403 Forbidden` fails the
  * check rather than reporting the role as missing. PlanetScale can also
  * return `404 NotFound` for a database outside a token's grants, which

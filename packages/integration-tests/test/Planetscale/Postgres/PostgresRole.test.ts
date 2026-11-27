@@ -1,7 +1,9 @@
 import * as Planetscale from "@alchemy.run/planetscale";
+import { fromToken } from "@alchemy.run/planetscale/Credentials";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ps from "@distilled.cloud/planetscale";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { Redacted } from "effect";
@@ -655,6 +657,75 @@ describe
             yield* waitForDatabaseToBeDeleted(database.name, database.organization);
           }).pipe(logLevel),
         5_000_000,
+      );
+
+      // #2996: a token that can't read a role must fail the drift check, not
+      // report the role as missing (which `drift --repair` would recreate).
+      test.provider(
+        "a role the drift token can't read fails the check instead of reading as missing",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const { database, role, token } = yield* stack.deploy(
+              Effect.gen(function* () {
+                const database = yield* Planetscale.PostgresDatabase("Database", {
+                  clusterSize: "PS_10",
+                });
+                const role = yield* Planetscale.PostgresRole("Role", {
+                  database,
+                  inheritedRoles: [],
+                });
+                // Scoped to the database, without branch or role access.
+                const token = yield* Planetscale.ServiceToken("Token", {
+                  database,
+                  accesses: ["read_database"],
+                });
+                return { database, role, token };
+              }),
+            );
+
+            // The role exists, as seen by the deploying credentials.
+            const live = yield* ps.getRole({
+              organization: role.organization,
+              database: role.database,
+              branch: role.branch,
+              id: role.id,
+            });
+            expect(live.id).toBe(role.id);
+
+            const exit = yield* Drift.plan({ name: stack.name, stage: stack.stage }).pipe(
+              Effect.provide(stack.state),
+              Effect.provide(
+                fromToken({
+                  tokenId: token.id,
+                  token: token.token,
+                  organization: token.organization,
+                }),
+              ),
+              Effect.exit,
+            );
+            // Other resources may also fail to read with this token; the role
+            // itself must fail its read with Forbidden.
+            expect(Exit.isFailure(exit)).toBe(true);
+            const roleFailure = Exit.isFailure(exit)
+              ? exit.cause.reasons
+                  .filter(Cause.isFailReason)
+                  // Drift.plan's error type omits the per-resource failures
+                  // it combines into its cause.
+                  .map((reason): unknown => reason.error)
+                  .find(
+                    (error): error is Drift.DriftResourceError =>
+                      error instanceof Drift.DriftResourceError && error.logicalId === "Role",
+                  )
+              : undefined;
+            expect(roleFailure?.operation).toBe("read");
+            expect(roleFailure?.cause).toMatchObject({ _tag: "Forbidden" });
+
+            yield* stack.destroy();
+            yield* waitForDatabaseToBeDeleted(database.name, database.organization);
+          }).pipe(logLevel),
+        { timeout: 900_000 },
       );
     },
   );
