@@ -2,7 +2,7 @@ import * as Domain from "@alchemy.run/domain";
 import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
 import { describe, expect, it } from "@alchemy.run/test";
 import { Command, Component, Query, Route, Subscription, UiSchema } from "@effect/ui";
-import { Html } from "@effect/ui/html";
+import { Html, HtmlServer } from "@effect/ui/html";
 import { layerHttp } from "@effect/ui/html/HtmlServerHttp";
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing";
 import { TestHost } from "@effect/ui/testing";
@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Redacted from "effect/Redacted";
 import * as RpcClientError from "effect/rpc/RpcClientError";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import {
@@ -1000,6 +1001,228 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(QueryClient)),
   );
 
+  // A View as a stream query: a component declares it in `queries` and reads `h.queries`.
+  const totalText = (
+    result: AsyncResult.AsyncResult<DomainEffectUI.Snapshot<{ total: number }>, any>,
+  ) =>
+    Option.match(AsyncResult.value(result), {
+      onNone: () => result._tag,
+      onSome: ({ state, cursor }) =>
+        `${Option.match(state, { onNone: () => 0, onSome: ({ total }) => total })}@${cursor}`,
+    });
+  // What `HtmlHydrate` does to the cache, without a DOM: `Query.internals` is `@internal`, so
+  // its type is not published.
+  const cacheInternals = (
+    Query as unknown as {
+      readonly internals: (cache: Query.Cache["Service"]) => {
+        readonly hydrate: (raw: unknown) => void;
+        readonly closeWindow: () => void;
+      };
+    }
+  ).internals;
+  const failureText = (cause: Cause.Cause<DomainEffectUI.ViewFailure<typeof Total>>) =>
+    Option.match(Cause.findErrorOption(cause), {
+      onNone: () => "defect",
+      onSome: (failure) =>
+        failure._tag === "Rejected" ? `Rejected:${failure.rejection.amount}` : failure._tag,
+    });
+  const TotalView = Html.component({
+    name: "TotalView",
+    model: Schema.Struct({}),
+    message: Schema.Never,
+    queries: { total: { query: Counter.Total, args: () => ({ key: target }) } },
+  }).make({
+    init: () => ({}),
+    update: ($) => $.model,
+    view: (h) => h.p.attr("aria-label", "Total").children(totalText(h.queries.total)),
+  });
+
+  it.live("renders a View's stream entry on the server, and the client hydrates it", () =>
+    Effect.gen(function* () {
+      const client = yield* CounterApi.Client;
+      const receipt = yield* client.Increment({ counterId: target, amount: 2 });
+      yield* client.Total.snapshot(target, { atLeast: receipt });
+      let opened = 0;
+      let watched = 0;
+      const counted = Layer.succeed(CounterApi.Client, {
+        ...client,
+        Total: {
+          ...client.Total,
+          snapshot: (...args: Parameters<typeof client.Total.snapshot>) => {
+            opened++;
+            return client.Total.snapshot(...args);
+          },
+          watch: (...args: Parameters<typeof client.Total.watch>) => {
+            watched++;
+            return client.Total.watch(...args);
+          },
+        },
+      });
+      const rendered = yield* HtmlServer.renderToHtml(
+        TotalView.pipe(Component.provide(Counter.layer.pipe(Layer.provide(counted)))),
+        {},
+      );
+      expect(rendered.html).toContain(">2@1<");
+      // The server stored the first element and closed the stream.
+      const shipped = JSON.parse(HtmlServer.serializeState(rendered.state))["~query"];
+      expect(Object.keys(shipped)).toEqual(["CounterApi/Total"]);
+      expect([opened, watched]).toEqual([1, 0]);
+      // The browser adopts the entry: no stream opens in the fetch-free window.
+      const seen: Array<string> = [];
+      yield* Effect.gen(function* () {
+        const cache = cacheInternals(yield* Query.Cache);
+        cache.hydrate(shipped);
+        yield* Counter.Total.changes({ key: target }).pipe(
+          Stream.runForEach((result) =>
+            Effect.sync(() => seen.push(totalText(result) + (result.waiting ? "~" : ""))),
+          ),
+          Effect.forkScoped,
+        );
+        yield* Effect.sleep("20 millis");
+        expect([seen, opened]).toEqual([["2@1"], 1]);
+        // Once the window closes the stream opens, and a later write arrives live.
+        cache.closeWindow();
+        yield* client.Increment({ counterId: target, amount: 3 });
+        while (seen.at(-1) !== "5@2") yield* Effect.sleep("5 millis");
+      }).pipe(
+        Effect.timeout("2 seconds"),
+        Effect.scoped,
+        Effect.provide(Layer.merge(Counter.layer, Query.layer()).pipe(Layer.provide(counted))),
+      );
+      expect(opened).toBe(2);
+      // The new stream's first element ends `waiting`; then the write.
+      expect(seen).toEqual(["2@1", "2@1~", "2@1", "5@2"]);
+    }).pipe(Effect.provide(Client)),
+  );
+
+  it.live("fails a View's stream entry with a typed rejection, and opens it again", () =>
+    Effect.gen(function* () {
+      const client = yield* CounterApi.Client;
+      const results: Array<string> = [];
+      const layer = Layer.merge(Counter.layer, Query.layer()).pipe(
+        Layer.provide(Layer.succeed(CounterApi.Client, client)),
+      );
+      yield* Effect.gen(function* () {
+        yield* Counter.Total.changes({ key: target }).pipe(
+          Stream.runForEach((result) =>
+            Effect.sync(() =>
+              results.push(
+                (AsyncResult.isFailure(result)
+                  ? `failed:${failureText(result.cause)}`
+                  : totalText(result)) + (result.waiting ? "~" : ""),
+              ),
+            ),
+          ),
+          Effect.forkScoped,
+        );
+        const settle = (expected: string) =>
+          Effect.gen(function* () {
+            while (results.at(-1) !== expected) yield* Effect.sleep("5 millis");
+          }).pipe(Effect.timeout("2 seconds"));
+        yield* settle("0@0");
+        // Over 5, the View's `validate` refuses the read: the stream ends with the rejection.
+        yield* client.Increment({ counterId: target, amount: 6 });
+        yield* settle("failed:Rejected:6");
+        // Back under the limit, the entry opens again only when asked: as after a new sign-in.
+        yield* client.Increment({ counterId: target, amount: -6 });
+        // A read is judged before it waits for `atLeast`, so wait for the View to apply it first.
+        yield* client.Total.get(target, { atLeast: [] }).pipe(
+          Effect.retry({ schedule: Schedule.spaced("5 millis"), times: 100 }),
+        );
+        yield* Counter.Total.invalidate({ key: target });
+        yield* settle("0@2");
+      }).pipe(Effect.scoped, Effect.provide(layer));
+      // `invalidate` keeps the failure, waiting, until the new stream's first element.
+      expect(results).toEqual(["0@0", "failed:Rejected:6", "failed:Rejected:6~", "0@2"]);
+    }).pipe(Effect.provide(Client)),
+  );
+
+  // A command's optimistic patch on the stream entry, recorded as each result arrives.
+  const Optimistic = DomainEffectUI.make(CounterApi, {
+    commands: {
+      Increment: {
+        optimistic: ({ input }, queries) => [
+          queries.Total.patch({ key: input.counterId }, (snapshot) => ({
+            ...snapshot,
+            state: Option.some({
+              total:
+                Option.match(snapshot.state, { onNone: () => 0, onSome: ({ total }) => total }) +
+                input.amount,
+            }),
+          })),
+        ],
+      },
+    },
+  });
+  const LiveMessage = UiSchema.TaggedEnum({
+    ClickedAdd: {},
+    Saw: { total: Schema.String },
+    Done: {},
+  });
+  const LivePanel = Html.component({
+    name: "LivePanel",
+    model: Schema.Struct({ seen: Schema.Array(Schema.String) }),
+    message: LiveMessage,
+    queries: {
+      total: {
+        query: Optimistic.Total,
+        args: () => ({ key: target }),
+        onChange: (result) => LiveMessage.Saw({ total: totalText(result) }),
+      },
+    },
+  }).make({
+    init: () => ({ seen: [] }),
+    update: {
+      ClickedAdd: ($) =>
+        $.run(
+          Optimistic.Increment.make({ input: { counterId: target, amount: 2 } }).pipe(
+            Command.match({
+              onSuccess: () => LiveMessage.Done(),
+              onFailure: () => LiveMessage.Done(),
+            }),
+          ),
+        ),
+      Saw: ($, { total }) =>
+        $.model.seen.at(-1) === total ? $.model : $.evolve({ seen: [...$.model.seen, total] }),
+      Done: ($) => $.model,
+    },
+    view: (h, model) =>
+      h.div.children(
+        h.p.attr("aria-label", "Total").children(totalText(h.queries.total)),
+        h.p.attr("aria-label", "Seen").children(model.seen.join(" ")),
+        h.button.on("click", LiveMessage.ClickedAdd()).children("Add 2"),
+      ),
+  });
+
+  it.effect("shows a command's write in the View's stream entry, with no step back", () =>
+    Effect.gen(function* () {
+      // A View that lags: a snapshot that names no receipt still shows the state before them.
+      const lagging = Layer.effect(
+        CounterApi.Client,
+        Effect.map(CounterApi.Client, (client) => ({
+          ...client,
+          Total: {
+            ...client.Total,
+            snapshot: (...args: Parameters<typeof client.Total.snapshot>) =>
+              args[1]?.atLeast === undefined
+                ? Effect.succeed({ state: null, cursor: 0 })
+                : client.Total.snapshot(...args),
+          },
+        })),
+      ).pipe(Layer.provide(Client));
+      const play = yield* HtmlPlay.make(
+        LivePanel.pipe(Component.provide(Optimistic.layer.pipe(Layer.provideMerge(lagging)))),
+        {},
+      );
+      yield* play.expect(HtmlLocator.label("Total")).toHaveText("0@0");
+      yield* play.click(HtmlLocator.role("button", { name: "Add 2" }));
+      yield* play.expect(HtmlLocator.label("Total")).toHaveText("2@1");
+      // The patch shows 2 at the old cursor. The run's end reopens the stream, and its first
+      // element waits for the run's receipt, so the total never steps back to 0.
+      yield* play.expect(HtmlLocator.label("Seen")).toHaveText("0@0 2@0 2@1");
+    }).pipe(Effect.scoped, Effect.provide(TestHost.layer())),
+  );
+
   it("types Commands, queries and reads from the Api", () => {
     // @ts-expect-error command input keys preserve their brand
     Counter.Increment.make({ input: { counterId: "one", amount: 1 }, commandId: "x" });
@@ -1018,5 +1241,15 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
         onDefect: () => -1,
       });
     expect(sub.name).toBe("CounterApi/Total/watch");
+    // A View is a stream query keyed by its read key, which keeps its brand.
+    Counter.Total.get({ key: target });
+    // @ts-expect-error a View key keeps its brand
+    Counter.Total.get({ key: "one" });
+    const failure: Effect.Effect<
+      DomainEffectUI.Snapshot<{ total: number }>,
+      DomainEffectUI.ViewFailure<typeof Total>,
+      any
+    > = Counter.Total.get({ key: target });
+    expect(Effect.isEffect(failure)).toBe(true);
   });
 });

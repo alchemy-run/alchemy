@@ -20,7 +20,7 @@ import type * as Middleware from "./Middleware.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainQuery from "./Query.ts";
 import * as Read from "./Read.ts";
-import { nameOf, outputEvents } from "./ReadRpcs.ts";
+import { nameOf, outputEvents, readRpcs } from "./ReadRpcs.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as View from "./View.ts";
 
@@ -147,18 +147,18 @@ export type QueryOf<A extends Api.Any, Q extends DomainQuery.Any> =
     ? Query.InfiniteService<
         QueryService<A["apiName"], Q["queryName"]>,
         string,
-        QueryArgs<Q>,
-        DomainQuery.ResultOf<Q>,
+        Schema.Schema<QueryArgs<Q>>,
+        Schema.Schema<DomainQuery.ResultOf<Q>>,
         Api.EntryOf<Q>,
-        string,
-        QueryFailure<Q>
+        Schema.Schema<string>,
+        Schema.Schema<QueryFailure<Q>>
       >
     : Query.Service<
         QueryService<A["apiName"], Q["queryName"]>,
         string,
-        QueryArgs<Q>,
-        DomainQuery.ResultOf<Q>,
-        QueryFailure<Q>
+        Schema.Schema<QueryArgs<Q>>,
+        Schema.Schema<DomainQuery.ResultOf<Q>>,
+        Schema.Schema<QueryFailure<Q>>
       >;
 
 type ReadEntry = View.Any | DomainStream.Any;
@@ -191,6 +191,47 @@ export type Snapshot<State> = Readonly<{
   cursor: number;
 }>;
 
+/** The identity of one Api View's stream query. */
+export interface ViewService<Name extends string, Tag extends string> {
+  readonly "~@alchemy.run/domain/EffectUI/View": { readonly api: Name; readonly tag: Tag };
+}
+
+/** The args of one View's stream query: its read key, the whole cache key. */
+export type ViewArgs<V extends View.Any> = Readonly<{ key: ReadKey<V> }>;
+
+type ViewRejection<V extends View.Any> = Aggregate.InstanceOf<
+  NonNullable<V["definition"]["rejects"]>[number]
+>;
+
+/**
+ * A View read failure. `Rejected` (the View's `validate`) and `Denied` (its middleware, such as
+ * a session that ended) end the stream. `TimedOut` means the View did not reach this client's
+ * writes in time; `Unknown` is transport or a defect. A failure closes the stream. It opens again
+ * when the entry is asked for again (a `get`, a new component, a refetch of a stale entry) or
+ * after `invalidate`.
+ */
+export type ViewFailure<V extends View.Any> =
+  | Readonly<{ _tag: "Rejected"; rejection: ViewRejection<V> }>
+  | Readonly<{
+      _tag: "Denied";
+      error: Middleware.Errors<NonNullable<V["definition"]["middleware"]>>;
+    }>
+  | Readonly<{ _tag: "TimedOut" }>
+  | Readonly<{ _tag: "Unknown" }>;
+
+/**
+ * An Effect UI stream query for one Api View, keyed by the read key. Its first element is the
+ * key's snapshot after this client's writes, then each change follows. A server render ships that
+ * first element, and every component that reads the key shares one entry and one open stream.
+ */
+export type ViewQueryOf<A extends Api.Any, V extends View.Any> = Query.StreamService<
+  ViewService<A["apiName"], V["viewName"]>,
+  string,
+  Schema.Schema<ViewArgs<V>>,
+  Schema.Schema<Snapshot<StateOf<V>>>,
+  Schema.Schema<ViewFailure<V>>
+>;
+
 /** Callbacks for live read state. */
 export interface WatchOptions<Message, V extends ReadEntry> {
   /** Change it to start the watch again, for example after `onFailure` and a new sign-in. */
@@ -217,7 +258,12 @@ export interface EventsOptions<Message, V extends ReadEntry> {
   readonly onDefect: (cause: Cause.Cause<unknown>) => Message;
 }
 
-/** Subscriptions for one View or Stream. Return them from a component's `subscriptions`. */
+/**
+ * Subscriptions for one View or Stream. Return them from a component's `subscriptions`. For a
+ * View, `watch` is the lower-level form of its stream query: it copies each snapshot into the
+ * Model, opens one stream per component, and has no data in a server render. `events` is a feed
+ * of messages, not state, so it stays a Subscription.
+ */
 export interface ReadClientOf<A extends Api.Any, V extends ReadEntry> {
   readonly watch: <Message>(
     key: ReadKey<V>,
@@ -237,13 +283,18 @@ export interface SnapshotOf<V extends View.Any> {
   readonly decodeSnapshot: (data: unknown) => Option.Option<SnapshotSchemaOf<V>["Type"]>;
 }
 
+type Views<A extends Api.Any> = Extract<Reads<A>, View.Any>;
+
 type Services<A extends Api.Any> =
   | {
       [C in Api.CommandsOf<A> as C["tag"]]: CommandService<A["apiName"], C["tag"]>;
     }[Api.CommandsOf<A>["tag"]]
   | {
       [Q in Api.QueriesOf<A> as Q["queryName"]]: QueryService<A["apiName"], Q["queryName"]>;
-    }[Api.QueriesOf<A>["queryName"]];
+    }[Api.QueriesOf<A>["queryName"]]
+  | {
+      [V in Views<A> as V["viewName"]]: ViewService<A["apiName"], V["viewName"]>;
+    }[Views<A>["viewName"]];
 
 type LayerRequirements<A extends Api.Any> =
   | A["Client"]["Identifier"]
@@ -251,10 +302,15 @@ type LayerRequirements<A extends Api.Any> =
       [C in Api.CommandsOf<A> as C["tag"]]: Effect.Services<ReturnType<Api.CommandClient<C>>>;
     }[Api.CommandsOf<A>["tag"]];
 
-/** The query services of an Api, as the cache callbacks of `make` receive them. */
+/** The View stream queries of an Api, by View name. */
+export type ViewQueriesOf<A extends Api.Any> = {
+  readonly [V in Views<A> as V["viewName"]]: ViewQueryOf<A, V>;
+};
+
+/** The query services of an Api, and its View stream queries, as the cache callbacks receive them. */
 export type QueriesOf<A extends Api.Any> = {
   readonly [Q in Api.QueriesOf<A> as Q["queryName"]]: QueryOf<A, Q>;
-};
+} & ViewQueriesOf<A>;
 
 /** What one command does to the Effect UI query cache. Each callback also gets the queries. */
 export interface CommandConfig<A extends Api.Any, C extends DomainCommand.Any> {
@@ -290,6 +346,15 @@ export interface QueryConfig<Q extends DomainQuery.Any> {
   readonly take?: number | undefined;
 }
 
+/** Options for one View's stream query. */
+export interface ViewConfig {
+  /**
+   * How long an unwatched entry keeps its stream open. Defaults to Effect UI's 5 minutes: one
+   * subscription per key stays open that long after its last component leaves.
+   */
+  readonly idleTimeToLive?: Duration.Input | undefined;
+}
+
 /** Options for `make`. */
 export interface MakeOptions<A extends Api.Any = Api.Any> {
   /** How long a query result stays fresh. Defaults to 0: a cached result shows at once and refetches. */
@@ -302,6 +367,8 @@ export interface MakeOptions<A extends Api.Any = Api.Any> {
   readonly queries?:
     | { readonly [Q in Api.QueriesOf<A> as Q["queryName"]]?: QueryConfig<Q> }
     | undefined;
+  /** Per-View stream query options, by View name. */
+  readonly views?: { readonly [V in Views<A> as V["viewName"]]?: ViewConfig } | undefined;
 }
 
 type StrongOf<O, Tag extends string> = O extends { readonly commands?: infer Cs }
@@ -314,7 +381,11 @@ type StrongOf<O, Tag extends string> = O extends { readonly commands?: infer Cs 
     : false
   : false;
 
-/** Commands, queries and read Subscriptions computed from the Api's entries. `layer` is reserved. */
+/**
+ * Commands, queries, View stream queries and read Subscriptions computed from the Api's entries.
+ * A View is a stream query with `watch`, `events` and its snapshot Schema beside it. `layer` is
+ * reserved.
+ */
 export type ClientOf<A extends Api.Any, O = {}> = {
   readonly [C in Api.CommandsOf<A> as C["tag"]]: CommandOf<A, C, StrongOf<O, C["tag"]>>;
 } & QueriesOf<A> & {
@@ -512,15 +583,37 @@ const commandService = (
   return { service, layer };
 };
 
-const queryError = (query: DomainQuery.Any) =>
+type Guards = Readonly<{
+  rejects: ReadonlyArray<Schema.Top>;
+  middleware: ReadonlyArray<{ readonly error: Schema.Top }>;
+}>;
+
+const queryGuards = (query: DomainQuery.Any): Guards => ({
+  rejects: query.definition.rejects ?? [],
+  middleware: query.middleware,
+});
+
+const viewGuards = (view: View.Any): Guards => ({
+  rejects: view.definition.rejects ?? [],
+  middleware: (view.definition.middleware ?? []) as Guards["middleware"],
+});
+
+/** The failure Schema of a read: its rejections, its middleware's errors, a timeout, the rest. */
+const readError = ({ rejects, middleware }: Guards) =>
   Schema.Union([
-    Schema.TaggedStruct("Rejected", { rejection: Schema.Union(query.definition.rejects ?? []) }),
+    Schema.TaggedStruct("Rejected", { rejection: Schema.Union(rejects) }),
     Schema.TaggedStruct("Denied", {
-      error: Schema.Union(query.middleware.map((middleware) => middleware.error)),
+      error: Schema.Union(middleware.map((m) => m.error)),
     }),
     Schema.TaggedStruct("TimedOut", {}),
     Schema.TaggedStruct("Unknown", {}),
   ]) as any;
+
+/** A read's failure as a Schema value; a defect is `Unknown`, interruption stays. */
+const readFailure = (guards: Guards, cause: Cause.Cause<unknown>) =>
+  Cause.hasDies(cause)
+    ? { _tag: "Unknown" }
+    : classifyRead(guards, cause.pipe(Cause.findErrorOption, Option.getOrUndefined));
 
 /** Run one query call with the per-call headers and this client's receipts, typed failures kept. */
 const fetchQuery = (
@@ -542,12 +635,7 @@ const fetchQuery = (
   }).pipe(
     Effect.catchCauseIf(
       (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
-      (cause) =>
-        Effect.fail(
-          Cause.hasDies(cause)
-            ? { _tag: "Unknown" }
-            : classifyQueryFailure(query, cause.pipe(Cause.findErrorOption, Option.getOrUndefined)),
-        ),
+      (cause) => Effect.fail(readFailure(queryGuards(query), cause)),
     ),
   );
 };
@@ -560,9 +648,10 @@ const queryService = (
 ) => {
   const name = query.queryName;
   const { successSchema } = query.rpc as Rpc.AnyWithProps;
+  const guards = queryGuards(query);
   const shared = {
     args: { input: inputOf(query.rpc) },
-    error: queryError(query),
+    error: readError(guards),
     staleTime: options.staleTime ?? 0,
   };
   // The cast skips Effect UI's NoServices check: a success Schema that needs services to decode
@@ -602,11 +691,11 @@ const queryService = (
   return { service, layer: (service as any).toLayer(build) as Layer.Layer<any, never, any> };
 };
 
-const classifyQueryFailure = (query: DomainQuery.Any, error: unknown) => {
-  if ((query.definition.rejects ?? []).some((rejection) => Schema.is(rejection)(error))) {
+const classifyRead = ({ rejects, middleware }: Guards, error: unknown) => {
+  if (rejects.some((rejection) => Schema.is(rejection)(error))) {
     return { _tag: "Rejected", rejection: error };
   }
-  if (query.middleware.some((middleware) => Schema.is(middleware.error)(error))) {
+  if (middleware.some((m) => Schema.is(m.error)(error))) {
     return { _tag: "Denied", error };
   }
   if (Schema.is(View.ConsistencyTimeout)(error)) return { _tag: "TimedOut" };
@@ -647,8 +736,71 @@ const snapshotSchema = <State extends Schema.Top>(state: State) =>
     cursor: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
   });
 
-// `watch` copies the View's state into the Model. Once Effect-TS/ui#454 lands, a View becomes a
-// `Query.StreamService` entry instead: shared, rendered on the server, and with no Model copy.
+/**
+ * A View as a stream query entry. The first element is `snapshot` with this client's receipts as
+ * `atLeast`, so it holds the client's own writes: after an optimistic run, the reopened stream's
+ * first element is the confirmed state, not one from before the write. Then `watch` follows, not
+ * `events`: a View that declares `events` can change state without emitting one.
+ */
+const viewQuery = (api: Api.Any, view: View.Any, name: string, config: ViewConfig) => {
+  const rpc = readRpcs(view).snapshot as Rpc.AnyWithProps;
+  const key = Schema.toType((rpc.payloadSchema as Schema.Struct<{ key: Schema.Top }>).fields.key);
+  const guards = viewGuards(view);
+  const service = Query.StreamService<any>()(`${api.apiName}/${name}`, {
+    args: { key },
+    success: snapshotSchema(
+      (view.definition.state ?? Schema.Never) as Schema.Schema<unknown> & {
+        readonly DecodingServices: never;
+      },
+    ),
+    error: readError(guards),
+    ...(config.idleTimeToLive === undefined ? {} : { idleTimeToLive: config.idleTimeToLive }),
+  } as any);
+  const build = Effect.gen(function* () {
+    const client = (yield* Effect.service(api.Client)) as Record<string, Api.ViewClient<View.Any>>;
+    const held = yield* Held;
+    // The context, not the headers, is captured once per Layer build, as for queries.
+    const context = yield* Effect.context<never>();
+    return ({ key }: { readonly key: string }) =>
+      Stream.unwrap(
+        Effect.gen(function* () {
+          const reader = client[name]!;
+          const headers = yield* headersFor(name);
+          const atLeast = yield* Ref.get(held);
+          const first = yield* reader.snapshot(key as never, {
+            headers,
+            ...(atLeast.length === 0 ? {} : { atLeast }),
+          });
+          let cursor = first.cursor;
+          return Stream.succeed(first).pipe(
+            Stream.concat(
+              // Suspended: a server render takes the first element and never opens the watch.
+              Stream.suspend(() => reader.watch(key as never, { headers })).pipe(
+                // `watch` opens after the snapshot, so it starts at or past it. A state at an
+                // older cursor is stale; one at the same cursor can still be new.
+                Stream.filter((snapshot) => {
+                  if (snapshot.cursor < cursor) return false;
+                  cursor = snapshot.cursor;
+                  return true;
+                }),
+              ),
+            ),
+          );
+        }),
+      ).pipe(
+        Stream.map(({ state, cursor }) => ({ state: Option.fromNullishOr(state), cursor })),
+        Stream.catchCause((cause) =>
+          Cause.hasFails(cause) || Cause.hasDies(cause)
+            ? Stream.fail(readFailure(guards, cause))
+            : Stream.failCause(cause),
+        ),
+        Stream.provideContext(context),
+      );
+  }) as Effect.Effect<any, never, any>;
+  return { service, layer: (service as any).toLayer(build) as Layer.Layer<any, never, any> };
+};
+
+/** `watch` copies the View's state into the Model; the stream query keeps it out. */
 const readClient = (api: Api.Any, entry: ReadEntry, name: string) => ({
   watch: (key: string, options: WatchOptions<unknown, ReadEntry>) =>
     Subscription.make(`${api.apiName}/${name}/watch`, [key, options.restartKey ?? null], () =>
@@ -714,6 +866,8 @@ const readClient = (api: Api.Any, entry: ReadEntry, name: string) => ({
  *
  * By default a command invalidates every query whose `waitsFor` reads its events reach, and no
  * other query: a query without `waitsFor` refetches only when a command's `invalidates` names it.
+ * A View's stream query is never invalidated by default: its open stream pushes the change. Its
+ * optimistic patch reopens it once the run succeeds (see `viewQuery`).
  */
 export function make<A extends Api.Any>(
   api: A & ("layer" extends keyof Api.ClientOf<A> ? never : unknown),
@@ -728,6 +882,7 @@ export function make(api: Api.Any, options: MakeOptions = {}): unknown {
   const layers: Array<Layer.Layer<any, never, any>> = [];
   const targets: Array<readonly [DomainQuery.Any, Query.Target]> = [];
   const queryConfigs = (options.queries ?? {}) as Record<string, QueryConfig<DomainQuery.Any>>;
+  const viewConfigs = (options.views ?? {}) as Record<string, ViewConfig>;
   for (const entry of api.serves) {
     if (entry.kind === "Query") {
       const query = entry as DomainQuery.Any;
@@ -740,7 +895,12 @@ export function make(api: Api.Any, options: MakeOptions = {}): unknown {
       client[query.queryName] = service;
       targets.push([query, service as Query.Target]);
       layers.push(layer);
-    } else if (entry.kind === "View" || entry.kind === "Stream") {
+    } else if (entry.kind === "View") {
+      const name = nameOf(entry);
+      const { service, layer } = viewQuery(api, entry, name, viewConfigs[name] ?? {});
+      client[name] = Object.assign(service, readClient(api, entry, name));
+      layers.push(layer);
+    } else if (entry.kind === "Stream") {
       const name = nameOf(entry);
       client[name] = readClient(api, entry, name);
     }

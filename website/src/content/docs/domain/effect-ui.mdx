@@ -1,13 +1,13 @@
 ---
 title: Integrate with Effect UI
-description: Derive Effect UI Command and Query services from an Api, and follow Views and Streams with Subscriptions.
+description: Derive Effect UI Command and Query services from an Api, read Views as stream query entries, and follow event feeds with Subscriptions.
 ---
 
 :::caution[Experimental]
-`@alchemy.run/domain/EffectUI` is experimental, and its API can change in any release. `@effect/ui` is not on npm yet. Until it is, install it from a pkg.pr.new snapshot: the workspace pins `https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f`.
+`@alchemy.run/domain/EffectUI` is experimental, and its API can change in any release. `@effect/ui` is not on npm yet. Until it is, install it from a pkg.pr.new snapshot: the workspace pins `https://pkg.pr.new/Effect-TS/ui/@effect/ui@e0b7cec`.
 :::
 
-[Effect UI](https://github.com/Effect-TS/ui) [continues the work of Foldkit 0.x](https://ui.effect.website/article.md). A component changes its Model through Messages, runs side effects as Commands, loads data through Queries, and follows live data with Subscriptions. The optional `@alchemy.run/domain/EffectUI` adapter connects these parts to a Domain Api. It follows the [Foldkit adapter](/domain/foldkit): the failures and read rules are the same.
+[Effect UI](https://github.com/Effect-TS/ui) [continues the work of Foldkit 0.x](https://ui.effect.website/article.md). A component changes its Model through Messages, runs side effects as Commands, loads and follows data through Queries, and receives feeds with Subscriptions. The optional `@alchemy.run/domain/EffectUI` adapter connects these parts to a Domain Api. It follows the [Foldkit adapter](/domain/foldkit): the failures and read rules are the same.
 
 Install `@effect/ui` in the web package. Domain's root entry does not import it.
 
@@ -20,7 +20,7 @@ import { CustomerApi } from "@bank/domain/CustomerApi.api";
 export const Bank = DomainEffectUI.make(CustomerApi);
 ```
 
-`Bank` has one `Command.Service` per Api command, one query per Api query, and a read namespace with `watch` and `events` for each View and Stream. `Bank.layer` implements every Command and query from the Api client. The name `layer` is reserved: `make` does not compile for an Api with an entry named `layer`.
+`Bank` has one `Command.Service` per Api command, one query per Api query, and one `Query.StreamService` per View. Each View also has the `watch` and `events` Subscriptions, and each Stream has them alone. `Bank.layer` implements every Command and query from the Api client. The name `layer` is reserved: `make` does not compile for an Api with an entry named `layer`.
 
 ## Send a command
 
@@ -71,7 +71,7 @@ A strong command can also fail with `TimedOut { commandId, receipt }`: the comma
 
 ## Update the query cache
 
-By default, a command invalidates each query whose `waitsFor` reads its events, and no other query. Declare what a command does to the cache with `commands`. Each callback receives the Command args and the Api's queries:
+By default, a command invalidates each query whose `waitsFor` reads its events, and no other query. A View's stream entry is not invalidated: its open stream sends the change. Declare what a command does to the cache with `commands`. Each callback receives the Command args and the Api's queries and Views:
 
 ```typescript
 export const Bank = DomainEffectUI.make(CustomerApi, {
@@ -91,7 +91,7 @@ export const Bank = DomainEffectUI.make(CustomerApi, {
 
 `invalidates` replaces the default. Add `Command.afterRefetch("2 seconds")` to hold the success Message until the invalidated queries have refetched.
 
-The adapter keeps the receipts of this client's commands. A query with `waitsFor` sends them as `atLeast`, so it includes this client's writes. The receipts are not part of the query args, so they do not split the cache.
+The adapter keeps the receipts of this client's commands. A query with `waitsFor`, and each View stream when it opens, sends them as `atLeast`, so the result includes this client's writes. The receipts are not part of the args, so they do not split the cache.
 
 ## Ask a query
 
@@ -115,7 +115,63 @@ export const Bank = DomainEffectUI.make(CustomerApi, {
 
 With `key`, an entry that a later page repeats is left out. Without it, every entry is kept.
 
-## Follow a View's state
+## Show a View
+
+A View is a stream query keyed by its read key. Its args are `{ key }`, and its value is the `{ state, cursor }` snapshot, with absent state as `Option.none()`. Declare it in a component's `queries` and read it with `AsyncResult`:
+
+```typescript
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+
+queries: {
+  summary: { query: Bank.AccountSummary, args: ({ props }) => ({ key: props.accountId }) },
+},
+view: (h) =>
+  Option.match(AsyncResult.value(h.queries.summary), {
+    onNone: () => h.p.children(h.queries.summary._tag === "Failure" ? "Not available" : "Loading"),
+    onSome: ({ state }) =>
+      h.p.children(Option.match(state, { onNone: () => "No account", onSome: (s) => `${s.balance}` })),
+  }),
+```
+
+`AsyncResult.value` gives the last Success, also when a later failure keeps it as its `previousSuccess`. `h.queries.summary.waiting` is `true` while the stream opens again.
+
+Each stream starts with `snapshot(key)`, with this client's receipts as `atLeast`, so its first element includes this client's writes. Then it follows `watch(key)`. The adapter does not fold `events`: a View that declares `events` can change its state without an event. Every component that reads the same key shares one entry and one open stream. The stream closes when the entry is collected: by default 5 minutes after the last component that reads it unmounts. Set a shorter time per View:
+
+```typescript
+export const Bank = DomainEffectUI.make(CustomerApi, {
+  views: { AccountSummary: { idleTimeToLive: "30 seconds" } },
+});
+```
+
+A View read fails with `Rejected` (the View's `validate`), `Denied` (its middleware), `TimedOut` (the View did not apply this client's writes in time), or `Unknown` (transport or a defect). The entry keeps the last value as `previousSuccess`. A failure closes the stream. It opens again when the entry is asked for again (a `get`, a new component, a refetch of a stale entry) or after `invalidate`.
+
+### Patch a View before the command answers
+
+An optimistic patch on a View entry shows the write at once:
+
+```typescript
+export const Bank = DomainEffectUI.make(CustomerApi, {
+  commands: {
+    DepositMoney: {
+      optimistic: ({ input }, queries) => [
+        queries.AccountSummary.patch({ key: input.accountId }, (snapshot) => ({
+          ...snapshot,
+          state: Option.map(snapshot.state, (summary) => ({ ...summary, balance: summary.balance + input.amount })),
+        })),
+      ],
+    },
+  },
+});
+```
+
+Effect UI applies the patch over each element while the run is queued or running. When the run succeeds, it closes the stream and opens it again, and the first element of the new stream drops the patch. A Domain View applies a command's events a short time after the command answers, so a plain `watch` can send the old state first, and the value goes back for a moment. The adapter prevents this: the new stream starts with a `snapshot` that waits for the run's receipt. Two limits stay ([our comment on Effect-TS/ui#454](https://github.com/Effect-TS/ui/pull/454#issuecomment-7208510587)):
+
+- Each optimistic run opens the stream again: one more subscription, and one more read of the key's state.
+- The open stream can send an element that already holds the write while the run is still running. The patch then applies to it again, and a patch that adds shows the deposit twice until the run ends. Where you can, write patches that set a value, not ones that add to it.
+
+### Follow a View with Subscriptions
+
+`watch` is the lower-level form of the stream query. It copies each snapshot into the Model through a Message, opens one stream per component, and has no data in a server render. Use it when `update` must handle each snapshot as a Message, such as a Model that keeps several keys:
 
 ```typescript
 subscriptions: ({ props, model }) => [
@@ -128,13 +184,21 @@ subscriptions: ({ props, model }) => [
 ],
 ```
 
-The adapter converts absent state to `Option.none()`. A new key or `restartKey` restarts the watch. Read defects call `onDefect`, typed read failures call `onFailure`, and interruption ends the Subscription without a Message.
+A new key or `restartKey` restarts the watch. Read defects call `onDefect`, typed read failures call `onFailure`, and interruption ends the Subscription without a Message.
 
-`events(key, { after, restartKey, onEntry, onCaughtUp, onFailure, onDefect })` follows an event feed after the cursor `after`. The feed reads `after` when it starts, so a new cursor does not restart it. Change `restartKey` to restart it, for example after a failure. The feed drops repeated entries and allows gaps.
+`events(key, { after, restartKey, onEntry, onCaughtUp, onFailure, onDefect })` follows an event feed after the cursor `after`. A feed is a list of messages, not state, so it stays a Subscription for Views and Streams. The feed reads `after` when it starts, so a new cursor does not restart it. Change `restartKey` to restart it, for example after a failure. The feed drops repeated entries and allows gaps. A Stream has only these two Subscriptions.
 
 ## Restart a read after the session ends
 
-When the session ends, the server ends each live read with the middleware error ([#3458](https://github.com/alchemy-run/alchemy/issues/3458)). The read calls `onFailure` and stops. Sign in again, then change `restartKey` to start the read again:
+When the session ends, the server ends each live read with the middleware error ([#3458](https://github.com/alchemy-run/alchemy/issues/3458)). A View entry fails with `Denied` and its stream closes. Sign in again, and list the View in the `invalidates` of the command that signs in. The View's query is a target for all its entries, so each entry that a component shows opens its stream again:
+
+```typescript
+export const Bank = DomainEffectUI.make(CustomerApi, {
+  commands: { SignIn: { invalidates: (_, queries) => [queries.AccountSummary] } },
+});
+```
+
+A Subscription calls `onFailure` and stops. Change `restartKey` to start it again:
 
 ```typescript
 FailedWatchSummary: ($, { reason }) =>
@@ -146,20 +210,9 @@ A query that failed with `Denied` keeps its failure until it fetches again. Name
 
 ## Seed the first paint
 
-A server render does not run Subscriptions, so a watched View is empty on the first paint. Until a View can be a query entry ([Effect-TS/ui#454](https://github.com/Effect-TS/ui/pull/454)), keep a snapshot in the Model. The server render puts it there, and the client hydrates the same Model:
+A server render stores the first element of each View entry and closes its stream. The page ships the entry, and the browser shows it without a read. The browser opens the stream once hydration's fetch-free window closes, and then the View follows live changes. Nothing goes in the Model.
 
-```typescript
-model: Schema.Struct({
-  summary: Schema.optional(Bank.AccountSummary.SnapshotSchema),
-}),
-// init on the server: props.summary is the `{ state, cursor }` the server read with
-// `client.AccountSummary.snapshot(accountId)`, encoded with the View's Schema.
-init: ({ props }) => ({
-  summary: Option.getOrUndefined(Bank.AccountSummary.decodeSnapshot(props.summary)),
-}),
-```
-
-`SnapshotSchema` decodes `null` state to `Option.none()`, and its cursor must be a nonnegative integer. Keep the prop as `Schema.Unknown` and decode it with `decodeSnapshot`: a stale state Schema then gives `None` and a fresh watch, and boot continues. To follow the feed from there, pass the snapshot's cursor to `events` as `after`.
+A server render does not run Subscriptions. A component that follows a View with `watch` can keep a snapshot in its Model instead. `Bank.AccountSummary.SnapshotSchema` is the Schema of `{ state, cursor }`, and `decodeSnapshot` decodes a root prop: a stale state Schema gives `None` and a fresh watch, and boot continues. To follow the feed from a snapshot, pass its cursor to `events` as `after`.
 
 ## Test a component with the model
 

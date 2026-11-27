@@ -248,8 +248,8 @@ catalogs:
       specifier: ^0.73.2
       version: 0.73.2
     '@effect/ui':
-      specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f
-      version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f
+      specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui@e0b7cec
+      version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@e0b7cec
     '@effect/vitest':
       specifier: ^4.1.4
       version: 4.1.4
@@ -10021,7 +10021,7 @@ importers:
         version: 4.1.4(effect@4.1.4)
       '@effect/ui':
         specifier: 'catalog:'
-        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f(effect@4.1.4)
+        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@e0b7cec(effect@4.1.4)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -11420,7 +11420,7 @@ importers:
         version: 4.1.4(effect@4.1.4)
       '@effect/ui':
         specifier: 'catalog:'
-        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f(effect@4.1.4)
+        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@e0b7cec(effect@4.1.4)
       '@electric-sql/pglite':
         specifier: 'catalog:'
         version: 0.3.15
@@ -16422,8 +16422,8 @@ packages:
     resolution: {integrity: sha512-eM5ayjlp0fD2l+aL+4O/y9d1LwF1m5in5EdNkOYwLFcXI3kcee8CWP4wr2xTc4L/+KJmS/uaYUGWdOj4G46BDA==}
     hasBin: true
 
-  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f':
-    resolution: {integrity: sha512-jiCKwNyfV/aKT5cfDL/8rFYwi4KXSuf/qCBtQz6ttwOw1aES81hk74noMKlDslAJ0ndQvd3Yv3EE+xWlkijH8A==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f}
+  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@e0b7cec':
+    resolution: {integrity: sha512-uYecYnIGC/Q15cl914C6Zbr1FOT1ahCjy625xwQyDODgNdq/yPEdxr6UuhkaYp83zWsiL4rVJsz8nFHziOCBDw==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui@e0b7cec}
     version: 0.0.0
     peerDependencies:
       effect: 4.1.4
@@ -34932,7 +34932,7 @@ snapshots:
       '@effect/tsgo-win32-arm64': 0.73.2
       '@effect/tsgo-win32-x64': 0.73.2
 
-  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f(effect@4.1.4)':
+  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@e0b7cec(effect@4.1.4)':
     dependencies:
       effect: 4.1.4
 

@@ -1390,7 +1390,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
 - [MCP](https://alchemy.run/domain/mcp) — Give an agent the commands and reads of an Api as tools, inside the app with Effect AI, or outside it over MCP.
 - [Integrate with Foldkit](https://alchemy.run/domain/foldkit) — Derive Foldkit Commands from an Api, ask its queries, follow View snapshots, and seed the Model from Flags.
-- [Integrate with Effect UI](https://alchemy.run/domain/effect-ui) — Derive Effect UI Command and Query services from an Api, and follow Views and Streams with Subscriptions.
+- [Integrate with Effect UI](https://alchemy.run/domain/effect-ui) — Derive Effect UI Command and Query services from an Api, read Views as stream query entries, and follow event feeds with Subscriptions.
 - [Optimistic updates](https://alchemy.run/domain/optimistic-updates) — Show pending intent, confirm it by commandId from a View feed, and retry an unknown outcome safely.
 - [Offline and local first](https://alchemy.run/domain/local-first) — Choose how local an app is, and keep it working offline by recording intents and sending them when the connection returns.
 - [Sessions and middleware](https://alchemy.run/domain/sessions) — Authenticate every request, carry who is asking into the domain, and sign browsers in with a cookie.

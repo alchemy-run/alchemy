@@ -200,6 +200,10 @@ const Bank = DomainEffectUI.make(CustomerApi, {
   queries: { AccountLedger: { take: 20, key: (entry) => entry.id } }, // a paged query: Query.InfiniteService
 });
 
+// A View is a Query.StreamService keyed by { key }: shared, rendered on the server, no Model copy.
+queries: { summary: { query: Bank.AccountSummary, args: ({ props }) => ({ key: props.accountId }) } },
+// view: AsyncResult.value(h.queries.summary) is Option<{ state: Option<State>, cursor }>
+
 $.run(
   // No commandId: the Command makes one. Retry Unknown with `commandId: failure.commandId`.
   Bank.DepositMoney.make({ input: { accountId, amount: 1_000 } }).pipe(
@@ -213,10 +217,12 @@ $.run(
 
 - Each Api command is a `Command.Service` with args `{ input, commandId?, headers? }`. Never keep ids in the Model: hydration and history restore would send them again. `headers` is a `Redacted` record for a per-call secret (an MFA code).
 - Each Api query is a `Query.Service` with args `{ input }` (declare it in a component's `queries`); a paged one is a `Query.InfiniteService`. A query with `waitsFor` sends this client's receipts as `atLeast`, outside the cache key.
-- By default a command invalidates the queries whose `waitsFor` reads its events. `commands.<Tag>.invalidates`, `optimistic` and `writes` take `(args, queries)` (`writes`: `(success, args, queries)`).
-- Each View and Stream has `watch(key, { restartKey?, ... })` and `events(key, { after, restartKey, ... })`, which return Subscriptions. Change `restartKey` after a new sign-in: a live read ends with the middleware error when the session ends. Each View has `SnapshotSchema` and `decodeSnapshot` to seed the first paint from the server's Model.
+- By default a command invalidates the queries whose `waitsFor` reads its events, and no View entry (its stream sends the change). `commands.<Tag>.invalidates`, `optimistic` and `writes` take `(args, queries)` (`writes`: `(success, args, queries)`); `queries` holds the Views too.
+- Each View is a `Query.StreamService` with args `{ key }` and value `{ state: Option, cursor }`. A stream starts with `snapshot(key, { atLeast: <this client's receipts> })`, then follows `watch`. A server render ships the first element; the browser opens the stream after hydration's fetch-free window. Failures: `Rejected`, `Denied`, `TimedOut`, `Unknown`. A failure closes the stream. It opens again when the entry is asked for again (a `get`, a new component, a refetch of a stale entry) or after `invalidate`. `views.<Name>.idleTimeToLive` sets how long an unwatched stream stays open (default 5 minutes).
+- An optimistic patch on a View entry (`queries.AccountSummary.patch({ key }, f)`) reopens the stream when the run succeeds; the reopened snapshot waits for the run's receipt, so the value does not step back. An element that already holds the write can arrive while the run runs: write patches that set a value, not ones that add.
+- `watch(key, { restartKey?, ... })` is the lower-level View read: a Subscription that copies snapshots into the Model, one stream per component, no server data. `events(key, { after, restartKey, ... })` is a message feed for Views and Streams; a Stream has only these two. When the session ends, a live read ends with the middleware error: list the View in the sign-in command's `invalidates` (`(_, queries) => [queries.AccountSummary]`), or change `restartKey`, after a new sign-in. `SnapshotSchema` and `decodeSnapshot` hold a `watch` snapshot in the Model.
 - Provide `Bank.layer` and the Api client where the app mounts, and `CommandHeaders` under `Bank.layer` (`Bank.layer.pipe(Layer.provide(Headers))`), so every query fetch sends them. On the server, `CommandHeaders.get` can read `HttpServerRequest` (`Effect.serviceOption`): `layerHttp` renders each request with its own cache.
 
 In a component test, build the adapter and the client inside the tree: `HtmlPlay.make(Panel.pipe(Component.provide(Bank.layer.pipe(Layer.provideMerge(Client)))), {})`, with only `TestHost.layer()` outside. `TestHost.settle` waits only for the tree's fibers. Provide `NewCommandId` under `Bank.layer` to pin ids.
 
-More: [Integrate with Effect UI](https://alchemy.run/domain/effect-ui), [Integrate with Effect UI: Update the query cache](https://alchemy.run/domain/effect-ui#update-the-query-cache), [Integrate with Effect UI: Render signed-in pages on the server](https://alchemy.run/domain/effect-ui#render-signed-in-pages-on-the-server).
+More: [Integrate with Effect UI](https://alchemy.run/domain/effect-ui), [Integrate with Effect UI: Update the query cache](https://alchemy.run/domain/effect-ui#update-the-query-cache), [Integrate with Effect UI: Show a View](https://alchemy.run/domain/effect-ui#show-a-view), [Integrate with Effect UI: Render signed-in pages on the server](https://alchemy.run/domain/effect-ui#render-signed-in-pages-on-the-server).
