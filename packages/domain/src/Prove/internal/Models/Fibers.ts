@@ -229,7 +229,16 @@ export const make = (
     );
     return lazy(() =>
       Effect.flatMap(Effect.service(Timeline.Current), (timeline) =>
-        timeline ? body(timeline) : Timeline.run(() => host.current.run, site, inside),
+        timeline
+          ? body(timeline)
+          : Timeline.run(
+              // Code read outside a handler, a policy's, is read on known inputs: its times are
+              // numbers, and the run is never asked to order two of them.
+              /* v8 ignore next */
+              () => host.current.run,
+              site,
+              inside,
+            ),
       ),
     );
   };

@@ -774,6 +774,8 @@ export const make = (
           timeline,
           Stream.timeoutOrElse(self, {
             duration: time,
+            // A handler's clock does not move while it waits on a stream, so the limit never comes.
+            /* v8 ignore next */
             orElse: () => to.inner(field(given, "orElse"))(),
           }),
           site,

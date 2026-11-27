@@ -231,14 +231,6 @@ export const make = (
     );
   };
 
-  const parallel = (site: Site, name: string): Eval<never> =>
-    Effect.fail(
-      Value.notTranslated(
-        site,
-        `${name} runs more than one item at a time, which the prover does not read`,
-      ),
-    );
-
   /** A stream that goes on with another when it fails with an error the code can handle. */
   const recovering = (self: Stream, handle: (error: V) => Eval<Stream | undefined>): Stream =>
     through(self, (pull) => {
@@ -666,22 +658,25 @@ export const make = (
       ),
     ),
     "effect/Stream:mapEffect": over("Stream.mapEffect", (self, [f, options], site) =>
+      // More than one at a time is the library's own model's, which hands this one the rest.
       !sequential(options)
-        ? parallel(site, "Stream.mapEffect")
+        ? wrongArguments(site, "Stream.mapEffect")
         : Effect.map(fnOf("Stream.mapEffect", f, site), (fn) =>
             single(self, (item) => ran(fn, [item], site)),
           ),
     ),
     "effect/Stream:tap": over("Stream.tap", (self, [f, options], site) =>
+      // More than one at a time is the library's own model's, which hands this one the rest.
       !sequential(options)
-        ? parallel(site, "Stream.tap")
+        ? wrongArguments(site, "Stream.tap")
         : Effect.map(fnOf("Stream.tap", f, site), (fn) =>
             single(self, (item) => Effect.as(ran(fn, [item], site), item)),
           ),
     ),
     "effect/Stream:flatMap": over("Stream.flatMap", (self, [f, options], site) =>
+      // More than one at a time is the library's own model's, which hands this one the rest.
       !sequential(options)
-        ? parallel(site, "Stream.flatMap")
+        ? wrongArguments(site, "Stream.flatMap")
         : Effect.map(fnOf("Stream.flatMap", f, site), (fn) =>
             through(self, (pull) => {
               let chunk: Chunk = [];
@@ -1379,9 +1374,8 @@ export const make = (
             )
           : wrongArguments(at, "Sink.map");
       };
-      return args.length >= 2
-        ? mapped(args[0], args[1], site)
-        : Effect.succeed(native("Sink.map", ([self], at) => mapped(self, args[0], at)));
+      // `Sink.map(f)` given a sink later is the sinks' own model, which calls this one with both.
+      return mapped(args[0], args[1], site);
     },
   };
 

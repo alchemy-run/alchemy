@@ -1438,6 +1438,12 @@ const base: ReadonlyArray<Group> = [
       `Effect.ensuring(Effect.succeed(a), Effect.fail(new Odd({ n: b }))).pipe(Effect.exit, Effect.map(Exit.hasDies))`,
       `even(a).pipe(Effect.ignore(), Effect.as(b))`,
     ],
+    unread: [
+      [
+        `Effect.matchCause(Effect.succeed(a), { onSuccess: 5, onFailure: () => 0 })`,
+        /a function is called in a way the prover has no model for/,
+      ],
+    ],
   },
   {
     // Functions the prover has no reading of its own for: the library computes them, on values the code writes.
@@ -1579,6 +1585,12 @@ const base: ReadonlyArray<Group> = [
       `Stream.make(a, 2).pipe(Stream.mapEffect((n) => Effect.succeed(n + 1), { concurrency: 1 }), Stream.runCollect)`,
       `Stream.run(Stream.make(a, 2), Sink.count.pipe(Sink.map((n) => n * 10)))`,
       `Stream.run(stream, Sink.map((n) => n * 10)(Sink.count))`,
+    ],
+    unread: [
+      [
+        `Stream.run(stream, Sink.count())`,
+        /Sink.count is called in a way the prover has no model for/,
+      ],
     ],
     known: [`Stream.runCollect(Stream.range(1, 3))`, `Stream.runCollect(Stream.range(a, a + 2))`],
   },
@@ -3190,6 +3202,10 @@ const rest: ReadonlyArray<Group> = [
     ],
     unread: [
       [
+        `Effect.gen(function* () { const line = yield* TxPriorityQueue.empty(); return a; })`,
+        /TxPriorityQueue.empty is called in a way the prover has no model for/,
+      ],
+      [
         `Effect.gen(function* () { const line = yield* TxPriorityQueue.empty(Order.Number); return yield* TxPriorityQueue.take(line); })`,
         /waits for a TxPriorityQueue that nothing changes/,
       ],
@@ -4030,6 +4046,10 @@ const rest: ReadonlyArray<Group> = [
       `Stream.fromEffect(Effect.as(Effect.sleep("2300 millis"), a)).pipe(Stream.timeoutOrElse({ duration: "1700 millis", orElse: () => Stream.make(b) }), Stream.runCollect)`,
     ],
     unread: [
+      [
+        `Stream.runCollect(Stream.failCause(a))`,
+        /Stream.failCause is called in a way the prover has no model for/,
+      ],
       // A stream's time limit is worked out from the clock, which a handler's does not move: it never comes.
       [
         `Stream.never.pipe(Stream.timeoutOrElse({ duration: "1 second", orElse: () => Stream.make(a) }), Stream.runCollect)`,
@@ -4130,6 +4150,10 @@ const rest: ReadonlyArray<Group> = [
       `Stream.run(Stream.concat(Stream.make(a), Stream.fail(new Odd({ n: b }))), Sink.flatMap(Sink.collect(), (all) => Sink.succeed(all))).pipe(Effect.flip, Effect.map((error) => error.n))`,
     ],
     unread: [
+      [
+        `Stream.run(four(a, b), Sink.ignoreLeftover(Sink.take(1))())`,
+        /Sink.ignoreLeftover is called in a way the prover has no model for/,
+      ],
       [
         `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), () => a))`,
         /is called in a way the prover has no model for/,

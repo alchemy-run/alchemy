@@ -14,7 +14,8 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@alchemy.run/domain": "workspace:*",
@@ -25,6 +26,7 @@
     "@bank/rules": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "@vitest/coverage-v8": "5.0.4",
     "vitest": "catalog:"
   }
 }
