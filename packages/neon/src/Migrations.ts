@@ -12,12 +12,13 @@ import * as Redacted from "effect/Redacted";
 import type { Client, ClientConfig } from "pg";
 
 /**
- * Neon's URIs carry `sslmode=require`; TLS is set on the client instead,
- * without verifying Neon's certificate chain.
+ * Neon's URIs carry `sslmode=require`, which `pg` reads as "don't verify";
+ * TLS is set on the client instead and verified against the system roots
+ * (Neon's certificates are publicly trusted).
  */
 const clientConfig = (connectionUri: Redacted.Redacted<string>): ClientConfig => ({
   connectionString: connectionUri.pipe(Redacted.value, stripSslQueryParams),
-  ssl: { rejectUnauthorized: false },
+  ssl: { rejectUnauthorized: true },
 });
 
 /** A `pg` client on a Neon connection URI for the scope of `use`. */
