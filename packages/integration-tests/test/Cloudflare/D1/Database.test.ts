@@ -640,6 +640,127 @@ test.provider(
 );
 
 /**
+ * drizzle-kit 0.x's layout for two migrations (flat files, `meta/` journal
+ * and snapshots), as a team on wrangler and drizzle-kit 0.x has it, then
+ * `drizzle-kit up` run on it: each file moves to `<when>_<name>/migration.sql`.
+ */
+const drizzleKitUpFromV0 = (dir: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    yield* fs.makeDirectory(path.join(dir, "meta"), { recursive: true });
+    yield* fs.writeFileString(
+      path.join(dir, "0000_init.sql"),
+      "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+    );
+    yield* fs.writeFileString(
+      path.join(dir, "0001_add_posts.sql"),
+      "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);",
+    );
+    const snapshot = (id: string, prevId: string) =>
+      JSON.stringify({
+        version: "6",
+        dialect: "sqlite",
+        id,
+        prevId,
+        tables: {},
+        views: {},
+        enums: {},
+        _meta: { schemas: {}, tables: {}, columns: {} },
+        internal: { indexes: {} },
+      });
+    yield* fs.writeFileString(
+      path.join(dir, "meta", "0000_snapshot.json"),
+      snapshot("11111111-1111-4111-8111-111111111111", "00000000-0000-0000-0000-000000000000"),
+    );
+    yield* fs.writeFileString(
+      path.join(dir, "meta", "0001_snapshot.json"),
+      snapshot("22222222-2222-4222-8222-222222222222", "11111111-1111-4111-8111-111111111111"),
+    );
+    yield* fs.writeFileString(
+      path.join(dir, "meta", "_journal.json"),
+      JSON.stringify({
+        version: "7",
+        dialect: "sqlite",
+        entries: [
+          { idx: 0, version: "6", when: 1735732800000, tag: "0000_init", breakpoints: true },
+          { idx: 1, version: "6", when: 1735819200000, tag: "0001_add_posts", breakpoints: true },
+        ],
+      }),
+    );
+    const cli = yield* Effect.promise(() => import("drizzle-kit/cli"));
+    const result = yield* Effect.tryPromise(() => cli.up({ dialect: "sqlite", out: dir }));
+    expect(result.status).toBe("ok");
+  });
+
+test.provider(
+  "adopts a wrangler-migrated database after drizzle-kit up renamed its files",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const migrationsDir = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-d1-wrangler-up-",
+      });
+
+      yield* stack.destroy();
+
+      // What `wrangler d1 migrations apply` left behind: the first file applied.
+      const seeded = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.D1.Database("WranglerUpAdoptionDb");
+        }),
+      );
+      yield* execSql(
+        accountId,
+        seeded.databaseId,
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+      );
+      yield* execSql(
+        accountId,
+        seeded.databaseId,
+        `CREATE TABLE d1_migrations(
+           id         INTEGER PRIMARY KEY AUTOINCREMENT,
+           name       TEXT UNIQUE,
+           applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+         );`,
+      );
+      yield* execSql(
+        accountId,
+        seeded.databaseId,
+        "INSERT INTO d1_migrations (name) VALUES ('0000_init.sql');",
+      );
+
+      // The team then follows DrizzleV0LayoutError's advice.
+      yield* drizzleKitUpFromV0(migrationsDir);
+
+      // The history follows the rename: 0000 is not re-run (its table exists),
+      // only 0001 is applied.
+      const database = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.D1.Database("WranglerUpAdoptionDb", {
+            migrations: migrationsDir,
+          });
+        }),
+      );
+      const applied = yield* queryAll<{ name: string }>(
+        accountId,
+        database.databaseId,
+        "SELECT name FROM __alchemy_migrations ORDER BY id;",
+      );
+      expect(applied.map((r) => r.name)).toEqual([
+        "20250101120000_init",
+        "20250102120000_add_posts",
+      ]);
+      expect(yield* listTables(accountId, database.databaseId)).toContain("posts");
+
+      yield* stack.destroy();
+      yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"] },
+);
+
+/**
  * True roll-forward: state row AND physical table are rewritten to exactly
  * what pre-registry Alchemy persisted (3-column `id TEXT PK` table,
  * `migrationsHashes` + `migrationsTable` in state), then a normal deploy

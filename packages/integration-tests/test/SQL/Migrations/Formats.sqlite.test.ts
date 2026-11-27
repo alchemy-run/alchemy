@@ -11,12 +11,27 @@ import { applyPendingAlchemyFormat } from "@alchemy.run/sql/Migrations/AlchemyFo
 import { expect, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import { makeSqliteExecutor, tableNames } from "./sqlite-executor.ts";
 
 const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url).pathname;
 
 const describe = layer(NodeServices.layer);
+
+/** A drizzle-kit v1 directory: one `<name>/migration.sql` per entry. */
+const writeMigrationDirs = (folders: Readonly<Record<string, string>>) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-mig-up-" });
+    for (const [name, sql] of Object.entries(folders)) {
+      yield* fs.makeDirectory(path.join(dir, name));
+      yield* fs.writeFileString(path.join(dir, name, "migration.sql"), sql);
+    }
+    return dir;
+  });
 
 const ALCHEMY_COLUMNS = ["id", "hash", "created_at", "name", "applied_at"];
 
@@ -654,6 +669,192 @@ describe("one-way conversion from foreign tables", (it) => {
     { tags: ["unit", "local"] },
   );
 
+  // `drizzle-kit up` turns `0000_init.sql` into `<when>_init/migration.sql`
+  // (drizzle-kit `planFoldersV3`), byte for byte; wrangler's rows keep the
+  // old names.
+  it.effect(
+    "wrangler history follows drizzle-kit up's rename",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        db.run(
+          "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+        );
+        db.run(
+          "INSERT INTO d1_migrations (name, applied_at) VALUES ('0000_init.sql', '2024-01-01 00:00:00'), ('0001_add_posts.sql', '2024-01-02 00:00:00');",
+        );
+        db.run("CREATE TABLE users (id integer PRIMARY KEY NOT NULL, name text NOT NULL);");
+        db.run("CREATE UNIQUE INDEX users_name_unique ON users (name);");
+        db.run(
+          "CREATE TABLE posts (id integer PRIMARY KEY NOT NULL, user_id integer NOT NULL, title text NOT NULL);",
+        );
+
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readDrizzleDirRecords(fixture("drizzle-v1"));
+        // Re-running either file would fail: its table exists.
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records });
+
+        const rows = migrationRows(db);
+        expect(rows.map((r) => r.name)).toEqual([
+          "20240101000000_init",
+          "20240102000000_add_posts",
+        ]);
+        expect(rows.map((r) => r.hash)).toEqual(records.map((r) => r.hash));
+        expect(rows.map((r) => r.applied_at)).toEqual([
+          "2024-01-01 00:00:00",
+          "2024-01-02 00:00:00",
+        ]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "wrangler rows sharing a name after drizzle-kit up pair in order",
+    () =>
+      Effect.gen(function* () {
+        const dir = yield* writeMigrationDirs({
+          "20240101000000_add": "CREATE TABLE a (id INTEGER);",
+          "20240102000000_add": "CREATE TABLE b (id INTEGER);",
+        });
+        const db = new Database(":memory:");
+        db.run(
+          "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+        );
+        db.run("INSERT INTO d1_migrations (name) VALUES ('0000_add.sql'), ('0001_add.sql');");
+        db.run("CREATE TABLE a (id INTEGER);");
+        db.run("CREATE TABLE b (id INTEGER);");
+
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readDrizzleDirRecords(dir);
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records });
+
+        const rows = migrationRows(db);
+        expect(rows.map((r) => [r.name, r.hash])).toEqual(records.map((r) => [r.name, r.hash]));
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "a renamed file never pairs a wrangler row with another migration's record",
+    () =>
+      Effect.gen(function* () {
+        // `0001_foo.sql` was renamed `0001_bar.sql` before wrangler applied it;
+        // `0002_bar` was never applied. Pairing by name alone would record
+        // `<ts>_bar` as applied, and it never ran.
+        const dir = yield* writeMigrationDirs({
+          "20240101000000_init": "CREATE TABLE init (id INTEGER);",
+          "20240102000000_foo": "CREATE TABLE foo (id INTEGER);",
+          "20240105000000_bar": "CREATE TABLE bar (id INTEGER);",
+        });
+        const db = new Database(":memory:");
+        db.run(
+          "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+        );
+        db.run("INSERT INTO d1_migrations (name) VALUES ('0000_init.sql'), ('0001_bar.sql');");
+        db.run("CREATE TABLE init (id INTEGER);");
+        db.run("CREATE TABLE foo (id INTEGER);");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readDrizzleDirRecords(dir);
+        const result = yield* Effect.result(
+          applyAlchemyFormat({ executor, table: "__alchemy_migrations", records }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("MigrationHistoryConflictError");
+        }
+        // Nothing was recorded.
+        expect(tableNames(db)).not.toContain("__alchemy_migrations");
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "a pending migration sharing an applied one's name stays pending after drizzle-kit up",
+    () =>
+      Effect.gen(function* () {
+        const dir = yield* writeMigrationDirs({
+          "20240101000000_add": "CREATE TABLE a (id INTEGER);",
+          "20240105000000_add": "CREATE TABLE b (id INTEGER);",
+        });
+        const db = new Database(":memory:");
+        db.run(
+          "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+        );
+        db.run("INSERT INTO d1_migrations (name) VALUES ('0000_add.sql');");
+        db.run("CREATE TABLE a (id INTEGER);");
+        const executor = makeSqliteExecutor(db);
+        const records = yield* readDrizzleDirRecords(dir);
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records });
+        expect(migrationRows(db).map((r) => r.name)).toEqual([
+          "20240101000000_add",
+          "20240105000000_add",
+        ]);
+        expect(tableNames(db)).toContain("b");
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  // Pre-registry Alchemy's d1_migrations recorded file names, as wrangler does.
+  it.effect(
+    "legacy Alchemy history follows drizzle-kit up's rename, as a source and in place",
+    () =>
+      Effect.gen(function* () {
+        const records = yield* readDrizzleDirRecords(fixture("drizzle-v1"));
+        for (const table of ["__alchemy_migrations", "d1_migrations"]) {
+          const db = new Database(":memory:");
+          db.run(
+            "CREATE TABLE d1_migrations (id TEXT PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL);",
+          );
+          db.run(
+            "INSERT INTO d1_migrations (id, name, applied_at) VALUES ('00001', '0000_init.sql', '2024-01-01 00:00:00');",
+          );
+          db.run("CREATE TABLE users (id integer PRIMARY KEY NOT NULL, name text NOT NULL);");
+          db.run("CREATE UNIQUE INDEX users_name_unique ON users (name);");
+          const executor = makeSqliteExecutor(db);
+          yield* applyAlchemyFormat({ executor, table, records });
+          expect(migrationRows(db, table).map((r) => r.name)).toEqual([
+            "20240101000000_init",
+            "20240102000000_add_posts",
+          ]);
+        }
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "a wrangler row drizzle-kit up's rename can't name is a conflict, never a guess",
+    () =>
+      Effect.gen(function* () {
+        for (const [rows, folders] of [
+          // The file was renamed away from its journal tag before `drizzle-kit up`.
+          [["0000_users.sql"], { "20240101000000_init": "CREATE TABLE users (id INTEGER);" }],
+          // Two rows share a name one folder has.
+          [
+            ["0000_add.sql", "0001_add.sql"],
+            { "20240101000000_add": "CREATE TABLE a (id INTEGER);" },
+          ],
+        ] as const) {
+          const dir = yield* writeMigrationDirs(folders);
+          const db = new Database(":memory:");
+          db.run(
+            "CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL);",
+          );
+          for (const name of rows) db.run(`INSERT INTO d1_migrations (name) VALUES ('${name}');`);
+          const executor = makeSqliteExecutor(db);
+          const records = yield* readDrizzleDirRecords(dir);
+          const result = yield* Effect.result(
+            applyAlchemyFormat({ executor, table: "__alchemy_migrations", records }),
+          );
+          expect(Result.isFailure(result)).toBe(true);
+          if (Result.isFailure(result)) {
+            expect(result.failure._tag).toBe("MigrationHistoryConflictError");
+            expect(result.failure.message).toContain(rows[rows.length - 1]!);
+          }
+        }
+      }),
+    { tags: ["unit", "local"] },
+  );
+
   it.effect(
     "conversion fails when foreign history references a missing local file",
     () =>
@@ -704,6 +905,151 @@ describe("one-way conversion from foreign tables", (it) => {
           name: string;
         }>;
         expect(legacyColumns.map((c) => c.name)).toEqual(["id", "name", "applied_at"]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "converts drizzle-orm 0.x history, which has no name column, as drizzle-orm 1.0 upgrades it",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const records = yield* readDrizzleDirRecords(fixture("drizzle-v1"));
+        // `drizzle-kit up` converts the migrations folder and leaves the database:
+        // a database drizzle-orm 0.x migrated keeps its original table, whose
+        // `created_at` is the journal's `when` in milliseconds.
+        db.run(
+          "CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric);",
+        );
+        db.run(
+          `INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('${records[0].hash}', 1704067200417);`,
+        );
+        db.run("CREATE TABLE users (id integer PRIMARY KEY NOT NULL, name text NOT NULL);");
+        db.run("CREATE UNIQUE INDEX users_name_unique ON users (name);");
+
+        const executor = makeSqliteExecutor(db);
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records });
+        const rows = migrationRows(db);
+        // The applied migration converts instead of running again; the next applies.
+        expect(rows.map((r) => r.name)).toEqual([
+          "20240101000000_init",
+          "20240102000000_add_posts",
+        ]);
+        expect(rows[0].hash).toBe(records[0].hash);
+        expect(tableNames(db)).toContain("posts");
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "converts drizzle-orm 0.x history in place when it is the resolved table",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const records = yield* readDrizzleDirRecords(fixture("drizzle-v1"));
+        db.run(
+          "CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric);",
+        );
+        db.run(
+          `INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('${records[0].hash}', 1704067200417);`,
+        );
+        db.run("CREATE TABLE users (id integer PRIMARY KEY NOT NULL, name text NOT NULL);");
+        db.run("CREATE UNIQUE INDEX users_name_unique ON users (name);");
+
+        const executor = makeSqliteExecutor(db);
+        yield* applyAlchemyFormat({ executor, table: "__drizzle_migrations", records });
+        const rows = migrationRows(db, "__drizzle_migrations");
+        expect(rows.map((r) => r.name)).toEqual([
+          "20240101000000_init",
+          "20240102000000_add_posts",
+        ]);
+        expect(tableNames(db)).toContain("posts");
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "a drizzle-orm 0.x row whose second two migrations share is named by its hash",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        // `drizzle-kit up` names folders to the second, so two migrations made
+        // in the same second share a timestamp; drizzle-orm 1.0 then matches by hash.
+        const record = (name: string, sql: string) => ({
+          name,
+          hash: new Bun.CryptoHasher("sha256").update(sql).digest("hex"),
+          createdAtMillis: 1704067200000,
+          sql,
+          statements: [sql],
+        });
+        const records = [
+          record("20240101000000_a", "CREATE TABLE a (id integer);"),
+          record("20240101000000_b", "CREATE TABLE b (id integer);"),
+        ];
+        db.run(
+          "CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric);",
+        );
+        // Recorded `b` first: taking the first candidate would name both rows `a`.
+        db.run(
+          `INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('${records[1].hash}', 1704067200417), ('${records[0].hash}', 1704067200950);`,
+        );
+        db.run("CREATE TABLE a (id integer);");
+        db.run("CREATE TABLE b (id integer);");
+
+        const executor = makeSqliteExecutor(db);
+        yield* applyAlchemyFormat({ executor, table: "__alchemy_migrations", records });
+        // Each row converts under the migration its hash names; nothing runs again.
+        expect(migrationRows(db).map((r) => [r.name, r.hash])).toEqual([
+          ["20240101000000_b", records[1].hash],
+          ["20240101000000_a", records[0].hash],
+        ]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "a table with a hash but no created_at is an unrecognized layout, not drizzle-orm 0.x",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const records = yield* readDrizzleDirRecords(fixture("drizzle-v1"));
+        db.run("CREATE TABLE migrations (id INTEGER PRIMARY KEY, hash text NOT NULL);");
+
+        const executor = makeSqliteExecutor(db);
+        const result = yield* Effect.result(
+          applyAlchemyFormat({ executor, table: "migrations", records }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure.message).toContain("unrecognized column layout");
+        }
+      }),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
+    "a drizzle-orm 0.x row that matches no local migration stops the conversion",
+    () =>
+      Effect.gen(function* () {
+        const db = new Database(":memory:");
+        const records = yield* readDrizzleDirRecords(fixture("drizzle-v1"));
+        db.run(
+          "CREATE TABLE __drizzle_migrations (id INTEGER PRIMARY KEY, hash text NOT NULL, created_at numeric);",
+        );
+        db.run(
+          "INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('not-a-local-hash', 1600000000000);",
+        );
+
+        const executor = makeSqliteExecutor(db);
+        const result = yield* Effect.result(
+          applyAlchemyFormat({ executor, table: "__alchemy_migrations", records }),
+        );
+        expect(Result.isFailure(result)).toBe(true);
+        if (Result.isFailure(result)) {
+          expect(result.failure._tag).toBe("MigrationHistoryConflictError");
+          expect(result.failure.message).toContain("[id: 1, created_at: 1600000000000]");
+        }
+        expect(tableNames(db)).not.toContain("users");
       }),
     { tags: ["unit", "local"] },
   );

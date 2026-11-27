@@ -87,7 +87,9 @@ export type DatabaseProps = {
    * first deploy: the old tool's applied history is copied into Alchemy's
    * table (validated against the local files) and the old table is left
    * frozen — never written, never dropped. From then on Alchemy owns the
-   * migration state.
+   * migration state. A wrangler-migrated directory converted with
+   * `drizzle-kit up` adopts the same way: wrangler's rows (`0000_init.sql`)
+   * follow drizzle-kit's rename (`<timestamp>_init/migration.sql`).
    *
    * Pending migrations are detected on each deploy and applied in order as
    * part of `update`.
