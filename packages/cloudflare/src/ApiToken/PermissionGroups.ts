@@ -2728,8 +2728,9 @@ export type PermissionGroupName = (typeof PERMISSION_GROUPS)[number]["name"];
  * Lookup map from permission-group name to the first matching permission group.
  *
  * Some Cloudflare names appear twice (e.g. account-scope and zone-scope variants
- * sharing a label). We keep the first occurrence; callers that need a specific
- * scope should pass `{ id }` directly instead of using the name shorthand.
+ * sharing a label). This map keeps the first occurrence, so it is not a way to
+ * resolve those names: token policies resolve a name against the scope of
+ * their resource keys instead.
  */
 export const PERMISSION_GROUPS_BY_NAME: Record<PermissionGroupName, PermissionGroup> = (() => {
   const map = {} as Record<PermissionGroupName, PermissionGroup>;
