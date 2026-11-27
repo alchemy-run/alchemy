@@ -93,13 +93,9 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
 });
 
 /**
- * Wait for a writable process stream to finish, close, or fail. A stream
- * that was already ended must not be ended again.
- *
- * This only waits for output to drain; it does not judge whether the reader
- * received it. Bun reports neither EPIPE nor ENOSPC on process streams, so a
- * closed or full reader cannot change the exit code consistently across
- * runtimes.
+ * End a process stream and wait for it to finish, close, or fail. This only
+ * waits for output to drain: Bun reports neither EPIPE nor ENOSPC on process
+ * streams, so a lost reader can't change the exit code consistently.
  */
 const finishOutput = (stream: NodeJS.WriteStream): Promise<void> =>
   new Promise((resolve) => {
@@ -117,10 +113,10 @@ const finishOutput = (stream: NodeJS.WriteStream): Promise<void> =>
  * only force-exits on failure or signal interruption — a *successful*
  * `alchemy deploy`/`destroy` otherwise lingers for ~100 seconds after "Done"
  * while keep-alive sockets (Cloudflare API agents, provider sidecar handles)
- * pin the event loop until the remote side closes them. Effect finalizers
- * have completed by teardown time. Drain both output streams before forcing
- * exit, so piped JSON and error logs are not truncated. A slow reader delays
- * exit, as with any process blocked on a pipe, rather than losing output.
+ * pin the event loop until the remote side closes them. All Effect finalizers
+ * have already run by the time teardown is invoked; draining both output
+ * streams first keeps piped output from being truncated (a slow reader delays
+ * exit rather than losing output).
  */
 const exitingTeardown: Teardown = (exit, onExit) => {
   defaultTeardown(exit, (code) => {
