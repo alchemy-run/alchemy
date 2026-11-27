@@ -758,7 +758,7 @@ export interface ScratchStack<ROut = any> {
   readonly name: string;
   /** Stage this scratch deploys to ({@link resolveStage} of the file options). */
   readonly stage: string;
-  /** The shared in-memory state Layer for this scratch. @internal */
+  /** The shared state Layer for this scratch (see above for where it lives). @internal */
   readonly state: Layer.Layer<State.State, never, never>;
   /** Filters leave other rows and stack outputs untouched; declaration still runs. */
   deploy<A, E, R, Call extends [options?: Plan.FilteredPlanOptions] = []>(

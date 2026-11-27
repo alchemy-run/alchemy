@@ -26,7 +26,7 @@ const { test, beforeAll, beforeEach, afterAll, afterEach, deploy, destroy } =
 |---|---|
 | `test(name, effect)` | Effect-aware test. `HttpClient` and your providers Layer are in scope. |
 | `test.skip` / `test.skipIf` / `test.only` / `test.todo` | Skip / focus / todo modifiers (same shape as `bun.test`). |
-| `test.provider(name, fn)` | [Provider-lifecycle test](/testing/testing-providers) against a scratch in-memory stack. |
+| `test.provider(name, fn)` | [Provider-lifecycle test](/testing/testing-providers) against a scratch stack. |
 | `beforeAll(effect)` | Run an Effect once. Returns a lazy accessor (`yield* result`) usable inside tests. |
 | `beforeEach(effect)` | Run an Effect before every test. |
 | `afterAll(effect)` / `afterAll.skipIf(predicate)` | Cleanup hook with conditional teardown. |
@@ -77,8 +77,15 @@ The state store used by top-level `deploy(Stack)` and
 
 ```typescript
 state: Cloudflare.state(),  // R2-backed, survives across CI runners
-state: localState({ path: ".alchemy-test/" }),  // separate dir
 state: undefined,  // omit → defaults to localState()
+```
+
+`localState()` takes no arguments. To keep test state in a
+separate directory, move the whole `.alchemy` directory with
+[`ALCHEMY_DIR`](/cli#common-options):
+
+```sh
+ALCHEMY_DIR=.alchemy-test alchemy-test
 ```
 
 Persistent state lets `deploy(Stack)` skip recreating unchanged
