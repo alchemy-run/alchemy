@@ -35,6 +35,8 @@ export interface ViteChildConfig {
     compatibility: { date: string; flags: string[] };
     main: string | undefined;
     viteEnvironments: { entry?: string; children?: string[] } | undefined;
+    /** Vite `--mode`; Vite's own default when undefined. */
+    viteMode: string | undefined;
     hasAssets: boolean;
     bindingDescriptors: WorkerBinding[];
     /** Binding name → opt-out of local emulation (`Alchemy.remote()`). */
@@ -83,6 +85,8 @@ export interface ViteBuildChildConfig {
   compatibilityDate: string | undefined;
   compatibilityFlags: string[] | undefined;
   viteEnvironments: { entry?: string; children?: string[] } | undefined;
+  /** Vite `--mode`; Vite's own default when undefined. */
+  mode: string | undefined;
   /** Absolute path the child writes the V8-serialized result to. */
   outputPath: string;
 }

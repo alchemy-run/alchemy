@@ -23,7 +23,7 @@ export class DuplicateName extends Data.TaggedError("DuplicateName")<{
 
 /** The Domain lists the same aggregate, policy, projection or query twice. */
 export class DuplicateDefinition extends Data.TaggedError("DuplicateDefinition")<{
-  readonly kind: "aggregate" | "policy" | "projection" | "query";
+  readonly kind: "aggregate" | "policy" | "projection" | "query" | "rewrite" | "compaction";
   readonly entity: string;
 }> {
   override get message() {
@@ -141,6 +141,27 @@ export class WriterKeyMismatch extends Data.TaggedError("WriterKeyMismatch")<{
   }
 }
 
+/** A schema in a state, command, event, reply or rejection has no JSON form. */
+export class NoJsonForm extends Data.TaggedError("NoJsonForm")<{
+  /** Where the schema is, such as `Order.state.placedAt`. */
+  readonly path: string;
+}> {
+  override get message() {
+    return `${this.path} has no JSON form: use a Schema with one, or annotate it with toCodecJson`;
+  }
+}
+
+/** An `initial` state that does not come back the same after a trip through JSON. */
+export class InitialNotJson extends Data.TaggedError("InitialNotJson")<{
+  readonly owner: string;
+  /** Why: the JSON error, or the JSON text that comes back different. */
+  readonly detail: string;
+}> {
+  override get message() {
+    return `${this.owner}.initial does not survive JSON: ${this.detail}`;
+  }
+}
+
 // ---------------------------------------------------------------- runtime
 
 /** An aggregate receives a command it does not list. */
@@ -159,6 +180,46 @@ export class UnroutedCommand extends Data.TaggedError("UnroutedCommand")<{
 }> {
   override get message() {
     return `${this.command} is served, but no hosted aggregate handles it`;
+  }
+}
+
+/** Two aggregates or decisions of one model implement the same command. */
+export class ImplementedTwice extends Data.TaggedError("ImplementedTwice")<{
+  readonly command: string;
+  readonly first: string;
+  readonly second: string;
+}> {
+  override get message() {
+    return `${this.command} is implemented by ${this.first} and by ${this.second}`;
+  }
+}
+
+/** A decision reads an aggregate its model does not host. */
+export class UnknownRead extends Data.TaggedError("UnknownRead")<{
+  readonly decision: string;
+  readonly aggregate: string;
+}> {
+  override get message() {
+    return `${this.decision} reads ${this.aggregate}, which is not in the Domain`;
+  }
+}
+
+/** A decision records an event on an instance it did not read. */
+export class UnreadRecord extends Data.TaggedError("UnreadRecord")<{
+  readonly decision: string;
+  readonly returned: string;
+}> {
+  override get message() {
+    return `${this.decision} returned ${this.returned}, which is not an event recorded with a read instance's \`record\``;
+  }
+}
+
+/** The platform a model is hosted on can't commit decisions. */
+export class DecisionsUnsupported extends Data.TaggedError("DecisionsUnsupported")<{
+  readonly decisions: ReadonlyArray<string>;
+}> {
+  override get message() {
+    return `the platform does not host decisions (${this.decisions.join(", ")})`;
   }
 }
 
@@ -219,6 +280,16 @@ export class ReservedOperation extends Data.TaggedError("ReservedOperation")<{
 }> {
   override get message() {
     return `ExternalSystem '${this.system}' cannot declare an operation named '${this.operation}'`;
+  }
+}
+
+/** A model's command, aggregate or view is named after a static of the model's class. */
+export class ReservedMember extends Data.TaggedError("ReservedMember")<{
+  readonly model: string;
+  readonly member: string;
+}> {
+  override get message() {
+    return `Model '${this.model}' cannot have a command, aggregate or view named '${this.member}': the name is a member of the model's class`;
   }
 }
 
@@ -372,6 +443,49 @@ export class UnknownWait extends Data.TaggedError("UnknownWait")<{
   }
 }
 
+/** A rewrite or compaction is of an aggregate the Domain does not list. */
+export class UnknownAggregate extends Data.TaggedError("UnknownAggregate")<{
+  readonly owner: string;
+  readonly aggregate: string;
+}> {
+  override get message() {
+    return `${this.owner} is of ${this.aggregate}, which is not in the Domain`;
+  }
+}
+
+/** A rewrite or compaction is run that the Domain does not list. */
+export class UnlistedRewrite extends Data.TaggedError("UnlistedRewrite")<{
+  readonly kind: "rewrite" | "compaction";
+  readonly entity: string;
+}> {
+  override get message() {
+    return `The ${this.kind} ${this.entity} is not in the Domain: list it in the model's ${this.kind}s`;
+  }
+}
+
+/** A rewrite handler returned neither an event nor `null`. */
+export class InvalidRewrite extends Data.TaggedError("InvalidRewrite")<{
+  readonly rewrite: string;
+  readonly event: string;
+}> {
+  override get message() {
+    return `${this.rewrite} returned nothing for ${this.event}: return the event to keep it, another event to replace it, or null to remove it`;
+  }
+}
+
+/**
+ * A rewrite changes events a projection was given, and the projection's
+ * Layer has no `rewrite` handler to say what that means for its store.
+ */
+export class MissingRewriteHandler extends Data.TaggedError("MissingRewriteHandler")<{
+  readonly projection: string;
+  readonly rewrite: string;
+}> {
+  override get message() {
+    return `${this.rewrite} changes events ${this.projection} is given, and ${this.projection} has no rewrite handler: return { write, rewrite } from its Layer (a rewrite that does nothing is still written down)`;
+  }
+}
+
 /** Every reason a {@link DefinitionError} has. */
 export type Reason =
   | DuplicateEventTag
@@ -387,14 +501,21 @@ export type Reason =
   | UnknownStream
   | TwoWriters
   | WriterKeyMismatch
+  | NoJsonForm
+  | InitialNotJson
   | UnhandledCommand
   | UnroutedCommand
+  | ImplementedTwice
+  | UnknownRead
+  | UnreadRecord
+  | DecisionsUnsupported
   | UndeclaredDecision
   | UndeclaredEvent
   | UndeclaredEmit
   | UnknownEvent
   | UnknownRequestContext
   | ReservedOperation
+  | ReservedMember
   | MissingWorkflowEngine
   | ForeignAppend
   | NotInModel
@@ -409,7 +530,11 @@ export type Reason =
   | LazyViewNeedsOneSource
   | PagedWithoutSuccess
   | UnknownWait
-  | UnvalidatedRead;
+  | UnvalidatedRead
+  | UnknownAggregate
+  | UnlistedRewrite
+  | InvalidRewrite
+  | MissingRewriteHandler;
 
 /**
  * A domain definition error, found while the kernel is built or when a

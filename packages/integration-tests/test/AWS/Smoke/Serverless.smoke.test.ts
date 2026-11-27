@@ -65,7 +65,12 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
 class UnexpectedStatus extends Data.TaggedError("UnexpectedStatus")<{
   readonly status: number;
   readonly expected: number;
-}> {}
+  readonly body: string;
+}> {
+  override get message() {
+    return `expected HTTP ${this.expected}, got ${this.status}: ${this.body}`;
+  }
+}
 
 class StillExists extends Data.TaggedError("StillExists")<{ readonly what: string }> {}
 
@@ -99,7 +104,11 @@ const awaitStatus = (request: HttpClientRequest.HttpClientRequest, expected: num
     Effect.flatMap((response) =>
       response.status === expected
         ? Effect.succeed(response)
-        : Effect.fail(new UnexpectedStatus({ status: response.status, expected })),
+        : response.text.pipe(
+            Effect.flatMap((body) =>
+              Effect.fail(new UnexpectedStatus({ status: response.status, expected, body })),
+            ),
+          ),
     ),
     Effect.retry({
       while: (e) => e._tag === "UnexpectedStatus",

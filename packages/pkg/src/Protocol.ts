@@ -61,6 +61,23 @@ export class RunNotInProgress extends Schema.TaggedError<RunNotInProgress>()(
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * A pull request run whose pull request was merged or closed, or whose head
+ * moved on, before it published. There is nothing left to preview.
+ */
+export class NoOpenPullRequest extends Schema.TaggedError<NoOpenPullRequest>()(
+  "NoOpenPullRequest",
+  { message: Schema.String },
+  { httpApiStatus: 410 },
+) {}
+
+/** Storage failed for a reason that may pass; send the request again. */
+export class Unavailable extends Schema.TaggedError<Unavailable>()(
+  "Unavailable",
+  { message: Schema.String },
+  { httpApiStatus: 503 },
+) {}
+
 /** Upload these, then publish again. */
 export class MissingTarballs extends Schema.TaggedError<MissingTarballs>()(
   "MissingTarballs",
@@ -103,7 +120,15 @@ export type PublishResponse = typeof PublishResponse.Type;
 export const publish = HttpApiEndpoint.post("publish", "/api/publish", {
   payload: Schema.Struct({ run: RunRef, manifest: Schema.String }),
   success: PublishResponse,
-  error: [BadRequest, Forbidden, RunNotInProgress, MissingTarballs, PackageTooLarge, Upstream],
+  error: [
+    BadRequest,
+    Forbidden,
+    RunNotInProgress,
+    NoOpenPullRequest,
+    MissingTarballs,
+    PackageTooLarge,
+    Upstream,
+  ],
 });
 
 export const TarballResponse = Schema.Struct({
@@ -124,7 +149,15 @@ export const uploadTarball = HttpApiEndpoint.put("uploadTarball", "/api/tarballs
   query: RunRef,
   payload: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
   success: TarballResponse,
-  error: [BadRequest, Forbidden, RunNotInProgress, PackageTooLarge, Upstream],
+  error: [
+    BadRequest,
+    Forbidden,
+    RunNotInProgress,
+    NoOpenPullRequest,
+    PackageTooLarge,
+    Unavailable,
+    Upstream,
+  ],
 });
 
 export const health = HttpApiEndpoint.get("health", "/api/health", {

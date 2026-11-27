@@ -117,7 +117,7 @@ export type ServerRuntimeContext = HostRuntimeContext;
  * ```
  *
  * ### Async program
- * **Example:** A plain HTTP server, no Effect (it runs on Bun)
+ * **Example:** A plain HTTP server, no Effect
  * ```typescript
  * // src/Api.ts
  * import * as Modal from "@alchemy.run/modal";
@@ -134,11 +134,12 @@ export type ServerRuntimeContext = HostRuntimeContext;
  *
  * ```typescript
  * // src/api-server.ts
+ * import { createServer } from "node:http";
  * import type { ApiEnv } from "./Api.ts";
  *
  * const env = process.env as unknown as ApiEnv;
  *
- * Bun.serve({ port: Number(process.env.PORT), fetch: () => new Response(env.GREETING) });
+ * createServer((_request, response) => response.end(env.GREETING)).listen(Number(process.env.PORT));
  * ```
  *
  * ### Calling it

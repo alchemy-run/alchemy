@@ -7,6 +7,7 @@
  * @internal
  */
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -17,6 +18,10 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import type { ImageProgram } from "./PoolHost.ts";
 import { stackDnsLabel } from "./PoolHost.ts";
+
+/** A value as an Output, whether it is one already or a plain value. */
+const output = (value: Input<string>): Output.Output<string> =>
+  (Output.isOutput(value) ? value : Output.literal(value)) as Output.Output<string>;
 
 /** The `docker` CLI exited non-zero while building or saving a node image. */
 export class NodeImageBuildFailed extends Data.TaggedError("Rivet.NodeImageBuildFailed")<{
@@ -73,21 +78,12 @@ export const saveNodeImage = Effect.fn(function* (
   const label = yield* stackDnsLabel(id);
   const dir = path.resolve(yield* dotAlchemyDirectory, "rivet", host, label);
   const tag = `rivet-node-${label}:latest`;
-  return Output.literal(program).pipe(
-    Output.mapEffect((image: ImageProgram) =>
+  return Output.all(output(program.context), output(program.dockerfile)).pipe(
+    Output.mapEffect(([context, dockerfile]: [string, string]) =>
       Effect.gen(function* () {
         yield* fs.makeDirectory(dir, { recursive: true });
         const tarball = path.join(dir, "node.tar");
-        yield* docker([
-          "build",
-          "--platform",
-          platform,
-          "-t",
-          tag,
-          "-f",
-          image.dockerfile,
-          image.context,
-        ]);
+        yield* docker(["build", "--platform", platform, "-t", tag, "-f", dockerfile, context]);
         yield* docker(["save", tag, "-o", tarball]);
         return tarball;
       }).pipe(Effect.orDie),

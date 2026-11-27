@@ -33,26 +33,22 @@ const get = (path: string, customer: string) =>
 it.live("opens accounts, deposits, and transfers over HTTP", () =>
   Effect.gen(function* () {
     yield* post("/OpenAccount", "sam", {
-      target: "sam-1",
       commandId: "o-1",
-      input: { name: "everyday" },
+      input: { accountId: "sam-1", name: "everyday" },
     });
     yield* post("/OpenAccount", "ada", {
-      target: "ada-1",
       commandId: "o-2",
-      input: { name: "savings" },
+      input: { accountId: "ada-1", name: "savings" },
     });
     const deposit = yield* post("/DepositMoney", "sam", {
-      target: "sam-1",
       commandId: "d-1",
-      input: { amount: 100 },
+      input: { accountId: "sam-1", amount: 100 },
     });
     expect(yield* deposit.json).toMatchObject({ reply: { balance: 100 } });
 
     yield* post("/RequestTransfer", "sam", {
-      target: "t-1",
       commandId: "t-1",
-      input: { from: "sam-1", to: "ada-1", amount: 40 },
+      input: { transferId: "t-1", from: "sam-1", to: "ada-1", amount: 40 },
     });
     const status = yield* get("/TransferStatus/t-1", "sam").pipe(
       Effect.repeat({
@@ -68,16 +64,21 @@ it.live("opens accounts, deposits, and transfers over HTTP", () =>
 
 it.live("a request without a session is unauthorized, and others' accounts are forbidden", () =>
   Effect.gen(function* () {
-    yield* post("/OpenAccount", "sam", { target: "sam-2", commandId: "o-3", input: { name: "x" } });
+    yield* post("/OpenAccount", "sam", {
+      commandId: "o-3",
+      input: { accountId: "sam-2", name: "x" },
+    });
     const anonymous = yield* HttpClientRequest.post("/DepositMoney").pipe(
-      HttpClientRequest.bodyJsonUnsafe({ target: "sam-2", commandId: "d-2", input: { amount: 1 } }),
+      HttpClientRequest.bodyJsonUnsafe({
+        commandId: "d-2",
+        input: { accountId: "sam-2", amount: 1 },
+      }),
       HttpClient.execute,
     );
     expect(anonymous.status).toBe(401);
     const stranger = yield* post("/DepositMoney", "eve", {
-      target: "sam-2",
       commandId: "d-3",
-      input: { amount: 1 },
+      input: { accountId: "sam-2", amount: 1 },
     });
     expect(stranger.status).toBe(403);
   }).pipe(Effect.provide(Served)),

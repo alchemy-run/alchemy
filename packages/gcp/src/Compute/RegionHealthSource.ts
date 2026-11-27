@@ -335,15 +335,13 @@ export const RegionHealthSourceProvider = () =>
           env.project,
           region,
           compute.insertRegionHealthSources({
+            name: sourceName,
+            description: desiredDescription,
+            sourceType,
+            sources,
+            healthAggregationPolicy,
             project: env.project,
             region,
-            body: {
-              name: sourceName,
-              description: desiredDescription,
-              sourceType,
-              sources,
-              healthAggregationPolicy,
-            },
           }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
@@ -378,10 +376,10 @@ export const RegionHealthSourceProvider = () =>
           env.project,
           region,
           compute.patchRegionHealthSources({
+            ...patch,
             project: env.project,
             region,
             healthSource: sourceName,
-            body: patch,
           }),
         );
         current = (yield* getByName(env.project, region, sourceName)) ?? current;

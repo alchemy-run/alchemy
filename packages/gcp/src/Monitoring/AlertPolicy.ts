@@ -671,13 +671,11 @@ export const AlertPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* monitoring
           .createProjectsAlertPolicies({
+            ...body,
+            conditions: news.conditions.map((condition) =>
+              toApiCondition({ ...condition, name: undefined }),
+            ),
             name: parentOf(env.project),
-            body: {
-              ...body,
-              conditions: news.conditions.map((condition) =>
-                toApiCondition({ ...condition, name: undefined }),
-              ),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(env.project, id)));
         current = created ?? undefined;
@@ -727,13 +725,10 @@ export const AlertPolicyProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* monitoring.patchProjectsAlertPolicies({
+          ...body,
+          conditions: withConditionNames(news.conditions, current.conditions),
           name,
           updateMask: updateMask.join(","),
-          body: {
-            ...body,
-            name,
-            conditions: withConditionNames(news.conditions, current.conditions),
-          },
         });
       }
 

@@ -1,4 +1,5 @@
 import { hashDockerBuildInputs, selectDockerBuildContext } from "@alchemy.run/docker/BuildHash";
+import { type IgnoreRules, listFileSystemDirectory, walkIgnoring } from "alchemy/Util/Ignore";
 import { initialCwd } from "alchemy/Util/Node";
 import { sha256Object } from "alchemy/Util/sha256";
 import { tarGzipDirectory } from "alchemy/Util/tarGzip";
@@ -217,6 +218,8 @@ const checkContextLimit = (size: number, entries: number) =>
 const selectedEntries = Effect.fn(function* (selected: {
   context: string;
   includes: (relativePath: string) => boolean;
+  rules: IgnoreRules | undefined;
+  force: ReadonlyArray<string>;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -228,27 +231,32 @@ const selectedEntries = Effect.fn(function* (selected: {
   }> = [];
   let size = 2 * TAR_BLOCK_BYTES;
   let entryCount = 0;
-  for (const entry of (yield* fs.readDirectory(selected.context, {
-    recursive: true,
-  })).sort()) {
-    const relative = entry.replaceAll("\\", "/");
+  // Walk one level at a time so `.dockerignore`d directories (a pnpm
+  // workspace's `node_modules`) are never read, and never follow a symlinked
+  // directory: pnpm's links form cycles a recursive read loops through.
+  const walked = yield* walkIgnoring({
+    list: yield* listFileSystemDirectory(selected.context),
+    rules: selected.rules,
+    force: selected.force,
+  });
+  for (const { path: relative, type } of walked) {
     if (!selected.includes(relative)) continue;
-    const sourcePath = path.join(selected.context, entry);
+    const sourcePath = path.join(selected.context, relative);
     if (/[^\x20-\x7e]/.test(relative)) {
       return yield* new ServiceContextPathUnsupported({ path: sourcePath });
     }
-    if (Result.isSuccess(yield* Effect.result(fs.readLink(sourcePath)))) {
+    if (type === "SymbolicLink") {
       return yield* new ServiceContextSymlinkUnsupported({ path: sourcePath });
     }
+    if (type !== "Directory" && type !== "File") continue;
     const info = yield* fs.stat(sourcePath);
-    if (info.type !== "Directory" && info.type !== "File") continue;
     entryCount += 1;
-    size += tarEntryBytes(relative, info.type, Number(info.size));
+    size += tarEntryBytes(relative, type, Number(info.size));
     yield* checkContextLimit(size, entryCount);
     entries.push({
-      entry,
+      entry: relative,
       sourcePath,
-      type: info.type,
+      type,
       mode: info.mode & 0o7777,
     });
   }

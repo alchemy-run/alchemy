@@ -72,7 +72,7 @@ export default class DomainIsolationWorker extends Cloudflare.Worker<DomainIsola
         const { accounts, owners } = hosted[route[1] as "Billing" | "Audit"];
         const id = decodeURIComponent(route[3]!);
         if (route[2] === "open") {
-          const receipt = yield* accounts.send(id, new Open({ owner: route[4]! }));
+          const receipt = yield* accounts.send(new Open({ id, owner: route[4]! }));
           return yield* HttpServerResponse.json({ version: receipt.version });
         }
         if (route[2] === "owners")

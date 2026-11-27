@@ -7,11 +7,10 @@ import * as Option from "effect/Option";
 import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
-import * as Schema from "effect/Schema";
-import * as SchemaAST from "effect/SchemaAST";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
 import type { Servable } from "./Api.ts";
 import { DefinitionError, DuplicateTool, ToolNameTooLong } from "./DefinitionError.ts";
+import { type Client, invoke, isToolCall, specOf, toolName } from "./Mention.ts";
 import {
   type ClientOf,
   exposedOf,
@@ -38,19 +37,6 @@ export type Services<A extends Toolable> = Exclude<
   Effect.Services<A["clientInProcess"]>,
   Scope.Scope | RpcMiddleware.ForClient<any>
 >;
-
-/** One schema for several failures, without repeats or `Never`. */
-const failures = (schemas: ReadonlyArray<Schema.Top>): Schema.Top => {
-  const members = new Set<Schema.Top>();
-  const add = (schema: Schema.Top): void => {
-    const union = schema as Schema.Top & { readonly members?: ReadonlyArray<Schema.Top> };
-    if (SchemaAST.isUnion(schema.ast) && union.members) union.members.forEach(add);
-    else if (!SchemaAST.isNever(schema.ast)) members.add(schema);
-  };
-  schemas.forEach(add);
-  const list = [...members];
-  return list.length === 0 ? Schema.Never : list.length === 1 ? list[0]! : Schema.Union(list);
-};
 
 /**
  * A call {@link toToolkit} can give as a tool: a command's tag
@@ -85,78 +71,15 @@ export interface ApiToolkit<R> {
   readonly layer: Layer.Layer<Tool.HandlersFor<Record<string, Tool.Any>>, never, R>;
 }
 
-/** Characters every MCP client and model provider accepts in a tool name. */
-const unsafe = /[^A-Za-z0-9_-]/g;
 /** The longest tool name model providers accept. */
 const MAX_NAME = 64;
 
-/**
- * The tool's name: `<api>_<name>_<operation>`, with any other character
- * than a letter, digit, `_` or `-` replaced by `_`.
- */
-export const toolName = (op: {
-  readonly api: string;
-  readonly name: string;
-  readonly operation: string;
-}): string => `${op.api}_${op.name}_${op.operation}`.replace(unsafe, "_");
-
-/**
- * What the model reads about the tool: a command's `description`, or a
- * sentence for the call; a read follows its sentence with its entry's
- * `description` (`Get the current AccountSummary of a key. An account's
- * balance and owner.`).
- */
-const toolDescription = (op: Operation): string => {
-  if (op.operation === "send") return op.description ?? `Send the ${op.name} command.`;
-  const call =
-    op.operation === "ask"
-      ? op.served.kind === "Query" && op.served.definition.paged
-        ? `Ask the ${op.name} query for a page of entries.`
-        : `Ask the ${op.name} query.`
-      : op.operation === "peek"
-        ? `Get the latest entry of the ${op.name} stream for a key.`
-        : op.operation === "list"
-          ? `List a page of the ${op.name} entries of a key.`
-          : op.operation === "snapshot"
-            ? `Get the current ${op.name} of a key, with the cursor it is valid at.`
-            : `Get the current ${op.name} of a key.`;
-  return op.description === undefined ? call : `${call} ${op.description}`;
-};
-
-/**
- * A call that returns once. A stream (`watch`, `events`) is not one tool
- * result: it stays on the Api's own clients.
- */
-const isToolCall = (op: Operation): boolean => !op.stream;
-
-/** Whether values of the schema are JSON objects, as an MCP tool's output must be. */
-const isObject = (schema: Schema.Top): boolean => {
-  const document = Schema.toJsonSchemaDocument(schema);
-  const ref = document.schema.$ref;
-  const root =
-    typeof ref === "string"
-      ? (document.definitions[ref.slice(ref.lastIndexOf("/") + 1)] ?? document.schema)
-      : document.schema;
-  return root.type === "object";
-};
-
 /** The tool for one call, and how to call it with the in-process client. */
 const toolOf = (api: string) => (op: Operation) => {
-  const { rpc } = op;
-  const success = rpc.successSchema;
-  // MCP clients reject a tool whose output is not an object (`State | null`),
-  // so such a value is returned as `{ value }`.
-  const wrapped = !isObject(success);
+  const { name, spec, wrapped } = specOf(api, op);
   const write = op.operation === "send";
-  const tool = Tool.make(toolName({ api, name: op.name, operation: op.operation }), {
-    description: toolDescription(op),
-    // JSON codecs, as the Api's HTTP server uses: the tool decodes the
-    // call's JSON once, and the in-process call does not decode it again.
-    parameters: Schema.toCodecJson(rpc.payloadSchema),
-    success: Schema.toCodecJson(wrapped ? Schema.Struct({ value: success }) : success),
-    failure: Schema.toCodecJson(
-      failures([rpc.errorSchema, ...[...rpc.middlewares].map((middleware) => middleware.error)]),
-    ),
+  const tool = Tool.make(name, {
+    ...spec,
     // A rejection is a result the model can act on, not a failed generation.
     failureMode: "return",
   })
@@ -164,38 +87,6 @@ const toolOf = (api: string) => (op: Operation) => {
     .annotate(Tool.Destructive, write)
     .annotate(Tool.Idempotent, !write);
   return { tool, op, wrapped };
-};
-
-type Client = Record<string, unknown>;
-
-/**
- * Send one call through the Api's client: a command takes its target, input
- * and command id; a query its input and options; a read its key and options.
- */
-const invoke = (client: Client, op: Operation, payload: unknown, headers?: Headers.Input) => {
-  if (op.operation === "send") {
-    const send = client[op.name] as (
-      target: unknown,
-      input: unknown,
-      options: object,
-    ) => Effect.Effect<unknown, unknown>;
-    const { target, input, commandId } = payload as {
-      readonly target: unknown;
-      readonly input: unknown;
-      readonly commandId?: string;
-    };
-    return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
-  }
-  if (op.operation === "ask") {
-    const ask = client[op.name] as (input: unknown, o: object) => Effect.Effect<unknown, unknown>;
-    const { input, ...options } = payload as { readonly input: unknown };
-    return ask(input, { ...options, headers });
-  }
-  const { key, ...options } = payload as { readonly key: unknown };
-  const read = (
-    client[op.name] as Record<string, (k: unknown, o: object) => Effect.Effect<unknown, unknown>>
-  )[op.operation]!;
-  return read(key, { ...options, headers });
 };
 
 const requestHeaders: Effect.Effect<Headers.Input | undefined> = Effect.map(
@@ -341,3 +232,5 @@ export const toMcp = <A extends Toolable, R = never>(
     Services<A> | R
   >;
 };
+
+export { toolName };

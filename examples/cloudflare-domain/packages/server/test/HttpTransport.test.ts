@@ -20,7 +20,12 @@ import { register } from "./flows.ts";
 import { SessionKeyTest, signedInAs } from "./session.ts";
 
 // The Worker's HTTP surface (`yield* CustomerApi`, its `fetch`) on a real HTTP server, over the in-memory platform.
-const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments, MemoryLedgerStore);
+const Ports = Layer.mergeAll(
+  SiftFraudCheck,
+  StripePayments,
+  MemoryLedgerStore,
+  Domain.VaultLive.pipe(Layer.provide(Layer.merge(Domain.MemoryKeyStore, Domain.NoKeyWrap))),
+);
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(
     Bank.layer(BankHandlers).pipe(Layer.provide(Layer.mergeAll(Ports, Domain.InMemory))),
@@ -43,7 +48,7 @@ it.live("the CustomerApi round-trips over HTTP, including a streamed watch", () 
   Effect.gen(function* () {
     const sam = yield* CustomerApi.client;
     const accountId = yield* register(sam, "c-1", "sam");
-    yield* sam.DepositMoney(accountId, { amount: 70 });
+    yield* sam.DepositMoney({ accountId, amount: 70 });
     const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
       Stream.map(({ state }) => state),
       Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 70),

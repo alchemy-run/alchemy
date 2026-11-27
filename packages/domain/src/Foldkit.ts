@@ -11,6 +11,7 @@ import { defineMessageUnion, type MessageUnion } from "foldkit/message";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Api from "./Api.ts";
 import type * as DomainCommand from "./Command.ts";
+import { sendPayload } from "./internal.ts";
 import * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Query from "./Query.ts";
@@ -84,7 +85,10 @@ type Cases<A extends Api.Any> = QueryCases<A> & {
   readonly [C in Api.CommandsOf<A> as `Succeeded${C["tag"]}`]: {
     commandId: typeof Schema.String;
     reply: Schema.Schema<Reply<C>>;
-    receipt: Schema.Struct<{ stream: typeof Schema.String; version: typeof Schema.Number }>;
+    /** The first stream it committed to: what a read takes as `atLeast`. */
+    receipt: typeof Receipt;
+    /** Every stream it committed to: more than one for a command a decision implements. */
+    commits: Schema.$Array<typeof Receipt>;
   };
 } & {
   readonly [C in Api.CommandsOf<A> as `Failed${C["tag"]}`]: {
@@ -94,7 +98,6 @@ type Cases<A extends Api.Any> = QueryCases<A> & {
 };
 
 type Args<C extends DomainCommand.Any> = {
-  target: Schema.toType<C["target"]>;
   input: Schema.Schema<Input<C>>;
   commandId: typeof Schema.String;
 };
@@ -154,6 +157,7 @@ function commandDefinitions(api: Api.Any): unknown {
       commandId: Schema.String,
       reply: command.reply ?? Schema.Void,
       receipt: Receipt,
+      commits: Schema.Array(Receipt),
     };
     cases[`Failed${command.tag}`] = {
       commandId: Schema.String,
@@ -194,35 +198,30 @@ function commandDefinitions(api: Api.Any): unknown {
     const { payloadSchema } = command.rpc as Rpc.AnyWithProps;
     definitions[command.tag] = Command.define(command.tag, {
       args: {
-        target: Schema.toType(command.target),
         input: Schema.toType((payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input),
         commandId: Schema.String,
       },
       messages: [Message],
       execute: Effect.fn(
-        function* ({ target, input, commandId }) {
-          const client = (yield* Effect.service(api.Client)) as Record<
-            string,
-            (
-              target: string,
-              input: unknown,
-              options: Api.CommandOptions,
-            ) => Effect.Effect<{ reply: unknown; stream: string; version: number }, unknown>
-          >;
+        function* (args: { readonly input: unknown; readonly commandId: string }) {
+          const { input, commandId } = args;
+          const client = (yield* Effect.service(api.Client)) as Record<string, unknown>;
           const headersService = yield* Effect.serviceOption(CommandHeaders);
           const headers =
             headersService._tag === "Some"
               ? yield* headersService.value.get(command.tag)
               : undefined;
-          const { reply, stream, version } = yield* client[command.tag](target, input, {
-            commandId,
-            headers,
-          });
+          const { reply, ...receipt } = (yield* sendPayload(
+            client[command.tag],
+            { ...args, input, commandId },
+            { headers },
+          )) as { reply: unknown; stream?: string; version?: number; commits?: unknown };
           return {
             _tag: `Succeeded${command.tag}`,
             commandId,
             reply,
-            receipt: { stream, version },
+            receipt: { stream: receipt.stream, version: receipt.version },
+            commits: receipt.commits,
           };
         },
         (effect, { commandId }) =>
@@ -423,7 +422,8 @@ export type Snapshot<State> = Readonly<{
 export interface WatchOptions<Model, Message, V extends ReadEntry> {
   readonly key: (model: Model) => ReadKey<V>;
   readonly isEnabled?: (model: Model) => boolean;
-  readonly toMessage: (snapshot: Snapshot<StateOf<V>>) => Message;
+  /** The snapshot, and the key it is of: a Model that keeps several keys files it under this one. */
+  readonly toMessage: (snapshot: Snapshot<StateOf<V>>, key: ReadKey<V>) => Message;
   readonly onFailure: (error: ErrorOf<V>) => Message;
   /** Handle unexpected read defects. Interruption does not call this callback. */
   readonly onDefect: (cause: Cause.Cause<unknown>) => Message;
@@ -455,7 +455,7 @@ function watchRead(
             ),
           ).pipe(
             Stream.map(({ state, cursor }) =>
-              options.toMessage({ state: Option.fromNullishOr(state), cursor }),
+              options.toMessage({ state: Option.fromNullishOr(state), cursor }, key),
             ),
             Stream.catchCause((cause) => {
               if (Cause.hasDies(cause)) {
@@ -478,7 +478,8 @@ export interface EventsOptions<Model, Message, V extends ReadEntry> {
   readonly isEnabled?: (model: Model) => boolean;
   readonly restartKey?: (model: Model) => number;
   readonly onEntry: (entry: EntryOf<V>) => Message;
-  readonly onCaughtUp: (cursor: number) => Message;
+  /** Every stored entry of `key` has been delivered: what follows is live. */
+  readonly onCaughtUp: (cursor: number, key: ReadKey<V>) => Message;
   readonly onFailure: (error: ErrorOf<V>) => Message;
   /** Handle unexpected read defects. Interruption does not call this callback. */
   readonly onDefect: (cause: Cause.Cause<unknown>) => Message;
@@ -586,7 +587,7 @@ function readEvents(
             return true;
           }),
           Stream.map((frame) =>
-            Read.isCaughtUp(frame) ? options.onCaughtUp(frame.cursor) : options.onEntry(frame),
+            Read.isCaughtUp(frame) ? options.onCaughtUp(frame.cursor, key) : options.onEntry(frame),
           ),
           Stream.catchCause((cause) => {
             if (Cause.hasDies(cause)) {

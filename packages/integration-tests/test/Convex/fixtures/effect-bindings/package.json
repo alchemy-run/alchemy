@@ -1,0 +1,8 @@
+{
+  "name": "convex-effect-bindings-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "convex": "1.49.0"
+  }
+}

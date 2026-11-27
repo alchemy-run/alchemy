@@ -20,6 +20,7 @@
     },
     {
       "path": "../../packages/docker/tsconfig.json"
-    }
+    },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }

@@ -322,14 +322,12 @@ export const AuthorizationPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsAuthorizationPolicies({
+            action,
+            rules,
+            description: news.description,
+            labels: desiredLabels,
             parent: projectParent(env.project, location),
             authorizationPolicyId,
-            body: {
-              action,
-              rules,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -365,15 +363,12 @@ export const AuthorizationPolicyProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networksecurity.patchProjectsLocationsAuthorizationPolicies({
+          labels: desiredLabels,
+          description: news.description,
+          action,
+          rules,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            action,
-            rules,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

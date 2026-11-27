@@ -1,4 +1,3 @@
-import { ConfigError } from "@distilled.cloud/core/errors";
 import { withAuthToken } from "@distilled.cloud/modal/AuthToken";
 import { Credentials, DEFAULT_API_BASE_URL } from "@distilled.cloud/modal/Credentials";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
@@ -25,14 +24,13 @@ export const fromAuthProvider = () =>
   withAuthTokens(
     Layer.effect(
       Credentials,
-      lazyCredentials<ModalResolvedCredentials, ConfigError>()(
-        MODAL_AUTH_PROVIDER_NAME,
-        (creds) => ({
-          tokenId: creds.tokenId,
-          tokenSecret: creds.tokenSecret,
-          apiBaseUrl: creds.apiBaseUrl,
-        }),
-      ),
+      // `Credentials` has no error channel: a failed resolution dies, and the
+      // engine reports it as `CredentialsRequired`.
+      lazyCredentials<ModalResolvedCredentials>()(MODAL_AUTH_PROVIDER_NAME, (creds) => ({
+        tokenId: creds.tokenId,
+        tokenSecret: creds.tokenSecret,
+        apiBaseUrl: creds.apiBaseUrl,
+      })).pipe(Effect.map(Effect.orDie)),
     ),
   );
 

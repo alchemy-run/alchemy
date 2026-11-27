@@ -25,6 +25,7 @@ import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
+import type * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -124,6 +125,23 @@ export interface EntityNamespace<Rpcs extends Rpc.Any> {
     never,
     Rpc.MiddlewareClient<Rpcs>
   >;
+  /**
+   * Open a WebSocket to the object `entityId` runs on, on pools whose
+   * instances each have one (`ClusterCloudflare.DurableObjectPool`), from a
+   * Worker. `request` is the client's upgrade: the object accepts it, sends
+   * the instance `call`, whose handler takes the socket with
+   * `InstanceSockets`, and answers the `101` response to return to the
+   * client. `undefined` where the caller can't reach the instance's object.
+   */
+  readonly connect?: (
+    entityId: string,
+    request: Request,
+    call: {
+      readonly tag: Rpcs["_tag"];
+      readonly payload: unknown;
+      readonly headers?: Headers.Input;
+    },
+  ) => Effect.Effect<Response | undefined, PersistenceError>;
 }
 
 /** What an instance's constructor runs with: once per instance. */
@@ -580,11 +598,14 @@ const clientOf = (entity: AnyEntity, declaration: Effect.Effect<Entity, never, a
     const token = yield* bind<Redacted.Redacted<string> | string>("TOKEN", resource?.token);
     // A Worker calling a gateway Worker reaches it through a service binding.
     const service = sanitizeKey(`CLUSTER_${entity.type}_SERVICE`);
-    if (!globalThis.__ALCHEMY_RUNTIME__) yield* bindRoute(entity.type, service);
+    // And opens WebSockets to its instances' objects, where they are Durable Objects.
+    const objects = sanitizeKey(`CLUSTER_${entity.type}_OBJECTS`);
+    if (!globalThis.__ALCHEMY_RUNTIME__) yield* bindRoute(entity.type, service, objects);
     return makeNamespace(entity, {
       url,
       token: token === undefined ? "" : Redacted.isRedacted(token) ? Redacted.value(token) : token,
       service,
+      objects,
     }) as unknown as EntityNamespace<Rpc.Any>;
   });
 

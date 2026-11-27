@@ -250,12 +250,10 @@ export const AgentPoolProvider = () =>
       if (current === undefined) {
         const created = yield* retryApiDisabled(
           storagetransfer.createProjectsAgentPools({
+            displayName: desiredDisplayName,
+            bandwidthLimit: desiredLimit,
             projectId: env.project,
             agentPoolId,
-            body: {
-              displayName: desiredDisplayName,
-              bandwidthLimit: desiredLimit,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getAgentPool(name)));
         current = created ?? undefined;
@@ -278,12 +276,10 @@ export const AgentPoolProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* storagetransfer.patchProjectsAgentPools({
+          displayName: desiredDisplayName,
+          bandwidthLimit: desiredLimit,
           name: current.name ?? name,
           updateMask,
-          body: {
-            displayName: desiredDisplayName,
-            bandwidthLimit: desiredLimit,
-          },
         });
       }
 

@@ -42,6 +42,7 @@ const program = Effect.gen(function* () {
       compatibilityFlags: config.compatibilityFlags,
       viteEnvironments: config.viteEnvironments,
     },
+    config.mode,
   );
   const [bundle, workspaces] = yield* Effect.all([serverBundle, externalWorkspaces]);
   const result: ViteBuildChildResult = {

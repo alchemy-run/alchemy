@@ -1,6 +1,6 @@
-import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials } from "@distilled.cloud/stripe";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { STRIPE_AUTH_PROVIDER_NAME, type StripeResolvedCredentials } from "./AuthProvider.ts";
 
@@ -25,11 +25,10 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    lazyCredentials<StripeResolvedCredentials, ConfigError>()(
-      STRIPE_AUTH_PROVIDER_NAME,
-      (creds) => ({
-        apiKey: creds.apiKey,
-        apiBaseUrl: creds.apiBaseUrl,
-      }),
-    ),
+    // `Credentials` has no error channel: a failed resolution dies, and the
+    // engine reports it as `CredentialsRequired`.
+    lazyCredentials<StripeResolvedCredentials>()(STRIPE_AUTH_PROVIDER_NAME, (creds) => ({
+      apiKey: creds.apiKey,
+      apiBaseUrl: creds.apiBaseUrl,
+    })).pipe(Effect.map(Effect.orDie)),
   );

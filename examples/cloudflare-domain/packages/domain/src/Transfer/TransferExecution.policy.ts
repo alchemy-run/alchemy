@@ -1,7 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import { TransferApproved } from "./ApproveTransfer.command.ts";
-import { Decision, ExecuteTransfer } from "./ExecuteTransfer.saga.ts";
+import { Approval, ExecuteTransfer } from "./ExecuteTransfer.saga.ts";
 import { TransferFailed } from "./FailTransfer.command.ts";
 import { TransferRequested } from "./RequestTransfer.command.ts";
 import { Transfer } from "./Transfer.aggregate.ts";
@@ -30,11 +30,11 @@ export const TransferExecutionLive = TransferExecution.toLayer(
           });
           return;
         case "TransferApproved":
-          return yield* executions.get(source).signal(Decision, "approved");
+          return yield* executions.get(source).signal(Approval, "approved");
         case "TransferFailed":
           // A transfer that expired waiting for approval; a saga that already
           // finished ignores it.
-          return yield* executions.get(source).signal(Decision, "expired");
+          return yield* executions.get(source).signal(Approval, "expired");
       }
     });
   }),

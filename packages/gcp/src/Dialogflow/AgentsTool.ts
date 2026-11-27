@@ -332,10 +332,7 @@ export const AgentsToolProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsTools({
-            parent: agent,
-            body,
-          })
+          .createProjectsLocationsAgentsTools({ ...body, parent: agent })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
       }
@@ -361,6 +358,7 @@ export const AgentsToolProvider = () =>
         dataStoreChanged
       ) {
         current = yield* dialogflow.patchProjectsLocationsAgentsTools({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -369,7 +367,6 @@ export const AgentsToolProvider = () =>
             openApiChanged && body.openApiSpec ? "open_api_spec" : undefined,
             dataStoreChanged && body.dataStoreSpec ? "data_store_spec" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

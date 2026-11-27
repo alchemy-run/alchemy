@@ -50,6 +50,12 @@ Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destro
 
 Use `--profile` with `deploy`, `plan`, `destroy`, `dev`, `logs`, `drift`, or `state`.
 
+Set `ALCHEMY_DIR` to move the project's `.alchemy` directory, where local state, run logs, build caches and local emulator data live. Like `ALCHEMY_STAGE`, it's read from the shell, `.env` or `--env-file`. A relative path resolves from the working directory. Add the new directory to `.gitignore`, as you would `.alchemy`.
+
+```sh
+ALCHEMY_DIR=.alchemy-ci alchemy deploy
+```
+
 ## The interactive TUI
 
 In an interactive terminal, `deploy`, `destroy`, and `plan` render a live TUI: the rendered plan, an arrow-key approval prompt, and per-resource apply progress that unmounts into the final output. Everywhere else the same commands emit plain line-oriented logs.

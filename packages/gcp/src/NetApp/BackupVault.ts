@@ -364,16 +364,14 @@ export const BackupVaultProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsBackupVaults({
+            backupVaultType: news.backupVaultType,
+            backupRegion,
+            kmsConfig,
+            backupRetentionPolicy: news.backupRetentionPolicy,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             backupVaultId,
-            body: {
-              backupVaultType: news.backupVaultType,
-              backupRegion,
-              kmsConfig,
-              backupRetentionPolicy: news.backupRetentionPolicy,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -403,14 +401,11 @@ export const BackupVaultProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsBackupVaults({
+          labels: desiredLabels,
+          description: news.description,
+          backupRetentionPolicy: news.backupRetentionPolicy,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            backupRetentionPolicy: news.backupRetentionPolicy,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
