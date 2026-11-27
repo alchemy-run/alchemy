@@ -131,52 +131,9 @@ const CIRCULAR = "(circular)";
 export const toYamlDisplayValue = (
   value: unknown,
   ancestors: WeakSet<object> = new WeakSet(),
-): YamlDisplayValue => toYamlDisplayValueRedacting(value, undefined, ancestors);
-
-/**
- * Whether the previous value at a path must stay hidden: the desired value is
- * a secret, or not resolved yet (an Output or an Effect), so it may become one.
- * Opaque leaves such as Duration or Date never hold a secret and stay visible.
- */
-const hidesPrevious = (desired: unknown) =>
-  Redacted.isRedacted(desired) ||
-  Output.isExpr(desired) ||
-  Effect.isEffect(desired) ||
-  typeof desired === "function";
-
-/** Both arrays, or both plain records: the walk can match their entries. */
-const sameShape = (value: unknown, desired: unknown) =>
-  isPlainData(value) && isPlainData(desired) && Array.isArray(value) === Array.isArray(desired);
-
-/** Whether any value inside plain desired data {@link hidesPrevious}. */
-const containsHidden = (desired: unknown, ancestors = new WeakSet<object>()): boolean => {
-  if (hidesPrevious(desired)) return true;
-  if (!isPlainData(desired) || ancestors.has(desired)) return false;
-  ancestors.add(desired);
-  try {
-    return Object.values(desired).some((value) => containsHidden(value, ancestors));
-  } finally {
-    ancestors.delete(desired);
-  }
-};
-
-/**
- * Render previous props beside the desired ones: wherever the desired value
- * {@link hidesPrevious}, the previous value prints as `(hidden)`, so a value
- * that is becoming a secret never prints its legacy plaintext.
- */
-const toYamlDisplayValueRedacting = (
-  value: unknown,
-  desired: unknown,
-  ancestors: WeakSet<object> = new WeakSet(),
 ): YamlDisplayValue => {
   // Output expressions are Effects too, so this order is security-sensitive.
   if (Redacted.isRedacted(value)) return REDACTED;
-  if (hidesPrevious(desired)) return HIDDEN;
-  // A value whose shape changed into data holding a secret (`"tok"` or
-  // `["tok"]` → `{ token: Redacted }`) has no matching path inside it to hide
-  // by, so hide it whole.
-  if (!sameShape(value, desired) && containsHidden(desired)) return HIDDEN;
   if (Output.isExpr(value)) return KNOWN_AFTER_APPLY;
   if (Effect.isEffect(value) || typeof value === "function") return COMPUTED;
   if (value === undefined) return UNDEFINED;
@@ -189,31 +146,68 @@ const toYamlDisplayValueRedacting = (
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
-      return value.map((item, index) =>
-        toYamlDisplayValueRedacting(
-          item,
-          Array.isArray(desired) && Object.hasOwn(desired, index) ? desired[index] : undefined,
-          ancestors,
-        ),
-      );
+      return value.map((item) => toYamlDisplayValue(item, ancestors));
     }
-    const desiredRecord = isPlainData(desired) && !Array.isArray(desired) ? desired : undefined;
     return Object.fromEntries(
       Object.keys(value)
         .sort((a, b) => a.localeCompare(b))
         .map((key) => [
           key,
-          toYamlDisplayValueRedacting(
-            (value as Record<string, unknown>)[key],
-            desiredRecord !== undefined && Object.hasOwn(desiredRecord, key)
-              ? desiredRecord[key]
-              : undefined,
-            ancestors,
-          ),
+          toYamlDisplayValue((value as Record<string, unknown>)[key], ancestors),
         ]),
     );
   } finally {
     ancestors.delete(value);
+  }
+};
+
+/** Whether desired props are, or hold, a secret or a value that may resolve to one. */
+const mayHoldSecret = (desired: unknown, ancestors = new WeakSet<object>()): boolean => {
+  if (Redacted.isRedacted(desired) || Output.isExpr(desired) || Effect.isEffect(desired)) {
+    return true;
+  }
+  if (typeof desired === "function") return true;
+  if (!isPlainData(desired) || ancestors.has(desired)) return false;
+  ancestors.add(desired);
+  try {
+    return Object.values(desired).some((value) => mayHoldSecret(value, ancestors));
+  } finally {
+    ancestors.delete(desired);
+  }
+};
+
+/**
+ * The previous props with each value the desired props now keep secret, or
+ * may, replaced by `(hidden)`, so a value becoming a secret never prints its
+ * legacy plaintext (#2816). Entries match by key and index; where the shapes
+ * differ nothing matches, so the whole previous value is hidden.
+ */
+const hidePrevious = (
+  previous: unknown,
+  desired: unknown,
+  ancestors = new WeakSet<object>(),
+): unknown => {
+  if (Redacted.isRedacted(previous)) return previous;
+  const sameShape =
+    isPlainData(previous) &&
+    isPlainData(desired) &&
+    Array.isArray(previous) === Array.isArray(desired);
+  if (!sameShape) return mayHoldSecret(desired) ? HIDDEN : previous;
+  if (ancestors.has(previous)) return CIRCULAR;
+  ancestors.add(previous);
+  try {
+    const at = (key: string | number) =>
+      Object.hasOwn(desired, key) ? (desired as Record<string | number, unknown>)[key] : undefined;
+    return Array.isArray(previous)
+      ? previous.map((value, index) => hidePrevious(value, at(index), ancestors))
+      : Object.fromEntries(
+          Object.entries(previous).map(([key, value]) => [
+            key,
+            hidePrevious(value, at(key), ancestors),
+          ]),
+        );
+  } finally {
+    ancestors.delete(previous);
   }
 };
 
@@ -255,7 +249,7 @@ export const formatDeclaredPropertyYaml = (
     lines: [
       "properties:",
       ...unifiedDriftLines(
-        toYamlDisplayValueRedacting(oldProps ?? {}, desired),
+        toYamlDisplayValue(hidePrevious(oldProps ?? {}, desired)),
         toYamlDisplayValue(desired),
         2,
       ),
