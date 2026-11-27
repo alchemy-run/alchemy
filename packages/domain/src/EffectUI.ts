@@ -1,11 +1,14 @@
 import { Command, Query, Subscription } from "@effect/ui";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import type * as Headers from "effect/http/Headers";
+import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Ref from "effect/Ref";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -14,16 +17,19 @@ import type * as Api from "./Api.ts";
 import type * as DomainCommand from "./Command.ts";
 import { sendPayload } from "./internal.ts";
 import type * as Middleware from "./Middleware.ts";
+import type * as Projection from "./Projection.ts";
 import type * as DomainQuery from "./Query.ts";
 import * as Read from "./Read.ts";
-import { nameOf } from "./ReadRpcs.ts";
+import { nameOf, outputEvents } from "./ReadRpcs.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as View from "./View.ts";
 
 /**
  * Per-call headers, read when a Command or query runs, never part of its args. Provide it under
  * `layer` (`Bank.layer.pipe(Layer.provide(Headers))`): a query can fetch outside the component that
- * asked for it, so a sibling of `layer` reaches Commands but not every query fetch.
+ * asked for it, so a sibling of `layer` reaches Commands but not every query fetch. On a server
+ * render, `get` can read the request (`Effect.serviceOption(HttpServerRequest)`): it runs in the
+ * fetch, which runs in the request.
  */
 export class CommandHeaders extends Context.Service<
   CommandHeaders,
@@ -32,16 +38,14 @@ export class CommandHeaders extends Context.Service<
   }
 >()("@alchemy.run/domain/EffectUI/CommandHeaders") {}
 
-/** Page-local command id state. Give each page load a fresh session. */
-export const CommandIds = Schema.Struct({ session: Schema.String, sent: Schema.Number });
-/** Page-local command id state. */
-export type CommandIds = typeof CommandIds.Type;
-
-/** Allocate an id without reading time or changing the supplied state. */
-export const next = (ids: CommandIds) => ({
-  commandId: `${ids.session}:${ids.sent}`,
-  commandIds: CommandIds.make({ session: ids.session, sent: ids.sent + 1 }),
-});
+/**
+ * Makes the id of a Command sent without one: a random UUID. Provide another under `layer` to pin
+ * ids in a test. An id never lives in a Model, so hydration and history restore cannot repeat one.
+ */
+export const NewCommandId = Context.Reference<Effect.Effect<string>>(
+  "@alchemy.run/domain/EffectUI/NewCommandId",
+  { defaultValue: () => Effect.sync(() => SecureRandom.uuidV4Unsafe()) },
+);
 
 type Input<C extends DomainCommand.Any> = Omit<C["Type"], "_tag">;
 type Reply<C extends DomainCommand.Any> = C["reply"] extends Schema.Top ? C["reply"]["Type"] : void;
@@ -51,7 +55,7 @@ type Denial<C extends DomainCommand.Any> = C["middleware"][number]["error"]["Typ
 /** One stream a command committed to. */
 export type Receipt = Readonly<{ stream: string; version: number }>;
 
-/** A committed command: its reply, the first stream it wrote (a read's `atLeast`), and every stream. */
+/** A committed command: its id, its reply, the first stream it wrote, and every stream. */
 export type Success<C extends DomainCommand.Any> = Readonly<{
   commandId: string;
   reply: Reply<C>;
@@ -59,11 +63,18 @@ export type Success<C extends DomainCommand.Any> = Readonly<{
   commits: ReadonlyArray<Receipt>;
 }>;
 
-/** A refusal is final; an unknown outcome can be retried with the same id. */
-export type Failure<C extends DomainCommand.Any> =
+/**
+ * A refusal is final. `Unknown` can be sent again with its `commandId`. `TimedOut`, only for a
+ * command made with `consistency: "strong"`, means the command committed at `receipt` and a view
+ * did not apply it in time.
+ */
+export type Failure<C extends DomainCommand.Any, Strong extends boolean = false> =
   | Readonly<{ _tag: "Rejected"; commandId: string; rejection: Rejection<C> }>
   | Readonly<{ _tag: "Denied"; commandId: string; error: Denial<C> }>
-  | Readonly<{ _tag: "Unknown"; commandId: string }>;
+  | Readonly<{ _tag: "Unknown"; commandId: string }>
+  | (Strong extends true
+      ? Readonly<{ _tag: "TimedOut"; commandId: string; receipt: Receipt }>
+      : never);
 
 type QueryRejection<Q extends DomainQuery.Any> = Aggregate.InstanceOf<
   NonNullable<Q["definition"]["rejects"]>[number]
@@ -76,26 +87,31 @@ type QueryRefusal<Q extends DomainQuery.Any> =
 
 /**
  * A query refusal (`Rejected`, `Denied`) is final. `TimedOut` (only for a query with
- * `waitsFor`) means its projections did not reach `atLeast` in time; `Unknown` is transport or a defect.
- * Both can be asked again.
+ * `waitsFor`) means its projections did not reach this client's writes in time; `Unknown` is
+ * transport or a defect. Both can be asked again.
  */
 export type QueryFailure<Q extends DomainQuery.Any> =
   NonNullable<Q["definition"]["waitsFor"]> extends readonly []
     ? QueryRefusal<Q>
     : QueryRefusal<Q> | Readonly<{ _tag: "TimedOut" }>;
 
-/** The args of one Api command's Command: the input and a caller-owned id that survives retries. */
+/** Per-call headers, such as an MFA code. Redacted, so the Effect UI message log hides them. */
+export type CallHeaders = Redacted.Redacted<Readonly<Record<string, string>>>;
+
+/**
+ * The args of one Api command's Command. Leave `commandId` out: the Command makes one and returns
+ * it in its success and failure. Pass that id again only to retry an `Unknown` (or `TimedOut`)
+ * failure.
+ */
 export type CommandArgs<C extends DomainCommand.Any> = Readonly<{
   input: Input<C>;
-  commandId: string;
+  commandId?: string | undefined;
+  headers?: CallHeaders | undefined;
 }>;
 
-/** The args of one Api query: its input, and the read options a Domain query takes. */
+/** The args of one Api query: its input. Paging and read-your-writes stay out of the cache key. */
 export type QueryArgs<Q extends DomainQuery.Any> = Readonly<{
   input: DomainQuery.InputOf<Q>;
-  atLeast?: Receipt | ReadonlyArray<Receipt> | undefined;
-  after?: string | undefined;
-  take?: number | undefined;
 }>;
 
 /** The identity of one Api command's Command service. */
@@ -109,23 +125,41 @@ export interface QueryService<Name extends string, Tag extends string> {
 }
 
 /** An Effect UI Command service for one Api command. Its `make` issues an Unmatched Command. */
-export type CommandOf<A extends Api.Any, C extends DomainCommand.Any> = Command.Service<
+export type CommandOf<
+  A extends Api.Any,
+  C extends DomainCommand.Any,
+  Strong extends boolean = false,
+> = Command.Service<
   CommandService<A["apiName"], C["tag"]>,
   string,
   CommandArgs<C>,
   Schema.Schema<Success<C>>,
   false,
-  Schema.Schema<Failure<C>>
+  Schema.Schema<Failure<C, Strong>>
 >;
 
-/** An Effect UI Query service for one Api query. */
-export type QueryOf<A extends Api.Any, Q extends DomainQuery.Any> = Query.Service<
-  QueryService<A["apiName"], Q["queryName"]>,
-  string,
-  QueryArgs<Q>,
-  DomainQuery.ResultOf<Q>,
-  QueryFailure<Q>
->;
+type IsPaged<Q extends DomainQuery.Any> =
+  NonNullable<Q["definition"]["paged"]> extends true ? true : false;
+
+/** An Effect UI query for one Api query: an infinite query when it is paged. */
+export type QueryOf<A extends Api.Any, Q extends DomainQuery.Any> =
+  IsPaged<Q> extends true
+    ? Query.InfiniteService<
+        QueryService<A["apiName"], Q["queryName"]>,
+        string,
+        QueryArgs<Q>,
+        DomainQuery.ResultOf<Q>,
+        Api.EntryOf<Q>,
+        string,
+        QueryFailure<Q>
+      >
+    : Query.Service<
+        QueryService<A["apiName"], Q["queryName"]>,
+        string,
+        QueryArgs<Q>,
+        DomainQuery.ResultOf<Q>,
+        QueryFailure<Q>
+      >;
 
 type ReadEntry = View.Any | DomainStream.Any;
 type Reads<A extends Api.Any> = Extract<A["serves"][number], ReadEntry>;
@@ -146,6 +180,10 @@ type EntryOf<V extends ReadEntry> = Exclude<
   Read.CaughtUp
 >;
 type ErrorOf<V extends ReadEntry> = Stream.Error<ReturnType<ReadClient<V>["watch"]>>;
+type ViewStateSchema<V extends View.Any> = [NonNullable<V["definition"]["state"]>] extends [never]
+  ? typeof Schema.Never
+  : Extract<NonNullable<V["definition"]["state"]>, Schema.Top>;
+type SnapshotSchemaOf<V extends View.Any> = ReturnType<typeof snapshotSchema<ViewStateSchema<V>>>;
 
 /** A watch snapshot with explicit absence for Effect UI Models. */
 export type Snapshot<State> = Readonly<{
@@ -155,8 +193,11 @@ export type Snapshot<State> = Readonly<{
 
 /** Callbacks for live read state. */
 export interface WatchOptions<Message, V extends ReadEntry> {
+  /** Change it to start the watch again, for example after `onFailure` and a new sign-in. */
+  readonly restartKey?: number | undefined;
   /** The snapshot, and the key it is of: a Model that keeps several keys files it under this one. */
   readonly onSnapshot: (snapshot: Snapshot<StateOf<V>>, key: ReadKey<V>) => Message;
+  /** A typed read failure, such as a middleware error once the session ends. The watch stops. */
   readonly onFailure: (error: ErrorOf<V>) => Message;
   /** Handle unexpected read defects. Interruption does not call this callback. */
   readonly onDefect: (cause: Cause.Cause<unknown>) => Message;
@@ -188,6 +229,14 @@ export interface ReadClientOf<A extends Api.Any, V extends ReadEntry> {
   ) => Subscription.Subscription<Message, A["Client"]["Identifier"]>;
 }
 
+/** A View's snapshot as a Schema, for a Model field or a root prop that seeds the first paint. */
+export interface SnapshotOf<V extends View.Any> {
+  /** Encodes `{ state, cursor }` with the View's state Schema; `null` state decodes to `None`. */
+  readonly SnapshotSchema: SnapshotSchemaOf<V>;
+  /** Decode unknown wire data, such as a root prop. A stale Schema gives `None`, not a crash. */
+  readonly decodeSnapshot: (data: unknown) => Option.Option<SnapshotSchemaOf<V>["Type"]>;
+}
+
 type Services<A extends Api.Any> =
   | {
       [C in Api.CommandsOf<A> as C["tag"]]: CommandService<A["apiName"], C["tag"]>;
@@ -202,29 +251,110 @@ type LayerRequirements<A extends Api.Any> =
       [C in Api.CommandsOf<A> as C["tag"]]: Effect.Services<ReturnType<Api.CommandClient<C>>>;
     }[Api.CommandsOf<A>["tag"]];
 
-/** Commands, queries and read Subscriptions computed from the Api's entries. `layer` is reserved. */
-export type ClientOf<A extends Api.Any> = {
-  readonly [C in Api.CommandsOf<A> as C["tag"]]: CommandOf<A, C>;
-} & {
+/** The query services of an Api, as the cache callbacks of `make` receive them. */
+export type QueriesOf<A extends Api.Any> = {
   readonly [Q in Api.QueriesOf<A> as Q["queryName"]]: QueryOf<A, Q>;
-} & {
-  readonly [V in Reads<A> as ReadName<V>]: ReadClientOf<A, V>;
-} & {
-  /** The implementation of every Command and query, from the Api client. */
-  readonly layer: Layer.Layer<Services<A>, never, LayerRequirements<A>>;
 };
 
-/** Options for `make`. */
-export interface MakeOptions {
-  /** How long a query result stays fresh. Defaults to 0: a cached result shows at once and refetches. */
-  readonly staleTime?: Duration.Input | undefined;
+/** What one command does to the Effect UI query cache. Each callback also gets the queries. */
+export interface CommandConfig<A extends Api.Any, C extends DomainCommand.Any> {
+  /**
+   * `"strong"`: the command answers once every view its events reach applied them, and a slow
+   * view fails it with `TimedOut`. Left out, the client's `Domain.DefaultConsistency` decides, and
+   * a view timeout is `Unknown`.
+   */
+  readonly consistency?: DomainCommand.Consistency | undefined;
+  /** What a run invalidates. Replaces the default (see `make`). */
+  readonly invalidates?:
+    | ((args: CommandArgs<C>, queries: QueriesOf<A>) => ReadonlyArray<Query.Target>)
+    | undefined;
+  /** Optimistic patches, applied while the run is queued or running. */
+  readonly optimistic?:
+    | ((args: CommandArgs<C>, queries: QueriesOf<A>) => ReadonlyArray<Query.Patch>)
+    | undefined;
+  /** Entries a success stores without a refetch. */
+  readonly writes?:
+    | ((
+        success: Success<C>,
+        args: CommandArgs<C>,
+        queries: QueriesOf<A>,
+      ) => ReadonlyArray<Query.Write>)
+    | undefined;
 }
 
+/** Options for one query. `key` and `take` apply to a paged query only. */
+export interface QueryConfig<Q extends DomainQuery.Any> {
+  /** Identifies an entry, so a repeat on a later page is left out. By default none is. */
+  readonly key?: ((entry: Api.EntryOf<Q>) => string) | undefined;
+  /** Entries per page, capped by the query Layer's `take.max`. */
+  readonly take?: number | undefined;
+}
+
+/** Options for `make`. */
+export interface MakeOptions<A extends Api.Any = Api.Any> {
+  /** How long a query result stays fresh. Defaults to 0: a cached result shows at once and refetches. */
+  readonly staleTime?: Duration.Input | undefined;
+  /** Per-command consistency and cache effects, by command tag. */
+  readonly commands?:
+    | { readonly [C in Api.CommandsOf<A> as C["tag"]]?: CommandConfig<A, C> }
+    | undefined;
+  /** Per-query paging options, by query name. */
+  readonly queries?:
+    | { readonly [Q in Api.QueriesOf<A> as Q["queryName"]]?: QueryConfig<Q> }
+    | undefined;
+}
+
+type StrongOf<O, Tag extends string> = O extends { readonly commands?: infer Cs }
+  ? Tag extends keyof NonNullable<Cs>
+    ? NonNullable<Cs>[Tag] extends { readonly consistency?: infer K }
+      ? [K] extends ["strong"]
+        ? true
+        : false
+      : false
+    : false
+  : false;
+
+/** Commands, queries and read Subscriptions computed from the Api's entries. `layer` is reserved. */
+export type ClientOf<A extends Api.Any, O = {}> = {
+  readonly [C in Api.CommandsOf<A> as C["tag"]]: CommandOf<A, C, StrongOf<O, C["tag"]>>;
+} & QueriesOf<A> & {
+    readonly [V in Reads<A> as ReadName<V>]: ReadClientOf<A, V> &
+      (V extends View.Any ? SnapshotOf<V> : {});
+  } & {
+    /** The implementation of every Command and query, from the Api client. */
+    readonly layer: Layer.Layer<Services<A>, never, LayerRequirements<A>>;
+  };
+
 const Receipt = Schema.Struct({ stream: Schema.String, version: Schema.Number });
-/** A query's `atLeast`: one receipt, or one per command. */
-const Receipts = Schema.Union([Receipt, Schema.Array(Receipt)]);
+
+/** At most this many streams are held for read-your-writes. */
+const heldLimit = 32;
+
+/**
+ * The receipts of this client's commands, newest last, one per stream. A query with `waitsFor`
+ * passes them as `atLeast`, so it sees this client's writes. Remove once the Domain client
+ * remembers its own receipts (alchemy-run/alchemy#3800).
+ */
+class Held extends Context.Service<Held, Ref.Ref<ReadonlyArray<Receipt>>>()(
+  "@alchemy.run/domain/EffectUI/Held",
+) {}
+
+const hold = (held: Ref.Ref<ReadonlyArray<Receipt>>, receipts: ReadonlyArray<Receipt>) =>
+  Ref.update(held, (current) => {
+    let next = current;
+    for (const receipt of receipts) {
+      const prior = next.find((r) => r.stream === receipt.stream);
+      if (prior !== undefined && prior.version >= receipt.version) continue;
+      next = [...next.filter((r) => r.stream !== receipt.stream), receipt];
+    }
+    return next.length > heldLimit ? next.slice(next.length - heldLimit) : next;
+  });
 
 type AnyClient = Record<string, unknown>;
+type QueryCall = (
+  input: unknown,
+  options: DomainQuery.RunOptions & { readonly headers?: Headers.Input | undefined },
+) => Effect.Effect<unknown, unknown>;
 
 /** Look the headers up on each call: under `layer`, else where the Command runs. */
 const headersFor = (name: string) =>
@@ -234,14 +364,71 @@ const headersFor = (name: string) =>
     ),
   );
 
-const commandService = (api: Api.Any, command: DomainCommand.Any) => {
-  const { payloadSchema } = command.rpc as Rpc.AnyWithProps;
+const inputOf = (rpc: Rpc.Any) =>
+  Schema.toType(
+    ((rpc as Rpc.AnyWithProps).payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input,
+  );
+
+/** The event tags a read handles from `source`: by tag, or by the source's name. */
+const handles = (handlers: object | undefined, tag: string, source: string) =>
+  handlers !== undefined && (tag in handlers || source in handlers);
+
+/**
+ * Whether a command's events can change what a read holds: a view or projection that handles
+ * one, directly or through the views it reads. A stream's writers are not known here: yes.
+ */
+const reachedBy = (read: DomainQuery.Waitable | View.Any, tags: ReadonlySet<string>): boolean => {
+  if (read.kind === "Stream") return true;
+  const def = read.definition;
+  const consumes = (tag: string, source: string) =>
+    read.kind === "View"
+      ? handles(read.definition.evolve, tag, source) ||
+        handles(read.definition.emit, tag, source) ||
+        handles(read.definition.keyOf, tag, source)
+      : (read as Projection.Any).definition.on.some((event) => event.tag === tag);
+  return def.from.some((source) => {
+    const name = nameOf(source);
+    if (source.kind === "View") {
+      return (
+        reachedBy(source as View.Any, tags) &&
+        outputEvents(source as View.Any).some((event) => consumes(event.tag, name))
+      );
+    }
+    return (source as Aggregate.Any).definition.events.some(
+      (event) => tags.has(event.tag) && consumes(event.tag, name),
+    );
+  });
+};
+
+/** The default invalidation: every query whose `waitsFor` the command's events reach. */
+const defaultTargets = (
+  command: DomainCommand.Any,
+  queries: ReadonlyArray<readonly [DomainQuery.Any, Query.Target]>,
+): ReadonlyArray<Query.Target> => {
+  const tags = new Set(command.events.map((event) => event.tag));
+  return queries
+    .filter(([query]) =>
+      (query.definition.waitsFor ?? []).some((read) => tags.size === 0 || reachedBy(read, tags)),
+    )
+    .map(([, target]) => target);
+};
+
+const commandService = (
+  api: Api.Any,
+  command: DomainCommand.Any,
+  config: CommandConfig<Api.Any, DomainCommand.Any>,
+  queries: () => QueriesOf<Api.Any>,
+  defaults: () => ReadonlyArray<Query.Target>,
+) => {
+  const strong = config.consistency === "strong";
   const rejection = Schema.Union(command.rejects);
   const denial = Schema.Union(command.middleware.map((middleware) => middleware.error));
+  const { invalidates, optimistic, writes } = config;
   const service = Command.Service<any>()(`${api.apiName}/${command.tag}`, {
     args: {
-      input: Schema.toType((payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input),
-      commandId: Schema.String,
+      input: inputOf(command.rpc),
+      commandId: Schema.optional(Schema.String),
+      headers: Schema.optional(Schema.Record(Schema.String, Schema.String).pipe(Schema.Redacted)),
     },
     success: Schema.Struct({
       commandId: Schema.String,
@@ -253,110 +440,166 @@ const commandService = (api: Api.Any, command: DomainCommand.Any) => {
       Schema.TaggedStruct("Rejected", { commandId: Schema.String, rejection }),
       Schema.TaggedStruct("Denied", { commandId: Schema.String, error: denial }),
       Schema.TaggedStruct("Unknown", { commandId: Schema.String }),
+      ...(strong
+        ? [Schema.TaggedStruct("TimedOut", { commandId: Schema.String, receipt: Receipt })]
+        : []),
     ]),
-  });
+    invalidates: (args: any) =>
+      invalidates === undefined ? defaults() : invalidates(args, queries()),
+    ...(optimistic === undefined ? {} : { optimistic: (args: any) => optimistic(args, queries()) }),
+    ...(writes === undefined
+      ? {}
+      : { writes: (success: any, args: any) => writes(success, args, queries()) }),
+  } as any);
   const layer = service.toLayer(
     Effect.gen(function* () {
       const client = (yield* Effect.service(api.Client)) as AnyClient;
+      const held = yield* Held;
       // The context, not the headers, is captured once per Layer build: the services the command
       // client needs (its middleware), and `CommandHeaders` when it is provided under `layer`.
       const context = yield* Effect.context<never>();
-      return (args: { readonly input: unknown; readonly commandId: string }) =>
+      return (args: CommandArgs<DomainCommand.Any>) =>
         Effect.gen(function* () {
-          const { commandId } = args;
-          const callHeaders = yield* headersFor(command.tag);
-          const { reply, ...receipt } = (yield* sendPayload(client[command.tag], args, {
-            headers: callHeaders,
-          })) as { reply: unknown; stream?: string; version?: number; commits?: unknown };
-          return {
-            commandId,
-            reply,
-            receipt: { stream: receipt.stream, version: receipt.version },
-            commits: receipt.commits,
-          };
-        }).pipe(
-          Effect.catchCauseIf(
-            (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
-            (cause) =>
-              Effect.fail(
-                Cause.hasDies(cause)
-                  ? { _tag: "Unknown", commandId: args.commandId }
-                  : classifyFailure(
-                      command,
-                      args.commandId,
-                      cause.pipe(Cause.findErrorOption, Option.getOrUndefined),
+          const commandId = args.commandId ?? (yield* yield* NewCommandId);
+          return yield* Effect.gen(function* () {
+            const callHeaders = Headers.fromInput(yield* headersFor(command.tag));
+            const headers =
+              args.headers === undefined
+                ? callHeaders
+                : Headers.setAll(callHeaders, Redacted.value(args.headers));
+            const { reply, ...receipt } = (yield* sendPayload(
+              client[command.tag],
+              {
+                input: args.input,
+                commandId,
+                ...(config.consistency === undefined ? {} : { consistency: config.consistency }),
+              },
+              { headers },
+            )) as { reply: unknown; stream: string; version: number; commits: Array<Receipt> };
+            yield* hold(held, receipt.commits);
+            return {
+              commandId,
+              reply,
+              receipt: { stream: receipt.stream, version: receipt.version },
+              commits: receipt.commits,
+            };
+          }).pipe(
+            Effect.catchCauseIf(
+              (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
+              (cause) => {
+                if (Cause.hasDies(cause)) return Effect.fail({ _tag: "Unknown", commandId });
+                const error = cause.pipe(Cause.findErrorOption, Option.getOrUndefined);
+                if (Schema.is(View.ConsistencyTimeout)(error)) {
+                  // Committed: the next read waits for it, whatever the caller does.
+                  const receipt = { stream: error.stream, version: error.version };
+                  return hold(held, [receipt]).pipe(
+                    Effect.andThen(
+                      Effect.fail(
+                        strong
+                          ? { _tag: "TimedOut", commandId, receipt }
+                          : { _tag: "Unknown", commandId },
+                      ),
                     ),
-              ),
-          ),
-          Effect.provide(context),
-        ) as Effect.Effect<any, any>;
+                  );
+                }
+                return Effect.fail(classifyFailure(command, commandId, error));
+              },
+            ),
+          );
+        }).pipe(Effect.provide(context)) as Effect.Effect<any, any>;
     }) as Effect.Effect<any, never, any>,
   );
   return { service, layer };
 };
 
-const queryService = (api: Api.Any, query: DomainQuery.Any, options: MakeOptions) => {
-  const name = query.queryName;
-  const { payloadSchema, successSchema } = query.rpc as Rpc.AnyWithProps;
-  const service = Query.Service<any>()(`${api.apiName}/${name}`, {
-    args: {
-      input: Schema.toType((payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input),
-      atLeast: Schema.optional(Receipts),
-      after: Schema.optional(Schema.String),
-      take: Schema.optional(Schema.Number),
-    },
-    // The cast skips Effect UI's NoServices check: a success Schema that needs services to decode
-    // fails only at runtime.
-    success: successSchema as Schema.Top as any,
-    error: Schema.Union([
-      Schema.TaggedStruct("Rejected", { rejection: Schema.Union(query.definition.rejects ?? []) }),
-      Schema.TaggedStruct("Denied", {
-        error: Schema.Union(query.middleware.map((middleware) => middleware.error)),
-      }),
-      Schema.TaggedStruct("TimedOut", {}),
-      Schema.TaggedStruct("Unknown", {}),
-    ]) as any,
-    staleTime: options.staleTime ?? 0,
-  });
-  const layer = service.toLayer(
-    Effect.gen(function* () {
-      const client = (yield* Effect.service(api.Client)) as Record<
-        string,
-        (
-          input: unknown,
-          options: DomainQuery.RunOptions & { readonly headers?: Headers.Input | undefined },
-        ) => Effect.Effect<unknown, unknown>
-      >;
-      // The context, not the headers, is captured once per Layer build: `CommandHeaders` when it
-      // is provided under `layer`.
-      const context = yield* Effect.context<never>();
-      return ({ input, atLeast, after, take }: QueryArgs<DomainQuery.Any>) =>
-        Effect.gen(function* () {
-          const callHeaders = yield* headersFor(name);
-          return yield* client[name](input, {
-            headers: callHeaders,
-            ...(atLeast === undefined ? {} : { atLeast }),
-            ...(after === undefined ? {} : { after }),
-            ...(take === undefined ? {} : { take }),
-          } as DomainQuery.RunOptions);
-        }).pipe(
-          Effect.catchCauseIf(
-            (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
-            (cause) =>
-              Effect.fail(
-                Cause.hasDies(cause)
-                  ? { _tag: "Unknown" }
-                  : classifyQueryFailure(
-                      query,
-                      cause.pipe(Cause.findErrorOption, Option.getOrUndefined),
-                    ),
-              ),
-          ),
-          Effect.provide(context),
-        );
-    }) as Effect.Effect<any, never, any>,
+const queryError = (query: DomainQuery.Any) =>
+  Schema.Union([
+    Schema.TaggedStruct("Rejected", { rejection: Schema.Union(query.definition.rejects ?? []) }),
+    Schema.TaggedStruct("Denied", {
+      error: Schema.Union(query.middleware.map((middleware) => middleware.error)),
+    }),
+    Schema.TaggedStruct("TimedOut", {}),
+    Schema.TaggedStruct("Unknown", {}),
+  ]) as any;
+
+/** Run one query call with the per-call headers and this client's receipts, typed failures kept. */
+const fetchQuery = (
+  query: DomainQuery.Any,
+  call: QueryCall,
+  held: Ref.Ref<ReadonlyArray<Receipt>>,
+  input: unknown,
+  page: { readonly after?: string; readonly take?: number },
+) => {
+  const waits = (query.definition.waitsFor ?? []).length > 0;
+  return Effect.gen(function* () {
+    const headers = yield* headersFor(query.queryName);
+    const atLeast = waits ? yield* Ref.get(held) : [];
+    return yield* call(input, {
+      headers,
+      ...(atLeast.length === 0 ? {} : { atLeast }),
+      ...page,
+    } as DomainQuery.RunOptions);
+  }).pipe(
+    Effect.catchCauseIf(
+      (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
+      (cause) =>
+        Effect.fail(
+          Cause.hasDies(cause)
+            ? { _tag: "Unknown" }
+            : classifyQueryFailure(query, cause.pipe(Cause.findErrorOption, Option.getOrUndefined)),
+        ),
+    ),
   );
-  return { service, layer };
+};
+
+const queryService = (
+  api: Api.Any,
+  query: DomainQuery.Any,
+  options: MakeOptions,
+  config: QueryConfig<DomainQuery.Any>,
+) => {
+  const name = query.queryName;
+  const { successSchema } = query.rpc as Rpc.AnyWithProps;
+  const shared = {
+    args: { input: inputOf(query.rpc) },
+    error: queryError(query),
+    staleTime: options.staleTime ?? 0,
+  };
+  // The cast skips Effect UI's NoServices check: a success Schema that needs services to decode
+  // fails only at runtime.
+  const service = query.definition.paged
+    ? (() => {
+        // Without a `key`, every entry is kept: a fresh key per entry.
+        let unkeyed = 0;
+        return Query.InfiniteService<any>()(`${api.apiName}/${name}`, {
+          ...shared,
+          page: successSchema as any,
+          items: (page: DomainQuery.Page<unknown>) => page.entries,
+          key: config.key ?? (() => `~${unkeyed++}`),
+          cursor: Schema.String,
+          next: (page: DomainQuery.Page<unknown>) => Option.fromNullishOr(page.cursor),
+        } as any);
+      })()
+    : Query.Service<any>()(`${api.apiName}/${name}`, {
+        ...shared,
+        success: successSchema as Schema.Top as any,
+      });
+  const build = Effect.gen(function* () {
+    const client = (yield* Effect.service(api.Client)) as Record<string, QueryCall>;
+    const held = yield* Held;
+    // The context, not the headers, is captured once per Layer build: `CommandHeaders` when it
+    // is provided under `layer`.
+    const context = yield* Effect.context<never>();
+    return query.definition.paged
+      ? ({ input }: QueryArgs<DomainQuery.Any>, cursor: Option.Option<string>) =>
+          fetchQuery(query, client[name]!, held, input, {
+            ...(Option.isSome(cursor) ? { after: cursor.value } : {}),
+            ...(config.take === undefined ? {} : { take: config.take }),
+          }).pipe(Effect.provide(context))
+      : ({ input }: QueryArgs<DomainQuery.Any>) =>
+          fetchQuery(query, client[name]!, held, input, {}).pipe(Effect.provide(context));
+  }) as Effect.Effect<any, never, any>;
+  return { service, layer: (service as any).toLayer(build) as Layer.Layer<any, never, any> };
 };
 
 const classifyQueryFailure = (query: DomainQuery.Any, error: unknown) => {
@@ -397,9 +640,18 @@ const settle =
       : Stream.failCause(cause as Cause.Cause<never>);
   };
 
+/** Decode snapshot wire data, converting null state to Option.none. */
+const snapshotSchema = <State extends Schema.Top>(state: State) =>
+  Schema.Struct({
+    state: Schema.OptionFromNullOr(state),
+    cursor: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+  });
+
+// `watch` copies the View's state into the Model. Once Effect-TS/ui#454 lands, a View becomes a
+// `Query.StreamService` entry instead: shared, rendered on the server, and with no Model copy.
 const readClient = (api: Api.Any, entry: ReadEntry, name: string) => ({
   watch: (key: string, options: WatchOptions<unknown, ReadEntry>) =>
-    Subscription.make(`${api.apiName}/${name}/watch`, [key], () =>
+    Subscription.make(`${api.apiName}/${name}/watch`, [key, options.restartKey ?? null], () =>
       Stream.unwrap(
         api.Client.pipe(
           Effect.map((client) =>
@@ -444,34 +696,76 @@ const readClient = (api: Api.Any, entry: ReadEntry, name: string) => ({
         );
       }),
     ),
+  ...(entry.kind === "View"
+    ? (() => {
+        const schema = snapshotSchema(
+          (entry.definition.state ?? Schema.Never) as Schema.Schema<unknown> & {
+            readonly DecodingServices: never;
+          },
+        );
+        return { SnapshotSchema: schema, decodeSnapshot: Schema.decodeUnknownOption(schema) };
+      })()
+    : {}),
 });
 
 /**
  * Build Effect UI Commands, queries and Subscriptions for an Api. Provide `layer`, and the Api
  * client it needs, where the app mounts.
+ *
+ * By default a command invalidates every query whose `waitsFor` reads its events reach, and no
+ * other query: a query without `waitsFor` refetches only when a command's `invalidates` names it.
  */
 export function make<A extends Api.Any>(
   api: A & ("layer" extends keyof Api.ClientOf<A> ? never : unknown),
-  options?: MakeOptions,
 ): ClientOf<A>;
+// A separate overload, not a defaulted `O`: a default stops TypeScript typing the callbacks.
+export function make<A extends Api.Any, const O extends MakeOptions<A>>(
+  api: A & ("layer" extends keyof Api.ClientOf<A> ? never : unknown),
+  options: O,
+): ClientOf<A, O>;
 export function make(api: Api.Any, options: MakeOptions = {}): unknown {
   const client: Record<string, unknown> = {};
   const layers: Array<Layer.Layer<any, never, any>> = [];
-  for (const command of api.commands) {
-    const { service, layer } = commandService(api, command);
-    client[command.tag] = service;
-    layers.push(layer);
-  }
+  const targets: Array<readonly [DomainQuery.Any, Query.Target]> = [];
+  const queryConfigs = (options.queries ?? {}) as Record<string, QueryConfig<DomainQuery.Any>>;
   for (const entry of api.serves) {
     if (entry.kind === "Query") {
-      const { service, layer } = queryService(api, entry as DomainQuery.Any, options);
-      client[(entry as DomainQuery.Any).queryName] = service;
+      const query = entry as DomainQuery.Any;
+      const { service, layer } = queryService(
+        api,
+        query,
+        options,
+        queryConfigs[query.queryName] ?? {},
+      );
+      client[query.queryName] = service;
+      targets.push([query, service as Query.Target]);
       layers.push(layer);
     } else if (entry.kind === "View" || entry.kind === "Stream") {
       const name = nameOf(entry);
       client[name] = readClient(api, entry, name);
     }
   }
-  client.layer = layers.length === 0 ? Layer.empty : Layer.mergeAll(...(layers as [any, ...any[]]));
+  const commandConfigs = (options.commands ?? {}) as Record<
+    string,
+    CommandConfig<Api.Any, DomainCommand.Any>
+  >;
+  for (const command of api.commands) {
+    let defaults: ReadonlyArray<Query.Target> | undefined;
+    const { service, layer } = commandService(
+      api,
+      command,
+      commandConfigs[command.tag] ?? {},
+      () => client as QueriesOf<Api.Any>,
+      () => (defaults ??= defaultTargets(command, targets)),
+    );
+    client[command.tag] = service;
+    layers.push(layer);
+  }
+  client.layer =
+    layers.length === 0
+      ? Layer.empty
+      : Layer.mergeAll(...(layers as [any, ...any[]])).pipe(
+          Layer.provide(Layer.effect(Held, Ref.make<ReadonlyArray<Receipt>>([]))),
+        );
   return client;
 }

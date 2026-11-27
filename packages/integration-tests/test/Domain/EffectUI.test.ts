@@ -1,8 +1,9 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
 import { describe, expect, it } from "@alchemy.run/test";
-import { Command, Component, Query, Subscription, UiSchema } from "@effect/ui";
+import { Command, Component, Query, Route, Subscription, UiSchema } from "@effect/ui";
 import { Html } from "@effect/ui/html";
+import { layerHttp } from "@effect/ui/html/HtmlServerHttp";
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing";
 import { TestHost } from "@effect/ui/testing";
 import * as Cause from "effect/Cause";
@@ -10,8 +11,12 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Redacted from "effect/Redacted";
 import * as RpcClientError from "effect/rpc/RpcClientError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -52,10 +57,28 @@ class Settled extends Domain.Query("Settled", {
   waitsFor: [Total],
 }) {}
 const SettledLive = Settled.toLayer(Effect.succeed(() => Effect.succeed(1)));
+/** A paged query over fixed rows; "b" repeats across the first two pages. */
+class Rows extends Domain.Query("Rows", {
+  input: { counterId: CounterId },
+  success: Schema.String,
+  paged: true,
+}) {}
+const rows = ["a", "b", "b", "c", "d"];
+const RowsLive = Rows.toLayer(
+  Effect.succeed((_, page) => {
+    const from = page.after === undefined ? 0 : Number(page.after);
+    const next = from + page.take;
+    return Effect.succeed({
+      entries: rows.slice(from, next),
+      cursor: next < rows.length ? String(next) : null,
+    });
+  }),
+  { take: { default: 2, max: 3 } },
+);
 class QueryModel extends Domain.Model("EffectUIQueries", {
   aggregates: [CounterAggregate],
   views: [Total],
-  queries: [Count, Guarded, Settled],
+  queries: [Count, Guarded, Settled, Rows],
 }) {}
 class QueryApi extends Domain.Api("EffectUIQueryApi", {
   model: QueryModel,
@@ -65,16 +88,33 @@ class QueryApi extends Domain.Api("EffectUIQueryApi", {
   queries: ["Count", "Guarded", "Settled"],
 }) {}
 const Queries = DomainEffectUI.make(QueryApi);
-const QueryClient = QueryApi.layerClientInProcess.pipe(
-  Layer.provide(
-    Layer.merge(
-      QueryModel.layer(Layer.mergeAll(CountLive, GuardedLive, SettledLive, TotalLive)).pipe(
-        Layer.provide(Domain.InMemory),
-      ),
-      Layer.succeed(Session, () => Effect.fail(Unauthenticated.make({}))),
-    ),
+const QueryHosted = Layer.merge(
+  QueryModel.layer(Layer.mergeAll(CountLive, GuardedLive, SettledLive, RowsLive, TotalLive)).pipe(
+    Layer.provide(Domain.InMemory),
   ),
+  Layer.succeed(Session, () => Effect.fail(Unauthenticated.make({}))),
 );
+const QueryClient = QueryApi.layerClientInProcess.pipe(Layer.provide(QueryHosted));
+/** Commands and queries in one Api: what a command does to the query cache. */
+class MixedApi extends Domain.Api("EffectUIMixedApi", {
+  model: QueryModel,
+  commands: ["Increment"],
+  views: ["Total"],
+  streams: [],
+  queries: ["Count", "Settled", "Rows"],
+}) {}
+const Mixed = DomainEffectUI.make(MixedApi);
+const MixedClient = MixedApi.layerClientInProcess.pipe(Layer.provide(QueryHosted));
+/** Run against one build of `layer`, the Effect UI cache and `client`, so receipts are shared. */
+const mixed = <A, E>(
+  layer: Layer.Layer<any, never, typeof MixedApi.Client.Identifier>,
+  effect: Effect.Effect<A, E, any>,
+  client: Layer.Layer<typeof MixedApi.Client.Identifier> = MixedClient,
+) =>
+  effect.pipe(
+    Effect.scoped,
+    Effect.provide(Layer.merge(layer, Query.layer()).pipe(Layer.provide(client))),
+  ) as Effect.Effect<A, E, never>;
 /** Run query work against the adapter's Layer, the Effect UI cache and `client`. */
 const ask = <A, E>(
   effect: Effect.Effect<A, E, any>,
@@ -278,13 +318,250 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(Client)),
   );
 
-  it("allocates ids without changing the prior state", () => {
-    const ids = DomainEffectUI.CommandIds.make({ session: "page", sent: 0 });
-    expect(DomainEffectUI.next(ids)).toEqual({
-      commandId: "page:0",
-      commandIds: { session: "page", sent: 1 },
+  it.live("makes a fresh id for each Command sent without one", () =>
+    Effect.gen(function* () {
+      // Two Commands issued alike, as two hydrated instances or a history restore would issue them.
+      const first = yield* run(
+        Counter.Increment.make({ input: { counterId: target, amount: 1 } }).effect,
+      );
+      const second = yield* run(
+        Counter.Increment.make({ input: { counterId: target, amount: 1 } }).effect,
+      );
+      expect(first.commandId).not.toBe(second.commandId);
+      // Each one committed: a repeated id would have replayed the first receipt.
+      expect([first.receipt.version, second.receipt.version]).toEqual([1, 2]);
+      expect(second.reply).toEqual({ total: 2 });
+    }).pipe(Effect.provide(Client)),
+  );
+
+  it.live("pins new ids with NewCommandId, and retries Unknown with the returned id", () =>
+    Effect.gen(function* () {
+      const client = yield* CounterApi.Client;
+      const pinned = Layer.succeed(DomainEffectUI.NewCommandId, Effect.succeed("pinned:0"));
+      const lossy = Layer.succeed(CounterApi.Client, {
+        ...client,
+        Increment: (...args: Parameters<typeof client.Increment>) =>
+          client.Increment(...args).pipe(
+            Effect.andThen(
+              Effect.fail(
+                new RpcClientError.RpcClientError({
+                  reason: new RpcClientError.RpcClientDefect({ cause: "lost", message: "lost" }),
+                }),
+              ),
+            ),
+          ),
+      });
+      const input = { counterId: target, amount: 2 };
+      const failure = yield* Counter.Increment.make({ input }).effect.pipe(
+        Effect.scoped,
+        Effect.provide(Counter.layer.pipe(Layer.provide(Layer.merge(lossy, pinned)))),
+        Effect.flip,
+      );
+      expect(failure).toEqual({ _tag: "Unknown", commandId: "pinned:0" });
+      // The retry sends the same id: Domain answers with the first receipt.
+      const retried = yield* run(
+        Counter.Increment.make({ input, commandId: failure.commandId }).effect,
+      );
+      expect(retried).toMatchObject({ commandId: "pinned:0", receipt: { version: 1 } });
+    }).pipe(Effect.provide(Client)),
+  );
+
+  it.live("sends a per-call Redacted header beside CommandHeaders, hidden in the args", () =>
+    Effect.gen(function* () {
+      const client = yield* CounterApi.Client;
+      const sent: Array<unknown> = [];
+      const spy = Layer.succeed(CounterApi.Client, {
+        ...client,
+        Increment: (...args: Parameters<typeof client.Increment>) => {
+          sent.push(args[1]?.headers);
+          return client.Increment(...args);
+        },
+      });
+      const headers = Layer.succeed(DomainEffectUI.CommandHeaders, {
+        get: () => Effect.succeed({ "x-app": "web", "x-mfa-code": "stale" }),
+      });
+      const command = Counter.Increment.make({
+        input: { counterId: target, amount: 1 },
+        headers: Redacted.make({ "x-mfa-code": "123456" }),
+      });
+      yield* command.effect.pipe(
+        Effect.scoped,
+        Effect.provide(Counter.layer.pipe(Layer.provide(Layer.merge(spy, headers)))),
+      );
+      expect(sent).toEqual([{ "x-app": "web", "x-mfa-code": "123456" }]);
+      expect(String((command.args as { headers?: unknown }).headers)).not.toContain("123456");
+    }).pipe(Effect.provide(Client)),
+  );
+
+  it.live("passes consistency, and maps a late view to TimedOut only for a strong command", () =>
+    Effect.gen(function* () {
+      const client = yield* CounterApi.Client;
+      const sent: Array<unknown> = [];
+      const late = Layer.succeed(CounterApi.Client, {
+        ...client,
+        Increment: (...args: Parameters<typeof client.Increment>) => {
+          sent.push(args[1]?.consistency);
+          return client.Increment(...args).pipe(
+            Effect.andThen((receipt) =>
+              Effect.fail(
+                new Domain.ConsistencyTimeout({
+                  view: "Total",
+                  key: "one",
+                  stream: receipt.stream,
+                  version: receipt.version,
+                }),
+              ),
+            ),
+          );
+        },
+      });
+      const Strong = DomainEffectUI.make(CounterApi, {
+        commands: { Increment: { consistency: "strong" } },
+      });
+      const input = { counterId: target, amount: 1 };
+      const timedOut = yield* Strong.Increment.make({ input, commandId: "strong:0" }).effect.pipe(
+        Effect.scoped,
+        Effect.provide(Strong.layer.pipe(Layer.provide(late))),
+        Effect.flip,
+      );
+      expect(timedOut).toEqual({
+        _tag: "TimedOut",
+        commandId: "strong:0",
+        receipt: { stream: "Counter/one", version: 1 },
+      });
+      const unknown = yield* Counter.Increment.make({ input, commandId: "eventual:0" }).effect.pipe(
+        Effect.scoped,
+        Effect.provide(Counter.layer.pipe(Layer.provide(late))),
+        Effect.flip,
+      );
+      expect(unknown).toEqual({ _tag: "Unknown", commandId: "eventual:0" });
+      expect(sent).toEqual(["strong", undefined]);
+      type StrongTags = Command.Failure<ReturnType<typeof Strong.Increment.make>>["_tag"];
+      type EventualTags = Command.Failure<ReturnType<typeof Counter.Increment.make>>["_tag"];
+      const strongTimesOut: "TimedOut" extends StrongTags ? true : false = true;
+      const eventualTimesOut: "TimedOut" extends EventualTags ? true : false = false;
+      expect([strongTimesOut, eventualTimesOut]).toEqual([true, false]);
+    }).pipe(Effect.provide(Client)),
+  );
+
+  it("invalidates the queries whose waitsFor reads a command's events, by default", () => {
+    const issued = Mixed.Increment.make({ input: { counterId: target, amount: 1 } });
+    // Settled waits for Total, which applies Incremented. Count and Rows wait for nothing.
+    expect(issued.invalidates).toEqual([Mixed.Settled]);
+    expect(issued.optimistic).toEqual([]);
+    expect(issued.writes).toBeUndefined();
+  });
+
+  it.live("declares invalidates, optimistic and writes per command from the Api's queries", () =>
+    Effect.gen(function* () {
+      const Declared = DomainEffectUI.make(MixedApi, {
+        commands: {
+          Increment: {
+            invalidates: ({ input }, queries) => [
+              queries.Count.entry({ input: { counterId: input.counterId } }),
+            ],
+            optimistic: ({ input }, queries) => [
+              queries.Count.patch(
+                { input: { counterId: input.counterId } },
+                (n) => n + input.amount,
+              ),
+            ],
+            writes: ({ reply }, { input }, queries) => [
+              queries.Count.set({ input: { counterId: input.counterId } }, reply.total),
+            ],
+          },
+        },
+      });
+      const args = { input: { counterId: target, amount: 2 } };
+      const issued = Declared.Increment.make(args);
+      expect(issued.invalidates).toEqual([Declared.Count.entry({ input: { counterId: target } })]);
+      expect(
+        Query.applyPatches(issued.optimistic, Declared.Count, { input: { counterId: target } }, 3),
+      ).toBe(5);
+      // The runtime stores what `writes` returns from the body's success.
+      const success = yield* mixed(Declared.layer, issued.effect);
+      expect(issued.writes?.(success)).toEqual([
+        Declared.Count.set({ input: { counterId: target } }, 2),
+      ]);
+    }),
+  );
+
+  it.live("waits for this client's writes in queries with waitsFor, outside the cache key", () =>
+    Effect.gen(function* () {
+      const client = yield* MixedApi.Client;
+      const sent: Array<readonly [string, unknown]> = [];
+      const spy = Layer.succeed(MixedApi.Client, {
+        ...client,
+        Settled: (...args: Parameters<typeof client.Settled>) => {
+          sent.push(["Settled", args[1]?.atLeast]);
+          return client.Settled(...args);
+        },
+        Count: (...args: Parameters<typeof client.Count>) => {
+          sent.push(["Count", args[1]?.atLeast]);
+          return client.Count(...args);
+        },
+      } as typeof client);
+      const input = { counterId: target };
+      yield* mixed(
+        Mixed.layer,
+        Effect.gen(function* () {
+          yield* Mixed.Settled.get({ input });
+          yield* Mixed.Increment.make({ input: { counterId: target, amount: 1 } }).effect;
+          yield* Mixed.Increment.make({ input: { counterId: target, amount: 1 } }).effect;
+          // The same args, so the same entry, fetched again with this client's receipts.
+          yield* Mixed.Settled.get({ input });
+          yield* Mixed.Count.get({ input });
+        }),
+        spy,
+      );
+      expect(sent).toEqual([
+        ["Settled", undefined],
+        ["Settled", [{ stream: "Counter/one", version: 2 }]],
+        ["Count", undefined],
+      ]);
+    }).pipe(Effect.provide(MixedClient)),
+  );
+
+  it.live("serves a paged query as an infinite query", () =>
+    Effect.gen(function* () {
+      const Keyed = DomainEffectUI.make(MixedApi, {
+        queries: { Rows: { key: (row) => row, take: 3 } },
+      });
+      const input = { counterId: target };
+      const [first, loaded] = yield* mixed(
+        Mixed.layer,
+        Effect.gen(function* () {
+          const first = yield* Mixed.Rows.get({ input });
+          return [first, yield* Mixed.Rows.loadMore({ input })] as const;
+        }),
+      );
+      const keyed = yield* mixed(Keyed.layer, Keyed.Rows.get({ input }));
+      expect(first).toEqual([{ entries: ["a", "b"], cursor: "2" }]);
+      expect(loaded.hasMore).toBe(true);
+      // Without a key every entry stays; with one, a repeat on a later page is left out.
+      expect(Mixed.Rows.items(loaded.pages)).toEqual(["a", "b", "b", "c"]);
+      expect(keyed).toEqual([{ entries: ["a", "b", "b"], cursor: "3" }]);
+      expect(Keyed.Rows.items([...keyed, { entries: ["b", "c"], cursor: null }])).toEqual([
+        "a",
+        "b",
+        "c",
+      ]);
+    }),
+  );
+
+  it("decodes a View snapshot for the first paint, falling back to None", () => {
+    const encode = Schema.encodeSync(Counter.Total.SnapshotSchema);
+    expect(encode({ state: Option.some({ total: 2 }), cursor: 1 })).toEqual({
+      state: { total: 2 },
+      cursor: 1,
     });
-    expect(ids.sent).toBe(0);
+    expect(Counter.Total.decodeSnapshot({ state: null, cursor: 0 })).toEqual(
+      Option.some({ state: Option.none(), cursor: 0 }),
+    );
+    expect(Counter.Total.decodeSnapshot({ state: { total: "2" }, cursor: 0 })).toEqual(
+      Option.none(),
+    );
+    expect(Counter.Total.decodeSnapshot({ state: null, cursor: -1 })).toEqual(Option.none());
   });
 
   it.live("serves a query through the Effect UI cache and keeps a typed refusal", () =>
@@ -297,7 +574,7 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
     }),
   );
 
-  it.live("forwards a query's read options and headers to the client", () =>
+  it.live("forwards a query's headers to the client", () =>
     Effect.gen(function* () {
       const client = yield* QueryApi.Client;
       const sent: Array<unknown> = [];
@@ -311,20 +588,13 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
       const headers = Layer.succeed(DomainEffectUI.CommandHeaders, {
         get: (name) => Effect.succeed({ "x-query": name }),
       });
-      const atLeast = { stream: "Counter/one", version: 0 };
-      const result = yield* Queries.Count.get({
-        input: { counterId: target },
-        atLeast,
-        take: 5,
-      }).pipe(
+      const result = yield* Queries.Count.get({ input: { counterId: target } }).pipe(
         Effect.provide(
           Layer.merge(Queries.layer.pipe(Layer.provide(Layer.merge(spy, headers))), Query.layer()),
         ),
       );
       expect(result).toBe(3);
-      expect(sent).toEqual([
-        [{ counterId: target }, { headers: { "x-query": "Count" }, atLeast, take: 5 }],
-      ]);
+      expect(sent).toEqual([[{ counterId: target }, { headers: { "x-query": "Count" } }]]);
     }).pipe(Effect.provide(QueryClient)),
   );
 
@@ -372,8 +642,9 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
         readonly snapshot: DomainEffectUI.Snapshot<{ total: number }>;
       }
     | { readonly _tag: "FailedTotal"; readonly reason: string };
-  const watched = (key: typeof CounterId.Type) =>
+  const watched = (key: typeof CounterId.Type, restartKey?: number) =>
     Counter.Total.watch<TotalMessage>(key, {
+      restartKey,
       onSnapshot: (snapshot) => ({ _tag: "ReceivedTotal" as const, snapshot }),
       onFailure: (error) => ({ _tag: "FailedTotal" as const, reason: error._tag }),
       onDefect: () => ({ _tag: "FailedTotal" as const, reason: "defect" }),
@@ -413,6 +684,11 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
   it("keys a watch by its read key, so the runtime restarts it only for a new key", () => {
     expect(watched(target).key).toBe(watched(target).key);
     expect(watched(target).key).not.toBe(watched(CounterId.make("two")).key);
+  });
+
+  it("restarts a watch for a new restart key, as after a new sign-in", () => {
+    expect(watched(target, 0).key).toBe(watched(target, 0).key);
+    expect(watched(target, 0).key).not.toBe(watched(target, 1).key);
   });
 
   const feed = (after: Option.Option<number>, restartKey?: number) =>
@@ -602,24 +878,24 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
     name: "CounterPanel",
     model: Schema.Struct({
       total: Schema.Number,
-      commandIds: DomainEffectUI.CommandIds,
+      // A View snapshot fits in a Model: the server render seeds it, hydration adopts it.
+      seed: Schema.optional(Counter.Total.SnapshotSchema),
       error: Schema.optional(Schema.String),
     }),
     message: PanelMessage,
   }).make({
-    init: () => ({ total: 0, commandIds: { session: "play", sent: 0 } }),
+    init: () => ({ total: 0 }),
     update: {
-      ClickedAdd: ($) => {
-        const { commandId, commandIds } = DomainEffectUI.next($.model.commandIds);
-        return $.evolve({ commandIds }).run(
-          Counter.Increment.make({ input: { counterId: target, amount: 2 }, commandId }).pipe(
+      // No ids in the Model: the Command makes one.
+      ClickedAdd: ($) =>
+        $.run(
+          Counter.Increment.make({ input: { counterId: target, amount: 2 } }).pipe(
             Command.match({
               onSuccess: ({ receipt }) => PanelMessage.SucceededAdd({ version: receipt.version }),
               onFailure: (failure) => PanelMessage.FailedAdd({ reason: failure._tag }),
             }),
           ),
-        );
-      },
+        ),
       ReceivedTotal: ($, { total }) => $.evolve({ total }),
       SucceededAdd: ($) => $.model,
       FailedAdd: ($, { reason }) => $.evolve({ error: reason }),
@@ -655,13 +931,86 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.scoped, Effect.provide(TestHost.layer())),
   );
 
+  // A server render: each request's fetch reads that request in CommandHeaders.
+  it.live("reads the request's cookie in CommandHeaders during a server render", () =>
+    Effect.gen(function* () {
+      const client = yield* QueryApi.Client;
+      const sent: Array<unknown> = [];
+      const spy = Layer.succeed(QueryApi.Client, {
+        ...client,
+        Count: (...args: Parameters<typeof client.Count>) => {
+          sent.push(args[1]?.headers);
+          return client.Count(...args);
+        },
+      });
+      const RequestHeaders = Layer.succeed(DomainEffectUI.CommandHeaders, {
+        get: () =>
+          Effect.serviceOption(HttpServerRequest.HttpServerRequest).pipe(
+            Effect.map(
+              Option.match({
+                onNone: () => ({}),
+                onSome: (request) => ({ cookie: request.headers.cookie ?? "" }),
+              }),
+            ),
+          ),
+      });
+      const PageRoute = Route.union({ Home: Route.make("/"), NotFound: Route.make("/*") });
+      const Page = Html.component({
+        name: "CountPage",
+        props: Schema.Struct({ route: PageRoute }),
+        model: Schema.Struct({}),
+        message: Schema.Never,
+        queries: {
+          count: { query: Queries.Count, args: () => ({ input: { counterId: target } }) },
+        },
+      }).make({
+        init: () => ({}),
+        update: ($) => $.model,
+        view: (h) =>
+          h.p.children(
+            AsyncResult.isSuccess(h.queries.count)
+              ? `count:${h.queries.count.value}`
+              : h.queries.count._tag,
+          ),
+      });
+      const Pages = layerHttp(Page, {
+        routes: PageRoute,
+        budget: "2 seconds",
+        document: (page) => page.html,
+      }).pipe(
+        Layer.provide(
+          Layer.merge(
+            Queries.layer.pipe(Layer.provide(Layer.merge(spy, RequestHeaders))),
+            Query.layer(),
+          ),
+        ),
+      );
+      const { dispose, handler } = HttpRouter.toWebHandler(Pages, { disableLogger: true });
+      const bodies: Array<string> = [];
+      for (const who of ["alice", "bob"]) {
+        const response = yield* Effect.promise(() =>
+          handler(new Request("http://localhost/", { headers: { cookie: `session=${who}` } })),
+        );
+        bodies.push(yield* Effect.promise(() => response.text()));
+      }
+      yield* Effect.promise(() => dispose());
+      // Each request has its own cache, so bob's render fetches again with his own cookie.
+      expect(sent).toEqual([{ cookie: "session=alice" }, { cookie: "session=bob" }]);
+      expect(bodies.map((body) => body.includes("count:3"))).toEqual([true, true]);
+    }).pipe(Effect.provide(QueryClient)),
+  );
+
   it("types Commands, queries and reads from the Api", () => {
     // @ts-expect-error command input keys preserve their brand
     Counter.Increment.make({ input: { counterId: "one", amount: 1 }, commandId: "x" });
-    // @ts-expect-error a command needs an id
+    // A command id is optional.
     Counter.Increment.make({ input: { counterId: target, amount: 1 } });
     // @ts-expect-error a query input keeps its brand
     Queries.Count.get({ input: { counterId: "one" } });
+    // @ts-expect-error a receipt is not part of a query's args, so not of its cache key
+    Queries.Count.get({ input: { counterId: target }, atLeast: { stream: "s", version: 1 } });
+    // @ts-expect-error a paged query's args have no cursor
+    Mixed.Rows.get({ input: { counterId: target }, after: "2" });
     const sub: Subscription.Subscription<number, typeof CounterApi.Client.Identifier> =
       Counter.Total.watch(target, {
         onSnapshot: ({ cursor }) => cursor,
