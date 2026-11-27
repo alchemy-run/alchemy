@@ -5808,8 +5808,10 @@ export const LiveWorkerProvider = () =>
                     (className) => !hostedClasses(settings?.bindings, [], name).has(className),
                   ),
                 ),
-                // A retired class is deleted only once its objects have moved out.
-                protection(dropped),
+                // Only a class whose objects a retirement moved out is safe to
+                // delete. An "unknown" class is one the settings don't show, which
+                // doesn't prove its namespace is gone.
+                protection(new Set([...dropped].filter((className) => !unknown.has(className)))),
               );
             });
           // Retiring classes: their objects move out between two uploads (see `DurableObjectRetirement`).
