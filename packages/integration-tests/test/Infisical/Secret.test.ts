@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as Infisical from "@alchemy.run/infisical";
 import { assert, describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -132,7 +133,15 @@ const declaration = Effect.fn(function* (stack: Test.ScratchStack) {
   return {
     project: yield* Config.String("INFISICAL_TEST_PROJECT"),
     environment: yield* Config.String("INFISICAL_TEST_ENVIRONMENT").pipe(Config.withDefault("dev")),
-    name: `ALCHEMY_${stack.name}_${stack.stage}`.replace(/[^a-zA-Z0-9_]/g, "_").toUpperCase(),
+    // Infisical caps the key's length in the URL, so hash the stack and stage
+    // into a short key that stays unique per test, user and worktree.
+    name: `ALCHEMY_TEST_${yield* Effect.sync(() =>
+      createHash("sha256")
+        .update(`${stack.name}/${stack.stage}`)
+        .digest("hex")
+        .slice(0, 16)
+        .toUpperCase(),
+    )}`,
     value: Redacted.make("Authorization=initial"),
   };
 });
