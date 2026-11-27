@@ -354,6 +354,8 @@ no request-level split between two images:
 
 ```typescript
 export class Api extends Cloudflare.Container<Api>()("Api", {
+  // rollouts belong to fleet-scheduled applications
+  schedulingPolicy: "default",
   main: import.meta.url,
   instances: 4,
   maxInstances: 4,

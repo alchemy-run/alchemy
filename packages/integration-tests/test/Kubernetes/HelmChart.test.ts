@@ -467,7 +467,7 @@ suite(
     beforeAll(
       Effect.gen(function* () {
         yield* kindStack.destroy();
-        cluster = yield* kindStack.deploy(KindTestCluster("helm", 5063));
+        cluster = yield* kindStack.deploy(KindTestCluster("helm"));
       }),
       { timeout: 300_000 },
     );

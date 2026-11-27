@@ -1,5 +1,6 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as Actions from "@distilled.cloud/hetzner/actions";
 import type { GetActionResponseAction } from "@distilled.cloud/hetzner/actions";
+import * as ZoneActions from "@distilled.cloud/hetzner/zone_actions";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -66,8 +67,8 @@ export const waitForAction = (
   ref: ActionRef,
 ): Effect.Effect<
   GetActionResponseAction,
-  ActionFailed | ActionTimeout | Hetzner.actions.GetActionError,
-  Hetzner.actions.HetznerOpContext
+  ActionFailed | ActionTimeout | Actions.GetActionError,
+  Actions.HetznerOpContext
 > =>
   Effect.gen(function* () {
     if (typeof ref !== "number" && "status" in ref) {
@@ -78,7 +79,7 @@ export const waitForAction = (
     }
 
     const id = actionIdOf(ref);
-    return yield* Hetzner.actions.getAction({ id }).pipe(
+    return yield* Actions.getAction({ id }).pipe(
       Effect.flatMap(({ action }) =>
         Effect.gen(function* () {
           yield* failIfError(action);
@@ -114,8 +115,8 @@ export const waitForActions = (
   refs: ReadonlyArray<ActionRef>,
 ): Effect.Effect<
   GetActionResponseAction[],
-  ActionFailed | ActionTimeout | Hetzner.actions.GetActionError,
-  Hetzner.actions.HetznerOpContext
+  ActionFailed | ActionTimeout | Actions.GetActionError,
+  Actions.HetznerOpContext
 > => Effect.forEach(refs, waitForAction, { concurrency: 1 });
 
 /**
@@ -131,8 +132,8 @@ export const waitForZoneAction = (
   ref: ActionRef,
 ): Effect.Effect<
   GetActionResponseAction,
-  ActionFailed | ActionTimeout | Hetzner.zoneActions.GetZonesActionError,
-  Hetzner.zoneActions.HetznerOpContext
+  ActionFailed | ActionTimeout | ZoneActions.GetZonesActionError,
+  ZoneActions.HetznerOpContext
 > =>
   Effect.gen(function* () {
     if (typeof ref !== "number" && "status" in ref) {
@@ -143,7 +144,7 @@ export const waitForZoneAction = (
     }
 
     const id = actionIdOf(ref);
-    return yield* Hetzner.zoneActions.getZonesAction({ id }).pipe(
+    return yield* ZoneActions.getZonesAction({ id }).pipe(
       Effect.flatMap(({ action }) =>
         Effect.gen(function* () {
           yield* failIfError(action as GetActionResponseAction);

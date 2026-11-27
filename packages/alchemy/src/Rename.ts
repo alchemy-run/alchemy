@@ -132,3 +132,15 @@ export const renamedFrom =
   (...formerIds: [FormerId, ...FormerId[]]) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.provideService(effect, RenamePolicy, formerIds);
+
+/**
+ * Run `effect` without the ambient {@link RenamePolicy}. Former ids name the
+ * ONE resource `renamedFrom` decorates; resources declared while building it
+ * (its props, a Platform's hooks and init) must not inherit them, or they
+ * claim the same former FQN.
+ */
+export const omitRenamePolicy = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.updateContext(
+    effect,
+    (context: Context.Context<R>) => Context.omit(RenamePolicy)(context) as Context.Context<R>,
+  );

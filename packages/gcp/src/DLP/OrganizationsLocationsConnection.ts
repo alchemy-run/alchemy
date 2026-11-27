@@ -223,13 +223,11 @@ export const OrganizationsLocationsConnectionProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createOrganizationsLocationsConnections({
-            parent,
-            body: {
-              connection: {
-                state,
-                cloudSql,
-              },
+            connection: {
+              state,
+              cloudSql,
             },
+            parent,
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -255,14 +253,12 @@ export const OrganizationsLocationsConnectionProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* dlp.patchOrganizationsLocationsConnections({
-          name: currentName,
-          body: {
-            updateMask,
-            connection: {
-              state,
-              cloudSql,
-            },
+          updateMask,
+          connection: {
+            state,
+            cloudSql,
           },
+          name: currentName,
         });
       }
 

@@ -1,6 +1,6 @@
 import { Credentials } from "@distilled.cloud/boat-dev/Credentials";
-import { ConfigError } from "@distilled.cloud/core/errors";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BOAT_AUTH_PROVIDER_NAME, type BoatResolvedCredentials } from "./AuthProvider.ts";
 
@@ -22,12 +22,14 @@ export {
 export const fromAuthProvider = (options?: { readonly org?: string }) =>
   Layer.effect(
     Credentials,
-    lazyCredentials<BoatResolvedCredentials, ConfigError>()(BOAT_AUTH_PROVIDER_NAME, (creds) => {
+    // `Credentials` has no error channel: a failed resolution dies, and the
+    // engine reports it as `CredentialsRequired`.
+    lazyCredentials<BoatResolvedCredentials>()(BOAT_AUTH_PROVIDER_NAME, (creds) => {
       const org = options?.org ?? creds.org;
       return {
         apiKey: creds.apiKey,
         apiBaseUrl: creds.apiBaseUrl,
         ...(org ? { org } : {}),
       };
-    }),
+    }).pipe(Effect.map(Effect.orDie)),
   );

@@ -255,12 +255,10 @@ export const AppsVersionProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           ces.createProjectsLocationsAppsVersions({
+            displayName,
+            description,
             parent: app,
             appVersionId,
-            body: {
-              displayName,
-              description,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

@@ -10,11 +10,18 @@
  */
 import * as Cloudflare from "@alchemy.run/cloudflare/Workers";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import { makeDurableObjectEngine, type ObjectImpl } from "alchemy/Workers/DurableObjectEngine";
+import {
+  makeDurableObjectEngine,
+  type ObjectImpl,
+  provideCallbacks,
+} from "alchemy/Workers/DurableObjectEngine";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Predicate from "effect/Predicate";
-import { InstanceStorage } from "../../Host.ts";
+import { InstanceSockets, InstanceStorage, SOCKET_HEADER } from "../../Host.ts";
 import type { EntityStorage } from "../../internal/EntityRuntime.ts";
 import {
   type EntityObjectStub,
@@ -28,6 +35,7 @@ import {
   workflowClassOf,
   workflowObjectName,
 } from "../../internal/ObjectSharding.ts";
+import { type Call, OBJECT_CALL_HEADER } from "../../internal/Wire.ts";
 
 /** Cloudflare, as a host of the cluster's objects. */
 export const host: ObjectHost = {
@@ -76,27 +84,80 @@ const storageOf = (state: Cloudflare.DurableObjectState["Service"]): EntityStora
   };
 };
 
-/** Every entity instance: one object per `(type, id)`. */
+/** The class every entity instance's object is of. */
+export const ENTITY_OBJECT_CLASS = "ClusterEntity";
+
+/**
+ * Every entity instance: one object per `(type, id)`. Its `fetch` accepts a
+ * WebSocket a caller opened with `EntityNamespace.connect`, and hands it to
+ * the call the upgrade carries; the object holds it as a hibernatable
+ * WebSocket, so it stays open while the object is evicted.
+ */
 export const EntityObject = Cloudflare.DurableObject<EntityObjectStub>()(
-  "ClusterEntity",
+  ENTITY_OBJECT_CLASS,
   Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
     return Effect.gen(function* () {
       const runtime = yield* Effect.context<RuntimeContext>();
-      return yield* makeEntityObject({
+      /** Sockets accepted for a call whose handler hasn't taken them yet. */
+      const accepted = new Map<string, Cloudflare.WebSocket>();
+      const sockets: InstanceSockets["Service"] = {
+        accept: (id) =>
+          Effect.sync(() => {
+            const socket = accepted.get(id);
+            accepted.delete(id);
+            return socket;
+          }),
+        all: state.getWebSockets().pipe(Effect.provideContext(runtime)),
+      };
+      const object = yield* makeEntityObject({
         name: objectName(state),
         host,
         storage: storageOf(state),
-        // The object's own key-value storage, for platforms built on
-        // entities (a Domain model's) to keep each instance's data in.
+        // The object's own key-value storage and WebSockets, for platforms
+        // built on entities (a Domain model's) to keep each instance's data
+        // and live reads in.
         runtime: Context.add(
-          runtime,
-          InstanceStorage,
-          state.storage as unknown as InstanceStorage["Service"],
+          Context.add(
+            runtime,
+            InstanceStorage,
+            state.storage as unknown as InstanceStorage["Service"],
+          ),
+          InstanceSockets,
+          sockets,
         ) as Context.Context<RuntimeContext>,
         maxEncodedBytes: MAX_ENCODED_BYTES,
         waitUntil: (effect) => state.waitUntil(effect).pipe(Effect.provideContext(runtime)),
       });
+      return {
+        ...object,
+        fetch: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const header = request.headers[OBJECT_CALL_HEADER];
+          if (header === undefined || request.headers.upgrade?.toLowerCase() !== "websocket") {
+            return HttpServerResponse.empty({ status: 426, headers: { Upgrade: "websocket" } });
+          }
+          const call = JSON.parse(header) as Omit<Call, "requestId">;
+          const [response, socket] = yield* Cloudflare.upgrade();
+          const requestId = SecureRandom.uuidV4Unsafe();
+          accepted.set(requestId, socket);
+          const reply = yield* object.ask(
+            JSON.stringify({
+              ...call,
+              requestId,
+              headers: { ...call.headers, [SOCKET_HEADER]: requestId },
+            } satisfies Call),
+          );
+          // The call's handler took the socket: it is the instance's now.
+          if (!accepted.delete(requestId)) return response;
+          yield* socket.close(1011, "The call did not accept the WebSocket");
+          return HttpServerResponse.text(reply, { status: 500 });
+        }).pipe(Effect.orDie),
+        // A client's messages are ignored; a close ends the socket.
+        webSocketMessage: () => Effect.void,
+        webSocketClose: (socket: Cloudflare.WebSocket) => socket.close(1000, ""),
+        webSocketError: (socket: Cloudflare.WebSocket) => socket.close(1011, ""),
+      };
     });
   }),
 );
@@ -137,7 +198,9 @@ export const WorkflowObject = Cloudflare.DurableObject<Record<string, never>>()(
           new NotHosted({ message: `This Worker hosts no Cluster.Workflow '${className}'.` }),
         );
       }
-      const object = yield* impl.pipe(Effect.provideService(Cloudflare.DurableObjectState, state));
+      const object = yield* provideCallbacks(impl, Cloudflare.DurableObjectCallbacks).pipe(
+        Effect.provideService(Cloudflare.DurableObjectState, state),
+      );
       return (yield* object.pipe(
         Effect.provideService(Cloudflare.DurableObjectState, state),
       )) as Record<string, never>;

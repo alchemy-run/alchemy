@@ -50,6 +50,43 @@ export const currentTrace: Effect.Effect<TraceJson | undefined> = Effect.current
 export const spanOf = (trace: TraceJson): Tracer.ExternalSpan =>
   Tracer.externalSpan({ traceId: trace.traceId, spanId: trace.spanId, sampled: trace.sampled });
 
+/** What a batch span needs from each event it handles. @internal */
+export interface Batched {
+  readonly stream: string;
+  readonly seq: number;
+  readonly commandId: string;
+  readonly correlationId?: string | undefined;
+  readonly trace?: TraceJson | undefined;
+}
+
+/**
+ * Trace a batch that may merge several flows: a link to each event's trace
+ * that names its flow and position, and every flow in the batch, so a search
+ * by one flow's correlation id finds the batch either way.
+ *
+ * @internal
+ */
+export const batch = (events: ReadonlyArray<Batched>) => {
+  const correlation = (event: Batched) => event.correlationId ?? event.commandId;
+  return {
+    links: events.flatMap((event) =>
+      event.trace
+        ? [
+            {
+              span: spanOf(event.trace),
+              attributes: {
+                "domain.correlation_id": correlation(event),
+                "domain.stream": event.stream,
+                "domain.seq": event.seq,
+              },
+            },
+          ]
+        : [],
+    ),
+    correlations: [...new Set(events.map(correlation))],
+  };
+};
+
 /**
  * The flow work belongs to: the id of the first command in a chain of
  * commands, events and reactions. Policies and sagas provide it, so every

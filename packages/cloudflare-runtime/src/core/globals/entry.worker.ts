@@ -352,6 +352,7 @@ async function handleEmail(
     raw: rawBody,
     rawSize: incomingEmailRaw.byteLength,
     headers: incomingEmailHeaders,
+    canBeForwarded: true,
     setReject: (reason: string): void => {
       console.error(`Email handler rejected message with the following reason: "${reason}"`);
       maybeClientError = reason;

@@ -353,14 +353,12 @@ export const ManagementServerProvider = () =>
       if (current === undefined) {
         const created = yield* backupdr
           .createProjectsLocationsManagementServers({
+            type: news.type,
+            networks,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             managementServerId,
-            body: {
-              type: news.type,
-              networks,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

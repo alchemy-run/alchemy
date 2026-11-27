@@ -330,9 +330,9 @@ export const FolderSavedQueryProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createFoldersLocationsSavedQueries({
+            ...toBody(news, desiredDescription),
             parent: locationParent(parent, location),
             savedQueryId,
-            body: toBody(news, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -361,9 +361,9 @@ export const FolderSavedQueryProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchFoldersLocationsSavedQueries({
+          ...toBody(news, desiredDescription),
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: toBody(news, desiredDescription),
         });
       }
 

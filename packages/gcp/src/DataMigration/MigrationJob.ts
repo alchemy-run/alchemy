@@ -558,9 +558,9 @@ export const MigrationJobProvider = () =>
       if (current === undefined) {
         const created = yield* dm
           .createProjectsLocationsMigrationJobs({
+            ...body,
             parent: locationParent(env.project, location),
             migrationJobId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -633,12 +633,9 @@ export const MigrationJobProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* dm.patchProjectsLocationsMigrationJobs({
+          ...body,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            ...body,
-            name: current.name ?? name,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

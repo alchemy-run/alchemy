@@ -329,19 +329,17 @@ export const AppsGuardrailProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           ces.createProjectsLocationsAppsGuardrails({
+            displayName,
+            description,
+            enabled,
+            contentFilter,
+            llmPolicy: news.llmPolicy,
+            llmPromptSecurity: news.llmPromptSecurity,
+            modelSafety: news.modelSafety,
+            codeCallback: news.codeCallback,
+            action: news.action,
             parent: app,
             guardrailId,
-            body: {
-              displayName,
-              description,
-              enabled,
-              contentFilter,
-              llmPolicy: news.llmPolicy,
-              llmPromptSecurity: news.llmPromptSecurity,
-              modelSafety: news.modelSafety,
-              codeCallback: news.codeCallback,
-              action: news.action,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -375,6 +373,15 @@ export const AppsGuardrailProvider = () =>
       ) {
         current = yield* retryTransient(
           ces.patchProjectsLocationsAppsGuardrails({
+            displayName,
+            description,
+            enabled,
+            contentFilter,
+            llmPolicy: news.llmPolicy,
+            llmPromptSecurity: news.llmPromptSecurity,
+            modelSafety: news.modelSafety,
+            codeCallback: news.codeCallback,
+            action: news.action,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "display_name" : undefined,
@@ -387,17 +394,6 @@ export const AppsGuardrailProvider = () =>
               callbackChanged ? "code_callback" : undefined,
               actionChanged ? "action" : undefined,
             ),
-            body: {
-              displayName,
-              description,
-              enabled,
-              contentFilter,
-              llmPolicy: news.llmPolicy,
-              llmPromptSecurity: news.llmPromptSecurity,
-              modelSafety: news.modelSafety,
-              codeCallback: news.codeCallback,
-              action: news.action,
-            },
           }),
         );
       }

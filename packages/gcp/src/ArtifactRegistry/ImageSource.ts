@@ -1,7 +1,15 @@
 import { type BuildCacheOptions, imageBuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import {
+  makeContainerBootstrap,
+  resolveContainerRuntime,
+  type ContainerRuntime,
+  type ContainerRuntimeSettings,
+} from "@alchemy.run/docker/ContainerRuntime";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile, type InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import {
+  containerBundleLayout,
+  mainBundleOptions,
   validateDockerfileBuild,
   type DockerfileBuild,
   type DockerfileImageSource,
@@ -42,11 +50,14 @@ import type * as rolldown from "rolldown";
 import { Credentials } from "../Credentials.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { serviceAccountHostBundle } from "../GCPBindings.ts";
+import { makeGcpBootstrap } from "../HostRuntime.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import { waitForDeleteOperation, waitForOperation } from "./internal.ts";
 
 export interface BundledImageSource {
   main: string;
+  /** Runtime the program runs on (see `@alchemy.run/docker` `BundledImageSource.runtime`). */
+  runtime?: ContainerRuntime;
   image?: string;
   dockerfile?: string | InlineDockerfile;
   context?: string;
@@ -70,6 +81,8 @@ export interface RegistryImageSource {
 
 export interface ImageSourceLike {
   main?: string;
+  /** Runtime of a bundled `main` (see `BundledImageSource.runtime`). */
+  runtime?: ContainerRuntime;
   handler?: string;
   /** Bundler config for `main`; Docker build args and secrets for `context`. */
   build?: Bundle.BundleConfig & DockerfileBuild;
@@ -172,6 +185,7 @@ export interface ResolveImageOptions {
   port?: number;
   isExternal?: boolean;
   bootstrap: (importPath: string) => string;
+  runtime?: ContainerRuntimeSettings;
   session: { note: (message: string) => Effect.Effect<void> };
 }
 
@@ -332,45 +346,11 @@ export const makeImageSource = Effect.gen(function* () {
   const { dotAlchemy } = yield* AlchemyContext;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
-  const mainBundleOptions = (
-    source: BundledImageSource,
-    entry: string,
-    cwd: string,
-    plugins?: rolldown.RolldownPluginOption,
-  ): {
-    inputOptions: rolldown.InputOptions;
-    outputOptions: rolldown.OutputOptions;
-  } => ({
-    // Images here run on Cloud Run or GKE, as a service account.
-    inputOptions: serviceAccountHostBundle({
-      ...source.build?.input,
-      input: entry,
-      cwd,
-      platform: "node",
-      external: [
-        "bun",
-        "bun:*",
-        ...((source.build?.input?.external as string[] | undefined) ?? []),
-      ],
-      resolve: {
-        conditionNames: ["bun", "import", "module", "default"],
-        ...source.build?.input?.resolve,
-      },
-      plugins: [source.build?.input?.plugins, plugins],
-    }),
-    outputOptions: {
-      ...source.build?.output,
-      format: "esm",
-      sourcemap: source.build?.output?.sourcemap ?? false,
-      minify: source.build?.output?.minify ?? false,
-      entryFileNames: "index.mjs",
-    },
-  });
-
   const bundleProgram = Effect.fn(function* (options: {
     source: BundledImageSource;
     isExternal?: boolean;
     bootstrap: (importPath: string) => string;
+    runtime: ContainerRuntimeSettings;
   }) {
     const { source } = options;
     const realMain = yield* resolveMainPath(source.main);
@@ -380,8 +360,22 @@ export const makeImageSource = Effect.gen(function* () {
       entry: string,
       plugins?: rolldown.RolldownPluginOption,
     ) {
-      const opts = mainBundleOptions(source, entry, cwd, plugins);
-      return yield* Bundle.build(opts.inputOptions, opts.outputOptions, source.build);
+      const runtime =
+        options.runtime.preset === "bun"
+          ? { ...options.runtime, conditions: ["bun", "import", "module", "default"] }
+          : options.runtime;
+      const { inputOptions, outputOptions } = mainBundleOptions(
+        source,
+        entry,
+        cwd,
+        runtime,
+        plugins,
+      );
+      return yield* Bundle.build(
+        serviceAccountHostBundle(inputOptions),
+        outputOptions,
+        source.build,
+      );
     });
 
     const bundleOutput = options.isExternal
@@ -397,18 +391,24 @@ export const makeImageSource = Effect.gen(function* () {
     return { files, hash: bundleOutput.hash };
   });
 
-  const generateDockerfile = (source: BundledImageSource, port?: number, envFrom?: string) => {
+  const generateDockerfile = (
+    source: BundledImageSource,
+    runtime: ContainerRuntimeSettings,
+    port?: number,
+    envFrom?: string,
+  ) => {
     const preamble =
       envFrom !== undefined
         ? `FROM ${envFrom}`
         : source.dockerfile !== undefined && isInlineDockerfile(source.dockerfile)
           ? (source.dockerfile.content as string).trimEnd()
-          : `FROM ${source.image ?? "oven/bun:1"}`;
-    const lines = [preamble, `WORKDIR /app`, `COPY index.mjs /app/index.mjs`, `COPY *.js /app/`];
+          : `FROM ${source.image ?? runtime.baseImage}`;
+    const layout = containerBundleLayout(runtime);
+    const lines = [preamble, `WORKDIR /app`, ...layout.copy];
     if (port !== undefined) {
       lines.push(`ENV PORT=${String(port)}`, `EXPOSE ${String(port)}`);
     }
-    lines.push(`ENTRYPOINT ["bun", "/app/index.mjs"]`);
+    lines.push(layout.entrypoint);
     return `${lines.join("\n")}\n`;
   };
 
@@ -416,13 +416,16 @@ export const makeImageSource = Effect.gen(function* () {
     source: BundledImageSource;
     isExternal?: boolean;
     bootstrap: (importPath: string) => string;
+    runtime?: ContainerRuntimeSettings;
     port?: number;
     platform: string;
   }) {
+    const runtime = options.runtime ?? (yield* resolveContainerRuntime(options.source.runtime));
     const bundled = yield* bundleProgram({
       source: options.source,
       isExternal: options.isExternal,
       bootstrap: options.bootstrap,
+      runtime,
     });
     const df = options.source.dockerfile;
     const isPathEnv = df !== undefined && !isInlineDockerfile(df);
@@ -440,6 +443,7 @@ export const makeImageSource = Effect.gen(function* () {
     }
     const dockerfile = generateDockerfile(
       options.source,
+      runtime,
       options.port,
       isPathEnv ? "<env>" : undefined,
     );
@@ -449,7 +453,7 @@ export const makeImageSource = Effect.gen(function* () {
       platform: options.platform,
       ...envIdentity,
     })).slice(0, 16);
-    return { bundled, dockerfile, codeHash };
+    return { bundled, dockerfile, codeHash, runtime };
   });
 
   /**
@@ -525,13 +529,11 @@ export const makeImageSource = Effect.gen(function* () {
     }
     const created = yield* artifactregistry
       .createProjectsLocationsRepositories({
+        format: "DOCKER",
+        mode: "STANDARD_REPOSITORY",
+        labels: desiredLabels,
         parent: `projects/${env.project}/locations/${options.location}`,
         repositoryId: options.repositoryId,
-        body: {
-          format: "DOCKER",
-          mode: "STANDARD_REPOSITORY",
-          labels: desiredLabels,
-        },
       })
       .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (created !== undefined) {
@@ -660,10 +662,11 @@ export const makeImageSource = Effect.gen(function* () {
         );
       }
       yield* session.note(`Bundling ${id} program...`);
-      const { bundled, dockerfile, codeHash } = yield* computeMainCodeHash({
+      const { bundled, dockerfile, codeHash, runtime } = yield* computeMainCodeHash({
         source: source as BundledImageSource,
         isExternal: options.isExternal,
         bootstrap: options.bootstrap,
+        runtime: options.runtime,
         port: options.port,
         platform,
       });
@@ -697,7 +700,7 @@ export const makeImageSource = Effect.gen(function* () {
       const finalDockerfile =
         envFrom === undefined
           ? dockerfile
-          : generateDockerfile(source as BundledImageSource, options.port, envFrom);
+          : generateDockerfile(source as BundledImageSource, runtime, options.port, envFrom);
 
       const realMain = yield* resolveMainPath((source as BundledImageSource).main);
       const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${id}-image`);
@@ -804,6 +807,7 @@ export const makeImageSource = Effect.gen(function* () {
     port?: number;
     isExternal?: boolean;
     bootstrap: (importPath: string) => string;
+    runtime?: ContainerRuntimeSettings;
   }) {
     const platform = options.platform ?? "linux/amd64";
     if (isNodeProgram(options.source, options.isExternal)) {
@@ -823,6 +827,7 @@ export const makeImageSource = Effect.gen(function* () {
         source: options.source as BundledImageSource,
         isExternal: options.isExternal,
         bootstrap: options.bootstrap,
+        runtime: options.runtime,
         port: options.port,
         platform,
       });
@@ -836,6 +841,46 @@ export const makeImageSource = Effect.gen(function* () {
     hash,
     destroyRepository: destroyImageRepository,
     resourceName,
+  };
+});
+
+/** Pair Cloud Run's process entry with the runtime each source builds its image for. */
+export const makeCloudRunImageSource = Effect.fnUntraced(function* (mode: "server" | "job") {
+  const images = yield* makeImageSource;
+  const bootstrap = (source: ImageSourceLike, runtime: ContainerRuntimeSettings) => {
+    const handler = source.handler ?? "default";
+    return runtime.preset === "bun"
+      ? makeGcpBootstrap(mode === "server" ? "CloudRun" : "CloudRunJob", handler)
+      : makeContainerBootstrap(
+          runtime.platformModule,
+          "@alchemy.run/gcp/Bootstrap/CloudRunProcess",
+          handler,
+          mode,
+          { deferEntrypointImport: true },
+        );
+  };
+  return {
+    ...images,
+    resolve: Effect.fnUntraced(function* (
+      options: Omit<ArtifactRegistryResolveOptions, "bootstrap" | "runtime">,
+    ) {
+      const runtime = yield* resolveContainerRuntime(options.source.runtime);
+      return yield* images.resolve({
+        ...options,
+        runtime,
+        bootstrap: bootstrap(options.source, runtime),
+      });
+    }),
+    hash: Effect.fnUntraced(function* (
+      options: Omit<Parameters<typeof images.hash>[0], "bootstrap" | "runtime">,
+    ) {
+      const runtime = yield* resolveContainerRuntime(options.source.runtime);
+      return yield* images.hash({
+        ...options,
+        runtime,
+        bootstrap: bootstrap(options.source, runtime),
+      });
+    }),
   };
 });
 

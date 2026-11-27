@@ -312,19 +312,13 @@ const waitForOperation = (
   );
 
 const removeConsumerPeering = (project: string, network: string, peering: string) =>
-  compute
-    .removePeeringNetworks({
-      project,
-      network,
-      body: { name: peering || DEFAULT_PEERING },
-    })
-    .pipe(
-      Effect.flatMap((operation) =>
-        waitGlobalOperation(project, operation, { ignore: ["RESOURCE_NOT_FOUND"] }),
-      ),
-      Effect.catchTag("NotFound", () => Effect.void),
-      Effect.asVoid,
-    );
+  compute.removePeeringNetworks({ name: peering || DEFAULT_PEERING, project, network }).pipe(
+    Effect.flatMap((operation) =>
+      waitGlobalOperation(project, operation, { ignore: ["RESOURCE_NOT_FOUND"] }),
+    ),
+    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.asVoid,
+  );
 
 const waitUntilPresent = (parent: string, consumerNetwork: string) =>
   getByNetwork(parent, consumerNetwork).pipe(
@@ -369,13 +363,11 @@ const patchRanges = (
 ) =>
   Effect.gen(function* () {
     const operation = yield* servicenetworking.patchServicesConnections({
+      network: consumerNetwork,
+      reservedPeeringRanges: [...ranges],
       name: connectionNameOf(parent, peering),
       updateMask: "reservedPeeringRanges",
       force: true,
-      body: {
-        network: consumerNetwork,
-        reservedPeeringRanges: [...ranges],
-      },
     });
     yield* waitForOperation(operation);
   });
@@ -489,11 +481,9 @@ export const ConnectionProvider = () =>
         }
         const created = yield* servicenetworking
           .createServicesConnections({
+            network: consumerNetwork,
+            reservedPeeringRanges: [...desiredRanges],
             parent,
-            body: {
-              network: consumerNetwork,
-              reservedPeeringRanges: [...desiredRanges],
-            },
           })
           .pipe(Effect.catchTag(["Conflict", "ConnectionAlreadyExists"], () => Effect.undefined));
         if (created !== undefined) {
@@ -549,8 +539,8 @@ export const ConnectionProvider = () =>
       const consumerNetwork = output.network;
       const operation = yield* servicenetworking
         .deleteConnectionServicesConnections({
+          consumerNetwork,
           name: output.name || connectionNameOf(parent, output.peering),
-          body: { consumerNetwork },
         })
         .pipe(
           Effect.catchTag("NotFound", () => Effect.undefined),

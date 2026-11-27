@@ -456,9 +456,9 @@ export const BillingBucketProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createBillingAccountsLocationsBuckets({
+            ...toCreateBody(news, desiredDescription),
             parent: `${billingAccountParent(billingAccountId)}/locations/${location}`,
             bucketId,
-            body: toCreateBody(news, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -526,9 +526,9 @@ export const BillingBucketProvider = () =>
           body.cmekSettings = { kmsKeyName: news.cmekSettings?.kmsKeyName };
         }
         current = yield* logging.patchBillingAccountsLocationsBuckets({
+          ...body,
           name: current.name ?? name,
           updateMask: syncMask.join(","),
-          body,
         });
         if (isPending(current.lifecycleState)) {
           current = yield* waitUntilActive(current.name ?? name);
@@ -537,9 +537,9 @@ export const BillingBucketProvider = () =>
 
       if (lockedChanged) {
         current = yield* logging.patchBillingAccountsLocationsBuckets({
+          locked: true,
           name: current.name ?? name,
           updateMask: "locked",
-          body: { locked: true },
         });
         if (isPending(current.lifecycleState)) {
           current = yield* waitUntilActive(current.name ?? name);

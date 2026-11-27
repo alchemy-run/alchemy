@@ -14,7 +14,7 @@ import { safeHttpEffect } from "alchemy/Http";
 import * as Output from "alchemy/Output";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createContainerRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
-import { packEnvValueKeepRedacted } from "alchemy/RuntimeContext";
+import { packEnvValueKeepRedacted, envStrings } from "alchemy/RuntimeContext";
 import {
   copyExtraFiles,
   contextRootOf,
@@ -181,13 +181,7 @@ export const plainEnvValue = (value: unknown): string | undefined => {
   return undefined;
 };
 
-export const toEnvRecord = (env: Record<string, any> | undefined): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(env ?? {}).flatMap(([key, value]) => {
-      const raw = plainEnvValue(value);
-      return raw === undefined ? [] : [[key, raw]];
-    }),
-  );
+export const toEnvRecord = envStrings;
 
 const coerceBindingName = (value: unknown): string | undefined => {
   const direct = plainEnvValue(value);

@@ -1,0 +1,87 @@
+{
+  "name": "@alchemy.run/opencode",
+  "version": "2.0.0-beta.87",
+  "description": "OpenCode agent harnesses for Alchemy: OpenCode runs in your Durable Object and uses the models, tools and skills of the harness that hosts it.",
+  "keywords": [
+    "agents",
+    "ai",
+    "alchemy",
+    "effect",
+    "harness",
+    "opencode"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/opencode"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./Cloudflare": "./src/Cloudflare/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./Cloudflare": {
+        "types": "./lib/Cloudflare/index.d.ts",
+        "bun": "./src/Cloudflare/index.ts",
+        "worker": "./src/Cloudflare/index.ts",
+        "default": "./lib/Cloudflare/index.js"
+      },
+      "./internal/*": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@alchemy.run/ai": "workspace:*",
+    "@opencode/plugin": "2.3.2",
+    "@opencode/sdk": "2.3.2"
+  },
+  "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@types/bun": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/cloudflare": {
+      "optional": true
+    }
+  }
+}

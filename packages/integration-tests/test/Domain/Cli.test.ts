@@ -46,8 +46,8 @@ class Deposited extends Domain.Event("Deposited", {
 class OverLimit extends Domain.Rejection("OverLimit", { limit: Schema.Int }) {}
 
 class Deposit extends Domain.Command("Deposit", {
-  target: WalletId,
   input: {
+    walletId: WalletId,
     amount: Schema.Int.annotate({ description: "Cents to add" }),
     note: Schema.optional(Schema.String),
     method: Schema.optional(Schema.Literals(["cash", "card"])),
@@ -65,6 +65,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [Deposit],
+  keyOf: (command) => command.walletId,
   decide: {
     Deposit: (wallet, cmd) =>
       cmd.amount > 100
@@ -224,7 +225,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
         const run = yield* cliOver;
         const deposit = yield* run(asSam, [
           "deposit",
-          "--target",
+          "--wallet-id",
           "w-1",
           "--amount",
           "40",
@@ -239,6 +240,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           reply: { balance: 40 },
           stream: "Wallet/w-1",
           version: 1,
+          commits: [{ stream: "Wallet/w-1", version: 1 }],
         });
 
         // The write reached the domain: the aggregate and the view read it back.
@@ -296,7 +298,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
     hosted(
       Effect.gen(function* () {
         const run = yield* cliOver;
-        const refused = yield* run(asSam, ["deposit", "--target", "w-1", "--amount", "500"]);
+        const refused = yield* run(asSam, ["deposit", "--wallet-id", "w-1", "--amount", "500"]);
         expect(refused.code).toBe(1);
         expect(refused.stdout).toBe("");
         expect(json(refused.stderr)).toEqual({ _tag: "OverLimit", limit: 100 });
@@ -320,13 +322,13 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
     hosted(
       Effect.gen(function* () {
         const run = yield* cliOver;
-        const fraction = yield* run(asSam, ["deposit", "--target", "w-1", "--amount", "1.5"]);
+        const fraction = yield* run(asSam, ["deposit", "--wallet-id", "w-1", "--amount", "1.5"]);
         expect(fraction.code).toBe(1);
         expect(fraction.stdout).toBe("");
         expect(fraction.stderr).toContain("amount");
         const missing = yield* run(asSam, ["deposit", "--amount", "5"]);
         expect(missing.code).toBe(1);
-        expect(missing.stderr).toContain("target");
+        expect(missing.stderr).toContain("walletId");
         const wallets = yield* Wallet;
         expect((yield* wallets.get(Wallet.ref("w-1"))).balance).toBe(0);
       }),
@@ -353,7 +355,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
         const deposit = yield* run(asSam, [
           "deposit",
           "--json",
-          JSON.stringify({ target: "w-2", amount: 7, tags: ["a", "b"] }),
+          JSON.stringify({ walletId: "w-2", amount: 7, tags: ["a", "b"] }),
           "--amount",
           "9",
           "--express",
@@ -364,7 +366,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
         const fromJson = yield* run(asSam, [
           "deposit",
           "--json",
-          JSON.stringify({ target: "w-4", amount: 4, note: "from json" }),
+          JSON.stringify({ walletId: "w-4", amount: 4, note: "from json" }),
         ]);
         expect(fromJson.code).toBe(0);
         expect(json(fromJson.stdout)).toMatchObject({ reply: { balance: 4 } });
@@ -372,7 +374,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
         const fromWire = yield* run(asSam, [
           "deposit",
           "--json",
-          JSON.stringify({ target: "w-5", input: { amount: 6, note: "wire" } }),
+          JSON.stringify({ input: { walletId: "w-5", amount: 6, note: "wire" } }),
         ]);
         expect(fromWire.code).toBe(0);
         expect(json(fromWire.stdout)).toMatchObject({ reply: { balance: 6 } });
@@ -392,7 +394,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           expose,
           headers: Effect.sync(() => ({ authorization: "Bearer kim" })),
         });
-        const deposit = yield* run(fromEnv, ["deposit", "--target", "w-3", "--amount", "3"]);
+        const deposit = yield* run(fromEnv, ["deposit", "--wallet-id", "w-3", "--amount", "3"]);
         expect(deposit.code).toBe(0);
         const balance = yield* run(fromEnv, [
           "balance",
@@ -428,7 +430,14 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
         expect(balance.stdout).not.toMatch(/\bevents\b/);
 
         const deposit = yield* run(asSam, ["deposit", "--help"]);
-        for (const flag of ["--target", "--amount", "--note", "--method", "--express", "--tags"]) {
+        for (const flag of [
+          "--wallet-id",
+          "--amount",
+          "--note",
+          "--method",
+          "--express",
+          "--tags",
+        ]) {
           expect(deposit.stdout).toContain(flag);
         }
         expect(deposit.stdout).toContain("--command-id");
@@ -438,19 +447,19 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
     ),
   );
 
-  it.live("a command whose input names a field target takes its input as --input JSON", () =>
+  it.live("a command whose input names a field commandId takes its input as --input JSON", () =>
     hosted(
       Effect.gen(function* () {
         class Rename extends Domain.Command("Rename", {
-          target: WalletId,
-          // `target` here is the input's own field, not the wallet.
-          input: { target: Schema.String },
+          // `commandId` here is the input's own field, not the call's.
+          input: { walletId: WalletId, commandId: Schema.String },
         }) {}
         class Names extends Domain.Aggregate("Names", {
           id: WalletId,
           state: Schema.Struct({}),
           initial: {},
           commands: [Rename],
+          keyOf: (command) => command.walletId,
           decide: { Rename: () => [] },
           evolve: {},
         }) {}
@@ -462,7 +471,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           ["rename", "--help"],
         );
         expect(help.code).toBe(0);
-        expect(help.stdout).toContain("--target");
+        expect(help.stdout).toContain("--command-id");
         expect(help.stdout).toContain("--input");
       }),
     ),
@@ -478,7 +487,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
             Effect.map(({ exit }) => (Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined)),
           );
         class Clash extends Domain.Command("deposit", {
-          target: WalletId,
+          input: { walletId: WalletId },
           events: [Deposited],
         }) {}
         class Clashing extends Domain.Aggregate("Clashing", {
@@ -486,6 +495,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           state: Schema.Struct({}),
           initial: {},
           commands: [Clash],
+          keyOf: (command) => command.walletId,
           decide: { deposit: () => [] },
           evolve: { Deposited: (s) => s },
         }) {}
@@ -498,14 +508,14 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           message: "ClashApi: `Deposit` and `deposit` are both the command deposit",
         });
         class Reserved extends Domain.Command("Reserved", {
-          target: WalletId,
-          input: { json: Schema.String },
+          input: { walletId: WalletId, json: Schema.String },
         }) {}
         class Reserving extends Domain.Aggregate("Reserving", {
           id: WalletId,
           state: Schema.Struct({}),
           initial: {},
           commands: [Reserved],
+          keyOf: (command) => command.walletId,
           decide: { Reserved: () => [] },
           evolve: {},
         }) {}
@@ -527,8 +537,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
         class Withdraw extends Domain.Command(
           "Withdraw",
           {
-            target: WalletId,
-            input: { amount: Schema.Int },
+            input: { walletId: WalletId, amount: Schema.Int },
             events: [Deposited],
           },
           { description: "Take money out of a wallet. The amount is in cents." },
@@ -538,6 +547,7 @@ describe("Domain toCli", { tags: ["unit", "local"] }, () => {
           state: Schema.Struct({ balance: Schema.Int }),
           initial: { balance: 0 },
           commands: [Withdraw],
+          keyOf: (command) => command.walletId,
           decide: { Withdraw: () => [] },
           evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
         }) {}

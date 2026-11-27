@@ -1,0 +1,136 @@
+---
+title: Project layout
+description: How to lay out an Alchemy AI project. One file per tool and per process, named after what it declares and its kind, with the contract and its Layer together.
+---
+
+An AI project grows into many small declarations: tools, processes, an MCP server or two. Lay them out so a file's name tells you what it holds before you open it.
+
+## Name a file after what it declares and its kind
+
+Every file holds one declaration, and its name is the declaration's name followed by its kind:
+
+```text
+SearchIssues.tool.ts
+PostAnswer.tool.ts
+Triage.process.ts
+Answering.process.ts
+Docs.mcp.ts
+```
+
+Never collect tools in a `tools.ts`. A tool is found by its name, and a file that holds several grows without limit.
+
+## Keep a tool's contract and its Layer together
+
+A tool's file holds its class and the Layer that implements it:
+
+```typescript title="src/PostAnswer.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import { Repo } from "./Repo.ts";
+
+export class PostAnswer extends AI.Tool<PostAnswer>()("post_answer", {
+  description: "Post your answer on the issue as a comment, in Markdown.",
+  parameters: Schema.Struct({ issue: Schema.Number, markdown: Schema.String }),
+  success: Schema.Struct({ url: Schema.String }),
+}) {}
+
+export const PostAnswerLive = PostAnswer.make(
+  Effect.gen(function* () {
+    const comment = yield* GitHub.CreateIssueComment(yield* Repo);
+
+    return Effect.fn(function* ({ issue, markdown }) {
+      const posted = yield* comment({ issue_number: issue, body: markdown }).pipe(Effect.orDie);
+      return { url: posted.html_url };
+    });
+  }),
+).pipe(Layer.provide(GitHub.CreateIssueCommentHttp));
+```
+
+The Layer is named after the tool, with `Live`. A failure only this tool returns lives in its file too.
+
+## Keep a process in a file of its own
+
+A process's file holds the process, and imports what it mentions:
+
+```typescript title="src/Triage.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Answering } from "./Answering.process.ts";
+import { PostAnswer } from "./PostAnswer.tool.ts";
+
+export class Triage extends AI.Process<Triage>()("Triage", {
+  description: "Answer one issue of the repository.",
+})`
+  You look after one issue. Follow ${Answering}, then call ${PostAnswer}.
+` {}
+```
+
+A process declared by name alone keeps its `toLayer` in the same file, as `TriageLive`. A second way to carry it out gets a file of its own.
+
+## Plain names for the rest
+
+Model names share one file, `Models.ts`, with the Layers behind them: they are a line each, and `.model.ts` already means a [Domain model](/domain/project-layout). The Durable Object that runs sessions, the Worker and the sandbox Layer keep plain names: `Agents.ts`, `Worker.ts`, `Sandbox.ts`.
+
+```text
+src/
+  Agents.ts
+  Answering.process.ts
+  Models.ts
+  PostAnswer.tool.ts
+  Sandbox.ts
+  SearchIssues.tool.ts
+  Triage.process.ts
+  Worker.ts
+```
+
+## With a Domain model
+
+A Domain model's files follow [its own layout](/domain/project-layout), in a folder or a package of their own. Processes and tools sit outside it: the model never imports one.
+
+```text
+src/
+  Board/
+    Board.model.ts
+    Issue.aggregate.ts
+    IssueWork.policy.ts
+    LabelIssue.command.ts
+    Triager.external.ts
+  Agents.ts
+  PostAnswer.tool.ts
+  Triage.process.ts
+```
+
+## With a front end
+
+A page reads sessions through the model, so what records a session sits with the model's files. The page is in `web/`, and imports only the model's Api, ids and value Schemas.
+
+```text
+src/
+  Board/
+    WebApi.api.ts               what a page may send and read
+    IssueSession.aggregate.ts   what was recorded of an issue's session
+    RecordActivity.command.ts
+    SessionStatus.view.ts
+    Transcript.stream.ts
+    Transcripts.projection.ts
+    IssueList.view.ts
+  Agents.ts                     runs the session, and records it
+  Worker.ts
+web/
+  src/
+    Board.ts                    Model, Message, update, Commands, Subscriptions
+    View.ts
+    entry.ts
+    worker.ts                   serves the build, forwards /api to the board
+test/
+  Board.verify.test.ts          the model's rules
+  Board.story.test.ts           the page's update
+  App.test.ts                   the page with the board, in memory
+  integ.test.ts                 the page with the deployed app
+```
+
+See [Connect a front end](/ai/front-end) for what each file holds.
+
+[`examples/cloudflare-ai-issues`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-ai-issues) is laid out this way.

@@ -1,6 +1,7 @@
 import { buildFunctionArtifact, validateFunctionZip } from "@alchemy.run/neon/FunctionArtifact";
 import { expect, test } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { AlchemyContext } from "alchemy/AlchemyContext";
 import { zipFiles } from "alchemy/Util/zip";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -26,6 +27,33 @@ test.effect(
       yield* fs.writeFile(zip, first.archive);
       const prebuilt = yield* buildFunctionArtifact({ ...scope, artifact: { zip } });
       expect(prebuilt.codeHash).toBe(first.codeHash);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
+);
+
+test.effect(
+  "directory artifact rejects a moved ALCHEMY_DIR inside it",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.realPath(yield* fs.makeTempDirectoryScoped());
+      yield* fs.writeFileString(path.join(root, "index.mjs"), "export default {};");
+      yield* fs.makeDirectory(path.join(root, "runtime", "state"), { recursive: true });
+      yield* fs.writeFileString(path.join(root, "runtime", "state", "project.json"), "{}");
+      const rejected = yield* buildFunctionArtifact({
+        ...scope,
+        artifact: { directory: root },
+      }).pipe(
+        Effect.provideService(AlchemyContext, {
+          dotAlchemy: path.join(root, "runtime"),
+          dev: false,
+          adopt: false,
+        }),
+        Effect.as(false),
+        Effect.catchTag("FunctionArtifactError", () => Effect.succeed(true)),
+      );
+      expect(rejected).toBe(true);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   { tags: ["unit", "provider:neon", "provider:neon:function", "local"] },
 );
