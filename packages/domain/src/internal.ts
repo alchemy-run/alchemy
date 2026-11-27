@@ -1,5 +1,6 @@
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -9,6 +10,17 @@ import * as SchemaAST from "effect/SchemaAST";
 import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
 
 export { DefinitionError } from "./DefinitionError.ts";
+
+/**
+ * Whether an Api client being built remembers the receipts of the commands
+ * it sends, for its reads to wait for. Off for a client that serves many
+ * callers, such as the one behind `toHttpApi` or `toToolkit`.
+ *
+ * @internal
+ */
+export const RemembersWrites = Context.Reference<boolean>("alchemy/Domain/Api/RemembersWrites", {
+  defaultValue: () => true,
+});
 
 /** The defects {@link internalError} made: already logged, sent as they are. */
 const internalErrors = new WeakSet<object>();

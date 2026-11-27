@@ -485,6 +485,24 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
     ),
   );
 
+  it.live("waits for the commands its client sent, with no atLeast", () =>
+    Effect.gen(function* () {
+      const api = yield* WalletApi.clientInProcess;
+      yield* api.Deposit({ id: "sam-1", amounts: [10, 20] });
+      yield* api.Deposit({ id: "kim-1", amounts: [12] });
+      // The projection batches for 200ms; the client remembers both receipts.
+      const combined = yield* api.Combined({ wallets: ["sam-1", "kim-1"] });
+      expect(combined).toEqual({ total: 42 });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Wallets.layer(handlers({ batch: { size: 100, wait: "200 millis" } })).pipe(
+          Layer.provideMerge(Layer.mergeAll(InMemory, Movements.memory, ViewerSessionLive)),
+        ),
+      ),
+    ),
+  );
+
   it.live("waits for a view in waitsFor, on the key the receipt's command reached", () =>
     Effect.gen(function* () {
       const { tracer, named } = recording();

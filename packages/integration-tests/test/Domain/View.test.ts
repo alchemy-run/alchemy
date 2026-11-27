@@ -151,10 +151,47 @@ const neverCaughtUp = (settle: Effect.Effect<void>) =>
         Effect.flip(api.Totals.snapshot("c-3", { atLeast })),
         Effect.flip(api.Totals.get("c-3", { atLeast })),
         Effect.flip(api.Totals.list("c-3", { atLeast })),
+        // The client holds the receipt, so a read with no `atLeast` waits for it too.
+        Effect.flip(api.Totals.get("c-3")),
       ],
       { concurrency: "unbounded" },
     );
     return [command, ...reads];
+  });
+
+/**
+ * A client remembers the commands it sent: its `get`, `snapshot`, `list` and
+ * `watch` wait until the view has applied them, with no `atLeast`. `[]`
+ * reads at once, and so does another client, or a key the command did not
+ * reach.
+ */
+const readsOwnWrites = (settle: Effect.Effect<void>, another: typeof CounterApi.clientInProcess) =>
+  Effect.gen(function* () {
+    const api = yield* CounterApi.Client;
+    const other = yield* another;
+    // The deploy is done: the view has its (empty) history.
+    yield* settle;
+    yield* api.Increment({ id: "c-1", by: 2 });
+    // Nothing is delivered until the platform drains: the view is behind the command.
+    expect(yield* api.Totals.get("c-1", { atLeast: [] })).toBeNull();
+    expect(yield* other.Totals.get("c-1")).toBeNull();
+    expect(yield* api.Totals.get("c-2")).toBeNull();
+    const reads = yield* Effect.all(
+      [
+        api.Totals.get("c-1"),
+        api.Totals.snapshot("c-1"),
+        api.Totals.list("c-1"),
+        api.Totals.watch("c-1").pipe(Stream.take(1), Stream.runCollect),
+      ],
+      { concurrency: "unbounded" },
+    ).pipe(Effect.forkChild);
+    yield* Effect.sleep("100 millis");
+    expect(reads.pollUnsafe()).toBeUndefined();
+    const [get, snapshot, page, watched] = yield* joinSettling(settle, reads);
+    expect(get).toEqual({ total: 2 });
+    expect(snapshot).toEqual({ state: { total: 2 }, cursor: 1 });
+    expect(page.entries.map((entry) => entry.state)).toEqual([{ total: 2 }]);
+    expect(watched).toEqual([{ state: { total: 2 }, cursor: 1 }]);
   });
 
 /** A snapshot, two writes, then a feed that resumes after the snapshot's cursor. */
@@ -278,6 +315,22 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
   it.live("a strong command answers once its views have applied it, over the wire", () => {
     const platform = held();
     return answersOnceApplied(platform.settle, overTheWire).pipe(
+      Effect.scoped,
+      Effect.provide(wireOver(platform.layer)),
+    );
+  });
+
+  it.live("a client's reads wait for the commands it sent, in process", () => {
+    const platform = held();
+    return readsOwnWrites(platform.settle, CounterApi.clientInProcess).pipe(
+      Effect.scoped,
+      Effect.provide(inProcessOver(platform.layer)),
+    );
+  });
+
+  it.live("a client's reads wait for the commands it sent, over the wire", () => {
+    const platform = held();
+    return readsOwnWrites(platform.settle, overTheWire).pipe(
       Effect.scoped,
       Effect.provide(wireOver(platform.layer)),
     );
