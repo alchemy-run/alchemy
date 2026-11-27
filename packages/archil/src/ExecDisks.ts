@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { ApiAccess } from "./ArchilBindings.ts";
 import type { ExecResult } from "./Clients.ts";
+import { toEgressPolicy, type SandboxEgress } from "./SandboxOptions.ts";
 
 /** One disk in a multi-disk exec. */
 export interface ExecDisksMount {
@@ -26,6 +27,14 @@ export interface ExecDisksClient {
   exec(request: {
     readonly disks: Record<string, string | ExecDisksMount>;
     readonly command: string;
+    /** Run in this built image instead of Archil's default. */
+    readonly imageId?: string | undefined;
+    /** vCPUs for the microVM. Defaults to 2. */
+    readonly vcpuCount?: number | undefined;
+    /** Memory in MiB for the microVM. Defaults to 4096. */
+    readonly memSizeMiB?: number | undefined;
+    /** Outbound network policy for this command. Unrestricted when omitted. */
+    readonly network?: { readonly egress?: SandboxEgress | undefined } | undefined;
   }): Effect.Effect<ExecResult, archil.ExecError, RuntimeContext>;
 }
 
@@ -84,6 +93,12 @@ export const ExecDisksHttp = Layer.effect(
                         },
                   ]),
                 ),
+                imageId: request.imageId,
+                vcpuCount: request.vcpuCount,
+                memSizeMib: request.memSizeMiB,
+                network: request.network?.egress
+                  ? { egress: toEgressPolicy(request.network.egress) }
+                  : undefined,
               })
               .pipe(
                 Effect.map(({ data }) => ({
