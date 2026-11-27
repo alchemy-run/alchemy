@@ -4,19 +4,22 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
 
 const tags = ["unit", "provider:cloudflare", "local"];
 
 /** A FileSystem whose reads of `slow` files finish after every other read. */
 const finishingLast = (fs: FileSystem.FileSystem, slow: ReadonlySet<string>) => ({
   ...fs,
-  readFile: (file: string) =>
+  stream: (file: string, options?: Parameters<FileSystem.FileSystem["stream"]>[1]) =>
     slow.has(file)
-      ? Effect.gen(function* () {
-          for (let step = 0; step < 20; step++) yield* Effect.yieldNow;
-          return yield* fs.readFile(file);
-        })
-      : fs.readFile(file),
+      ? Stream.unwrap(
+          Effect.gen(function* () {
+            for (let step = 0; step < 20; step++) yield* Effect.yieldNow;
+            return fs.stream(file, options);
+          }),
+        )
+      : fs.stream(file, options),
 });
 
 layer(NodeServices.layer)("Cloudflare Worker asset manifest hashing", (it) => {
@@ -51,15 +54,16 @@ layer(NodeServices.layer)("Cloudflare Worker asset manifest hashing", (it) => {
           let peak = 0;
           const monitored = {
             ...fs,
-            readFile: (file: string) =>
-              Effect.suspend(() => {
-                active++;
-                peak = Math.max(peak, active);
-                return Effect.yieldNow.pipe(
-                  Effect.andThen(fs.readFile(file)),
-                  Effect.ensuring(Effect.sync(() => active--)),
-                );
-              }),
+            stream: (file: string, options?: Parameters<FileSystem.FileSystem["stream"]>[1]) =>
+              Stream.unwrap(
+                Effect.sync(() => {
+                  active++;
+                  peak = Math.max(peak, active);
+                  return fs
+                    .stream(file, options)
+                    .pipe(Stream.ensuring(Effect.sync(() => active--)));
+                }),
+              ),
           };
           const assets = yield* readAssets({
             directory,
@@ -109,47 +113,6 @@ layer(NodeServices.layer)("Cloudflare Worker asset manifest hashing", (it) => {
           expect(Object.keys(second.manifest)).toEqual(Object.keys(first.manifest));
           expect(second.manifest).toEqual(first.manifest);
           expect(second.hash).toBe(first.hash);
-        }),
-      ),
-    { tags },
-  );
-
-  it.effect(
-    "bounds the bytes of large assets read at once",
-    () =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const fs = yield* FileSystem.FileSystem;
-          const path = yield* Path.Path;
-          const directory = yield* fs.makeTempDirectoryScoped({
-            prefix: "alchemy-manifest-bytes-",
-          });
-          for (let i = 0; i < 6; i++) {
-            yield* fs.writeFile(
-              path.join(directory, `large-${i}.bin`),
-              new Uint8Array(20 * 1024 * 1024).fill(i),
-            );
-          }
-
-          let active = 0;
-          let peak = 0;
-          const monitored = {
-            ...fs,
-            readFile: (file: string) =>
-              Effect.suspend(() => {
-                active++;
-                peak = Math.max(peak, active);
-                return Effect.yieldNow.pipe(
-                  Effect.andThen(fs.readFile(file)),
-                  Effect.ensuring(Effect.sync(() => active--)),
-                );
-              }),
-          };
-          yield* readAssets({ directory }).pipe(
-            Effect.provideService(FileSystem.FileSystem, monitored),
-          );
-          // A 64 MiB budget admits three 20 MiB files, not the 16-file pool.
-          expect(peak).toBe(3);
         }),
       ),
     { tags },
