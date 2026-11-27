@@ -242,14 +242,10 @@ const evaluateChain = async (
   }
   let path = binding;
   for (const segment of chain) {
-    // Settle every argument before failing, so a sibling chain still running
-    // can't push a result after the caller has disposed `acquired`.
-    const settled = await Promise.allSettled(
-      segment.args.map((arg) => decodeArg(env, binding, arg, acquired)),
-    );
-    const rejected = settled.find((result) => result.status === "rejected");
-    if (rejected !== undefined) throw rejected.reason;
-    const args = settled.map((result) => (result as PromiseFulfilledResult<unknown>).value);
+    // One at a time: a failing argument then can't leave a sibling running
+    // that pushes a result after the caller has disposed `acquired`.
+    const args: Array<unknown> = [];
+    for (const arg of segment.args) args.push(await decodeArg(env, binding, arg, acquired));
     const method = (target as Record<string, unknown> | null)?.[segment.method];
     if (typeof method !== "function") {
       const targetObject = target as object | null;

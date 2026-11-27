@@ -149,7 +149,7 @@ describe("platform-proxy RPC result lifetime", () => {
     expect(dispose).toHaveBeenCalledOnce();
   });
 
-  it("disposes a sibling argument that resolves after another argument failed", async () => {
+  it("disposes an earlier argument when a later one fails", async () => {
     const dispose = vi.fn();
     const response = await worker.fetch(
       new Request(`http://platform-proxy.test${PATH_CALL}`, {
@@ -161,8 +161,8 @@ describe("platform-proxy RPC result lifetime", () => {
             {
               method: "consume",
               args: [
-                { $: "chain", chain: [{ method: "fail", args: [] }] },
                 { $: "chain", chain: [{ method: "slow", args: [] }] },
+                { $: "chain", chain: [{ method: "fail", args: [] }] },
               ],
             },
           ],
