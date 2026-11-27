@@ -262,6 +262,21 @@ export const findPlain = (json: unknown): SealedJson | undefined => {
 };
 
 /**
+ * `json` with each sealed value, plain or sealed, replaced by its subject
+ * alone: what a command's fingerprint may hash. Sealing uses a fresh IV
+ * each time, and a hash of a plain value would outlive its subject's key.
+ * @internal
+ */
+export const withoutSealed = (json: unknown): unknown => {
+  if (typeof json !== "object" || json === null) return json;
+  if (isSealedJson(json)) return { sealed: json.subject };
+  if (Array.isArray(json)) return json.map(withoutSealed);
+  return Object.fromEntries(
+    Object.entries(json).map(([key, value]) => [key, withoutSealed(value)]),
+  );
+};
+
+/**
  * Seal every value in `json` that is waiting to be sealed. `json` itself is
  * returned when nothing in it is. @internal
  */

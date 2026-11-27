@@ -10,7 +10,7 @@ import { Command, type Subscription } from "foldkit";
 import { defineMessageUnion, type MessageUnion } from "foldkit/message";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Api from "./Api.ts";
-import type * as DomainCommand from "./Command.ts";
+import * as DomainCommand from "./Command.ts";
 import { sendPayload } from "./internal.ts";
 import * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
@@ -44,10 +44,15 @@ type Reply<C extends DomainCommand.Any> = C["reply"] extends Schema.Top ? C["rep
 type Rejection<C extends DomainCommand.Any> = C["rejects"][number]["Type"];
 type Denial<C extends DomainCommand.Any> = C["middleware"][number]["error"]["Type"];
 
-/** A refusal is final; an unknown outcome can be retried with the same id. */
+/**
+ * A refusal is final; an unknown outcome can be retried with the same id.
+ * `Reused` is final too: the id was sent before with another input, and
+ * nothing was applied. Send the command again under a new id.
+ */
 export type Failure<C extends DomainCommand.Any> =
   | Readonly<{ _tag: "Rejected"; rejection: Rejection<C> }>
   | Readonly<{ _tag: "Denied"; error: Denial<C> }>
+  | Readonly<{ _tag: "Reused" }>
   | Readonly<{ _tag: "Unknown" }>;
 
 type QueryRejection<Q extends Query.Any> = Aggregate.InstanceOf<
@@ -164,6 +169,7 @@ function commandDefinitions(api: Api.Any): unknown {
       failure: Schema.Union([
         Schema.TaggedStruct("Rejected", { rejection }),
         Schema.TaggedStruct("Denied", { error: denial }),
+        Schema.TaggedStruct("Reused", {}),
         Schema.TaggedStruct("Unknown", {}),
       ]),
     };
@@ -319,6 +325,7 @@ const classifyFailure = (command: DomainCommand.Any, error: unknown) => {
   if (command.middleware.some((middleware) => Schema.is(middleware.error)(error))) {
     return { _tag: "Denied", error };
   }
+  if (Schema.is(DomainCommand.CommandIdReused)(error)) return { _tag: "Reused" };
   return { _tag: "Unknown" };
 };
 

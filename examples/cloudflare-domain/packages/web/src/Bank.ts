@@ -114,6 +114,9 @@ const outcomeOfFailure = (
         Effect.succeed({ commandId, result: "Rejected", reason: Option.some(rejection._tag) }),
       Denied: ({ error }) =>
         Effect.succeed({ commandId, result: "Denied", reason: Option.some(error._tag) }),
+      // The id was sent before with another input: final, like a rejection.
+      Reused: () =>
+        Effect.succeed({ commandId, result: "Rejected", reason: Option.some("CommandIdReused") }),
       Unknown: (failure) => Effect.fail(failure),
     }),
   );

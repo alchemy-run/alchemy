@@ -44,6 +44,23 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(Client)),
   );
 
+  it.live("reports an id sent again with another input as Reused, a final failure", () =>
+    Effect.gen(function* () {
+      yield* Counter.Increment({ input: { counterId: target, amount: 1 }, commandId: "page:r" })
+        .effect;
+      const result = yield* Counter.Increment({
+        input: { counterId: target, amount: 5 },
+        commandId: "page:r",
+      }).effect;
+      expect(result).toEqual({
+        _tag: "FailedIncrement",
+        commandId: "page:r",
+        failure: { _tag: "Reused" },
+      });
+      expect(Schema.is(Counter.Message)(result)).toBe(true);
+    }).pipe(Effect.provide(Client)),
+  );
+
   it.live("keeps declared rejection fields", () =>
     Effect.gen(function* () {
       const result = yield* Counter.Increment({

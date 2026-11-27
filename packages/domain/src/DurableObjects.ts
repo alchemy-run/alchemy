@@ -1459,7 +1459,7 @@ const aggregateObject = Effect.fn(function* (
   const commitOnce = Effect.fn(function* (id: string, command: Json, meta: Aggregate.SendMeta) {
     const duplicate = yield* state.storage.get<StoredResult>(`receipt:${meta.commandId}`);
     if (duplicate && reusedBy(duplicate, meta)) {
-      return { _tag: "Reused", commandId: meta.commandId } satisfies SendResult as SendResult;
+      return { _tag: "Reused", commandId: meta.commandId } satisfies SendResult;
     }
     if (duplicate) return yield* resent(id, duplicate);
     const current = yield* storedMeta;
