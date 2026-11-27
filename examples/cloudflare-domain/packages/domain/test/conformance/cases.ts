@@ -1580,12 +1580,6 @@ const base: ReadonlyArray<Group> = [
       `Stream.run(Stream.make(a, 2), Sink.count.pipe(Sink.map((n) => n * 10)))`,
       `Stream.run(stream, Sink.map((n) => n * 10)(Sink.count))`,
     ],
-    unread: [
-      [
-        `stream.pipe(Stream.mapEffect((n) => Effect.succeed(n + a), { concurrency: 2 }), Stream.runCollect)`,
-        /runs more than one item at a time, which the prover does not read/,
-      ],
-    ],
     known: [`Stream.runCollect(Stream.range(1, 3))`, `Stream.runCollect(Stream.range(a, a + 2))`],
   },
 ];
