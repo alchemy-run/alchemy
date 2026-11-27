@@ -3248,15 +3248,6 @@ export const LiveWorkerProvider = () =>
                 : item,
           ),
         );
-        let metadataAssets: workers.CreatePreviewDeploymentMetadata["assets"] | undefined;
-        if (assets) {
-          yield* Effect.logInfo(`Cloudflare Worker Preview: uploading assets for ${parentName}`);
-          const { jwt } = yield* uploadAssets(accountId, parentName, assets, session);
-          metadataAssets = { jwt, config: mergeAssetsConfigFiles(assets.config, assets) };
-          metadataBindings.push({ type: "assets", name: "ASSETS" });
-        }
-        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, parentName);
-
         const hostedClasses = getDurableObjectBindings(bindings, parentName);
         const classNames = [...new Set(hostedClasses.map((c) => c.className))];
         let migrations: unknown = undefined;
@@ -3298,6 +3289,15 @@ export const LiveWorkerProvider = () =>
             }
           }
         }
+
+        let metadataAssets: workers.CreatePreviewDeploymentMetadata["assets"] | undefined;
+        if (assets) {
+          yield* Effect.logInfo(`Cloudflare Worker Preview: uploading assets for ${parentName}`);
+          const { jwt } = yield* uploadAssets(accountId, parentName, assets, session);
+          metadataAssets = { jwt, config: mergeAssetsConfigFiles(assets.config, assets) };
+          metadataBindings.push({ type: "assets", name: "ASSETS" });
+        }
+        appendAlchemyAndEnvBindings(metadataBindings, news, accountId, parentName);
 
         // A container-backed class carries its images as the parent's does,
         // without the parent's application name: the Preview's namespace gets
