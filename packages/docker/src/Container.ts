@@ -1548,7 +1548,7 @@ const validateContainerNetworks = (news: ContainerProps) => {
   return Effect.void;
 };
 
-const isAffinityId = Schema.is(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)));
+const isAffinityId = Schema.is(Schema.Natural);
 // Keep this on stable Schema primitives: Schema.Port is experimental.
 const isPortNumber = Schema.is(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })));
 
