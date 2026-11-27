@@ -962,6 +962,53 @@ const upgradedNow = (
   return data?.beforeVersions === true && !request.deployedClasses.has(data.domainClass);
 };
 
+/**
+ * Two models of a Worker would both take over a Durable Object class from
+ * before Domain versions, which every model that listed its definition
+ * shared. Only one can keep its objects.
+ */
+export class AmbiguousDomainLegacyData extends Data.TaggedError("AmbiguousDomainLegacyData")<{
+  readonly scriptName: string;
+  readonly className: string;
+  /** Each model's class that takes it over, like `Billing.AccountAggregate`. */
+  readonly models: ReadonlyArray<string>;
+}> {
+  override get message() {
+    return (
+      `${this.models.map((model) => `'${model}'`).join(" and ")} on Worker '${this.scriptName}' both take over the Durable Object class '${this.className}', deployed before Domain versions. ` +
+      `Only one can keep its objects: set \`legacyData: false\` on the \`layer\` of each model that starts empty.`
+    );
+  }
+}
+
+/**
+ * The first class of the request from before Domain versions that another
+ * model of the Worker takes over too, by a binding of its own.
+ */
+const ambiguous = (request: RetirementRequest) => {
+  for (const retiring of request.classes) {
+    if ((retiring.data as RetiringDomainClass | undefined)?.beforeVersions !== true) continue;
+    const models = request.bindings.flatMap((item) =>
+      item.type === "durable_object_namespace" &&
+      "className" in item &&
+      item.className === retiring.className &&
+      item.name.endsWith(BEFORE_VERSIONS)
+        ? [item.name.slice(0, -BEFORE_VERSIONS.length)]
+        : [],
+    );
+    if (new Set(models).size > 1)
+      return new AmbiguousDomainLegacyData({
+        scriptName: request.scriptName,
+        className: retiring.className,
+        models: [...new Set(models)],
+      });
+  }
+  return undefined;
+};
+
+/** The end of a model's binding to a class from before Domain versions. */
+export const BEFORE_VERSIONS = ".BeforeVersions";
+
 /** An error as the Worker deploy reports it: the error itself when it has a tag and a message. */
 const describeError = (error: unknown): { readonly _tag: string; readonly message: string } =>
   typeof error === "object" &&
@@ -985,6 +1032,9 @@ export const DomainRetirementLive = Layer.effect(
       Effect.Services<ReturnType<typeof migrateModel>> | CloudflareEnvironment
     >();
     const settled = Effect.fn(function* (request: RetirementRequest) {
+      // Before any upload: two models can't both move one class's objects.
+      const conflict = ambiguous(request);
+      if (conflict !== undefined) return yield* conflict;
       const { accountId } = yield* yield* CloudflareEnvironment;
       const workflowName = migrationWorkflowName(request);
       // The migration Workflow's complete passes: see `passMarker`.

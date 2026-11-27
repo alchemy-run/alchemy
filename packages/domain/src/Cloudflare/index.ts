@@ -68,7 +68,7 @@ import {
   onCloudflare,
   routeView,
 } from "./DomainClass.ts";
-import type { RetiringDomainClass } from "./Migration.ts";
+import { BEFORE_VERSIONS, type RetiringDomainClass } from "./Migration.ts";
 import type { Providers } from "./Providers.ts";
 import { DeployVersion } from "./Version.ts";
 
@@ -202,25 +202,8 @@ const renamedFrom = (
 /** The directory's class: before Domain versions, one for every model of a Worker. */
 const DIRECTORY_CLASS = "DomainDirectory";
 
-/**
- * Two models of a Worker would both take over a Durable Object class from
- * before Domain versions, which every model that listed its definition
- * shared. Only one can keep its objects.
- */
-export class AmbiguousDomainLegacyData extends Data.TaggedError("AmbiguousDomainLegacyData")<{
-  readonly className: string;
-  readonly models: ReadonlyArray<string>;
-}> {
-  override get message() {
-    return (
-      `Models ${this.models.map((model) => `'${model}'`).join(" and ")} both take over the Durable Object class '${this.className}', deployed before Domain versions. ` +
-      `Only one can keep its objects: set \`legacyData: false\` on the \`layer\` of each model that starts empty.`
-    );
-  }
-}
-
-/** The model that takes over each class from before Domain versions, per Worker. */
-const takenOver = new WeakMap<object, Map<string, string>>();
+/** The model that keeps the directory from before Domain versions, per Worker. */
+const directoryKeepers = new WeakMap<object, string>();
 
 /**
  * The classes a route's objects may still be on when its model gets one class:
@@ -228,7 +211,9 @@ const takenOver = new WeakMap<object, Map<string, string>>();
  * before versions (`AccountAggregate`), which keeps its name. The deploy keeps
  * whichever the Worker has. A model that sets `legacyData: false` takes over
  * nothing from before versions. The directory from before versions was one
- * class for every model: the first model to list it keeps it.
+ * class for every model: the first model to list it keeps it. Two models that
+ * take over any other class the Worker has fail the deploy (see
+ * `AmbiguousDomainLegacyData`).
  */
 const legacyClasses = Effect.fn(function* (
   modelName: string,
@@ -240,23 +225,16 @@ const legacyClasses = Effect.fn(function* (
   if (!legacyData) return [current];
   const before: LegacyClass = {
     className: legacyName,
-    binding: `${route}.BeforeVersions`,
+    binding: `${route}${BEFORE_VERSIONS}`,
     beforeVersions: true,
   };
   // At runtime the bindings the upload kept decide (see `DomainClass.ts`).
   if (globalThis.__ALCHEMY_RUNTIME__) return [current, before];
+  if (legacyName !== DIRECTORY_CLASS) return [current, before];
   const worker = yield* CloudflareWorker;
-  let models = takenOver.get(worker);
-  if (models === undefined) takenOver.set(worker, (models = new Map()));
-  const owner = models.get(legacyName);
-  if (owner === undefined || owner === modelName) {
-    models.set(legacyName, modelName);
-    return [current, before];
-  }
-  if (legacyName === DIRECTORY_CLASS) return [current];
-  return yield* Effect.die(
-    new AmbiguousDomainLegacyData({ className: legacyName, models: [owner, modelName] }),
-  );
+  const keeper = directoryKeepers.get(worker) ?? modelName;
+  directoryKeepers.set(worker, keeper);
+  return keeper === modelName ? [current, before] : [current];
 });
 
 /** A model's one class on the Worker, as `domainClass` hands it back. */
