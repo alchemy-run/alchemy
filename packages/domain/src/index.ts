@@ -72,6 +72,8 @@ export declare namespace Command {
 export const Command = CommandModule.make;
 /** When the commands of a client answer, unless a call says otherwise. See {@link CommandModule.DefaultConsistency}. */
 export const DefaultConsistency = CommandModule.DefaultConsistency;
+/** Whether a client's reads wait for the commands it sent. See {@link CommandModule.ReadOwnWrites}. */
+export const ReadOwnWrites = CommandModule.ReadOwnWrites;
 
 export declare namespace Rejection {
   /** Any Rejection class. */

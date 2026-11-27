@@ -245,7 +245,7 @@ Either way, `send` succeeds once the events have committed, with a receipt. It h
 
 ## Choose when it answers
 
-A command answers as soon as its events are committed. The [views](/domain/view) apply them a moment later, so a read straight after the answer can miss the command. A read that must include it passes the receipt as [`atLeast`](/domain/view#views-catch-up-after-the-commit).
+A command answers as soon as its events are committed. The [views](/domain/view) apply them a moment later, so a read straight after the answer can miss the command. An Api client remembers the commands it sent, so its own reads wait for them. Any other read that must include it passes the receipt as [`atLeast`](/domain/view#views-catch-up-after-the-commit).
 
 ```typescript title="packages/server/test/depositThenRead.ts"
 const receipt = yield* bank.DepositMoney({ accountId, amount: 500 });

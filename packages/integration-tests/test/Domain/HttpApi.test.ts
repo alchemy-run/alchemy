@@ -1,6 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DomainHttp from "@alchemy.run/domain/Http";
 import { InMemory } from "@alchemy.run/domain/InMemory";
+import * as InMemoryPlatform from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Cause from "effect/Cause";
@@ -306,6 +307,50 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       });
     }).pipe(Effect.provide(Served)),
   );
+
+  it.live("a read after a command through the same surface does not wait for it", () => {
+    // Nothing reaches the view until the platform drains: a read that waited would time out.
+    const hosted = InMemoryPlatform.make({ manual: true });
+    const settle: Effect.Effect<void> = Effect.gen(function* () {
+      while (true) {
+        yield* hosted.control.drain;
+        if (yield* hosted.control.idle) return;
+        yield* Effect.sleep("1 millis");
+      }
+    });
+    return Effect.gen(function* () {
+      yield* settle;
+      const sent = yield* send("POST", "/Deposit", {
+        owner: "sam",
+        body: { input: { walletId: "w-held", amount: 40, at } },
+      });
+      expect(sent.status).toBe(200);
+      const read = yield* send("GET", "/Balance/w-held", { owner: "sam" }).pipe(
+        Effect.timeoutOrElse({
+          duration: "2 seconds",
+          orElse: () => Effect.die(new Error("the read waited for another caller's command")),
+        }),
+      );
+      expect(read).toEqual({ status: 200, body: null });
+    }).pipe(
+      Effect.provide(
+        HttpRouter.serve(HttpApiBuilder.layer(WalletHttp.api), {
+          disableListenLog: true,
+          disableLogger: true,
+        }).pipe(
+          Layer.provide(WalletHttp.layer),
+          Layer.provideMerge(
+            Layer.mergeAll(
+              SessionLive,
+              SignedSessionLive,
+              ServerCredential,
+              Wallets.layer(Layer.merge(RatesLive, BalanceLive)),
+            ).pipe(Layer.provide(hosted.layer), Layer.provideMerge(BunHttpServer.layerTest)),
+          ),
+        ),
+      ),
+    );
+  });
 
   it.live("a defect answers with a 500 that holds nothing of its cause", () =>
     Effect.gen(function* () {

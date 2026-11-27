@@ -142,8 +142,9 @@ export interface ViewClient<V extends View.Any> {
     },
   ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]> | View.ConsistencyTimeout>;
   /**
-   * The key's state with its cursor, then every change. Ends with a rejection
-   * when `validate` stops allowing it.
+   * The key's state with its cursor, then every change. The first state
+   * includes the commands this client sent. Ends with a rejection when
+   * `validate` stops allowing it.
    */
   readonly watch: (
     key: Key.IdOf<View.KeyOf<V>>,
@@ -223,7 +224,8 @@ export interface StreamClient<S extends DomainStream.Any> {
   >;
   /**
    * The key's latest entry (`null` before any) with its cursor, then each new
-   * one. Ends with a rejection when `validate` stops allowing it.
+   * one. The first entry includes the commands this client sent. Ends with a
+   * rejection when `validate` stops allowing it.
    */
   readonly watch: (
     key: Key.IdOf<DomainStream.KeyOf<S>>,
@@ -437,7 +439,11 @@ export interface ApiClass<
   >;
   /** The client as a service, for code that uses it without owning the connection. */
   readonly Client: Context.Service<ClientKey<Name>, ApiClient<Serves[number]>>;
-  /** Build {@link Client} for the life of the Layer, over the protocol provided to it. */
+  /**
+   * Build {@link Client} for the life of the Layer, over the protocol
+   * provided to it. Its reads wait for every command it sent: see
+   * `Domain.ReadOwnWrites` for a client shared between callers.
+   */
   readonly layerClient: Layer.Layer<
     ClientKey<Name>,
     never,
@@ -477,7 +483,12 @@ export interface ApiClass<
     never,
     Scope.Scope | Model.Internals | MiddlewareServices<Serves> | MiddlewareClients<Serves>
   >;
-  /** {@link layerClient} over {@link protocolInProcess}. */
+  /**
+   * {@link layerClient} over {@link protocolInProcess}. One client for the
+   * Layer's life: in a server that shares it between callers, provide
+   * `Domain.ReadOwnWrites` as `false`, or each caller's reads wait for the
+   * others' commands.
+   */
   readonly layerClientInProcess: Layer.Layer<
     ClientKey<Name>,
     never,
@@ -1103,49 +1114,117 @@ const liveReads = (
 
 type Flat = Record<string, (payload: unknown, options?: CallOptions) => unknown>;
 
+/**
+ * How long a client keeps a command's receipt for its reads to wait for. A
+ * view or projection applies a command well within this (a read that waits
+ * gives up after 10 seconds), and a receipt kept longer costs each read one
+ * look at the command's events.
+ */
+const OWN_WRITE_MILLIS = 30_000;
+/** The most receipts a client keeps: a burst of commands keeps the latest. */
+const OWN_WRITES_MAX = 32;
+
+/**
+ * The writes a client sent: every stream each of its commands committed to,
+ * for {@link OWN_WRITE_MILLIS}. A read with no `atLeast` waits for them. The
+ * server waits only for the commands whose events reach what the read reads.
+ */
+const ownWrites = (enabled: boolean) => {
+  let held: Array<Query.AtLeast & { readonly at: number }> = [];
+  const keep = (now: number) => {
+    held = held.filter((write) => now - write.at < OWN_WRITE_MILLIS);
+  };
+  return {
+    /** Remember a command's receipt. */
+    add: (receipt: unknown): Effect.Effect<void> =>
+      enabled
+        ? Effect.map(Clock.currentTimeMillis, (now) => {
+            const { stream, version, commits } = receipt as {
+              readonly stream: string;
+              readonly version: number;
+              readonly commits?: ReadonlyArray<Query.AtLeast>;
+            };
+            keep(now);
+            // Every stream a decision committed to; one with more than the limit keeps its last.
+            for (const commit of commits?.length ? commits : [{ stream, version }]) {
+              held = held.filter(
+                (write) => write.stream !== commit.stream || write.version !== commit.version,
+              );
+              held.push({ stream: commit.stream, version: commit.version, at: now });
+            }
+            held = held.slice(-OWN_WRITES_MAX);
+          })
+        : Effect.void,
+    /** What a read waits for: its own `atLeast`, else the writes this client holds. */
+    atLeast: (atLeast: Query.AtLeastInput | undefined) =>
+      atLeast !== undefined || !enabled
+        ? Effect.succeed(atLeast)
+        : Effect.map(Clock.currentTimeMillis, (now): Query.AtLeastInput | undefined => {
+            keep(now);
+            return held.length === 0
+              ? undefined
+              : held.map(({ stream, version }) => ({ stream, version }));
+          }),
+  };
+};
+
 /** Shape the flat Effect RPC client into commands and queries, plus view and stream namespaces. */
 const nest = (
   entries: ReadonlyArray<Servable>,
   flat: Flat,
   defaultConsistency: Command.Consistency,
+  remembers: boolean,
 ): unknown => {
   const client: Record<string, unknown> = {};
+  const writes = ownWrites(remembers);
   for (const entry of entries) {
     if (entry.kind === "Command") {
       const send = flat[entry.tag]!;
       client[entry.tag] = (
         input: object = {},
         { commandId, consistency = defaultConsistency, ...options }: CommandOptions = {},
-      ) => send({ commandId, input, consistency }, options);
+      ) =>
+        (send({ commandId, input, consistency }, options) as Effect.Effect<unknown, unknown>).pipe(
+          Effect.tap(writes.add),
+        );
       continue;
     }
     if (entry.kind === "Query") {
       const name = entry.queryName;
       const ask = (input: unknown, options: QueryOptions = {}) => {
-        const { headers, ...rest } = options;
-        return flat[name]!({ input, ...rest }, { headers }) as Effect.Effect<unknown, unknown>;
+        const { headers, atLeast, ...rest } = options;
+        return Effect.flatMap(
+          writes.atLeast(atLeast),
+          (atLeast) =>
+            flat[name]!(
+              { input, ...rest, ...(atLeast === undefined ? {} : { atLeast }) },
+              { headers },
+            ) as Effect.Effect<unknown, unknown>,
+        );
       };
       if (!entry.definition.paged) {
         client[name] = ask;
         continue;
       }
       const pages = (input: unknown, { after, atLeast, ...options }: QueryOptions = {}) =>
-        Stream.unfold({ after, atLeast, done: false }, (state) =>
-          state.done
-            ? Effect.succeed(undefined)
-            : Effect.map(
-                ask(input, { ...options, after: state.after, atLeast: state.atLeast }),
-                (result) => {
-                  const page = result as Query.Page<unknown>;
-                  // The first page already waited for `atLeast`; later pages read the same store.
-                  const next = {
-                    after: page.cursor ?? undefined,
-                    atLeast: undefined,
-                    done: page.cursor === null,
-                  };
-                  return [page, next] as const;
-                },
-              ),
+        Stream.unfold(
+          { after, atLeast: atLeast as Query.AtLeastInput | undefined, done: false },
+          (state) =>
+            state.done
+              ? Effect.succeed(undefined)
+              : Effect.map(
+                  ask(input, { ...options, after: state.after, atLeast: state.atLeast }),
+                  (result) => {
+                    const page = result as Query.Page<unknown>;
+                    // The first page already waited for `atLeast`; later pages read the same store.
+                    const next = {
+                      after: page.cursor ?? undefined,
+                      atLeast: [],
+                      done: page.cursor === null,
+                    };
+                    return [page, next] as const;
+                  },
+                ),
         );
       client[name] = Object.assign(ask, {
         pages,
@@ -1155,22 +1234,56 @@ const nest = (
       continue;
     }
     const name = nameOf(entry);
+    type ReadOptions = CallOptions & { readonly atLeast?: Query.AtLeastInput };
     const call =
       (method: string) =>
       (key: unknown, options: CallOptions & Record<string, unknown> = {}) => {
         const { headers, ...rest } = options;
         return flat[`${name}.${method}`]!({ key, ...rest }, { headers });
       };
+    // A read that takes `atLeast`: left out, it waits for this client's writes.
+    const read =
+      (method: string) =>
+      (key: unknown, { atLeast, ...options }: ReadOptions & Record<string, unknown> = {}) =>
+        Effect.flatMap(
+          writes.atLeast(atLeast),
+          (atLeast) =>
+            call(method)(key, {
+              ...options,
+              ...(atLeast === undefined ? {} : { atLeast }),
+            }) as Effect.Effect<unknown, unknown>,
+        );
+    // A live read first waits, through `waitWith`, for this client's writes, so its first
+    // value includes them. The live read judges the caller and reports its own failures: a
+    // wait that fails or times out only opens it at once, and it shows the write as it lands.
+    const live =
+      (waitWith: string) =>
+      (key: unknown, options: CallOptions & Record<string, unknown> = {}) =>
+        Stream.unwrap(
+          writes.atLeast(undefined).pipe(
+            Effect.flatMap((atLeast) =>
+              atLeast === undefined
+                ? Effect.void
+                : Effect.exit(
+                    call(waitWith)(key, {
+                      headers: options.headers,
+                      atLeast,
+                    }) as Effect.Effect<unknown, unknown>,
+                  ),
+            ),
+            Effect.map(() => call("watch")(key, options) as Stream.Stream<unknown, unknown>),
+          ),
+        );
     client[name] =
       entry.kind === "View"
         ? {
-            get: call("get"),
-            watch: call("watch"),
+            get: read("get"),
+            watch: live("snapshot"),
             events: call("events"),
-            list: call("list"),
-            snapshot: call("snapshot"),
+            list: read("list"),
+            snapshot: read("snapshot"),
           }
-        : { peek: call("peek"), watch: call("watch"), events: call("events"), list: call("list") };
+        : { peek: read("peek"), watch: live("peek"), events: call("events"), list: read("list") };
   }
   return client;
 };
@@ -1265,7 +1378,8 @@ const build = (
   const client = Effect.gen(function* () {
     // Read once, here: the consistency of every command sent without one.
     const consistency = yield* Command.DefaultConsistency;
-    return nest(entries, (yield* RpcClient.make(group)) as unknown as Flat, consistency);
+    const remembers = yield* Command.ReadOwnWrites;
+    return nest(entries, (yield* RpcClient.make(group)) as unknown as Flat, consistency, remembers);
   });
   const Client = Context.Service<ClientKey<string>, unknown>()(`alchemy/Domain/Api/${name}/Client`);
   const commands = entries.filter((entry): entry is Command.Any => entry.kind === "Command");
@@ -1389,10 +1503,19 @@ const build = (
  * ```
  *
  * ### Reading your own writes
- * A client remembers the commands it sent. Its `get`, `list`, `snapshot`,
- * `peek` and queries carry their receipts and wait until the view, stream or
- * projection has applied them. `atLeast` names other writes to wait for, and
- * `[]` waits for none.
+ * A client remembers the commands it sent in the last 30 seconds. Its `get`,
+ * `list`, `snapshot`, `peek` and queries carry their receipts and wait until
+ * the view, stream or projection has applied them, or fail with
+ * `ConsistencyTimeout` after 10 seconds. The server waits only for the
+ * commands whose events reach what the read reads. A `watch` waits for them
+ * before its first value. `atLeast` names the writes to wait for in their
+ * place, and `[]` waits for none.
+ *
+ * A client that serves many callers, such as one `layerClientInProcess` in
+ * a server, keeps one memory for all of them: each caller's reads also wait
+ * for the others' commands. Build it with `Domain.ReadOwnWrites` set to
+ * `false`, or pass `atLeast: []`. The clients behind `toHttpApi`,
+ * `toToolkit` and mentions serve many callers, and remember nothing.
  *
  * **Example:** A read right after a command
  * ```typescript

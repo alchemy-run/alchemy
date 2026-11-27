@@ -8,6 +8,7 @@ import * as SchemaAST from "effect/SchemaAST";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
 import type { Servable } from "./Api.ts";
+import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
 import { FilterJson } from "./Filter.ts";
 import * as Key from "./Key.ts";
@@ -326,7 +327,8 @@ export const exposedOf = (
  * An Api's in-process client for a caller from outside the app, such as an
  * HTTP request or an MCP client. It runs no middleware's client half (what
  * `RpcMiddleware.layerClient` provides): a credential the server holds for
- * its own calls must never replace the caller's headers.
+ * its own calls must never replace the caller's headers. It remembers no
+ * receipts: its reads wait only for the writes a caller passes as `atLeast`.
  */
 export const outsideClient = <A, R>(api: {
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
@@ -339,5 +341,10 @@ export const outsideClient = <A, R>(api: {
   const halves = [...middleware].map(
     (tag) => ({ key: `${tag.key}/Client` }) as unknown as Context.Key<never, unknown>,
   );
-  return api.clientInProcess.pipe(Effect.updateContext(Context.omit(...halves)));
+  return api.clientInProcess.pipe(
+    Effect.updateContext((context: Context.Context<R>) =>
+      // It serves many callers: one caller's commands must not hold up another's reads.
+      Context.add(Context.omit(...halves)(context), Command.ReadOwnWrites, false),
+    ),
+  );
 };

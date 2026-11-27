@@ -455,19 +455,23 @@ export const host = (
     run: (input, { after, take, atLeast }) =>
       Effect.gen(function* () {
         const receipts = receiptsOf(atLeast);
-        // Every receipt, through every projection: each command's events name its own keys.
-        for (const receipt of receipts) {
-          for (const read of def.waitsFor ?? []) {
-            yield* caughtUpOf(read)(receipt).pipe(
+        // Every receipt, through every projection, all at once: each command's events name
+        // its own keys.
+        yield* Effect.forEach(
+          receipts.flatMap((receipt) =>
+            (def.waitsFor ?? []).map((read) => [receipt, read] as const),
+          ),
+          ([receipt, read]) =>
+            caughtUpOf(read)(receipt).pipe(
               Effect.withSpan(`Domain.caughtUp ${nameOfWaitable(read)}`, {
                 attributes: {
                   "domain.stream": receipt.stream,
                   "domain.version": receipt.version,
                 },
               }),
-            );
-          }
-        }
+            ),
+          { concurrency: "unbounded", discard: true },
+        );
         if (!def.paged) return yield* implementation.handle(input, undefined);
         const size = take === undefined ? fallback : Math.min(max, Math.max(1, Math.floor(take)));
         const page = (yield* implementation.handle(input, {
