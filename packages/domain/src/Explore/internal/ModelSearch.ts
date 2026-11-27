@@ -3538,6 +3538,12 @@ export const search = Effect.fn(function* (
           prefix = Value.nextPrefix(run.taken);
           const error = ran.failure;
           if (error._tag === "NotTranslated") {
+            // A path no input takes says nothing of the code: what stopped the prover on it is never met.
+            const reached = yield* values(sequence, run, "true");
+            if (reached._tag === "Unsat") {
+              sequences++;
+              continue;
+            }
             // Code of a policy's or saga's own, not of a command it sent: leave it out.
             if (reacting !== undefined && stopped !== error)
               return yield* new PolicyUnread({ policy: reacting, error });

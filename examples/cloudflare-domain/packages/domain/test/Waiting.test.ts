@@ -6,6 +6,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { Dispatch, Hold, Send, Sent } from "./fixtures/Dispatch.aggregate.ts";
 import { Patient, PatientApi } from "./fixtures/Patient.model.ts";
+import { Wary, WaryApi } from "./fixtures/Wary.model.ts";
 
 // A handler that waits: it races two sleeps under a time limit, and how long
 // each takes is a field of the command. The prover reads it on time that
@@ -85,6 +86,24 @@ it.effect(
       expect(report.eventually).toEqual([
         expect.objectContaining({ name: "APlacedOrderIsHeld", broken: undefined }),
       ]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  120_000,
+);
+
+it.effect(
+  "a policy's race of a wait the input decides is read on both sides of the limit",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Explore.check(Wary, {
+        source: new URL("./fixtures/Wary.model.ts", import.meta.url),
+        apis: [WaryApi],
+        depth: 1,
+      }).pipe(Effect.flip);
+      // Twice a whole number is never the odd limit: no two waits end at once, and the policy is read.
+      expect(report.message).not.toContain("two waits end at the same moment");
+      expect(report.message).toContain("Policies followed: Weigh");
+      // A small order is held in time; a large one is not, and the search finds it.
+      expect(report.message).toContain("Wary.APlacedOrderIsHeld does not hold");
     }).pipe(Effect.provide(NodeServices.layer)),
   120_000,
 );

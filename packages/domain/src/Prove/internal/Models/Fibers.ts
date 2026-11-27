@@ -232,9 +232,7 @@ export const make = (
         timeline
           ? body(timeline)
           : Timeline.run(
-              // Code read outside a handler, a policy's, is read on known inputs: its times are
-              // numbers, and the run is never asked to order two of them.
-              /* v8 ignore next */
+              // A policy's waits the input decides are ordered on the run that reads it.
               () => host.current.run,
               site,
               inside,
