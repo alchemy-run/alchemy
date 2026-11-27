@@ -7,7 +7,7 @@ import * as Path from "effect/Path";
 
 layer(NodeServices.layer)("Cloudflare Worker asset manifest hashing", (it) => {
   it.effect(
-    "hashes files concurrently with a bounded pool and preserves the serial manifest",
+    "hashes files concurrently with a bounded pool and keeps the serial digest",
     () =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -40,6 +40,10 @@ layer(NodeServices.layer)("Cloudflare Worker asset manifest hashing", (it) => {
             notFoundHandling: "single-page-application" as const,
           };
           const reference = yield* readAssets(props);
+          // Produced by the serial implementation on main for this fixture.
+          expect(reference.hash).toBe(
+            "73dc48c021b537ed02d0a4aa270265a4384f8252b1ec78205b64e3117eab092d",
+          );
           expect(reference.manifest["/docs/index.html"]).toEqual(reference.manifest["/index.html"]);
           expect(reference.manifest["/docs/index-alias.html"]).toEqual(
             reference.manifest["/docs/index.html"],
@@ -170,6 +174,85 @@ layer(NodeServices.layer)("Cloudflare Worker asset manifest hashing", (it) => {
           expect(reads).toBeLessThanOrEqual(16);
           expect(interrupted).toBe(reads - 1);
           expect(inFlight).toBe(0);
+        }),
+      ),
+    { tags: ["unit", "provider:cloudflare", "local"] },
+  );
+  it.effect.skipIf(process.platform === "darwin")(
+    "orders names that collate equal independently of read completion",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const directory = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-manifest-nfc-" });
+          // Linux filesystems keep both spellings as distinct files.
+          const composed = "caf\u00e9.html";
+          const decomposed = "cafe\u0301.html";
+          yield* fs.writeFileString(path.join(directory, composed), "composed");
+          yield* fs.writeFileString(path.join(directory, decomposed), "decomposed");
+
+          const finishingLast = (slow: string) => ({
+            ...fs,
+            readFile: (file: string) =>
+              path.basename(file) === slow
+                ? Effect.gen(function* () {
+                    for (let step = 0; step < 20; step++) yield* Effect.yieldNow;
+                    return yield* fs.readFile(file);
+                  })
+                : fs.readFile(file),
+          });
+          const composedLast = yield* readAssets({ directory }).pipe(
+            Effect.provideService(FileSystem.FileSystem, finishingLast(composed)),
+          );
+          const decomposedLast = yield* readAssets({ directory }).pipe(
+            Effect.provideService(FileSystem.FileSystem, finishingLast(decomposed)),
+          );
+          expect(Object.keys(composedLast.manifest)).toEqual([`/${decomposed}`, `/${composed}`]);
+          expect(Object.keys(decomposedLast.manifest)).toEqual(Object.keys(composedLast.manifest));
+          expect(decomposedLast.hash).toBe(composedLast.hash);
+        }),
+      ),
+    { tags: ["unit", "provider:cloudflare", "local"] },
+  );
+
+  it.effect(
+    "bounds the bytes of large assets read at once",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const directory = yield* fs.makeTempDirectoryScoped({
+            prefix: "alchemy-manifest-bytes-",
+          });
+          for (let i = 0; i < 6; i++) {
+            yield* fs.writeFile(
+              path.join(directory, `large-${i}.bin`),
+              new Uint8Array(20 * 1024 * 1024).fill(i),
+            );
+          }
+
+          let active = 0;
+          let peak = 0;
+          const monitored = {
+            ...fs,
+            readFile: (file: string) =>
+              Effect.suspend(() => {
+                active++;
+                peak = Math.max(peak, active);
+                return Effect.gen(function* () {
+                  yield* Effect.yieldNow;
+                  return yield* fs.readFile(file);
+                }).pipe(Effect.ensuring(Effect.sync(() => active--)));
+              }),
+          };
+          const assets = yield* readAssets({ directory }).pipe(
+            Effect.provideService(FileSystem.FileSystem, monitored),
+          );
+          expect(Object.keys(assets.manifest)).toHaveLength(6);
+          // A 64 MiB budget admits three 20 MiB files, not the 16-file pool.
+          expect(peak).toBe(3);
         }),
       ),
     { tags: ["unit", "provider:cloudflare", "local"] },

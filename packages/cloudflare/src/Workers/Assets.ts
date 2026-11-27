@@ -16,6 +16,8 @@ import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
+/** Upper bound on asset bytes being read and hashed at once. */
+const HASH_BYTES_IN_FLIGHT = 1024 * 1024 * 64;
 const MAX_ASSET_COUNT = 20_000;
 
 export interface Assets {
@@ -319,6 +321,9 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
   );
   const manifest = new Map<string, { hash: string; size: number }>();
   let count = 0;
+  // Reading and hashing copies each file a few times, so bound the bytes
+  // in flight as well as the file count. MAX_ASSET_SIZE fits the budget.
+  const hashBudget = yield* Semaphore.make(HASH_BYTES_IN_FLIGHT);
   yield* Effect.forEach(
     files,
     Effect.fn(function* (name) {
@@ -352,6 +357,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
         ),
         Effect.flatMap(sha256),
         Effect.map((hash) => hash.slice(0, 32)),
+        Semaphore.withPermits(hashBudget, Math.max(size, 1)),
       );
       count++;
       if (count > MAX_ASSET_COUNT) {
@@ -370,7 +376,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
       );
     }),
     // Stat, read and hash independent files concurrently, without keeping
-    // an unused array of results; sorting below preserves manifest order.
+    // an unused array of results; sorting below fixes the manifest order.
     { concurrency: 16, discard: true },
   );
   // Cloudflare's SPA fallback is hard-coded to `/index.html` at the
@@ -386,7 +392,11 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
     manifest.set("/index.html", indexHtml);
   }
   const sortedManifest = Object.fromEntries(
-    Array.from(manifest.entries()).sort((a, b) => a[0].localeCompare(b[0])),
+    // Distinct names can collate equal (NFC vs NFD `café.html`); break the
+    // tie by code unit so read completion order never reaches the digest.
+    Array.from(manifest.entries()).sort(
+      (a, b) => a[0].localeCompare(b[0]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0),
+    ),
   );
   // Hash only inputs that affect what gets uploaded — the file
   // manifest, asset config, and the special `_headers` / `_redirects`
