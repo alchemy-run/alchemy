@@ -57,9 +57,11 @@ export function Text({
 type LinkProps = {
   readonly href: string;
   readonly children?: string;
+  /** `soft` lets a long URL wrap as one line the terminal can select whole. */
+  readonly wrap?: "wrap" | "soft";
 };
 
-export function Link({ href, children }: LinkProps) {
+export function Link({ href, children, wrap }: LinkProps) {
   const { colors } = useCliEnvironment();
   const label = children ?? href;
   return (
@@ -68,6 +70,7 @@ export function Link({ href, children }: LinkProps) {
       fallback={label !== href}
       color={colors ? theme.color.info : undefined}
       underline={colors || undefined}
+      wrap={wrap}
     >
       {label}
     </SigilHyperlink>

@@ -76,7 +76,9 @@ export const makeFisTemplateHttpBinding = <I, A, E, R>(options: {
                     Effect: "Allow" as const,
                     Action: ["iam:CreateServiceLinkedRole"],
                     Resource: [
-                      "arn:aws:iam::*:role/aws-service-role/fis.amazonaws.com/AWSServiceRoleForFIS",
+                      AWSBindings.partitionArn(
+                        "iam::*:role/aws-service-role/fis.amazonaws.com/AWSServiceRoleForFIS",
+                      ),
                     ],
                     Condition: {
                       StringEquals: {

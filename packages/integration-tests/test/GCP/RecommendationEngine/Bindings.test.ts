@@ -3,7 +3,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import type * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
+import type * as recommendationengine from "@distilled.cloud/gcp/unstable/recommendationengine_v1beta1";
 import * as Effect from "effect/Effect";
 import { expectProbe } from "../bindingHost.ts";
 import { currentProject, entitled } from "./common.ts";
@@ -64,8 +64,8 @@ describe.skipIf(!entitled || !!process.env.FAST)(
             // Conditions, so the viewer role is granted on the project.
             const project = yield* currentProject;
             const policy = yield* resourcemanager.getIamPolicyProjects({
+              options: { requestedPolicyVersion: 3 },
               resource: `projects/${project}`,
-              body: { options: { requestedPolicyVersion: 3 } },
             });
             expect(
               (policy.bindings ?? [])

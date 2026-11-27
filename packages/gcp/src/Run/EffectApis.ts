@@ -191,6 +191,7 @@ export const makeRpcGroupClient = <Rpcs extends Rpc.Any>(
                     never,
                     Scope.Scope
                   >,
+                  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- handlers are registered by name and erased; each API's own types carry them
                   (effect) => effect,
                 ),
               );

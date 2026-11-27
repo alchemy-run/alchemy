@@ -25,11 +25,13 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type { Self as SelfService } from "alchemy/Self";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import type { WebhookHost } from "alchemy/WebhookHost";
+import type { TcpSocket } from "alchemy/Workers/Workerd/Socket";
 import type { ConfigError } from "effect/Config";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import type * as Scope from "effect/Scope";
 import path from "pathe";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
@@ -40,6 +42,7 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
+import type { RetiringClass } from "./DurableObjectRetirement.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
@@ -139,7 +142,22 @@ export type WorkerServices =
   | Container.Application<any>
   | SelfService;
 
-export type WorkerShape<Req = never> = Main<WorkerServices | Req> & MainRpc<WorkerServices | Req>;
+/**
+ * The handler for inbound TCP connections: Spectrum (a Spectrum application
+ * whose origin is this Worker) or another Worker's `connect()` over a
+ * service binding. Runs once per connection; the connection stays open until
+ * the Effect settles.
+ */
+export type ConnectHandler<Req = never> = (
+  socket: TcpSocket,
+) => Effect.Effect<void, never, PlatformServices | RuntimeContext | Scope.Scope | Req>;
+
+export type WorkerShape<Req = never> = Main<WorkerServices | Req> & {
+  /**
+   * Accept inbound TCP connections. See {@link ConnectHandler}.
+   */
+  connect?: ConnectHandler<WorkerServices | Req>;
+} & MainRpc<WorkerServices | Req>;
 
 export type WorkerEnv = Record<
   string,
@@ -779,8 +797,11 @@ export interface WorkerProps<
    * `python_workers` compatibility flag is added, and dependencies from
    * `pyproject.toml` (or a prebuilt `python_modules/` directory) are
    * vendored alongside. See the Python Workers section above.
+   *
+   * `null` is the same as omitting it, so a wrapper that spreads its own
+   * props (where `main` means something else) can clear it.
    */
-  main?: string;
+  main?: string | null;
   /**
    * Raw module source for the Worker. When provided, bundling is bypassed
    * entirely and this string is uploaded as a single ESM module
@@ -1016,8 +1037,11 @@ export interface WorkerProps<
    * When Alchemy bundles {@link main}, rules add to the built-in ones
    * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
    * imported file that matches is uploaded as a module instead of bundled.
-   * JavaScript, TypeScript and JSON are always bundled, and imports inside
-   * nested `?worker` modules don't use rules. For files outside the entry's
+   * JavaScript and TypeScript are always bundled, and imports inside
+   * nested `?worker` modules don't use rules. JSON is bundled unless a rule
+   * matches it: `{ type: "Text", globs: ["**\/openapi.json"] }` uploads a
+   * large document as a string module instead of an object literal the
+   * Worker builds at startup. For files outside the entry's
    * directory, globs may start with `../` or be absolute. `!` globs exclude
    * across your rules; an excluded `.txt` or `.wasm` still matches the
    * built-in rules.
@@ -1171,12 +1195,13 @@ export interface WorkerSourceDescriptor {
    */
   readonly devMode: "server" | "bundle";
   /**
-   * The framework project root. Server-mode dev children are spawned with
-   * this directory as their working directory — some framework dev servers
-   * (e.g. `next dev`, which 404s every route when `process.cwd()` differs
-   * from its `dir`) require cwd to be the project root. Relative paths
-   * resolve against the engine's working directory. Defaults to the
-   * engine's working directory.
+   * The framework project root. The only place a source's root is set:
+   * the engine resolves it once and hands it to the module's `make`, and
+   * server-mode dev children are spawned with it as their working
+   * directory — some framework dev servers (e.g. `next dev`, which 404s
+   * every route when `process.cwd()` differs from its `dir`) require cwd to
+   * be the project root. Relative paths resolve against the engine's
+   * working directory. Defaults to the engine's working directory.
    */
   readonly rootDir?: string;
   /**
@@ -1188,7 +1213,7 @@ export interface WorkerSourceDescriptor {
    */
   readonly runtime?: "node";
   /**
-   * Provider-specific options (rootDir, memo, framework config, ...).
+   * Provider-specific options (memo, framework config, ...).
    * Must be JSON-serializable AND JSON-stable: the descriptor persists
    * in state and participates in the metadata hash, so non-deterministic
    * values here cause perpetual redeploys.
@@ -1196,14 +1221,29 @@ export interface WorkerSourceDescriptor {
   readonly options?: unknown;
 }
 
-export interface ViteOptions {
+/**
+ * Which files are hashed to decide whether a framework build re-runs: by
+ * default every non-gitignored file under the root plus the nearest
+ * lockfile, and the workspace packages the build imports.
+ */
+export interface WorkspaceMemoOptions extends MemoOptions {
   /**
-   * Framework-specific build metadata interpreted after Vite completes.
-   * Set by `Website.Foldkit` to derive asset routing from its manifest.
-   * @internal
+   * Workspace directories outside the root to hash. `"auto"` hashes the
+   * workspaces the build's module graph reached; an explicit array pins
+   * them, each hashed under its own scope.
+   * @default "auto"
    */
-  framework?: "foldkit";
+  workspaces?:
+    | "auto"
+    | Array<
+        MemoOptions & {
+          /** The workspace directory, relative to the root. */
+          cwd: string;
+        }
+      >;
+}
 
+export interface ViteOptions {
   /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
    * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
@@ -1229,30 +1269,29 @@ export interface ViteOptions {
    */
   rootDir?: string;
   /**
+   * Vite [mode](https://vite.dev/guide/env-and-mode#modes), as passed to
+   * `vite build --mode`. It selects which `.env.[mode]` files load and
+   * sets `import.meta.env.MODE`. Changing it rebuilds the Worker, or
+   * restarts the dev server in `alchemy dev`.
+   *
+   * Edits to a gitignored `.env.[mode]` file don't trigger a rebuild on
+   * their own. Add the file to `memo.include` if they should.
+   *
+   * @default "production" on deploy, "development" in `alchemy dev`
+   * @example
+   * ```typescript
+   * vite: { mode: "staging" }
+   * ```
+   */
+  mode?: string;
+  /**
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file in `cwd` is hashed, plus the nearest
    * lockfile. Provide explicit globs to narrow the scope.
    *
    * @see {@link MemoOptions}
    */
-  memo?: MemoOptions & {
-    /**
-     * Configure additional workspaces to hash.
-     * By default, auto-detects workspaces during Vite build, then hashes all
-     * non-gitignored files in the workspace plus the nearest lockfile.
-     * @default "auto"
-     */
-    workspaces?:
-      | "auto"
-      | Array<
-          MemoOptions & {
-            /**
-             * The working directory to hash, relative to the Vite root.
-             */
-            cwd: string;
-          }
-        >;
-  };
+  memo?: WorkspaceMemoOptions;
   /**
    * Selects which Vite environments make up the deployed Worker, for
    * frameworks that build more than one (e.g. React Server Components).
@@ -1501,6 +1540,8 @@ export type Worker<Bindings = any> = Resource<
       hash: string | undefined;
     }[];
     crons?: string[];
+    /** Durable Object classes kept only while their objects move out: see `DurableObjectRetirement`. */
+    retiringClasses?: RetiringClass[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
     /**
      * Dev-only channel (like `hyperdrives`): binding name → opt-out of local
@@ -2596,6 +2637,51 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * };
  * ```
  *
+ * ### TCP Connections
+ * Return a `connect` handler to accept raw TCP connections: from a
+ * Spectrum application whose origin is the Worker (`trafficType:
+ * "worker"`), or from another Worker's `connect()` over a service binding.
+ * The handler gets an Effect `Socket` (`socket.raw` is the native one) and
+ * the connection stays open until its Effect settles. See
+ * [Accept TCP connections](/cloudflare/compute/tcp).
+ *
+ * **Example:** Echo every line back in capitals
+ * ```typescript
+ * const decoder = new TextDecoder();
+ *
+ * export default class Echo extends Cloudflare.Worker<Echo>()(
+ *   "Echo",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     return {
+ *       connect: (socket) =>
+ *         Effect.gen(function* () {
+ *           const { pull } = yield* socket.reader;
+ *           const writer = yield* socket.writer;
+ *           while (true) {
+ *             for (const chunk of yield* pull) {
+ *               const text = typeof chunk === "string" ? chunk : decoder.decode(chunk);
+ *               yield* writer.write(text.toUpperCase());
+ *             }
+ *           }
+ *         }).pipe(Effect.catch(() => Effect.void)),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** Serve it on a public port with Spectrum
+ * ```typescript
+ * const echo = yield* Echo;
+ * yield* Cloudflare.Spectrum.Application("EchoTcp", {
+ *   zoneId: zone.zoneId,
+ *   dns: { type: "CNAME", name: "tcp.example.com" },
+ *   protocol: "tcp/9000",
+ *   trafficType: "worker",
+ *   originWorkerId: echo.workerId,
+ * });
+ * ```
+ *
  * ### Background Work & Scopes
  * Each incoming event (fetch, RPC call, scheduled run) gets its own Effect
  * `Scope`. When the handler finishes, the bridge closes that scope and
@@ -2907,10 +2993,14 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  */
 export const Worker: ResourceClassLike<Worker> & {
   /**
-   * Reference a deployed Worker — in the current stack/stage by default, or
-   * in another via `options`. Pass the Worker's declaration instead of its
-   * logical id to keep its type, including its RPC methods, for service
-   * bindings from another stack.
+   * Reference a Worker by its logical id, in the current stack/stage by
+   * default or in another via `options`. Another Worker this program
+   * declares in the same stack and stage is bound to that declaration (no
+   * earlier deploy needed), so a ref breaks a cycle between two Workers that
+   * bind each other; any other ref, including one to the Worker itself,
+   * reads the deployed Worker from state. Pass
+   * the Worker's declaration instead of its logical id to keep its type,
+   * including its RPC methods, for service bindings from another stack.
    */
   ref: WorkerRef;
   /**
@@ -3064,15 +3154,20 @@ export const Worker: ResourceClassLike<Worker> & {
               ),
             ),
       createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
-      // Normalize `main` relative to the cwd, then let `domain.dns` naming a
-      // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
-      // records and rewrite `domain` into routes.
+      // Drop a `null` main and normalize a path `main` relative to the cwd,
+      // then let `domain.dns` naming a non-Cloudflare DNS host compose
+      // Cloudflare for SaaS custom hostnames + records and rewrite `domain`
+      // into routes.
       transformProps: (id, props) =>
         transformWorkerDomainProps(
           id,
-          globalThis.__ALCHEMY_RUNTIME__ || typeof props?.main !== "string"
+          globalThis.__ALCHEMY_RUNTIME__ || props === undefined
             ? props
-            : { ...props, main: relativeWorkerMain(props.main, process.cwd()) },
+            : props.main === null
+              ? { ...props, main: undefined }
+              : typeof props.main === "string"
+                ? { ...props, main: relativeWorkerMain(props.main, process.cwd()) }
+                : props,
         ),
     },
     { URL },

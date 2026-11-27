@@ -2,14 +2,11 @@ import * as Domain from "@alchemy.run/domain";
 import { customer } from "@bank/domain/Actor";
 import { Bank, BankReads } from "@bank/domain/Bank.model";
 import { CurrentActor } from "@bank/domain/CurrentActor.context";
+import { CustomerAddress, CustomerAddressLive } from "@bank/domain/Customer/CustomerAddress.query";
 import {
   MainAccountProvisioning,
   MainAccountProvisioningLive,
 } from "@bank/domain/Customer/MainAccountProvisioning.policy";
-import {
-  UsernameReservation,
-  UsernameReservationLive,
-} from "@bank/domain/Customer/UsernameReservation.policy";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import { AccountLedger, AccountLedgerLive } from "@bank/domain/Ledger/AccountLedger.query";
 import { Ledger, LedgerLive } from "@bank/domain/Ledger/Ledger.projection";
@@ -21,21 +18,27 @@ import * as Layer from "effect/Layer";
 
 class WebBank extends Domain.Model("WebBank", {
   aggregates: Bank.definitions.aggregates,
+  decisions: Bank.decisions,
   views: Bank.definitions.views,
   streams: Bank.definitions.streams,
   // Registration opens the main account, so the app can write and read it back.
-  policies: [UsernameReservation, MainAccountProvisioning],
+  policies: [MainAccountProvisioning],
   projections: [Ledger],
-  queries: [AccountLedger],
+  // Every query the CustomerApi exposes.
+  queries: [AccountLedger, CustomerAddress],
 }) {}
+// The Vault the Worker uses, with its keys in memory.
+const Sealing = Domain.VaultLive.pipe(
+  Layer.provide(Layer.merge(Domain.MemoryKeyStore, Domain.NoKeyWrap)),
+);
 const Hosted = WebBank.layer(
   Layer.mergeAll(
     BankReads,
-    UsernameReservationLive,
     MainAccountProvisioningLive,
+    CustomerAddressLive,
     Layer.merge(LedgerLive, AccountLedgerLive).pipe(Layer.provide(memoryLedger())),
   ),
-).pipe(Layer.provide(Domain.InMemory));
+).pipe(Layer.provide(Domain.InMemory), Layer.provideMerge(Sealing));
 const Middleware = Layer.merge(
   Layer.succeed(Session, (effect) => Effect.provideService(effect, CurrentActor, customer("c-1"))),
   Layer.succeed(MfaChallenge, () => Effect.fail(MfaRequired.make({}))),

@@ -20,7 +20,7 @@ When the deploy finishes, `history` is already `complete`. A deploy that changes
 
 ## How the work spreads out
 
-Every instance lists itself in a directory on its first commit: a tree of Durable Objects, one subtree per aggregate and view, where each node lists up to 256 instances and splits into 16 children when it fills. The directory is only an index. A backfill reads it and does its work elsewhere.
+Every instance lists itself in a directory just after its first commit: a tree of Durable Objects, one subtree per aggregate and view, where each node lists up to 256 instances and splits into 16 children when it fills. The commit doesn't wait for the directory. It records that the instance still has to be listed, in the same write, and the instance lists itself once the call has returned, trying again until it does, even if it is evicted or restarted meanwhile. If a consumer was deployed in between, so that its run read the directory before the instance was listed, the instance asks for that consumer's history when it is listed. The directory is only an index. A backfill reads it and does its work elsewhere.
 
 The work belongs to the run, and every part of the run is an object of a class the deploy adds. A new view's class exists only in the code that adds it, and a rebuilt view gets a new class too (`DepositsViewV1`), so none of these objects can start on the code from before the deploy while Cloudflare rolls it out.
 
@@ -94,7 +94,7 @@ Every aggregate instance, view key and projection key is its own Durable Object,
 
 One object handles about 1,000 requests a second. A key that every instance feeds, like a global feed or a counter, tops out there, live as well as during a backfill. Partition it: key it by day, by region or by a hash of the source, and read the parts together.
 
-One object stores up to 10 GB. An aggregate instance keeps its whole event history, so give long-lived streams of events their own instances (an account per period, a ledger per month) rather than one instance that grows forever.
+One object stores up to 10 GB. An aggregate instance keeps its whole event history unless a [compaction](/domain/compaction) replaces it with a roll-up. Without one, give long-lived streams of events their own instances (an account per period, a ledger per month) rather than one instance that grows forever. See [Closing the books](/domain/closing-the-books).
 
 One request runs at most 6 calls at a time. A request that fans out to many instances, say a command sent to every member of a group, runs 6 at a time however many there are. Spread wide fan-out over many requests, or hand it to a saga or a workflow. The backfill fans out through its relays for the same reason.
 

@@ -262,7 +262,7 @@ export const SfdcInstancesSfdcChannelProvider = () =>
         const created = yield* integrations
           .createProjectsLocationsSfdcInstancesSfdcChannels({
             parent: sfdcInstance,
-            body,
+            ...body,
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -283,13 +283,13 @@ export const SfdcInstancesSfdcChannelProvider = () =>
 
       if (displayChanged || descriptionChanged || topicChanged) {
         current = yield* integrations.patchProjectsLocationsSfdcInstancesSfdcChannels({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "displayName" : undefined,
             descriptionChanged ? "description" : undefined,
             topicChanged ? "channelTopic" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

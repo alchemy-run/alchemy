@@ -344,13 +344,11 @@ export const DeploymentGroupProvider = () =>
       if (current === undefined) {
         const created = yield* config
           .createProjectsLocationsDeploymentGroups({
+            deploymentUnits: units,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             deploymentGroupId,
-            body: {
-              deploymentUnits: units,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -375,13 +373,11 @@ export const DeploymentGroupProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* config.patchProjectsLocationsDeploymentGroups({
+          labels: desiredLabels,
+          annotations: desiredAnnotations,
+          deploymentUnits: units,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            labels: desiredLabels,
-            annotations: desiredAnnotations,
-            deploymentUnits: units,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

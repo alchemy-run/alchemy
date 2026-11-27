@@ -7,12 +7,12 @@ import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { LookupMethod, Resource, ResourceBinding } from "alchemy/Resource";
 import type { ServerHost } from "alchemy/Runtime/Process";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import {
@@ -421,14 +421,7 @@ const retryTransient = <A, E extends { readonly _tag: string }, R>(
     }),
   );
 
-const toEnv = (env: Record<string, any> | undefined): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(env ?? {}).flatMap(([key, value]) => {
-      if (value === undefined || value === null) return [];
-      const raw = Redacted.isRedacted(value) ? Redacted.value(value) : value;
-      return [[key, String(raw)]];
-    }),
-  );
+const toEnv = envStrings;
 
 const collectBindingEnv = (bindings: readonly ResourceBinding<SpriteBinding>[]) => {
   const active = bindings.filter(

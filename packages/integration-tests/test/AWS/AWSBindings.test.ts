@@ -123,7 +123,9 @@ describe(
   "AWS bindings on a Google service account host",
   { tags: ["provider:aws", "provider:gcp", "provider:gcp:run", "live"] },
   () => {
-    liveTest.provider(
+    // The service runs on Cloud Run and can't reach an emulator on this
+    // machine, so its token would go to real STS for a role only the emulator has.
+    liveTest.provider.skipIf(!!process.env.AWS_ENDPOINT_URL)(
       "Cloud Run reaches SQS by assuming a Role with its Google ID token",
       (stack) =>
         Effect.gen(function* () {

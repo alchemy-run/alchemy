@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, parentBefore, parseResourceName, toResourceId } from "./internal.ts";
 
@@ -129,7 +130,7 @@ const toAttrs = (
     parent: parentBefore(name, "pushNotificationConfigs"),
     project: parsed.project || project,
     url: config.pushNotificationConfig?.url,
-    token: config.pushNotificationConfig?.token,
+    token: revealOptional(config.pushNotificationConfig?.token),
   };
 };
 
@@ -182,24 +183,22 @@ export const CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigP
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfigs(
             {
+              name: fallbackName,
+              pushNotificationConfig: {
+                url: news.url,
+                token,
+                id: configId,
+                authentication:
+                  news.schemes !== undefined || news.credentials !== undefined
+                    ? {
+                        schemes: news.schemes,
+                        credentials: news.credentials,
+                      }
+                    : undefined,
+              },
               tenant: news.tenant,
               parent: news.parent,
               configId,
-              body: {
-                name: fallbackName,
-                pushNotificationConfig: {
-                  url: news.url,
-                  token,
-                  id: configId,
-                  authentication:
-                    news.schemes !== undefined || news.credentials !== undefined
-                      ? {
-                          schemes: news.schemes,
-                          credentials: news.credentials,
-                        }
-                      : undefined,
-                },
-              },
             },
           )
           .pipe(Effect.catchTag("Conflict", () => getByName(news.tenant, fallbackName)));

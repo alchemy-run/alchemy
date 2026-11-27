@@ -311,17 +311,15 @@ export const AppsToolsetProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           ces.createProjectsLocationsAppsToolsets({
+            displayName,
+            description,
+            executionType: news.executionType,
+            toolFakeConfig: news.toolFakeConfig,
+            openApiToolset,
+            mcpToolset: news.mcpToolset,
+            connectorToolset: news.connectorToolset,
             parent: app,
             toolsetId,
-            body: {
-              displayName,
-              description,
-              executionType: news.executionType,
-              toolFakeConfig: news.toolFakeConfig,
-              openApiToolset,
-              mcpToolset: news.mcpToolset,
-              connectorToolset: news.connectorToolset,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -352,6 +350,13 @@ export const AppsToolsetProvider = () =>
       ) {
         current = yield* retryTransient(
           ces.patchProjectsLocationsAppsToolsets({
+            displayName,
+            description,
+            executionType: news.executionType,
+            toolFakeConfig: news.toolFakeConfig,
+            openApiToolset,
+            mcpToolset: news.mcpToolset,
+            connectorToolset: news.connectorToolset,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "display_name" : undefined,
@@ -366,15 +371,6 @@ export const AppsToolsetProvider = () =>
                     : "connector_toolset"
                 : undefined,
             ),
-            body: {
-              displayName,
-              description,
-              executionType: news.executionType,
-              toolFakeConfig: news.toolFakeConfig,
-              openApiToolset,
-              mcpToolset: news.mcpToolset,
-              connectorToolset: news.connectorToolset,
-            },
           }),
         );
       }

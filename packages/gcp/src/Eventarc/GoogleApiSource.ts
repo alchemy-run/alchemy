@@ -370,9 +370,7 @@ export const GoogleApiSourceProvider = () =>
       if (current === undefined) {
         const created = yield* eventarc
           .createProjectsLocationsGoogleApiSources({
-            parent: parentOf(env.project, location),
-            googleApiSourceId,
-            body: compact({
+            ...compact({
               name,
               destination,
               displayName: news.displayName,
@@ -383,6 +381,8 @@ export const GoogleApiSourceProvider = () =>
               labels: desiredLabels,
               annotations: desiredAnnotations,
             }),
+            parent: parentOf(env.project, location),
+            googleApiSourceId,
           })
           .pipe(
             Effect.retry({
@@ -419,19 +419,16 @@ export const GoogleApiSourceProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* eventarc.patchProjectsLocationsGoogleApiSources({
+          destination,
+          displayName: news.displayName,
+          cryptoKeyName: desiredCrypto,
+          loggingConfig: desiredLogging,
+          organizationSubscription: desiredOrg,
+          projectSubscriptions: desiredProjects,
+          labels: desiredLabels,
+          annotations: desiredAnnotations ?? {},
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            destination,
-            displayName: news.displayName,
-            cryptoKeyName: desiredCrypto,
-            loggingConfig: desiredLogging,
-            organizationSubscription: desiredOrg,
-            projectSubscriptions: desiredProjects,
-            labels: desiredLabels,
-            annotations: desiredAnnotations ?? {},
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

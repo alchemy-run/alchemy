@@ -219,6 +219,12 @@ export class Echo extends Cloudflare.Container<Echo>()("Echo", {
 }) {}
 ```
 
+`context` builds `<context>/Dockerfile` unless you set `dockerfile`. A
+relative `dockerfile` path is resolved against `context`, like Docker
+Compose. A relative `context` is resolved against the working directory of
+the process that runs the stack, so build it from `import.meta.dirname` to
+keep it independent of where you run `alchemy`.
+
 Arbitrary images expose no RPC methods — the DO talks to them purely
 over their TCP port via `getTcpPort`. To build, tag, and push that
 image as part of the same Stack, see
@@ -248,6 +254,23 @@ image can be neither pulled nor found locally, the error names the
 image and the `docker login` or `docker build` command that fixes it.
 The tag is the image's identity, so give each build its own tag to
 redeploy it.
+
+## Run containers natively under `alchemy dev`
+
+`alchemy dev` builds and pulls `linux/amd64` images too, so local
+containers match what Cloudflare runs. On an arm64 host (Apple
+silicon, arm64 Linux CI) Docker then runs them under emulation. Set
+`ALCHEMY_LOCAL_CONTAINER_PLATFORM=host` to let Docker use its own
+architecture instead:
+
+```sh
+ALCHEMY_LOCAL_CONTAINER_PLATFORM=host alchemy dev
+```
+
+Your Dockerfile then has to build for the host's architecture (use
+`ARG TARGETARCH` for per-architecture downloads). An image published
+only for amd64 still runs, emulated. Deploys always build
+`linux/amd64`.
 
 ## Cached builds by default
 
@@ -653,13 +676,13 @@ export class Node extends Cloudflare.Container<Node>()("Node", {
 
 export class Python extends Cloudflare.Container<Python>()("Python", {
   schedulingPolicy: "durable_object",
-  dockerfile: "./python/Dockerfile",
   context: "./python",
 }) {}
 ```
 
-One Container is one image: `image` copies a registry image, and
-`context`/`dockerfile` builds one. Alchemy publishes it to Cloudflare's
+One Container is one image: `image` copies a registry image,
+`context`/`dockerfile` builds one, and `main` bundles an Effect program into
+one. Alchemy publishes it to Cloudflare's
 registry and prepares it before the Worker is uploaded.
 
 Bind both in the Durable Object. Each handle's `start()` starts its own
@@ -699,6 +722,43 @@ Two Containers that declare different values fail the deploy with
 
 A Container can be bound by several Durable Object classes. Each class adds
 the image to its own application.
+
+## Effect programs in a Durable Object's images
+
+An Effect-native Container is Durable Object-managed unless it names a fleet
+policy. Alchemy bundles `main` into the Container's image:
+
+```typescript
+// src/Sandbox.runtime.ts
+export default Sandbox.make(
+  {
+    main: import.meta.url,
+    env: { WORKSPACE: "/workspace" },
+  },
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    return Sandbox.of({ read: (path) => Effect.orDie(fs.readFileString(path)) });
+  }),
+);
+```
+
+The handle has the program's RPC methods next to `start`,
+`snapshotContainer`, `destroy`, and `image`, so the Durable Object can
+snapshot the program's filesystem and call it with types:
+
+```typescript
+const sandbox = yield* Sandbox;
+yield* sandbox.start({ enableInternet: false });
+const text = yield* sandbox.read("/workspace/notes.md");
+```
+
+The application has no deployment environment, so `start()` hands the
+program its `env`, the env its capabilities bind, and the account id. An
+`env` you pass to `start()` overrides them by name.
+
+Bind several Effect-native Containers to choose a program per request. As
+with any images of one class, `destroy()` the running one before you start
+another.
 
 ## Several images on an async Worker
 
@@ -768,13 +828,15 @@ the same props shape (`instanceType`, `observability`, `runtime`,
 
 ## Rollouts
 
-When a deploy changes the image or configuration, running instances
-are replaced with the new version. By default the replacement is
+Rollouts belong to fleet applications, so an Effect-native Container names
+`schedulingPolicy: "default"` to use them. When a deploy changes the image or
+configuration, running instances are replaced with the new version. By default the replacement is
 immediate — every instance at once. Set `rollout` to replace them in
 steps instead, so the application stays available through the update:
 
 ```typescript
 export class Api extends Cloudflare.Container<Api>()("Api", {
+  schedulingPolicy: "default",
   main: import.meta.url,
   instances: 4,
   maxInstances: 4,

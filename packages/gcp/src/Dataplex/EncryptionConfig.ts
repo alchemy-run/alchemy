@@ -244,12 +244,10 @@ export const EncryptionConfigProvider = () =>
       if (current === undefined) {
         const created = yield* retryQuota(
           dataplex.createOrganizationsLocationsEncryptionConfigs({
+            key: news.key,
+            enableMetastoreEncryption: news.enableMetastoreEncryption === true ? true : undefined,
             parent: orgParent(news.organizationId, location),
             encryptionConfigId,
-            body: {
-              key: news.key,
-              enableMetastoreEncryption: news.enableMetastoreEncryption === true ? true : undefined,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -268,6 +266,9 @@ export const EncryptionConfigProvider = () =>
 
       if (keyChanged || metastoreChanged) {
         const operation = yield* dataplex.patchOrganizationsLocationsEncryptionConfigs({
+          key: news.key,
+          enableMetastoreEncryption: news.enableMetastoreEncryption === true,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: [
             keyChanged ? "key" : undefined,
@@ -275,12 +276,6 @@ export const EncryptionConfigProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            key: news.key,
-            enableMetastoreEncryption: news.enableMetastoreEncryption === true,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

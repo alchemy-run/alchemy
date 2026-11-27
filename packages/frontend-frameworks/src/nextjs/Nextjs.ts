@@ -23,6 +23,15 @@ import * as DevServer from "./DevServer.ts";
 import * as Runner from "./Runner.ts";
 
 /**
+ * Cloudflare credentials, resolved on first use. Only remote bindings read
+ * them, so a local-only dev server starts without any.
+ */
+const lazyCredentials = Layer.succeed(
+  Credentials.Credentials,
+  Credentials.resolveFromEnv.pipe(Effect.orDie),
+);
+
+/**
  * The subset of the e2e-harness `options.vite` convention this integration
  * reads: the cloudflare worker configuration (compatibility date/flags,
  * worker name/bindings/assets). Structurally compatible with
@@ -198,7 +207,7 @@ const makeRuntimeLayer = () =>
     },
   }).pipe(
     Layer.provideMerge(NodeServices.layer),
-    Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
+    Layer.provide(Layer.merge(lazyCredentials, FetchHttpClient.layer)),
   );
 
 /**
@@ -443,6 +452,7 @@ export const make = (
                     }),
                   ]
                 : []),
+              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- cloudflare-runtime `BindingHooks` is `ReadonlyArray<BindingHook<any>>`, so the hooks' requirements are erased
               ...(worker?.bindings ?? []),
             ],
             assets: {
@@ -476,6 +486,7 @@ export const make = (
 
       return FrameworkCore.Framework.of({
         build: (buildOptions) => build(buildOptions),
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- cloudflare-runtime `BindingHooks` is `ReadonlyArray<BindingHook<any>>`, so the hooks' requirements are erased
         dev: (devOptions) => dev(devOptions),
       });
     }),

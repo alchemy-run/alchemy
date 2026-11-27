@@ -188,7 +188,7 @@ test.provider(
       const reset = yield* deploy();
       expect(
         (yield* getProject({ project_id: reset.projectId })).project.history_retention_seconds,
-      ).toBe(86400);
+      ).toBe(21600);
       const uri = yield* getConnectionURI({
         project_id: reset.projectId,
         branch_id: reset.defaultBranchId,

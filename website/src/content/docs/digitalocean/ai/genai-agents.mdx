@@ -1,0 +1,132 @@
+---
+title: GenAI agents
+description: Build DigitalOcean GenAI Platform agents with instructions, knowledge bases, function calls and routes to other agents, and call them from any runtime with a key of their own.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+The **GenAI Platform** hosts **agents**: a model with your instructions, answering on a private endpoint. An agent retrieves from **knowledge bases** built from your Spaces buckets or websites, calls your **Functions** when it needs live data, and hands a conversation to another agent when it matches a **route**. Each agent belongs to a project.
+
+<Tree
+  nodes={[
+    {
+      id: "project", label: "Support", type: "project", icon: "folder", dashed: true, colGap: 7,
+      areas: ["api api api", "agent agent agent", "docs lookup billing"],
+    },
+    { id: "api", label: "Api", type: "App · your app", parent: "project", tone: "accent", icon: "server" },
+    {
+      id: "agent", label: "Helpdesk", type: "agent", parent: "project", icon: "bot",
+      specs: [["model", "Ministral 3 14B"]],
+    },
+    { id: "docs", label: "Docs", type: "knowledge base", parent: "project", icon: "book-open" },
+    { id: "lookup", label: "lookup_order", type: "Functions action", parent: "project", icon: "square-function" },
+    { id: "billing", label: "Billing", type: "agent", parent: "project", icon: "bot" },
+  ]}
+  links={[
+    { from: "api", to: "agent", label: "asks" },
+    { from: "agent", to: "docs", label: "retrieves" },
+    { from: "agent", to: "lookup", label: "calls" },
+    { from: "agent", to: "billing", label: "routes" },
+  ]}
+  caption="The App asks Helpdesk with a key of its own. Helpdesk answers from its knowledge base, calls a function for order data, and hands billing questions to another agent."
+/>
+
+## Create an agent
+
+```typescript
+const project = yield* DigitalOcean.Project("Support", {});
+const agent = yield* DigitalOcean.GenAI.Agent("Helpdesk", {
+  projectId: project.projectId,
+  model: "Ministral 3 14B",
+  instruction: "Answer questions about Example Corp. Be brief.",
+});
+```
+
+`model` is a model name from the GenAI catalog. Deploy waits until the agent is running. `temperature` and `maxTokens` tune its answers, and every prop updates in place.
+
+## Give it knowledge
+
+A knowledge base indexes a Spaces bucket or a website so the agent can retrieve from it:
+
+```typescript
+const docs = yield* DigitalOcean.GenAI.KnowledgeBase("Docs", {
+  projectId: project.projectId,
+  embeddingModel: "GTE Large EN v1.5",
+  sources: [{ webCrawler: { baseUrl: "https://docs.example.com" } }],
+  indexingSchedule: { days: [1, 4], time: "03:00" },
+});
+```
+
+Then add `knowledgeBaseIds: [docs.knowledgeBaseId]` to the agent. The first deploy creates an OpenSearch cluster for the index and runs the first indexing job; `indexingSchedule` re-indexes on those days. `{ spaces: { bucketName, region } }` indexes a bucket instead.
+
+## Let it call your functions
+
+```typescript
+{
+  functions: [
+    {
+      name: "lookup_order",
+      description: "Look up an order by its id",
+      namespaceId: lookup.namespaceId,
+      function: lookup.name,
+      parameters: [{ name: "id", type: "string", required: true }],
+    },
+  ],
+}
+```
+
+The agent calls the [Functions](/digitalocean/compute/functions) action with the parameters it chose, and uses the result in its answer.
+
+## Route to other agents
+
+```typescript
+{ routes: [{ agentId: billing.agentId, name: "billing", when: "The user asks about invoices or payments" }] }
+```
+
+`when` is plain language; the agent hands the conversation over when it matches.
+
+## Ask it from a runtime
+
+`InvokeAgent` creates an API key for the agent and gives it to the calling runtime as a secret:
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Helpdesk } from "./agents.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const helpdesk = yield* DigitalOcean.GenAI.InvokeAgent(Helpdesk);
+    return {
+      fetch: Effect.gen(function* () {
+        const question = yield* (yield* HttpServerRequest).text;
+        return HttpServerResponse.text(yield* helpdesk.ask(question));
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(DigitalOcean.GenAI.InvokeAgentHttp)),
+) {}
+```
+
+`ask` sends one message and returns the reply's text; `chat` sends a whole conversation and returns the completion.
+
+## Bring your own model key
+
+Agents on OpenAI or Anthropic models need your key with that provider:
+
+```typescript
+const apiKey = yield* Config.Redacted("ANTHROPIC_API_KEY");
+yield* DigitalOcean.GenAI.ProviderKey("Anthropic", { provider: "anthropic", apiKey });
+```
+
+## More on the GenAI Platform
+
+`Workspace` groups agents, `ModelRouter` picks a model per task with fallbacks, `CustomModel` imports open-weight models from Hugging Face or Spaces, and `AgentApiKey` creates a key for a program Alchemy doesn't deploy.
+
+## Limits
+
+- A knowledge base's first indexing job, and its OpenSearch cluster, take several minutes; deploy waits for both.
+- Destroying a knowledge base destroys the OpenSearch cluster it created.

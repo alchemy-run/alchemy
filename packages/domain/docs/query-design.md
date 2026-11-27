@@ -199,6 +199,20 @@ Like `caughtUp` today, the wait covers events a projection consumes directly fro
 
 Views keep their current behaviour: a view `get` whose `atLeast` times out is still a defect on the client. Making it typed too is a follow-up.
 
+### Read replicas
+
+Every wait here, and the wait a `consistency: "strong"` command does before it answers, asks one question of a view key: do your checkpoints include this event? Today a key is one object, so a yes means every later read includes it.
+
+Read replicas are planned and not built. When a key's reads are served from several copies, the rule is: **a key reports an event in its checkpoints only once every copy that serves reads has applied it.** The primary pushes each change to its replicas, and advances the checkpoints it reports after those pushes return. The waits, the `consistency` option and `ConsistencyTimeout` stay as they are.
+
+The alternatives were rejected. A replica that asks the primary for its version on each read puts back the load replicas exist to remove. A lease that lets a replica serve unchecked for a bounded time makes a clock decide correctness.
+
+What the rule costs:
+
+- A strong command to a replicated key takes as long as its slowest replica. `consistency: "eventual"` skips the wait.
+- While a command is in flight one replica can have it before another, so two reads can disagree until the command answers. The guarantee starts at the answer.
+- `watch` is a push, so it is unaffected.
+
 ## Pagination
 
 Paging is cursor-based, and the cursor is opaque to the framework.

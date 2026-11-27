@@ -799,11 +799,11 @@ export const ConnectionProfileProvider = () =>
       if (current === undefined) {
         yield* ds
           .createProjectsLocationsConnectionProfiles({
+            ...body,
             parent: locationParent(env.project, location),
             connectionProfileId,
             force: news.force,
             validateOnly: news.validateOnly,
-            body,
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
@@ -956,11 +956,11 @@ export const ConnectionProfileProvider = () =>
           patch.privateConnectivity = connectivity.privateConnectivity;
         }
         const operation = yield* ds.patchProjectsLocationsConnectionProfiles({
+          ...patch,
           name: current.name ?? name,
           updateMask: mask,
           force: news.force,
           validateOnly: news.validateOnly,
-          body: patch,
         });
         yield* settleOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

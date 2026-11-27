@@ -1,4 +1,5 @@
 import * as Kubernetes from "@alchemy.run/kubernetes";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { GATEWAY_PORT } from "../internal/Gateway.ts";
@@ -27,6 +28,16 @@ export interface DeploymentPoolOptions extends PoolSettings {
    * @default the cluster's
    */
   architecture?: "amd64" | "arm64";
+  /**
+   * The cluster runners run on when the database is on none, such as
+   * `Cluster.Database.fromUrl`. Ignored when the database is on one.
+   */
+  cluster?: Kubernetes.ClusterLike | Effect.Effect<Input<Kubernetes.ClusterLike>, never, any>;
+  /**
+   * Kubernetes namespace of the runners, with `cluster`.
+   * @default "default"
+   */
+  namespace?: string;
 }
 
 /**
@@ -35,8 +46,8 @@ export interface DeploymentPoolOptions extends PoolSettings {
  * namespace. Pods reach each other at their own addresses; the gateway is
  * a Service of the Deployment, at
  * `http://{name}.{namespace}.svc.cluster.local:34500` for callers in the
- * cluster. Requires a database on a Kubernetes cluster —
- * `ClusterKubernetes.Database`.
+ * cluster. With a database on no cluster (`Cluster.Database.fromUrl`),
+ * give the pool its `cluster`.
  *
  * ### Running on Kubernetes
  * **Example:** Two runners
@@ -45,6 +56,17 @@ export interface DeploymentPoolOptions extends PoolSettings {
  * export const Default = ClusterKubernetes.DeploymentPool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Database),
  * );
+ * ```
+ *
+ * ### Sizing database connections
+ * **Example:** At most 8 connections per runner
+ * ```typescript
+ * // Each runner holds two pools to the database: Effect Cluster's own, and
+ * // one its Domain models share. Each holds at most 4 connections.
+ * export const Default = ClusterKubernetes.DeploymentPool("Default", {
+ *   replicas: 2,
+ *   databaseConnections: 4,
+ * }).pipe(Layer.provide(Database));
  * ```
  *
  * @primitive
@@ -56,6 +78,17 @@ export const DeploymentPool = (id: string, options: DeploymentPoolOptions = {}) 
     settings: options,
     expected: "a Kubernetes cluster (ClusterKubernetes.Database)",
     network: (database) => (database.network?.kind === "kubernetes" ? database.network : undefined),
+    ownNetwork:
+      options.cluster === undefined
+        ? Effect.succeed(undefined)
+        : Effect.map(
+            Effect.isEffect(options.cluster) ? options.cluster : Effect.succeed(options.cluster),
+            (cluster) => ({
+              kind: "kubernetes" as const,
+              cluster: cluster as unknown,
+              namespace: options.namespace ?? "default",
+            }),
+          ),
     // The Deployment's Service is named after the pool.
     gateway: (name, network) =>
       Effect.succeed({

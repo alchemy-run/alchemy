@@ -3,7 +3,7 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { Region } from "@distilled.cloud/aws/Region";
-import { deepEqual, isResolved } from "alchemy/Diff";
+import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
 import type { DnsConfig } from "alchemy/DNS/Adapter";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
@@ -35,12 +35,11 @@ import {
 import type { SubnetId } from "../EC2/Subnet.ts";
 import type { VpcId } from "../EC2/Vpc.ts";
 import {
-  makeBunBootstrap,
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
+  type EcrRegistryImageSource,
   type ImageSourceLike,
-  type RegistryImageSource,
 } from "../ECR/ImageSource.ts";
 import type { ListenerAction, ListenerRuleCondition } from "../ELBv2/common.ts";
 import { Listener } from "../ELBv2/Listener.ts";
@@ -50,6 +49,7 @@ import { TargetGroup, type TargetGroupArn } from "../ELBv2/TargetGroup.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { plainJson } from "../internal/Observe.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
@@ -71,7 +71,8 @@ import {
 } from "./Task.ts";
 
 export type ServiceName = string;
-export type ServiceArn = `arn:aws:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
+export type ServiceArn =
+  `arn:${Partition}:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
 
 export const isService = (value: any): value is Service =>
   typeof value === "object" &&
@@ -803,7 +804,10 @@ export interface ImageOwningServicePropsBase
    * env-var name → SSM Parameter Store parameter ARN or Secrets Manager
    * secret ARN. Wired as container `secrets` (`valueFrom`), with the
    * execution role granted `ssm:GetParameters` /
-   * `secretsmanager:GetSecretValue` on exactly the referenced ARNs.
+   * `secretsmanager:GetSecretValue` on exactly the referenced ARNs. A
+   * secret ARN may name a JSON key or pin a version
+   * (`arn:…:secret:name-AbCdEf:::versionId`): a new version is a new task
+   * definition, so tasks restart with it.
    */
   secrets?: Record<string, string>;
 
@@ -828,8 +832,8 @@ export interface BundledServiceProps extends ImageOwningServicePropsBase, Bundle
 /** Build the user's own Dockerfile into the service's image. */
 export interface DockerfileServiceProps
   extends ImageOwningServicePropsBase, DockerfileImageSource {}
-/** Run a pre-built registry image, mirrored into ECR. */
-export interface ImageServiceProps extends ImageOwningServicePropsBase, RegistryImageSource {}
+/** Run a pre-built registry image, mirrored into ECR unless `mirror: false`. */
+export interface ImageServiceProps extends ImageOwningServicePropsBase, EcrRegistryImageSource {}
 
 /**
  * Service props — either reference an existing task definition (`task:`) or
@@ -980,7 +984,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * The service's image comes from one of four sources:
  *
- * - `image` — run a pre-built registry image, mirrored into ECR.
+ * - `image` — run a pre-built registry image, mirrored into ECR unless
+ *   `mirror: false`.
  * - `context` — build your own Dockerfile.
  * - `main` — bundle an inline Effect program (servers return `{ fetch }`).
  * - `task:` — deploy an existing `AWS.ECS.Task`'s definition; the Service
@@ -1401,14 +1406,9 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
   transformProps: (id, props) => transformServiceProps(id, props),
   // Autoscaling references the service's own Output attributes (cluster/name/
   // target-group ARNs), so it composes AFTER the resource exists.
-  onCreate: (resource, props) =>
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Platform onCreate hook type is Effect<void, never, any>; failures still propagate at runtime
-    composeServiceScaling(
-      resource as Service,
-      props as ServiceProps,
-      // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
-      // surface through the deploy like any resource-construction error.
-    ) as Effect.Effect<void, never, any>,
+  // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer) surface
+  // through the deploy like any resource-construction error.
+  onCreate: (resource, props) => composeServiceScaling(resource as Service, props as ServiceProps),
 });
 
 /** The BYO task reference, when the props use the `task:` form. */
@@ -1699,10 +1699,7 @@ const composeServiceRegistry = (id: string, props: ServiceProps) =>
  * namespace and rewrite the props to reference their outputs (the internal
  * `ingress` prop and `serviceRegistries`). A no-op at runtime.
  */
-const transformServiceProps = (
-  id: string,
-  props: ServiceProps,
-): Effect.Effect<ServiceProps, unknown, any> =>
+const transformServiceProps = (id: string, props: ServiceProps) =>
   Effect.gen(function* () {
     // Composition is a plan/deploy concern — never runs inside bundles.
     if (globalThis.__ALCHEMY_RUNTIME__) {
@@ -2350,10 +2347,7 @@ const composeManagedIngress = (
  * because the scalable target's `resourceId` and the request-count metric's
  * `ResourceLabel` are derived from the service's own Output attributes.
  */
-const composeServiceScaling = (
-  service: Service,
-  props: ServiceProps | undefined,
-): Effect.Effect<void, unknown, any> =>
+const composeServiceScaling = (service: Service, props: ServiceProps | undefined) =>
   Effect.gen(function* () {
     // Composition is a plan/deploy concern — never runs inside bundles.
     if (globalThis.__ALCHEMY_RUNTIME__) {
@@ -2483,7 +2477,15 @@ const syncTaskSecretsPolicy = Effect.fn(function* ({
   }
   const serviceOf = (arn: string) => arn.split(":")[2];
   const ssmArns = secretArns.filter((arn) => serviceOf(arn) === "ssm");
-  const secretsManagerArns = secretArns.filter((arn) => serviceOf(arn) === "secretsmanager");
+  // A reference may carry `:json-key:version-stage:version-id`; the grant
+  // is on the secret itself.
+  const secretsManagerArns = [
+    ...new Set(
+      secretArns
+        .filter((arn) => serviceOf(arn) === "secretsmanager")
+        .map((arn) => arn.split(":").slice(0, 7).join(":")),
+    ),
+  ];
   yield* iam.putRolePolicy({
     RoleName: roleName,
     PolicyName: SECRETS_POLICY_NAME,
@@ -2776,7 +2778,6 @@ export const serviceImageInput = (props: ServiceProps) => {
     platform: taskImagePlatform(imageProps.runtimePlatform),
     port: imageProps.port,
     isExternal: imageProps.isExternal,
-    bootstrap: makeBunBootstrap(source.handler ?? "default"),
   };
 };
 
@@ -3235,7 +3236,16 @@ export const ServiceProvider = () =>
 
       return {
         stables: ["serviceArn", "serviceName", "clusterArn"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output }) {
+          // Effect-native runtime exports remain unevaluated during planning.
+          // Their identity is represented by the image hash, so they must not
+          // prevent source changes from reaching the hash comparison below.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? (Object.assign({}, desired, {
+                  exports: stripEffects(desired.exports),
+                }) as typeof desired)
+              : desired;
           if (!isResolved(news)) return;
           // serviceName change → delete-first replace (name is the identity).
           if ((yield* toServiceName(id, olds ?? {})) !== (yield* toServiceName(id, news ?? {}))) {

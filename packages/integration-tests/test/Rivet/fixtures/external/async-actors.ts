@@ -5,7 +5,8 @@ export const counter = actor({
   state: { count: 0 },
   actions: {
     increment: (c, x: number) => {
-      c.state.count += x;
+      // The prebuilt image's `STEP`; 1 when bundled.
+      c.state.count += x * Number(process.env.STEP ?? 1);
       return c.state.count;
     },
   },

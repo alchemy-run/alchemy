@@ -60,6 +60,7 @@ const program = Effect.scoped(
       compatibility,
       main,
       viteEnvironments,
+      viteMode,
       hasAssets,
       bindingDescriptors,
       devRemote,
@@ -68,7 +69,9 @@ const program = Effect.scoped(
     } = config.worker;
     const source = config.source;
     const provider = source
-      ? yield* loadSource(source.descriptor).pipe(
+      ? // The child runs in the root: hand the source the parent's absolute
+        // root so a relative `rootDir` is not resolved a second time.
+        yield* loadSource({ ...source.descriptor, rootDir: config.rootDir }).pipe(
           // `loadSource` is typed against the full `SourceServices` union
           // (which includes the per-run Artifacts cache the live provider
           // supplies); the dev child has no run-scoped cache, so hand the
@@ -86,6 +89,9 @@ const program = Effect.scoped(
         devAccess,
       },
       { accountId: config.accountId, selfUrl: config.publicUrl, stack: config.stack },
+    );
+    const selfEntrypoints = bindingDescriptors.flatMap((binding) =>
+      binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],
     );
     const viteHost = "127.0.0.1";
     // `viteDev` resolves `port: 0` per the loaded Vite: a true OS-assigned
@@ -123,7 +129,9 @@ const program = Effect.scoped(
                   cf: runtimeWorker.cf,
                   access: devAccess,
                   workerd: runtimeWorker.workerd,
+                  publicUrl: config.publicUrl,
                 },
+                entrypoints: selfEntrypoints,
               },
               runtimeContext,
             })
@@ -167,11 +175,10 @@ const program = Effect.scoped(
                 access: devAccess,
               },
               context: runtimeContext,
-              entrypoints: bindingDescriptors.flatMap((binding) =>
-                binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],
-              ),
+              entrypoints: selfEntrypoints,
             },
             { host: viteHost, port: vitePort, strictPort: false },
+            viteMode,
           ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));
     if (!url) {
       return yield* Effect.die("Dev server child started without a local URL");

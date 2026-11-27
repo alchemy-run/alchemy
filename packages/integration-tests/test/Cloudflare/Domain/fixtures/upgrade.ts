@@ -2,6 +2,7 @@ import * as Domain from "@alchemy.run/domain";
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { DeployVersion } from "@alchemy.run/domain/Cloudflare/Version";
 import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -27,7 +28,7 @@ export const ApproveLive = Approve.toLayer(
       yield* Activity.make({
         name: "open",
         execute: accounts
-          .send(key, new Open({ owner: `${owner}:${approvedBy}` }))
+          .send(new Open({ id: key, owner: `${owner}:${approvedBy}` }))
           .pipe(Effect.asVoid),
       });
     });
@@ -42,12 +43,13 @@ export class Billing extends Domain.Model("Billing", {
 export class Audit extends Domain.Model("Audit", { aggregates: [Account], views: [Owners] }) {}
 
 /**
- * `POST /<model>/open/<id>/<owner>`, `GET /<model>/state/<id>`,
+ * `POST /<model>/open/<id>/<owner>`, `POST /<model>/later/<id>/<owner>` (opens it in an
+ * hour), `POST /<model>/cancel/<id>` (cancels that), `GET /<model>/state/<id>`,
  * `GET /<model>/owners/<id>`, `POST /saga/<key>/<owner>` (starts a run),
  * `GET /saga/<key>` (its status), `POST /approve/<key>/<by>` and
  * `GET /version`.
  */
-const ROUTE = /^\/(Billing|Audit)\/(open|state|owners)\/([^/]+)(?:\/([^/]+))?$/;
+const ROUTE = /^\/(Billing|Audit)\/(open|later|cancel|state|owners)\/([^/]+)(?:\/([^/]+))?$/;
 const SAGA = /^\/(saga|approve)\/([^/]+)(?:\/([^/]+))?$/;
 
 /**
@@ -110,9 +112,27 @@ export const upgradeWorker = ({
         if (!route || !model) return HttpServerResponse.text("Not Found", { status: 404 });
         const id = decodeURIComponent(route[3]!);
         if (route[2] === "open") {
-          const receipt = yield* model.accounts.send(id, new Open({ owner: route[4]! }));
+          const receipt = yield* model.accounts.send(new Open({ id, owner: route[4]! }));
           return yield* HttpServerResponse.json({ version: receipt.version });
         }
+        // Open the account in an hour: until then it has only a scheduled command.
+        if (route[2] === "later") {
+          const receipt = yield* model.accounts.schedule(new Open({ id, owner: route[4]! }), {
+            after: "1 hour",
+            commandId: "open-later",
+          });
+          return yield* HttpServerResponse.json({ at: DateTime.toEpochMillis(receipt.at) });
+        }
+        // Cancel it: `Cancelled` when the command was still scheduled.
+        if (route[2] === "cancel")
+          return yield* HttpServerResponse.json({
+            cancel: yield* model.accounts.unschedule(id, "open-later").pipe(
+              Effect.as("Cancelled"),
+              Effect.catchTag(["AlreadyExecuted", "AlreadyCancelled", "NotScheduled"], (e) =>
+                Effect.succeed(e._tag),
+              ),
+            ),
+          });
         if (route[2] === "owners")
           return yield* HttpServerResponse.json(
             Option.getOrNull(yield* model.owners.get(Account.ref(id)).pipe(Effect.orDie)),

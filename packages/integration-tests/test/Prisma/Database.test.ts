@@ -2,14 +2,10 @@ import * as Prisma from "@alchemy.run/prisma";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { Credentials, Retry } from "@distilled.cloud/prisma";
-import {
-  getBranch,
-  getDatabase,
-  getProject,
-  getProjectBranches,
-  updateDatabase,
-} from "@distilled.cloud/prisma/management";
+import { getDatabase, getProject, updateDatabase } from "@distilled.cloud/prisma/management";
+import { getBranch, getProjectBranches } from "@distilled.cloud/prisma/unstable/management";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -519,7 +515,7 @@ const hostEnvironment = (() => {
             Effect.map(resolve, (env) => ({ apiToken: env.serviceToken, apiBaseUrl: env.baseUrl })),
           ),
         ),
-        Layer.succeed(Retry.Retry, Retry.makeDefault),
+        Layer.succeed(Retry.Retry, DeployRetry.policy),
       ),
     ),
     Layer.provideMerge(environment),
@@ -599,7 +595,7 @@ const hostAuthenticated = (() => {
             Effect.map(resolve, (env) => ({ apiBaseUrl: env.baseUrl })),
           ),
         ),
-        Layer.succeed(Retry.Retry, Retry.makeDefault),
+        Layer.succeed(Retry.Retry, DeployRetry.policy),
       ),
     ),
     Layer.provideMerge(environmentWithoutToken),

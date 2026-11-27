@@ -1,9 +1,11 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as ImageActions from "@distilled.cloud/hetzner/image_actions";
+import * as Images from "@distilled.cloud/hetzner/images";
 import type {
   GetImageResponseImage,
   ListImagesResponseImagesItem,
   UpdateImageResponseImage,
 } from "@distilled.cloud/hetzner/images";
+import * as ServerActions from "@distilled.cloud/hetzner/server_actions";
 import type { CreateServerImageResponseImage } from "@distilled.cloud/hetzner/server_actions";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -61,6 +63,16 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
 export type ImageServer = {
   readonly serverId: number;
 };
+
+/**
+ * Deletion was refused because the image has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class ImageDeleteProtected extends Data.TaggedError("Hetzner.ImageDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
 
 export interface ImageProps {
   /**
@@ -322,19 +334,17 @@ const toDescription = (id: string, description: string | undefined, existing?: s
   });
 
 const getById = (id: number) =>
-  Hetzner.images.getImage({ id }).pipe(
+  Images.getImage({ id }).pipe(
     Effect.map(({ image }) => image),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByLabels = (labels: Record<string, string>) =>
-  Hetzner.images
-    .listImages({
-      type: ["snapshot", "backup"],
-      label_selector: labelSelector(labels),
-      per_page: 50,
-    })
-    .pipe(Effect.map(({ images }) => images[0]));
+  Images.listImages({
+    type: ["snapshot", "backup"],
+    label_selector: labelSelector(labels),
+    per_page: 50,
+  }).pipe(Effect.map(({ images }) => images[0]));
 
 const observe = Effect.fn(function* ({ id, outputId }: { id: string; outputId?: number }) {
   if (outputId !== undefined) {
@@ -373,7 +383,7 @@ const waitUntilAvailable = (imageId: number) =>
   );
 
 const waitUntilGone = (imageId: number) =>
-  Hetzner.images.getImage({ id: imageId }).pipe(
+  Images.getImage({ id: imageId }).pipe(
     Effect.map(() => false),
     Effect.catchTag("NotFound", () => Effect.succeed(true)),
     Effect.repeat({
@@ -390,15 +400,15 @@ const serverIdOf = (value: unknown): number | undefined => {
 };
 
 const disableProtection = (id: number) =>
-  Hetzner.imageActions
-    .changeImageProtection({ id, delete: false })
-    .pipe(Effect.flatMap(({ action }) => waitForAction(action)));
+  ImageActions.changeImageProtection({ id, delete: false }).pipe(
+    Effect.flatMap(({ action }) => waitForAction(action)),
+  );
 
 export const ImageProvider = () =>
   Provider.succeed(Image, {
     stables: ["id", "created", "createdFromId", "architecture", "diskSize", "osFlavor"],
     list: Effect.fn(function* () {
-      const items = yield* Hetzner.images.listImages
+      const items = yield* Images.listImages
         .items({
           type: ["snapshot", "backup"],
           label_selector: alchemyStackSelector,
@@ -468,7 +478,7 @@ export const ImageProvider = () =>
         if (desiredServerId === undefined) {
           return yield* new ImageServerRequired({ description });
         }
-        const created = yield* Hetzner.serverActions.createServerImage({
+        const created = yield* ServerActions.createServerImage({
           id: desiredServerId,
           description,
           type: desiredType,
@@ -497,7 +507,7 @@ export const ImageProvider = () =>
       const convertToSnapshot = current.type === "backup" && desiredType === "snapshot";
       const descriptionChanged = current.description !== description;
       if (descriptionChanged || labelsChanged || convertToSnapshot) {
-        const updated = yield* Hetzner.images.updateImage({
+        const updated = yield* Images.updateImage({
           id: current.id,
           description: descriptionChanged ? description : undefined,
           type: convertToSnapshot ? "snapshot" : undefined,
@@ -507,7 +517,7 @@ export const ImageProvider = () =>
       }
 
       if (current.protection.delete !== desiredProtection) {
-        const { action } = yield* Hetzner.imageActions.changeImageProtection({
+        const { action } = yield* ImageActions.changeImageProtection({
           id: current.id,
           delete: desiredProtection,
         });
@@ -517,15 +527,23 @@ export const ImageProvider = () =>
 
       return toAttrs(current);
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
 
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new ImageDeleteProtected({
+            id: current.id,
+            message: `Hetzner image '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* disableProtection(current.id);
       }
 
-      yield* Hetzner.images.deleteImage({ id: current.id }).pipe(
+      yield* Images.deleteImage({ id: current.id }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
         Effect.retry({
           while: retryable,

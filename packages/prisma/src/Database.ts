@@ -1,17 +1,19 @@
 import { Retry } from "@distilled.cloud/prisma";
 import {
   type GetDatabasesResponse,
-  type GetProjectBranchesResponse,
   type GetProjectDatabasesResponse,
   deleteDatabase,
   getDatabases,
   getDatabase,
   getProject,
-  getProjectBranches,
   getProjectDatabases,
   updateDatabase,
   createDatabase,
 } from "@distilled.cloud/prisma/management";
+import {
+  type GetProjectBranchesResponse,
+  getProjectBranches,
+} from "@distilled.cloud/prisma/unstable/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";

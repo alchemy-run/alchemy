@@ -302,8 +302,7 @@ export const ReasoningEngineProvider = () =>
       if (current === undefined) {
         const created = yield* retryWriteQuota(
           aiplatform.createProjectsLocationsReasoningEngines({
-            parent,
-            body: compact({
+            ...compact({
               displayName,
               description: news.description,
               labels: desiredLabels,
@@ -311,6 +310,7 @@ export const ReasoningEngineProvider = () =>
               contextSpec: news.contextSpec,
               encryptionSpec: news.encryptionSpec,
             }),
+            parent,
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -344,9 +344,7 @@ export const ReasoningEngineProvider = () =>
         ].filter((field): field is string => field !== undefined);
         const patched = yield* retryWriteQuota(
           aiplatform.patchProjectsLocationsReasoningEngines({
-            name: observedName,
-            updateMask: updateMask.join(","),
-            body: compact({
+            ...compact({
               name: observedName,
               displayName,
               description: news.description,
@@ -354,6 +352,8 @@ export const ReasoningEngineProvider = () =>
               spec: news.spec,
               etag: current.etag,
             }),
+            name: observedName,
+            updateMask: updateMask.join(","),
           }),
         );
         yield* waitForOperation(patched);

@@ -2,6 +2,7 @@ import * as NodeZlib from "node:zlib";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
+import { isLiveId } from "@alchemy.run/cloudflare/LocalRuntime";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { assert, describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -14,6 +15,7 @@ import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -22,6 +24,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Ref from "effect/Ref";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
@@ -31,7 +34,7 @@ import {
   withBuilder,
   withDockerEnv,
 } from "./fixtures/buildx.ts";
-import MyContainerLive, { MyContainer } from "./fixtures/effectful/container.ts";
+import { MyContainer, MyFleetContainerLive } from "./fixtures/effectful/container.ts";
 import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
 import { ExternalContainer } from "./fixtures/external/object.ts";
 import ExternalContainerWorker from "./fixtures/external/worker.ts";
@@ -46,6 +49,8 @@ import {
   recoveryApplications,
   historyApplications,
 } from "./fixtures/publication/applications.ts";
+import GrowingRemoteWorkerAfter from "./fixtures/remote/growing-after.ts";
+import GrowingRemoteWorkerBefore from "./fixtures/remote/growing-before.ts";
 import { EnvBucket, RemoteContainer } from "./fixtures/remote/object.ts";
 import RemoteContainerWorker from "./fixtures/remote/worker.ts";
 
@@ -142,6 +147,67 @@ const plantForeignApplication = Effect.fn(function* (stack: Scratch) {
     yield* state.set({ ...key, value: row });
   }).pipe(Effect.provide(stack.state));
   return { original, restore };
+});
+
+/** One `POST …/containers/applications` the provider sent to Cloudflare. */
+interface ApplicationCreate {
+  readonly name: string | undefined;
+  readonly namespaceId: string | undefined;
+}
+
+class ApplicationCreates extends Context.Service<
+  ApplicationCreates,
+  { creates: Ref.Ref<ReadonlyArray<ApplicationCreate>> }
+>()("test/Container/ApplicationCreates") {}
+
+// Forward every request to Cloudflare unchanged, recording each application
+// create: an account that lets a default application exist without its
+// Durable Object binding accepts a create that a stricter account rejects
+// (#3264), so only the request itself shows whether one was sent.
+const RecordApplicationCreates = Layer.effect(
+  HttpClient.HttpClient,
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const { creates } = yield* ApplicationCreates;
+    return HttpClient.transform(client, (response, request) =>
+      Effect.gen(function* () {
+        if (
+          request.method === "POST" &&
+          request.url.endsWith("/containers/applications") &&
+          request.body._tag === "Uint8Array"
+        ) {
+          const text = new TextDecoder().decode(request.body.body);
+          const body = yield* Schema.decodeUnknownEffect(
+            Schema.fromJsonString(
+              Schema.Struct({
+                name: Schema.optional(Schema.String),
+                durable_objects: Schema.optional(
+                  Schema.Struct({ namespace_id: Schema.optional(Schema.String) }),
+                ),
+              }),
+            ),
+          )(text).pipe(Effect.orDie);
+          yield* Ref.update(creates, (sent) => [
+            ...sent,
+            { name: body.name, namespaceId: body.durable_objects?.namespace_id },
+          ]);
+        }
+        return yield* response;
+      }),
+    );
+  }),
+);
+
+const { test: cycleTest } = Test.make({
+  providers: Cloudflare.providers().pipe(
+    Layer.provide(RecordApplicationCreates),
+    Layer.provideMerge(
+      Layer.effect(
+        ApplicationCreates,
+        Effect.map(Ref.make<ReadonlyArray<ApplicationCreate>>([]), (creates) => ({ creates })),
+      ),
+    ),
+  ),
 });
 
 const waitForApplicationDeleted = (accountId: string, applicationId: string) =>
@@ -522,11 +588,17 @@ describe.concurrent(
           Effect.gen(function* () {
             yield* stack.destroy();
             const provider = yield* Provider.findProvider(ContainerPlatform);
+            // A fresh image for each run: the repository outlives the stack.
+            const run = yield* FileSystem.FileSystem.pipe(
+              Effect.flatMap((fs) => fs.makeTempDirectoryScoped({ prefix: "alchemy-recovery-" })),
+            );
             const program = (includeSecond = false) =>
               Effect.gen(function* () {
                 expect(yield* Provider.findProvider(ContainerPlatform)).toBe(provider);
                 return yield* recoveryApplications(
                   failure === "interrupted" ? 10 : 0,
+                  `alchemy-publication-${failure}-${stack.stage.toLowerCase()}`,
+                  run,
                   includeSecond,
                 );
               });
@@ -630,7 +702,8 @@ describe.concurrent(
           for (const [kind, context] of Object.entries(contexts)) {
             yield* fs.makeDirectory(context);
             yield* fs.writeFileString(path.join(context, ".gitignore"), "payload.txt\n");
-            yield* fs.writeFileString(path.join(context, "payload.txt"), kind);
+            // The temp root makes each run's images new: the repository outlives the stack.
+            yield* fs.writeFileString(path.join(context, "payload.txt"), `${kind}-${root}`);
             yield* fs.writeFileString(path.join(context, "input.txt"), "first");
             yield* fs.writeFileString(
               path.join(context, "Dockerfile"),
@@ -642,7 +715,10 @@ describe.concurrent(
               ].join("\n"),
             );
           }
-          const program = publicationApplications(contexts);
+          const program = publicationApplications(
+            contexts,
+            `alchemy-publication-${stack.stage.toLowerCase()}`,
+          );
           const first = yield* stack.deploy(program);
           const history = yield* buildHistory;
           expect(history.filter((build) => build.status === "Completed")).toHaveLength(3);
@@ -1141,6 +1217,68 @@ describe.concurrent(
       { timeout: 120_000 },
     );
 
+    // https://github.com/alchemy-run/alchemy/issues/3653
+    test.provider(
+      "publishes one context to each application's own repository",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const context = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-one-context-" });
+          yield* fs.writeFileString(path.join(context, "payload.txt"), context);
+          yield* fs.writeFileString(
+            path.join(context, "Dockerfile"),
+            'FROM alpine:3.19\nCOPY payload.txt /payload.txt\nCMD ["sleep", "3600"]\n',
+          );
+          const program = (maxInstances: number) =>
+            Effect.gen(function* () {
+              return {
+                first: yield* Cloudflare.Container("OneContextFirst", { context, maxInstances })
+                  .Application,
+                second: yield* Cloudflare.Container("OneContextSecond", { context, maxInstances })
+                  .Application,
+              };
+            });
+
+          const initial = yield* stack.deploy(program(1));
+          expect(initial.first.hash?.digest).toBe(initial.second.hash?.digest);
+          for (const app of [initial.first, initial.second]) {
+            expect(app.configuration.image).toBe(
+              `registry.cloudflare.com/${app.accountId}/${app.applicationName.toLowerCase()}@${app.hash?.digest}`,
+            );
+          }
+
+          // An unchanged image with a configuration update takes the
+          // unchanged-image path, which rolls out each application's own
+          // repository at the recorded digest.
+          const updated = yield* stack.deploy(program(2));
+          for (const app of [updated.first, updated.second]) {
+            expect(app.maxInstances).toBe(2);
+            expect(app.configuration.image).toBe(
+              `registry.cloudflare.com/${app.accountId}/${app.applicationName.toLowerCase()}@${app.hash?.digest}`,
+            );
+          }
+
+          yield* stack.destroy();
+          for (const app of [initial.first, initial.second]) {
+            const deleted = yield* Containers.getContainerApplication({
+              accountId: app.accountId,
+              applicationId: app.applicationId,
+            }).pipe(
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (app) => app === undefined,
+                times: 8,
+              }),
+            );
+            expect(deleted).toBeUndefined();
+          }
+        }).pipe(withBuilder("alchemy-one-context", { attestations: false }), logLevel),
+      { timeout: 180_000 },
+    );
+
     for (const fixture of [
       {
         name: "Dockerfile",
@@ -1158,7 +1296,7 @@ describe.concurrent(
           const worker = yield* EffectfulContainerWorker;
           const app: Cloudflare.ContainerApplication = yield* MyContainer.Application;
           return { app, url: worker.url.as<string>() };
-        }).pipe(Effect.provide(MyContainerLive)),
+        }).pipe(Effect.provide(MyFleetContainerLive)),
         route: "/ping",
         response: "pong",
       },
@@ -1510,6 +1648,331 @@ describe.concurrent(
 
         yield* stack.destroy();
       }).pipe(logLevel),
+    );
+
+    // Cloudflare rejects a default application created without its Durable
+    // Object binding ("This account requires a Durable Object binding when
+    // creating a default application."), and a cycle precreates before the
+    // Worker has a namespace. Precreate publishes the image and creates no
+    // application; reconcile creates it once, attached (#3264).
+    cycleTest.provider(
+      "a fresh Worker and Container cycle creates one attached application",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const { creates } = yield* ApplicationCreates;
+          const program = Effect.gen(function* () {
+            yield* EnvBucket;
+            const worker = yield* RemoteContainerWorker;
+            const app = yield* RemoteContainer.Application;
+            return { url: worker.url.as<string>(), app };
+          });
+
+          // A retried attempt deploys the same name again.
+          const before = (yield* Ref.get(creates)).length;
+          const { app } = yield* scratch.deploy(program);
+          expect(isLiveId(app.applicationId)).toBe(true);
+          const namespaceId = app.durableObjects?.namespaceId;
+          expect(namespaceId).toBeDefined();
+          // The only create Cloudflare received carried the namespace.
+          expect(
+            (yield* Ref.get(creates))
+              .slice(before)
+              .filter((create) => create.name === app.applicationName),
+          ).toEqual([{ name: app.applicationName, namespaceId }]);
+          // `list` is eventually consistent: wait for it to show only this id.
+          const named = yield* Containers.listContainerApplications({ accountId }).pipe(
+            Effect.map((apps) =>
+              apps.filter((item) => item.name === app.applicationName).map((item) => item.id),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (ids) => ids.length === 1 && ids[0] === app.applicationId,
+              times: 8,
+            }),
+          );
+          expect(named).toEqual([app.applicationId]);
+          expect(
+            yield* live(accountId, app.applicationId).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "ContainerApplicationNotFound",
+                schedule: Schedule.spaced("1 second"),
+                times: 8,
+              }),
+            ),
+          ).toMatchObject({ durableObjects: { namespaceId } });
+          expect((yield* scratch.plan(program)).resources.RemoteContainer?.action).toBe("noop");
+
+          yield* scratch.destroy();
+          expect(yield* waitForApplicationDeleted(accountId, app.applicationId)).toBeUndefined();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
+    );
+
+    // A deployed Worker that gains a fleet Container updates inside the
+    // cycle, so it first publishes its old attributes, which have no namespace
+    // for the new class. The Container keeps precreate's placeholder until
+    // the convergence pass hands it the namespace, then creates the
+    // application once, attached.
+    cycleTest.provider(
+      "a deployed Worker gains a fleet Container in one deploy",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* scratch.deploy(
+            Effect.gen(function* () {
+              yield* GrowingRemoteWorkerBefore;
+            }),
+          );
+          const program = Effect.gen(function* () {
+            yield* EnvBucket;
+            const worker = yield* GrowingRemoteWorkerAfter;
+            const app = yield* RemoteContainer.Application;
+            return { worker, app };
+          });
+          const { creates } = yield* ApplicationCreates;
+          // A retried attempt deploys the same name again.
+          const before = (yield* Ref.get(creates)).length;
+          const { worker, app } = yield* scratch.deploy(program);
+
+          expect(isLiveId(app.applicationId)).toBe(true);
+          const namespaceId = worker.durableObjectNamespaces.RemoteContainerObject;
+          expect(namespaceId).toBeDefined();
+          expect(app.durableObjects).toEqual({ namespaceId });
+          // The only create Cloudflare received carried the namespace.
+          expect(
+            (yield* Ref.get(creates))
+              .slice(before)
+              .filter((create) => create.name === app.applicationName),
+          ).toEqual([{ name: app.applicationName, namespaceId }]);
+          const named = yield* Containers.listContainerApplications({ accountId }).pipe(
+            Effect.map((apps) =>
+              apps.filter((item) => item.name === app.applicationName).map((item) => item.id),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (ids) => ids.length === 1 && ids[0] === app.applicationId,
+              times: 8,
+            }),
+          );
+          expect(named).toEqual([app.applicationId]);
+          expect(
+            yield* live(accountId, app.applicationId).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "ContainerApplicationNotFound",
+                schedule: Schedule.spaced("1 second"),
+                times: 8,
+              }),
+            ),
+          ).toMatchObject({ durableObjects: { namespaceId } });
+          expect((yield* scratch.plan(program)).resources.RemoteContainer?.action).toBe("noop");
+
+          yield* scratch.destroy();
+          expect(yield* waitForApplicationDeleted(accountId, app.applicationId)).toBeUndefined();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
+    );
+
+    // A crash after precreate leaves a `creating` row holding precreate's
+    // placeholder: a `dev:` id with the application's real name. A crash after
+    // reconcile created the application leaves the same row. Redeploying from
+    // either converges on one attached application, and destroy from the
+    // second still deletes it.
+    test.provider(
+      "redeploys and destroys a Worker and Container cycle interrupted after precreate",
+      (scratch) =>
+        Effect.gen(function* () {
+          yield* scratch.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const program = Effect.gen(function* () {
+            yield* EnvBucket;
+            const worker = yield* RemoteContainerWorker;
+            const app = yield* RemoteContainer.Application;
+            return { url: worker.url.as<string>(), app };
+          });
+          const key = { stack: scratch.name, stage: scratch.stage, fqn: "RemoteContainer" };
+          const interruptAfterPrecreate = Effect.gen(function* () {
+            const state = yield* yield* State;
+            const row = yield* state.get(key);
+            assert(row?.status === "created" || row?.status === "updated");
+            yield* state.set({
+              ...key,
+              value: {
+                ...row,
+                status: "creating",
+                attr: {
+                  ...row.attr,
+                  applicationId: "dev:interrupted-precreate",
+                  instances: undefined,
+                  maxInstances: undefined,
+                  configuration: {},
+                  durableObjects: undefined,
+                  createdAt: "",
+                  version: undefined,
+                },
+              },
+            });
+          }).pipe(Effect.provide(scratch.state));
+          const applicationsNamed = (name: string) =>
+            Containers.listContainerApplications({ accountId }).pipe(
+              Effect.map((apps) =>
+                apps.filter((item) => item.name === name).map((item) => item.id),
+              ),
+            );
+
+          const first = yield* scratch.deploy(program);
+          const namespaceId = first.app.durableObjects?.namespaceId;
+          expect(namespaceId).toBeDefined();
+
+          // Crashed between precreate and reconcile: no application exists.
+          yield* Containers.deleteContainerApplication({
+            accountId,
+            applicationId: first.app.applicationId,
+          });
+          expect(
+            yield* waitForApplicationDeleted(accountId, first.app.applicationId),
+          ).toBeUndefined();
+          yield* interruptAfterPrecreate;
+          const recreated = yield* scratch.deploy(program);
+          expect(isLiveId(recreated.app.applicationId)).toBe(true);
+          expect(recreated.app.applicationId).not.toBe(first.app.applicationId);
+          expect(recreated.app.durableObjects).toEqual({ namespaceId });
+          expect(yield* applicationsNamed(recreated.app.applicationName)).toEqual([
+            recreated.app.applicationId,
+          ]);
+
+          // Crashed after reconcile created the application, before state
+          // recorded it: the redeploy takes it over instead of creating another.
+          yield* interruptAfterPrecreate;
+          const resumed = yield* scratch.deploy(program);
+          expect(resumed.app.applicationId).toBe(recreated.app.applicationId);
+          expect(resumed.app.durableObjects).toEqual({ namespaceId });
+          expect(yield* applicationsNamed(resumed.app.applicationName)).toEqual([
+            recreated.app.applicationId,
+          ]);
+          expect((yield* scratch.plan(program)).resources.RemoteContainer?.action).toBe("noop");
+
+          // The same interruption, then destroy: the application is deleted.
+          yield* interruptAfterPrecreate;
+          yield* scratch.destroy();
+          expect(
+            yield* waitForApplicationDeleted(accountId, recreated.app.applicationId),
+          ).toBeUndefined();
+        }).pipe(logLevel),
+      { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
+    );
+
+    test.provider(
+      "preserves runtime-owned capacity across redeploys and configuration updates",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const constraints = { jurisdiction: "eu", regions: ["WEUR", "EEUR"] };
+          const program = (revision = "first", image = "mendhak/http-https-echo:41") =>
+            Cloudflare.Container("RuntimeCapacity", {
+              image,
+              instanceType: "basic",
+              maxInstances: 2,
+              schedulingPolicy: "default",
+              constraints,
+              env: { SCALING_REVISION: revision },
+            }).Application;
+          const identity = yield* Effect.gen(function* () {
+            const first = yield* stack.deploy(program());
+            const identity = { accountId: first.accountId, applicationId: first.applicationId };
+            expect(first.instances).toBe(0);
+            yield* Containers.updateContainerApplication({ ...identity, instances: 1 });
+            const running = yield* Containers.getContainerApplication(identity).pipe(
+              Effect.map(scheduledApplication),
+            );
+            for (let i = 0; i < 2; i++) {
+              yield* stack.deploy(program());
+              const observed = yield* Containers.getContainerApplication(identity).pipe(
+                Effect.map(scheduledApplication),
+              );
+              expect(observed.instances).toBe(1);
+              expect(observed.version).toBe(running.version);
+            }
+            // One configuration update (env + image) rolls out while the
+            // runtime-owned instance keeps running.
+            const changed = yield* stack.deploy(program("changed", "mendhak/http-https-echo:40"));
+            expect(changed.instances).toBe(1);
+            expect(changed.configuration.environmentVariables).toContainEqual({
+              name: "SCALING_REVISION",
+              value: "changed",
+            });
+            const observed = yield* Containers.getContainerApplication(identity).pipe(
+              Effect.map(scheduledApplication),
+            );
+            expect(observed.instances).toBe(1);
+            expect(observed.maxInstances).toBe(2);
+            expect(observed.schedulingPolicy).toBe("default");
+            expect(observed.constraints).toEqual(constraints);
+            expect(observed.configuration.image).toBe(changed.configuration.image);
+            expect(observed.configuration.image).not.toBe(first.configuration.image);
+            expect(observed.version).not.toBe(running.version);
+            return identity;
+          }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+          expect(
+            yield* waitForApplicationDeleted(identity.accountId, identity.applicationId),
+          ).toBeUndefined();
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    test.provider(
+      "applies and restores declared counts without rolling out unchanged configuration",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const program = (instances: number) =>
+            Cloudflare.Container("DeclaredCapacity", {
+              image: "mendhak/http-https-echo:41",
+              instanceType: "basic",
+              maxInstances: 2,
+              instances,
+              constraints: { jurisdiction: "eu", regions: ["WEUR", "EEUR"] },
+            }).Application;
+          // The same application goes 0 -> 2: a count change, like a
+          // restored count, updates it in place without a new version.
+          const steps = yield* Effect.forEach([0, 2], (instances) =>
+            Effect.gen(function* () {
+              const declared = yield* stack.deploy(program(instances));
+              const identity = {
+                accountId: declared.accountId,
+                applicationId: declared.applicationId,
+              };
+              expect(declared.instances).toBe(instances);
+              yield* Containers.updateContainerApplication({ ...identity, instances: 1 });
+              const drifted = yield* Containers.getContainerApplication(identity).pipe(
+                Effect.map(scheduledApplication),
+              );
+              expect(drifted.instances).toBe(1);
+              yield* stack.deploy(program(instances));
+              const restored = yield* Containers.getContainerApplication(identity).pipe(
+                Effect.map(scheduledApplication),
+              );
+              expect(restored.instances).toBe(instances);
+              expect(restored.version).toBe(drifted.version);
+              expect(restored.configuration).toEqual(drifted.configuration);
+              expect(restored.maxInstances).toBe(2);
+              return { identity, declared: declared.version, restored: restored.version };
+            }),
+          ).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+          const [zero, two] = steps;
+          expect(two!.identity).toEqual(zero!.identity);
+          expect(two!.declared).toBe(zero!.restored);
+          expect(
+            yield* waitForApplicationDeleted(
+              zero!.identity.accountId,
+              zero!.identity.applicationId,
+            ),
+          ).toBeUndefined();
+        }).pipe(logLevel),
+      { timeout: 300_000 },
     );
 
     // Placement constraints pass through to Cloudflare unchanged and read back
@@ -1898,8 +2361,8 @@ describe.concurrent(
     );
 
     // The Durable Object attachment is immutable, so a reconcile that finds an
-    // application without it (precreate's stub, or a deploy that died between
-    // precreate and reconcile) deletes and re-creates the application. When
+    // application without it (a deploy that died between creating and
+    // attaching it, or one created out of band) deletes and re-creates the application. When
     // the source hash has drifted in between, that path rebuilds the image and
     // must apply the same digest comparison as a plain update.
     test.provider(

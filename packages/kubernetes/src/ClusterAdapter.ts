@@ -1,3 +1,7 @@
+import type {
+  ContainerRuntime,
+  ContainerRuntimeSettings,
+} from "@alchemy.run/docker/ContainerRuntime";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type { DockerfileBuild } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -170,6 +174,8 @@ export type WorkloadServices = WorkloadServicesRegistry[keyof WorkloadServicesRe
  */
 export interface WorkloadImageSource {
   main?: string;
+  /** Runtime of a bundled `main` (see `BundledImageSource.runtime`). */
+  runtime?: ContainerRuntime;
   handler?: string;
   /**
    * Bundler configuration for `main`, or Docker build args and secrets for
@@ -240,6 +246,7 @@ export interface ImageRegistryResolveOptions {
   isExternal?: boolean;
   /** The generated-entry bootstrap wrapped around `main`. */
   bootstrap: (importPath: string) => string;
+  runtime?: ContainerRuntimeSettings;
   /** Tags for registry-owned cloud resources. */
   tags: Record<string, string>;
   /**
@@ -267,6 +274,7 @@ export interface ImageRegistryHashOptions {
   port?: number;
   isExternal?: boolean;
   bootstrap: (importPath: string) => string;
+  runtime?: ContainerRuntimeSettings;
 }
 
 export interface ImageRegistryDeleteOptions {
@@ -292,27 +300,30 @@ export interface ClusterAdapterService {
   readonly identity?: {
     readonly reconcile: (
       options: WorkloadIdentityReconcileOptions,
-    ) => Effect.Effect<WorkloadIdentityResult, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<WorkloadIdentityResult, ProviderError, AdapterLifecycleServices>;
     readonly delete: (
       options: WorkloadIdentityDeleteOptions,
-    ) => Effect.Effect<void, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<void, ProviderError, AdapterLifecycleServices>;
   };
   /** Managed container-image registry (ECR on EKS, Artifact Registry on GKE). */
   readonly registry?: {
     readonly resolve: (
       options: ImageRegistryResolveOptions,
-    ) => Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<ImageRegistryResult, ProviderError, AdapterLifecycleServices>;
     /** Plan-time content hash used by `diff` to surface source drift. */
     readonly hash: (
       options: ImageRegistryHashOptions,
-    ) => Effect.Effect<string | undefined, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<string | undefined, ProviderError, AdapterLifecycleServices>;
     readonly delete: (
       options: ImageRegistryDeleteOptions,
-    ) => Effect.Effect<void, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<void, ProviderError, AdapterLifecycleServices>;
   };
+  /** Bootstrap module for the shared runtime path, including adapter-specific workload identity. */
+  readonly runtimeBootstrap?: string;
   /**
-   * Platform-specific generated container entries for Effect-native
-   * workloads. Defaults to the platform-neutral bootstraps when omitted.
+   * Temporary Bun bootstrap templates for Effect-native workloads. Omit to
+   * use the built-in Bun templates. New bootstrap integrations should use
+   * `runtimeBootstrap` for the shared path.
    */
   readonly bootstrap?: {
     readonly server?: (handler: string) => (importPath: string) => string;
@@ -328,7 +339,7 @@ export interface ClusterAdapterService {
       loadBalancerClass?: string | undefined;
       annotations?: Record<string, string>;
     },
-    any,
+    ProviderError,
     AdapterLifecycleServices
   >;
 }

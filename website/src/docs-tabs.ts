@@ -34,6 +34,7 @@ export interface DocsTab {
 
 /** Hub categories, in header order. */
 export const DOCS_CATEGORIES = [
+  "AI",
   "Clouds",
   "Actors",
   "Containers",
@@ -82,12 +83,16 @@ export const DOCS_TABS: DocsTab[] = [
   hub("Hetzner", "hetzner", "Clouds", "servers · networks · volumes", ["/providers/hetzner"]),
   hub("Fly", "fly", "Clouds", "apps · machines · volumes", ["/providers/fly"]),
   hub("Railway", "railway", "Clouds", "services · environments · volumes", ["/providers/railway"]),
+  hub("DigitalOcean", "digitalocean", "Clouds", "droplets · ssh keys · firewalls", [
+    "/providers/digitalocean",
+  ]),
 
   hub("PlanetScale", "planetscale", "Databases", "MySQL · Postgres · branches", [
     "/providers/planetscale",
   ]),
   hub("Neon", "neon", "Databases", "serverless Postgres · branches", ["/providers/neon"]),
   hub("Turso", "turso", "Databases", "libSQL · groups · tokens", ["/providers/turso"]),
+  hub("Convex", "convex", "Databases", "projects · deployments · functions", ["/providers/convex"]),
   hub("Prisma", "prisma", "Databases", "Prisma Postgres · client", ["/providers/prisma"]),
   hub("SQL", "sql", "Databases", "effect-sql · drizzle · migrations", [
     "/drizzle",
@@ -127,6 +132,10 @@ export const DOCS_TABS: DocsTab[] = [
     category: "Sandboxes",
     hint: "sandboxes · ECS · EKS · EC2",
   },
+
+  hub("AI", "ai", "AI", "models · tools · skills · sandboxes"),
+  hub("Pi", "pi", "AI", "conversations · extensions · code mode"),
+  hub("OpenCode", "opencode", "AI", "sessions · prompts · skills"),
 
   hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", ["/providers/rivet"]),
   hub("Effect Cluster", "cluster", "Actors", "entities · workflows · pools", [

@@ -12,21 +12,24 @@ export type Input<T> =
   | T
   | Output<T>
   | Config<T>
-  // TODO(sam): extract Requirements in Resource
+  // TODO(sam): extract Requirements in Resource, then type this as
+  // `Effect<T, never, Req>`. Until then `any` leaks into every Effect-valued
+  // Input, so sites that pipe one disable
+  // `effecttsgo/any-unknown-in-error-context` (or go through `isEffectOf` /
+  // `yieldDeclared` in Util/effect.ts).
   | Effect<T, any, any>
   | (T extends S.Schema<any>
       ? never
-      :
-          | Output<T, any>
-          | (T extends Primitive
-              ? never
-              : T extends any[]
-                ? number extends T["length"]
-                  ? Input<T[number]>[]
-                  : Inputs<T>
-                : T extends object
-                  ? { [K in keyof T]: Input<T[K]> }
-                  : never));
+      : | Output<T, any>
+        | (T extends Primitive
+            ? never
+            : T extends any[]
+              ? number extends T["length"]
+                ? Input<T[number]>[]
+                : Inputs<T>
+              : T extends object
+                ? { [K in keyof T]: Input<T[K]> }
+                : never));
 
 export type InputProps<T extends Record<string, any>, Static extends keyof T = never> = {
   [K in keyof T]: K extends Static ? T[K] : Input<T[K]>;

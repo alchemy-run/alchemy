@@ -481,17 +481,15 @@ export const TargetPoolProvider = () =>
       if (current === undefined) {
         const created = yield* compute
           .insertTargetPools({
+            name: targetPoolName,
+            description: desiredDescription,
+            sessionAffinity,
+            backupPool,
+            failoverRatio: news.failoverRatio,
+            healthChecks,
+            instances,
             project: env.project,
             region,
-            body: {
-              name: targetPoolName,
-              description: desiredDescription,
-              sessionAffinity,
-              backupPool,
-              failoverRatio: news.failoverRatio,
-              healthChecks,
-              instances,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -525,11 +523,11 @@ export const TargetPoolProvider = () =>
             region,
             targetPoolName,
             compute.setBackupTargetPools({
+              target: desiredBackup,
               project: env.project,
               region,
               targetPool: targetPoolName,
               failoverRatio: desiredFailover,
-              body: { target: desiredBackup },
             }),
           ).pipe(Effect.catchTag("Conflict", () => Effect.void));
           current = (yield* getByName(env.project, region, targetPoolName)) ?? current;
@@ -548,12 +546,10 @@ export const TargetPoolProvider = () =>
             region,
             targetPoolName,
             compute.addHealthCheckTargetPools({
+              healthChecks: toAdd.map((healthCheck) => ({ healthCheck })),
               project: env.project,
               region,
               targetPool: targetPoolName,
-              body: {
-                healthChecks: toAdd.map((healthCheck) => ({ healthCheck })),
-              },
             }),
           );
         }
@@ -563,12 +559,10 @@ export const TargetPoolProvider = () =>
             region,
             targetPoolName,
             compute.removeHealthCheckTargetPools({
+              healthChecks: toRemove.map((healthCheck) => ({ healthCheck })),
               project: env.project,
               region,
               targetPool: targetPoolName,
-              body: {
-                healthChecks: toRemove.map((healthCheck) => ({ healthCheck })),
-              },
             }),
           );
         }
@@ -587,12 +581,10 @@ export const TargetPoolProvider = () =>
             region,
             targetPoolName,
             compute.addInstanceTargetPools({
+              instances: toAdd.map((instance) => ({ instance })),
               project: env.project,
               region,
               targetPool: targetPoolName,
-              body: {
-                instances: toAdd.map((instance) => ({ instance })),
-              },
             }),
           );
         }
@@ -602,12 +594,10 @@ export const TargetPoolProvider = () =>
             region,
             targetPoolName,
             compute.removeInstanceTargetPools({
+              instances: toRemove.map((instance) => ({ instance })),
               project: env.project,
               region,
               targetPool: targetPoolName,
-              body: {
-                instances: toRemove.map((instance) => ({ instance })),
-              },
             }),
           );
         }
@@ -622,10 +612,10 @@ export const TargetPoolProvider = () =>
             region,
             targetPoolName,
             compute.setSecurityPolicyTargetPools({
+              securityPolicy: desiredPolicy,
               project: env.project,
               region,
               targetPool: targetPoolName,
-              body: { securityPolicy: desiredPolicy },
             }),
           );
           current = (yield* getByName(env.project, region, targetPoolName)) ?? current;

@@ -6,11 +6,11 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import { isEffectOf } from "alchemy/Util/effect";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import type * as Redacted from "effect/Redacted";
 import * as S from "effect/Schema";
@@ -409,9 +409,8 @@ export const Table: typeof TableResource = Object.assign(
       return (TableResource as (methods: object) => unknown)(args[0]);
     }
     const [id, props] = args as [string, unknown];
-    const resolved = Effect.isEffect(props)
-      ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props are untyped; Effect-valued props are resolved by the engine
-        Effect.flatMap(props as Effect.Effect<unknown>, toProps)
+    const resolved = isEffectOf(props)
+      ? Effect.flatMap(props, toProps)
       : Effect.suspend(() => toProps(props));
     return TableResource(id, resolved as Effect.Effect<any>);
   },
@@ -487,14 +486,11 @@ const withCatalog =
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       Effect.provide(
-        Layer.mergeAll(
-          Iceberg.IcebergProtocol,
-          Iceberg.fromCatalogConfig({
-            uri: ref.catalogUri,
-            warehouse: ref.warehouse,
-            token,
-          }),
-        ),
+        Iceberg.fromCatalogConfig({
+          uri: ref.catalogUri,
+          warehouse: ref.warehouse,
+          token,
+        }),
       ),
     );
 
@@ -541,11 +537,6 @@ const loadTable = (namespace: string, table: string) =>
   Iceberg.loadTable({ namespace, table }).pipe(
     Effect.catchTag("NoSuchTableException", () => Effect.undefined),
   );
-
-const requirement = (type: string, fields: Record<string, unknown>): Iceberg.TableRequirement => ({
-  type,
-  ...fields,
-});
 
 const currentSchemaOf = (metadata: Iceberg.TableMetadata) =>
   metadata.schemas?.find((s) => s.schema_id === metadata.current_schema_id) ??
@@ -599,7 +590,7 @@ const syncTable = (input: {
     if (reasons.length > 0) return yield* rejected(identifier, reasons);
 
     const requirements: Iceberg.TableRequirement[] = [
-      requirement("assert-table-uuid", { uuid: metadata.table_uuid }),
+      { type: "assert-table-uuid", uuid: metadata.table_uuid },
     ];
     const updates: Iceberg.TableUpdateInput[] = [];
 
@@ -611,11 +602,12 @@ const syncTable = (input: {
     ) {
       let next = Math.max(metadata.last_column_id ?? 0, maxFieldId(observedFields)) + 1;
       const fields = assignFieldIds(input.schema.fields, observedFields, () => next++);
-      requirements.push(
-        requirement("assert-current-schema-id", {
-          "current-schema-id": metadata.current_schema_id,
-        }),
-      );
+      if (metadata.current_schema_id !== undefined) {
+        requirements.push({
+          type: "assert-current-schema-id",
+          current_schema_id: metadata.current_schema_id,
+        });
+      }
       updates.push(
         { action: "add-schema", schema: { type: "struct", fields } },
         { action: "set-current-schema", schema_id: -1 },

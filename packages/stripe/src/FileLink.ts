@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetFileLinks,
   GetFileLink,
@@ -292,11 +291,8 @@ export const FileLinkProvider = () =>
           file: news.file,
           metadata,
           ...(desiredExpiresAt !== undefined ? { expires_at: desiredExpiresAt } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-file-link-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-file-link-${instanceId}`,
+        });
       }
 
       const observedMetadata = tagRecord(current.metadata);

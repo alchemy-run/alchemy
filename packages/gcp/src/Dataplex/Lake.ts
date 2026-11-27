@@ -306,14 +306,12 @@ export const LakeProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsLakes({
+            displayName: news.displayName,
+            description: news.description,
+            labels: desiredLabels,
+            metastore: desiredMetastore ? { service: desiredMetastore } : undefined,
             parent: locationParent(env.project, location),
             lakeId,
-            body: {
-              displayName: news.displayName,
-              description: news.description,
-              labels: desiredLabels,
-              metastore: desiredMetastore ? { service: desiredMetastore } : undefined,
-            },
           })
           .pipe(
             Effect.retry({
@@ -348,14 +346,12 @@ export const LakeProvider = () =>
           metastoreChanged ? "metastore.service" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* dataplex.patchProjectsLocationsLakes({
+          displayName: news.displayName,
+          description: news.description,
+          labels: desiredLabels,
+          metastore: desiredMetastore ? { service: desiredMetastore } : undefined,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            displayName: news.displayName,
-            description: news.description,
-            labels: desiredLabels,
-            metastore: desiredMetastore ? { service: desiredMetastore } : undefined,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);

@@ -28,7 +28,7 @@ RpcServer.launch((group) =>
   Effect.promise(() => import(group)).pipe(
     Effect.flatMap((module: { default?: unknown }) =>
       Layer.isLayer(module.default)
-        ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- dynamically imported provider group module
+        ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- dynamically imported provider group module; RpcServer.ProviderLayer erases each group's types
           Effect.succeed(module.default as RpcServer.ProviderLayer)
         : Effect.fail(
             new SidecarInvalidProps({

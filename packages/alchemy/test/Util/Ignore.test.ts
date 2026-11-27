@@ -386,6 +386,20 @@ describe("Ignore rules (in-memory trees)", { tags: ["unit", "local"] }, () => {
       }),
     );
 
+    it.effect("keeps a pruned directory that the rules only empty", () =>
+      Effect.gen(function* () {
+        // `cache/**` excludes everything below `cache`, not `cache` itself:
+        // Docker sends it as an empty directory.
+        const { kept, reads } = yield* walkTree(
+          tree("cache/x", "cache/sub/y", "app.ts"),
+          "cache/**\n",
+          "dockerignore",
+        );
+        expect(kept).toEqual(["app.ts", "cache/"]);
+        expect(reads).not.toContain("cache");
+      }),
+    );
+
     it.effect("forced paths are kept and their parents are never pruned", () =>
       Effect.gen(function* () {
         const { files } = yield* walkTree(

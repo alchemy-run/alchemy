@@ -136,10 +136,22 @@ const RESTART_DELAY = "2 seconds";
  * its entrypoint, or the consumer's class) stays on the code it started with:
  * a new instance runs the deployed code.
  */
-const startedTooSoon = (message: string) =>
+export const startedTooSoon = (message: string) =>
   /entrypoint name .* was not found|^Worker not found|isn't in the code this runs yet/.test(
     message,
   );
+
+/**
+ * How long after an upload an instance's failure may come from the code before
+ * it: Cloudflare moves a busy Durable Object to the deployed code only once it
+ * goes idle, so the first calls can reach an object still running the last
+ * upload (one that failed, say).
+ */
+export const ROLLOUT_MILLIS = 60_000;
+
+/** Whether an instance that failed with `message`, `elapsed` ms into a deploy, is worth starting again. */
+export const worthRestarting = (message: string, elapsed: number) =>
+  startedTooSoon(message) || elapsed < ROLLOUT_MILLIS;
 
 /**
  * Workflows answers instance calls for a Workflow uploaded moments before with
@@ -147,6 +159,18 @@ const startedTooSoon = (message: string) =>
  */
 const retryInternal = {
   while: (error: { readonly _tag: string }) => error._tag === "WorkflowInternalError",
+  schedule: Schedule.spaced("2 seconds"),
+  times: 30,
+};
+
+/**
+ * Right after `createInstance` on a Workflow uploaded in the same deploy,
+ * `getInstance` can answer not found (and internal errors) for a few seconds:
+ * call again, for at most a minute.
+ */
+const retryJustStarted = {
+  while: (error: { readonly _tag: string }) =>
+    error._tag === "InstanceNotFound" || error._tag === "WorkflowInternalError",
   schedule: Schedule.spaced("2 seconds"),
   times: 30,
 };
@@ -281,6 +305,17 @@ const BackfillLive = () =>
                 times: 30,
               }),
             );
+          // On a Workflow created in the same deploy, the instance just created can read as
+          // missing for a moment. Wait for it here, once: later polls treat a missing
+          // instance as missing.
+          yield* workflows
+            .getInstance({
+              accountId,
+              workflowName: news.workflowName,
+              instanceId: id,
+              simple: true,
+            })
+            .pipe(Effect.retry(retryJustStarted));
           return id;
         });
 
@@ -315,7 +350,7 @@ const BackfillLive = () =>
           const message = failed.error?.message ?? "";
           // The runs are unaffected: a new instance waits on them, from where they are.
           if (
-            (current.status === "terminated" || startedTooSoon(message)) &&
+            (current.status === "terminated" || worthRestarting(message, elapsed)) &&
             attempt < MAX_RESTARTS
           ) {
             attempt += 1;
@@ -342,9 +377,9 @@ const BackfillLive = () =>
             instanceId: id,
           });
         }
-        yield* session.note(`Backfilling ${where()} (${Math.round(elapsed / 1000)}s) ...`, {
-          kind: "status",
-        });
+        const line = `Backfilling ${where()} (${Math.round(elapsed / 1000)}s) ...`;
+        yield* session.note(line, { kind: "status" });
+        yield* Effect.logInfo(line);
         yield* Effect.sleep(POLL);
       }
     }),

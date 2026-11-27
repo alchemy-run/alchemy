@@ -4,8 +4,7 @@ import {
   bundleNodes,
   isImageProgram,
   makePoolLayer,
-  nodeEnvironment,
-  RIVETKIT_VERSION,
+  secretNodeEnvironment,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -39,6 +38,13 @@ export interface ServerPoolOptions extends PoolSettings {
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.
  *
+ * Hetzner Cloud has no secret store and no instance identity a node could
+ * read one with, so the control plane's token, and every secret a class
+ * reads as config, are copied over SSH into an env file on each Server
+ * that only root can read. They never go into the Server's user data,
+ * which any process on it can read from the metadata service. Root on the
+ * Server can still read them.
+ *
  * ### Running Durable Objects on Hetzner
  * **Example:** Two nodes
  * ```typescript
@@ -56,8 +62,9 @@ export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
     id,
     settings: options,
     expected: "a reachable control plane",
-    // Servers reach the control plane's public address.
-    network: (cluster) => cluster.network ?? { kind: "none" as const },
+    // The nodes join no network of the control plane's, so they connect to its
+    // public endpoint, never a private address they can't reach.
+    network: () => ({ kind: "none" as const }),
     // Every class the pool hosts is bundled into the node program;
     // RivetKit is installed beside it (it loads a native addon).
     nodes: Effect.fn(function* (nodes) {
@@ -66,7 +73,7 @@ export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
         ? { context: nodes.program.context, dockerfile: nodes.program.dockerfile }
         : {
             main: (yield* bundleNodes("hetzner", id, nodes.program)) as unknown as string,
-            build: { install: { rivetkit: RIVETKIT_VERSION } },
+            build: { install: { rivetkit: options.rivetkitVersion ?? nodes.rivetkitVersion } },
           };
       const location = options.location ?? "nbg1";
       const firewall = yield* Hetzner.Firewall(`${id}Firewall`, {
@@ -80,7 +87,8 @@ export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
           },
         ],
       });
-      const env = nodeEnvironment(nodes);
+      // Copied over SSH into a file only root can read: never user data.
+      const env = secretNodeEnvironment(nodes);
       for (let i = 0; i < (options.replicas ?? 1); i++) {
         const server = yield* Hetzner.Server(`${id}Node${i}`, {
           serverType: options.serverType ?? "cx23",

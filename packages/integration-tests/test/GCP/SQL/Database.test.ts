@@ -238,8 +238,8 @@ describe.skipIf(!!process.env.FAST)(
         );
         yield* Core.withProviders(
           secretmanager.addVersionProjectsLocationsSecrets({
+            payload: { data },
             parent: shared.secret,
-            body: { payload: { data } },
           }),
           migrationsOptions,
           "SqlMigrations",
@@ -255,14 +255,12 @@ describe.skipIf(!!process.env.FAST)(
       Effect.gen(function* () {
         const { project } = yield* GcpEnvironment.current;
         const response = yield* sqladmin.executeSqlInstances({
+          database,
+          user,
+          passwordSecretVersion: `${shared.secret}/versions/latest`,
+          sqlStatement: "SELECT name FROM __alchemy_migrations ORDER BY id",
           project,
           instance,
-          body: {
-            database,
-            user,
-            passwordSecretVersion: `${shared.secret}/versions/latest`,
-            sqlStatement: "SELECT name FROM __alchemy_migrations ORDER BY id",
-          },
         });
         expect(response.status?.message).toBeUndefined();
         return (response.results?.[0]?.rows ?? []).map((row) => row.values?.[0]?.value);

@@ -63,7 +63,6 @@ test.provider.skipIf(!!spansDataset)(
         observability.createProjectsLocationsBucketsDatasetsLinks({
           parent: `projects/${project}/locations/us-central1/buckets/_Trace/datasets/Spans`,
           linkId: "alchemy_probe_link",
-          body: {},
         }),
       );
       expect(error._tag).toEqual("BadRequest");

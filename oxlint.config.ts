@@ -29,7 +29,7 @@ export default defineConfig({
     "effecttsgo/abort-controller-in-effect": "error",
     "effecttsgo/acquire-release-disposable": "error",
     "effecttsgo/all-of-map-to-for-each": "error",
-    "effecttsgo/any-unknown-in-error-context": "off",
+    "effecttsgo/any-unknown-in-error-context": "error",
     "effecttsgo/catch-all-tag-dispatch-to-catch-tag": "error",
     "effecttsgo/catch-all-to-map-error": "error",
     "effecttsgo/catch-chain-to-first-success-of": "error",
@@ -184,8 +184,71 @@ export default defineConfig({
   overrides: [
     {
       // CLI tooling, not library code: a plain Error is fine here.
-      files: ["scripts/**", "benchmark/**", "stacks/**"],
-      rules: { "effecttsgo/global-error-in-effect-failure": "off" },
+      files: ["scripts/**", "benchmark/**", "stacks/**", "packages/*/scripts/**"],
+      rules: {
+        "effecttsgo/global-error-in-effect-failure": "off",
+        "effecttsgo/any-unknown-in-error-context": "off",
+      },
+    },
+    {
+      // Type-erasure boundaries: runtime bridges (Durable Objects, RPC,
+      // workflow engines, binding hosts, host bootstraps that load the user's
+      // program) and dynamic handler registries move effects across untyped
+      // stubs. `any`/`unknown` in E/R is the contract here, not a leak.
+      files: [
+        "packages/*/src/Bootstrap.ts",
+        "packages/*/src/Bootstrap/**",
+        "packages/alchemy/src/Apply.ts",
+        "packages/alchemy/src/Local/RpcSerialization.ts",
+        "packages/alchemy/src/Local/RpcServer.ts",
+        "packages/alchemy/src/Output.ts",
+        "packages/alchemy/src/Provider.ts",
+        "packages/alchemy/src/Rpc.ts",
+        "packages/alchemy/src/Runtime/Bootstrap.ts",
+        "packages/alchemy/src/Runtime/Process.ts",
+        "packages/alchemy/src/Telemetry.ts",
+        "packages/alchemy/src/TelemetryRuntime.ts",
+        "packages/alchemy/src/Util/ConfigProvider.ts",
+        "packages/alchemy/src/Workers/DurableObject.ts",
+        "packages/alchemy/src/Workers/DurableObjectBridge.ts",
+        "packages/alchemy/src/Workers/DurableObjectEngine.ts",
+        "packages/alchemy/src/Workers/WorkerBridge.ts",
+        "packages/alchemy/src/Workers/Workerd/**",
+        "packages/aws/src/AWSBindings.ts",
+        "packages/aws/src/Lambda/MicrovmBinding.ts",
+        "packages/aws/src/Lambda/MicrovmProvider.ts",
+        "packages/aws/src/Lambda/MicrovmRuntimeContext.ts",
+        "packages/aws/src/StepFunctions/Asl/simulate.ts",
+        "packages/cloudflare/src/Containers/ContainerPlatform.ts",
+        "packages/cloudflare/src/LocalGateway.ts",
+        "packages/cloudflare/src/Workers/Rpc.ts",
+        "packages/cloudflare/src/Workers/RpcDurableObject.ts",
+        "packages/cloudflare/src/Workflows/WorkflowBridge.ts",
+        // Agent harnesses hold tools, models and platform sandbox handles
+        // whose error and requirement types are erased by the registry
+        // (`AI.Sandboxes` takes any platform's handle).
+        "packages/ai/src/**",
+        "packages/opencode/src/**",
+        "packages/pi/src/**",
+        "packages/domain/src/**",
+        "packages/effect-cluster/src/**",
+        "packages/gcp/src/GCPBindings.ts",
+        "packages/gcp/src/HostContext.ts",
+        "packages/git/src/BlobStoreS3.ts",
+        "packages/rivet/src/**",
+      ],
+      rules: { "effecttsgo/any-unknown-in-error-context": "off" },
+    },
+    {
+      // MCP servers are reached through Effect AI's `McpClient`, which Effect
+      // still marks experimental. There is no stable client to use instead.
+      files: [
+        "packages/ai/src/McpServer.ts",
+        "packages/opencode/src/Harness.ts",
+        "packages/pi/src/Harness.ts",
+        "packages/pi/src/internal/mcp.ts",
+      ],
+      rules: { "effecttsgo/experimental-api-usage": "off" },
     },
   ],
 } satisfies OxlintConfig);

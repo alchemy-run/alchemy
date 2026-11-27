@@ -54,8 +54,10 @@ export const makeExecutionMemo = <A, E, R>(
         // set: a concurrent first access joins this memo (evaluating the
         // same cached effect) instead of building a second resource.
         memo = yield* Effect.cached(build.pipe(Scope.provide(scope)));
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the memo cache holds Effects of every shape; callers keep their own types
         cache.set(symbol, memo);
       }
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the memo cache holds Effects of every shape; callers keep their own types
       return yield* memo;
     }) as Effect.Effect<A, E, Exclude<R, Scope.Scope>>;
   });

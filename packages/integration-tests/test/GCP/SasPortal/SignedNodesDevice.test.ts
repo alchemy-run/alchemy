@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as sasportal from "@distilled.cloud/gcp/sasportal_v1alpha1";
+import * as sasportal from "@distilled.cloud/gcp/unstable/sasportal_v1alpha1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { firstCustomerName, logLevel, runLifecycle, signedDeviceProbe } from "./common.ts";
@@ -44,10 +44,7 @@ test.provider.skipIf(runLifecycle)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        sasportal.createSignedNodesDevices({
-          parent: "nodes/missing",
-          body: signedDeviceProbe,
-        }),
+        sasportal.createSignedNodesDevices({ ...signedDeviceProbe, parent: "nodes/missing" }),
       );
       expect(error._tag).toEqual("ServiceDisabled");
 

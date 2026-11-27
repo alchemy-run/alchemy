@@ -107,7 +107,6 @@
     "./EMRServerless": "./src/EMRServerless/index.ts",
     "./EntityResolution": "./src/EntityResolution/index.ts",
     "./EventBridge": "./src/EventBridge/index.ts",
-    "./FinSpace": "./src/FinSpace/index.ts",
     "./Firehose": "./src/Firehose/index.ts",
     "./FIS": "./src/FIS/index.ts",
     "./FMS": "./src/FMS/index.ts",
@@ -643,11 +642,6 @@
         "types": "./lib/EventBridge/index.d.ts",
         "bun": "./src/EventBridge/index.ts",
         "default": "./lib/EventBridge/index.js"
-      },
-      "./FinSpace": {
-        "types": "./lib/FinSpace/index.d.ts",
-        "bun": "./src/FinSpace/index.ts",
-        "default": "./lib/FinSpace/index.js"
       },
       "./Firehose": {
         "types": "./lib/Firehose/index.d.ts",

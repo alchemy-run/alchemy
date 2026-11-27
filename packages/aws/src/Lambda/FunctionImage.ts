@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { normalizePolicyDocument } from "../IAM/Policy.ts";
+import { partitionOf } from "../Partition.ts";
 import type { FunctionImageConfig } from "./Function.ts";
 
 export class FunctionImageInvalidProps extends Data.TaggedError("FunctionImageInvalidProps")<{
@@ -213,6 +214,13 @@ export interface FunctionImageAttributes {
 
 export interface ResolveFunctionImageOptions {
   id: string;
+  /**
+   * Who pulls the image, which scopes the managed repository's pull policy:
+   * Lambda reads a function's image as that function, and a runtime
+   * version's image as its runtime.
+   * @default "function"
+   */
+  consumer?: "function" | "runtime";
   source: FunctionImageSource;
   architecture: "x86_64" | "arm64";
   previousImage?: Omit<FunctionImageAttributes, "hash">;
@@ -298,10 +306,10 @@ export const decodeFunctionImageSource = Effect.fn("AWS.Lambda.decodeFunctionIma
       });
     }
     const decodeError = (error: unknown) =>
-      new Error(
-        `Function(${id}): image source values must be literal and valid before Lambda pre-create`,
-        { cause: error },
-      );
+      new FunctionImageInvalidProps({
+        message: `Function(${id}): image source values must be literal and valid before Lambda pre-create`,
+        cause: error,
+      });
     if (hasUri) {
       return yield* Schema.decodeUnknownEffect(FunctionEcrImageSourceSchema)(source).pipe(
         Effect.map((decoded): FunctionEcrImageSource => decoded),
@@ -333,8 +341,11 @@ export const makeFunctionImage = Effect.gen(function* () {
       lowercase: true,
     });
 
-  const desiredRepositoryPolicy = Effect.fn(function* () {
+  const desiredRepositoryPolicy = Effect.fn(function* (
+    consumer: "function" | "runtime" = "function",
+  ) {
     const { accountId, region } = yield* AWSEnvironment.current;
+    const arnPrefix = `arn:${partitionOf(region)}:lambda:${region}:${accountId}`;
     return JSON.stringify({
       Version: "2012-10-17",
       Statement: [
@@ -342,10 +353,14 @@ export const makeFunctionImage = Effect.gen(function* () {
           Sid: "LambdaECRImageRetrievalPolicy",
           Effect: "Allow",
           Principal: { Service: "lambda.amazonaws.com" },
-          Action: ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
+          Action:
+            consumer === "function"
+              ? ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+              : ["ecr:BatchGetImage", "ecr:DescribeImages", "ecr:GetDownloadUrlForLayer"],
           Condition: {
             StringLike: {
-              "aws:sourceArn": `arn:aws:lambda:${region}:${accountId}:function:*`,
+              "aws:sourceArn":
+                consumer === "function" ? `${arnPrefix}:function:*` : `${arnPrefix}:runtime/*`,
             },
           },
         },
@@ -353,7 +368,11 @@ export const makeFunctionImage = Effect.gen(function* () {
     });
   });
 
-  const ensureRepository = Effect.fn(function* (id: string, repositoryName: string) {
+  const ensureRepository = Effect.fn(function* (
+    id: string,
+    repositoryName: string,
+    consumer?: "function" | "runtime",
+  ) {
     let repository = yield* ecr.describeRepositories({ repositoryNames: [repositoryName] }).pipe(
       Effect.map((response) => response.repositories?.[0]),
       Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined),
@@ -405,7 +424,7 @@ export const makeFunctionImage = Effect.gen(function* () {
       });
     }
 
-    const desiredPolicy = yield* desiredRepositoryPolicy();
+    const desiredPolicy = yield* desiredRepositoryPolicy(consumer);
     const observedPolicy = yield* ecr.getRepositoryPolicy({ repositoryName }).pipe(
       Effect.map((response) => response.policyText),
       Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.undefined),
@@ -535,7 +554,7 @@ export const makeFunctionImage = Effect.gen(function* () {
         : yield* createRepositoryName(options.id);
     // Re-ensure even with persisted metadata: the repository or its Lambda
     // pull policy may have drifted out-of-band.
-    const ensured = yield* ensureRepository(options.id, repositoryName);
+    const ensured = yield* ensureRepository(options.id, repositoryName, options.consumer);
     const imageUri = `${ensured.repositoryUri}:${imageTag}`;
 
     let detail = yield* describeImage(repositoryName, imageTag);
@@ -615,20 +634,18 @@ export const makeFunctionImage = Effect.gen(function* () {
       return false;
     }
 
+    const readTags = ecr
+      .listTagsForResource({ resourceArn: repository.repositoryArn })
+      .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined));
+    const readPolicy = ecr.getRepositoryPolicy({ repositoryName }).pipe(
+      Effect.map((response) => response.policyText),
+      Effect.catchTag(
+        ["RepositoryNotFoundException", "RepositoryPolicyNotFoundException"],
+        () => Effect.undefined,
+      ),
+    );
     const [tags, observedPolicy, image] = yield* Effect.all(
-      [
-        ecr
-          .listTagsForResource({ resourceArn: repository.repositoryArn })
-          .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined)),
-        ecr.getRepositoryPolicy({ repositoryName }).pipe(
-          Effect.map((response) => response.policyText),
-          Effect.catchTag(
-            ["RepositoryNotFoundException", "RepositoryPolicyNotFoundException"],
-            () => Effect.undefined,
-          ),
-        ),
-        describeImage(repositoryName, imageTag),
-      ] as const,
+      [readTags, readPolicy, describeImage(repositoryName, imageTag)] as const,
       { concurrency: 3 },
     );
     if (tags === undefined || !(yield* hasAlchemyTags(id, tags.tags))) {

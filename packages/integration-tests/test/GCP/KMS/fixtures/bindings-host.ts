@@ -30,10 +30,8 @@ export default class KmsBindingsHost extends GCP.Function<KmsBindingsHost>()(
     return {
       fetch: serveProbes({
         roundTrip: Effect.gen(function* () {
-          const encrypted = yield* encrypt({ body: { plaintext } });
-          const decrypted = yield* decrypt({
-            body: { ciphertext: encrypted.ciphertext },
-          });
+          const encrypted = yield* encrypt({ plaintext });
+          const decrypted = yield* decrypt({ ciphertext: encrypted.ciphertext });
           return {
             plaintext,
             ciphertext: encrypted.ciphertext,

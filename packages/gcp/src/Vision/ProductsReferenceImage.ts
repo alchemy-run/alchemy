@@ -284,12 +284,10 @@ export const ProductsReferenceImageProvider = () =>
       if (current === undefined) {
         const created = yield* vision
           .createProjectsLocationsProductsReferenceImages({
+            uri: news.uri,
+            boundingPolys: news.boundingPolys,
             parent,
             referenceImageId,
-            body: {
-              uri: news.uri,
-              boundingPolys: news.boundingPolys,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getReferenceImage(name)));
         current = created ?? undefined;

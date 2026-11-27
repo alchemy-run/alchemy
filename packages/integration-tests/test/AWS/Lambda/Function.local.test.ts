@@ -44,6 +44,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtures/raw.ts";
 
@@ -52,6 +53,9 @@ const { test } = Test.make({ providers: AWS.providers(), dev: true });
 const devFixtureDir = fileURLToPath(new URL("../Lambda/fixtures/floci-dev", import.meta.url));
 const esmHandlerPath = fileURLToPath(
   new URL("../Lambda/fixtures/floci-esm/handler.mjs", import.meta.url),
+);
+const nodeVersionHandlerPath = fileURLToPath(
+  new URL("../Lambda/fixtures/node-version-handler.ts", import.meta.url),
 );
 
 /** Floci-scoped context for the raw distilled calls the test makes itself. */
@@ -408,6 +412,35 @@ test.provider(
       const cleared = yield* findGroup;
       expect(cleared).toBeDefined();
       expect(cleared?.retentionInDays).toBeUndefined();
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 300_000 },
+);
+
+test.provider(
+  "dev runs a nodejs26.x Function in floci",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function("DevNode26Fn", {
+          main: nodeVersionHandlerPath,
+          functionUrl: false,
+          runtime: "nodejs26.x",
+        }),
+      );
+      expect(fn.functionArn).toContain(":000000000000:");
+
+      const response = yield* Lambda.invoke({ FunctionName: fn.functionName, Payload: "{}" }).pipe(
+        Effect.provide(flociContext),
+      );
+      expect(response.FunctionError).toBeUndefined();
+      const payload = response.Payload
+        ? yield* response.Payload.pipe(Stream.decodeText(), Stream.mkString)
+        : "";
+      expect((JSON.parse(payload) as { version: string }).version).toMatch(/^v26\./);
 
       yield* stack.destroy();
     }),

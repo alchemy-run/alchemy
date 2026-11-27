@@ -287,6 +287,11 @@ test("never forwards to a host named in the request path", async () => {
     });
   expect(await get(`//${other.host}/marker.txt?x=1`)).toBe(`worker //${other.host}/marker.txt?x=1`);
   expect(await get(`${other.origin}/marker.txt`)).toBe("worker /marker.txt");
+  expect(await get(`///${other.host}/marker.txt`)).toBe(`worker ///${other.host}/marker.txt`);
+  expect(await get(`/\\${other.host}/marker.txt`)).toBe(`worker //${other.host}/marker.txt`);
+  expect(await get("/%2f%5C/marker.txt?next=//x.example&x=%2F&x=+&empty=&flag")).toBe(
+    "worker /%2f%5C/marker.txt?next=//x.example&x=%2F&x=+&empty=&flag",
+  );
 });
 
 test("relays the Worker's status text and repeated Set-Cookie request headers", async () => {

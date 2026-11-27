@@ -363,17 +363,15 @@ export const UnitKindProvider = () =>
       if (current === undefined) {
         const created = yield* saasservicemgmt
           .createProjectsLocationsUnitKinds({
+            saas,
+            defaultRelease,
+            dependencies,
+            inputVariableMappings: news.inputVariableMappings,
+            outputVariableMappings: news.outputVariableMappings,
+            labels: desiredLabels,
+            annotations,
             parent: parentOf(env.project, location),
             unitKindId,
-            body: {
-              saas,
-              defaultRelease,
-              dependencies,
-              inputVariableMappings: news.inputVariableMappings,
-              outputVariableMappings: news.outputVariableMappings,
-              labels: desiredLabels,
-              annotations,
-            },
           })
           .pipe(
             // A Saas created seconds earlier is unreadable here until it
@@ -416,17 +414,14 @@ export const UnitKindProvider = () =>
 
       if (mask.length > 0) {
         current = yield* saasservicemgmt.patchProjectsLocationsUnitKinds({
+          etag: current.etag,
+          defaultRelease,
+          inputVariableMappings: news.inputVariableMappings,
+          outputVariableMappings: news.outputVariableMappings,
+          labels: desiredLabels,
+          annotations,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            defaultRelease,
-            inputVariableMappings: news.inputVariableMappings,
-            outputVariableMappings: news.outputVariableMappings,
-            labels: desiredLabels,
-            annotations,
-          },
         });
       }
 

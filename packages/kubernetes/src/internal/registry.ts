@@ -1,8 +1,6 @@
+import type { ContainerRuntimeSettings } from "@alchemy.run/docker/ContainerRuntime";
 import type { RegistryCredentials } from "@alchemy.run/docker/Docker";
-import {
-  makeContainerImageSource,
-  type ImageRegistryTarget,
-} from "@alchemy.run/docker/ImageSource";
+import { makeContainerImageSource } from "@alchemy.run/docker/ImageSource";
 import { createPhysicalName } from "alchemy/PhysicalName";
 /**
  * Image publishing for connections that declare a
@@ -39,6 +37,7 @@ export const makeConnectionRegistry = Effect.gen(function* () {
     port?: number | undefined;
     isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
+    runtime?: ContainerRuntimeSettings;
     state: Record<string, unknown> | undefined;
     session: { note: (message: string) => Effect.Effect<void> };
   }) {
@@ -55,7 +54,7 @@ export const makeConnectionRegistry = Effect.gen(function* () {
             maxLength: 96,
             lowercase: true,
           })}`;
-    const target: ImageRegistryTarget = {
+    const target = {
       repositoryUri: Effect.succeed(repository),
       // Generic registries have no cheap existence probe; resolve only runs
       // when the workload changes, and the local build cache makes a
@@ -71,6 +70,7 @@ export const makeConnectionRegistry = Effect.gen(function* () {
         port: options.port,
         isExternal: options.isExternal,
         bootstrap: options.bootstrap,
+        runtime: options.runtime,
         session: options.session,
       },
       target,
@@ -92,6 +92,7 @@ export const makeConnectionRegistry = Effect.gen(function* () {
     port?: number | undefined;
     isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
+    runtime?: ContainerRuntimeSettings;
   }) =>
     images.hash({
       source: options.source,
@@ -99,6 +100,7 @@ export const makeConnectionRegistry = Effect.gen(function* () {
       port: options.port,
       isExternal: options.isExternal,
       bootstrap: options.bootstrap,
+      runtime: options.runtime,
     });
 
   return { resolve, hash };

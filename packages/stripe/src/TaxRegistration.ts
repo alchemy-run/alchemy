@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetTaxRegistrations,
   GetTaxRegistration,
@@ -654,11 +653,8 @@ export const TaxRegistrationProvider = () =>
           country_options: countryOptions,
           active_from: desiredActiveFrom,
           ...(typeof news.expiresAt === "number" ? { expires_at: news.expiresAt } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-tax-registration-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-tax-registration-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

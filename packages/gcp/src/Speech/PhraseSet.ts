@@ -249,14 +249,12 @@ export const PhraseSetProvider = () =>
       if (current === undefined) {
         const created = yield* speech
           .createProjectsLocationsPhraseSets({
-            parent: locationParent(env.project, location),
-            body: {
-              phraseSetId,
-              phraseSet: {
-                phrases,
-                boost: news.boost,
-              },
+            phraseSetId,
+            phraseSet: {
+              phrases,
+              boost: news.boost,
             },
+            parent: locationParent(env.project, location),
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -285,13 +283,10 @@ export const PhraseSetProvider = () =>
       );
       if (updateMask.length > 0) {
         current = yield* speech.patchProjectsLocationsPhraseSets({
+          phrases,
+          boost: news.boost,
           name: currentName,
           updateMask,
-          body: {
-            name: currentName,
-            phrases,
-            boost: news.boost,
-          },
         });
       }
 

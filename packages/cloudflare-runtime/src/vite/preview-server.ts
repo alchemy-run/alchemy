@@ -16,6 +16,15 @@ import type { CloudflareVitePluginOptions } from "./plugin.ts";
 import { workerSocketPath } from "./worker-request.ts";
 
 /**
+ * Cloudflare credentials, resolved on first use. Only remote bindings read
+ * them, so a local-only dev server starts without any.
+ */
+const lazyCredentials = Layer.succeed(
+  Credentials.Credentials,
+  Credentials.resolveFromEnv.pipe(Effect.orDie),
+);
+
+/**
  * The freshly built worker a preview server hosts: which directory holds the
  * server modules, which of them is the entry, and where the client assets
  * live. Derived by the preview plugin from the resolved Vite config.
@@ -136,7 +145,7 @@ const makeHandleSweep = (): (() => void) => {
 const makePreviewContext = () =>
   RuntimeServices.layerRuntime({ api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID! } }).pipe(
     Layer.provideMerge(PlatformServices),
-    Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
+    Layer.provide(Layer.merge(lazyCredentials, FetchHttpClient.layer)),
   );
 
 const closeScope = async (scope: Scope.Closeable) => {

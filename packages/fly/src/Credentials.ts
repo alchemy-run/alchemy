@@ -1,4 +1,3 @@
-import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials, CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import { lazyCredentials, orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Output from "alchemy/Output";
@@ -36,7 +35,7 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
           // defect as `CredentialsRequired`.
           orDieCredentialsUnavailable("Fly"),
         );
-    yield* Output.named(Output.asOutput(token), "FLY_API_TOKEN").asEffect().pipe(Effect.asVoid);
+    yield* Output.named(Output.literal(token), "FLY_API_TOKEN").asEffect().pipe(Effect.asVoid);
   });
 
 /**
@@ -57,7 +56,9 @@ export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> = Layer.effec
   Effect.gen(function* () {
     const ambient = yield* Effect.serviceOption(Credentials);
     if (Option.isSome(ambient)) return ambient.value;
-    return yield* Credentials.pipe(Effect.provide(CredentialsFromEnv));
+    // In a Machine without `FLY_API_TOKEN` the env layer fails when it is
+    // built; this layer is typed as never failing, so that dies.
+    return yield* Credentials.pipe(Effect.provide(Layer.orDie(CredentialsFromEnv)));
   }),
 );
 
@@ -72,8 +73,10 @@ export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> = Layer.effec
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    lazyCredentials<FlyResolvedCredentials, ConfigError>()(FLY_AUTH_PROVIDER_NAME, (creds) => ({
+    // `Credentials` has no error channel: a failed resolution dies, and the
+    // engine reports it as `CredentialsRequired`.
+    lazyCredentials<FlyResolvedCredentials>()(FLY_AUTH_PROVIDER_NAME, (creds) => ({
       apiKey: creds.apiKey,
       apiBaseUrl: creds.apiBaseUrl,
-    })),
+    })).pipe(Effect.map(Effect.orDie)),
   );

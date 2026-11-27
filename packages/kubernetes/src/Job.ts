@@ -1,4 +1,8 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import {
+  type ContainerRuntime,
+  resolveContainerRuntime,
+} from "@alchemy.run/docker/ContainerRuntime";
 import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
@@ -8,7 +12,7 @@ import { Platform, type PlatformProps, type PlatformServices } from "alchemy/Pla
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import type { HostRuntimeContext } from "alchemy/Runtime/Process";
-import { packEnvValue, unpackEnvValue, RuntimeContext } from "alchemy/RuntimeContext";
+import { packEnvValueKeepRedacted, unpackEnvValue, RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags } from "alchemy/Tags";
 import { unwrapRedacted } from "alchemy/Util/data";
@@ -35,12 +39,12 @@ import { toConnection, type ClusterLike, type Connection } from "./Connection.ts
 import { makeConnectionRegistry } from "./internal/registry.ts";
 import {
   collectBindingEnv,
-  containerEnvValue,
+  ENV_SECRET_DIGEST,
+  workloadEnv,
   connectionIdentity,
   connectionOfOutput,
   deepMerge,
   imagePlatformOf,
-  makeJobBootstrap,
   resolveWorkloadImage,
   tryConnectionOf,
   workloadImageHash,
@@ -107,7 +111,12 @@ export interface JobPropsBase extends PlatformProps {
     limits?: { cpu?: string; memory?: string };
   };
   /**
-   * Additional environment variables for the container.
+   * Additional environment variables for the container. A `Redacted` value
+   * (or one holding a `Redacted`) is kept in the Job's own Secret,
+   * `<name>-env`, and read through `secretKeyRef`, so the pod template never
+   * holds it; a changed secret rolls the pods. `{ valueFrom: { ... } }`
+   * passes through as a Kubernetes `EnvVarSource`, to read a Secret,
+   * ConfigMap or field of your own.
    */
   env?: Record<string, any>;
   /**
@@ -159,10 +168,16 @@ export interface BundledJobProps extends JobPropsBase {
   main: string;
   /**
    * Environment image used as the generated Dockerfile's `FROM`; must be
-   * able to run the bun runtime.
-   * @default "oven/bun:1"
+   * able to run the {@link runtime}.
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /** Named export to load from `main`. @default "default" */
   handler?: string;
   /** Bundler configuration for the entrypoint, and the image build's layer `cache`. */
@@ -433,24 +448,27 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
         set: (bindingId: string, output: Output.Output) =>
           Effect.sync(() => {
             const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-            env[key] = output.pipe(Output.map(packEnvValue));
+            // A Redacted stays Redacted, so the Job keeps it in its Secret.
+            env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
             return key;
           }),
         // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime ctx.get must read raw env, never Config (see unpackEnvValue)
         get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: (effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
+            // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- host programs keep their own requirements; the generated entry satisfies them
             runners.push(effect);
           }),
         serve: ((_handler, options) =>
           Effect.sync(() => {
             const run = options?.shape?.run;
             if (Effect.isEffect(run)) {
-              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `run` is a user program; the host runner surfaces its failures
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- `run` is a user program; the host runner surfaces its failures and satisfies its requirements
               runners.push(run as Effect.Effect<void, never, any>);
             }
           })) as HostRuntimeContext["serve"],
         exports: Effect.sync(() => ({
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- host programs keep their own requirements; the generated entry satisfies them
           program: Effect.all(runners, { concurrency: "unbounded" }).pipe(Effect.asVoid),
         })),
       };
@@ -519,7 +537,8 @@ export const JobProvider = () =>
               source,
               platform: imagePlatformOf(news.architecture, connection),
               isExternal: news.isExternal,
-              bootstrap: (adapter.bootstrap?.job ?? makeJobBootstrap)(source.handler ?? "default"),
+              mode: "job",
+              runtime: yield* resolveContainerRuntime(source.runtime),
             });
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
@@ -592,7 +611,8 @@ export const JobProvider = () =>
             source,
             platform: imagePlatformOf(news.architecture, connection),
             isExternal: news.isExternal,
-            bootstrap: (adapter.bootstrap?.job ?? makeJobBootstrap)(source.handler ?? "default"),
+            mode: "job",
+            runtime: yield* resolveContainerRuntime(source.runtime),
             tags,
             state:
               (output?.registry as Record<string, unknown> | undefined) ??
@@ -614,6 +634,9 @@ export const JobProvider = () =>
             ...news.env,
           };
 
+          // Secrets move into the workload's own Secret, read by reference.
+          const env = yield* workloadEnv({ name: baseName, namespace, labels, env: containerEnv });
+
           const serviceAccountObject: KubernetesObjectDefinition = {
             apiVersion: "v1",
             kind: "ServiceAccount",
@@ -628,7 +651,12 @@ export const JobProvider = () =>
           };
           const podTemplate = deepMerge(
             {
-              metadata: { labels },
+              metadata: {
+                labels,
+                ...(env.digest === undefined
+                  ? {}
+                  : { annotations: { [ENV_SECRET_DIGEST]: env.digest } }),
+              },
               spec: {
                 serviceAccountName,
                 ...(news.runtimeClassName ? { runtimeClassName: news.runtimeClassName } : {}),
@@ -639,10 +667,7 @@ export const JobProvider = () =>
                     image: resolved.imageUri,
                     command: news.command,
                     args: news.args,
-                    env: Object.entries(containerEnv).map(([name, value]) => ({
-                      name,
-                      value: containerEnvValue(value),
-                    })),
+                    env: env.entries,
                     resources: news.resources,
                   },
                 ],
@@ -691,7 +716,11 @@ export const JobProvider = () =>
                 spec: jobSpec,
               };
 
-          const desiredObjects = [serviceAccountObject, workloadObject];
+          const desiredObjects = [
+            serviceAccountObject,
+            ...(env.secret === undefined ? [] : [env.secret as KubernetesObjectDefinition]),
+            workloadObject,
+          ];
 
           const kubernetesObjects = yield* reconcileObjects({
             transport,

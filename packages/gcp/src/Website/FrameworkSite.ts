@@ -102,8 +102,10 @@ export interface FrameworkSiteProps extends WebsiteServiceProps {
   memo?: MemoOptions | boolean;
   /**
    * Process environment for the hosted server (Cloud Run container env
-   * vars). Accepts `Output`s (e.g. `VITE_API_URL: api.uri`). `Redacted`
-   * values are unwrapped into plain container env vars.
+   * vars). Accepts `Output`s (e.g. `VITE_API_URL: api.uri`). A `Redacted`
+   * value is kept out of the revision: it goes into a Secret Manager
+   * secret of the service's own, which the container reads through
+   * `secretKeyRef`.
    */
   env?: Record<string, WebsiteEnvValue>;
   /**
@@ -121,6 +123,8 @@ export interface FrameworkSiteProps extends WebsiteServiceProps {
 
 /** Per-framework wiring for {@link makeFrameworkSite}. */
 export interface FrameworkSiteConfig {
+  /** The framework's default JS runtime for its dev server; `dev.runtime` overrides it. @default the engine's runtime */
+  runtime?: "node" | "bun";
   /** Display name used in error messages (e.g. `"SvelteKit"`). */
   name: string;
   /** Framework-integration module specifier. */
@@ -171,7 +175,7 @@ export class FrameworkSiteError extends Data.TaggedError("FrameworkSiteError")<{
   readonly cause?: unknown;
 }> {}
 
-/** Unwrap `Redacted` values into plain container env vars. */
+/** Unwrap `Redacted` values for the local build and dev server's process env. */
 export const websiteEnv = (
   env: Record<string, WebsiteEnvValue> | undefined,
 ): Record<string, string | Output.Output<string | undefined>> | undefined => {
@@ -203,7 +207,9 @@ export const websiteServiceProps = (
   isExternal: true,
   extraFiles: program.extraFiles,
   port: WEBSITE_PORT,
-  env: websiteEnv(props.env),
+  // A `Redacted` value stays `Redacted`, so the service keeps it in Secret
+  // Manager instead of its revision's plain env.
+  env: props.env,
   labels: props.tags,
   ingress: props.ingress,
   invokerIamDisabled: props.public ?? true,
@@ -234,6 +240,7 @@ const runFrameworkSite = Effect.fn("GCP.Website.FrameworkSite")(function* (
   const build = yield* FrameworkServer("Build", {
     framework: config.framework,
     target: config.target,
+    runtime: config.runtime,
     root: props.rootDir,
     env: websiteEnv(props.env),
     options: config.options,

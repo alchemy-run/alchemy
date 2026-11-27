@@ -1,0 +1,106 @@
+---
+title: Pi
+description: Run the Pi coding agent's durable engine with Alchemy. Conversations in a Durable Object's storage, tools and models as Layers, coding tools in a sandbox, and runs that resume after a crash.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Pi is an open-source coding agent. Its durable engine, [Pi Durable](https://github.com/earendil-works/pi/tree/main/packages/durable), keeps every conversation, model request and tool call in storage as it goes, so a run that is cut off continues from where it stopped. Alchemy hosts that engine in a Durable Object: each object holds its own conversations, and its models, tools and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
+
+**New to Pi?** Start with [What is Pi?](/pi/what-is-pi).
+
+## A quick example
+
+A model and a tool, declared once:
+
+```typescript title="src/agent.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Schema from "effect/Schema";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Model(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
+
+export class Add extends AI.Tool<Add>()("add", {
+  description: "Add two integers. Use it whenever numbers are added.",
+  parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+  success: Schema.Struct({ sum: Schema.Number }),
+}) {}
+
+export const AddLive = Add.make(({ a, b }) => ({ sum: a + b }));
+```
+
+A Durable Object yields the harness and prompts a conversation by name:
+
+```typescript title="src/Session.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Add, AddLive, Fast, FastLive } from "./agent.ts";
+
+const HarnessLive = Layer.mergeAll(FastLive, AddLive, PiCloudflare.DurableObjectStorage);
+
+export default class Session extends Cloudflare.DurableObject<Session>()(
+  "Session",
+  Effect.gen(function* () {
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [Add] });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: Effect.fn(function* (name: string, text: string, requestId: string) {
+          const conversation = yield* harness.createConversation({ name });
+          const submission = yield* conversation.submit({ type: "input", content: text, requestId });
+          return (yield* submission.wait).status;
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+A Worker reaches a user's `Session` and prompts it:
+
+```typescript title="src/Api.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Session from "./Session.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sessions = yield* Session;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const { user, text, requestId } = (yield* request.json) as {
+          user: string;
+          text: string;
+          requestId: string;
+        };
+        const status = yield* sessions.getByName(user).prompt("main", text, requestId);
+        return yield* HttpServerResponse.json({ status });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+## Where to start
+
+**Want to build?** Follow [Setup](/pi/setup), then the [tutorial](/pi/tutorial/part-1): a bot that answers issues on a GitHub repository.
+
+**Looking for something specific?** Every section of these docs is listed below. Models, tools, MCP servers, sandboxes and processes are shared by every harness, and are covered in the [AI docs](/ai).
+
+## The docs
+
+<HubMap />

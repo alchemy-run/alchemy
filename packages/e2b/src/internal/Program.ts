@@ -2,15 +2,16 @@
  * How a template runs its `main` program.
  *
  * `@alchemy.run/docker/BuildPlan` bundles `main` and adds the layer that
- * runs it with Bun from `/app`; E2B starts that command when it builds the
+ * runs it from `/app`; E2B starts that command when it builds the
  * template and captures it running in the template's snapshot, so every
  * sandbox boots with it already serving on `PORT`. An Effect program (the
  * class form) is wrapped in the generated bootstrap entry; an async program
  * (`main` with no Effect impl) is bundled and run as-is.
  */
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import { shellCommand } from "./TemplatePlan.ts";
 
 /** The port a template's program serves on unless `port` says otherwise. */
 export const DEFAULT_PORT = 3000;
@@ -32,21 +33,6 @@ const { ${handler}: entrypoint } = await import(${JSON.stringify(importPath)});
 await bootstrap(entrypoint);
 `;
 
-/**
- * A value as the env var the program reads, verbatim. Bound values arrive
- * already packed by the host (`packEnvValue`, so a `Redacted` keeps its
- * marker); packing again would double-encode them, and a user's `env` is read
- * raw (`Config`, `process.env`).
- */
-const envValue = (value: unknown): string | undefined =>
-  value === undefined || value === null
-    ? undefined
-    : Redacted.isRedacted(value)
-      ? String(Redacted.value(value))
-      : typeof value === "string"
-        ? value
-        : JSON.stringify(value);
-
 /** The program's environment: Alchemy's runtime vars, bound env, then the user's `env`. */
 export const programEnv = Effect.fn(function* (
   port: number,
@@ -54,12 +40,7 @@ export const programEnv = Effect.fn(function* (
   env: Readonly<Record<string, unknown>> | undefined,
 ) {
   const stack = yield* Stack;
-  const values = Object.fromEntries(
-    Object.entries({ ...bound, ...env }).flatMap(([key, value]) => {
-      const text = envValue(value);
-      return text === undefined ? [] : [[key, text]];
-    }),
-  ) as Record<string, string>;
+  const values = envStrings({ ...bound, ...env });
   return {
     ALCHEMY_STACK_NAME: stack.name,
     ALCHEMY_STAGE: stack.stage,
@@ -71,5 +52,5 @@ export const programEnv = Effect.fn(function* (
 });
 
 /** The template's snapshot is taken once the program answers HTTP. */
-export const programReadyCmd = (port: number) =>
-  `bun -e "fetch('http://127.0.0.1:${port}/').then(()=>process.exit(0),()=>process.exit(1))"`;
+export const programReadyCmd = (port: number, command: readonly string[]) =>
+  `${shellCommand(command)} -e "fetch('http://127.0.0.1:${port}/').then(()=>process.exit(0),()=>process.exit(1))"`;

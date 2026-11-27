@@ -429,36 +429,67 @@ interface RefEdge {
  * props only what the provider can't move into a binding.
  */
 export class RefCycleError extends Data.TaggedError("RefCycleError")<{
-  message: string;
   owner: string;
   target: string;
-}> {}
+  cycle: string[];
+}> {
+  override get message(): string {
+    return (
+      `'${this.owner}' references '${this.target}' through a ref in its props, and ` +
+      `'${this.target}' depends on '${this.owner}' through props (${this.cycle.join(" -> ")}). ` +
+      `Bind the reference instead of passing it as a prop, so the cycle runs through bindings.`
+    );
+  }
+}
 
 /**
- * The first ref edge whose target reaches its owner through props, if any
- * (see {@link RefCycleError}).
+ * New resources whose props reference each other directly, or a resource
+ * whose props reference itself. A declaration can't reference a resource
+ * declared after it, so only props Effects that yield each other build this
+ * cycle: each yields the other while
+ * it is still being declared. Neither can be planned before the other, so the
+ * plan fails instead of waiting forever. Declaring each as a class (the Tag
+ * other declarations yield) with its implementation in `.make()` (a Layer)
+ * lets the references run through bindings instead.
  */
-const findRefCycle = (
-  edges: ReadonlyArray<RefEdge>,
-  upstream: { readonly [fqn: string]: ReadonlyArray<string> },
-): { edge: RefEdge; path: string[] } | undefined => {
-  for (const edge of edges) {
-    // Depth-first from the target along prop dependencies, back to the owner.
-    const visited = new Set<string>();
-    const walk = (fqn: string, path: string[]): string[] | undefined => {
-      if (fqn === edge.owner) return path;
-      if (visited.has(fqn)) return undefined;
-      visited.add(fqn);
-      for (const next of upstream[fqn] ?? []) {
-        const found = walk(next, [...path, next]);
-        if (found) return found;
-      }
-      return undefined;
-    };
-    const path = walk(edge.target, [edge.target]);
-    if (path) return { edge, path: [edge.owner, ...path] };
+export class DeclarationCycleError extends Data.TaggedError("DeclarationCycleError")<{
+  cycle: string[];
+}> {
+  override get message(): string {
+    const what =
+      this.cycle.length === 2
+        ? `Resource ${this.cycle[0]} yields itself in its props, so it can't be planned.`
+        : `Resources ${this.cycle.join(" -> ")} yield each other in their props, so none can be planned first.`;
+    return (
+      `${what} Bind them instead (https://alchemy.run/infrastructure-as-effects/circular-bindings). ` +
+      `Where the provider turns refs into bindings, reach one by id with \`.ref(id)\` (https://alchemy.run/infrastructure-as-code/references).`
+    );
   }
-  return undefined;
+}
+
+/**
+ * The shortest path from `from` to `to` through `members`, both ends
+ * included. `members` is a strongly-connected component, so one exists.
+ */
+const pathWithin = (
+  members: ReadonlySet<string>,
+  edges: { readonly [fqn: string]: ReadonlyArray<string> },
+  from: string,
+  to: string,
+): string[] => {
+  const prev = new Map<string, string>([[from, from]]);
+  const queue = [from];
+  while (queue.length > 0 && !prev.has(to)) {
+    const fqn = queue.shift()!;
+    for (const next of edges[fqn] ?? []) {
+      if (!members.has(next) || prev.has(next)) continue;
+      prev.set(next, fqn);
+      queue.push(next);
+    }
+  }
+  const path = [to];
+  while (path[0] !== from) path.unshift(prev.get(path[0])!);
+  return path;
 };
 
 const makePlan = <A>(
@@ -1296,7 +1327,7 @@ const makePlan = <A>(
           return attrs;
         } else if (Output.isEffectExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr, peers);
-          return Output.hasOutputs(upstream) ? expr : yield* expr.f(upstream);
+          return Output.hasOutputs(upstream) ? expr : yield* Output.runEffectExpr(expr, upstream);
         } else if (Output.isFlatMapExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr, peers);
           // Source still unresolved -> keep the flatMap intact for a later pass.
@@ -1400,25 +1431,29 @@ const makePlan = <A>(
       ),
     ]);
 
-    // Fail before resolving anything: a ref that closes a cycle through
-    // props would leave both resources waiting on each other (#3112).
-    const refCycle = findRefCycle(
-      refPropEdges.filter((edge) => newResourceFqns.has(edge.owner)),
-      newUpstreamDependencies,
+    // Fail before resolving anything: resources whose props reference each
+    // other would each wait for the next (#3112). A same-stack ref bound to
+    // its declaration is a prop edge too, so one pass finds both kinds. Edges
+    // through Actions are left out: an Action input in a cycle stays unresolved.
+    const propEdges = Object.fromEntries(
+      resources.map((r) => [
+        r.FQN,
+        (newUpstreamDependencies[r.FQN] ?? []).filter((dep) => newResourceFqns.has(dep)),
+      ]),
     );
-    if (refCycle !== undefined) {
-      const { edge, path } = refCycle;
+    const propCycle = findCycles(propEdges).values().next().value;
+    if (propCycle !== undefined) {
+      const edge = refPropEdges.find(
+        (edge) => propCycle.has(edge.owner) && propCycle.has(edge.target),
+      );
+      const from = edge?.owner ?? [...newResourceFqns].find((fqn) => propCycle.has(fqn))!;
+      const to =
+        edge?.target ?? propEdges[from].find((dep) => dep !== from && propCycle.has(dep)) ?? from;
+      const cycle = [from, ...pathWithin(propCycle, propEdges, to, from)];
       return yield* Effect.die(
-        new RefCycleError({
-          message:
-            `'${edge.owner}' references '${edge.target}' through a ref in its props, and ` +
-            `'${edge.target}' depends on '${edge.owner}' through props ` +
-            `(${path.join(" -> ")}). Neither can be planned before the other. ` +
-            `Bind the reference instead of passing it as a prop, so the cycle runs ` +
-            `through bindings.`,
-          owner: edge.owner,
-          target: edge.target,
-        }),
+        edge
+          ? new RefCycleError({ owner: edge.owner, target: edge.target, cycle })
+          : new DeclarationCycleError({ cycle }),
       );
     }
 
@@ -1470,10 +1505,10 @@ const makePlan = <A>(
     ]);
 
     // Resources that participate in a cycle when both prop and binding
-    // edges are considered. Used below to decide whether an acyclic
-    // binding edge should also become a downstream edge.
+    // edges are considered, each mapped to the members of its own cycle.
+    // Used below to decide whether a binding edge stays inside one cycle
+    // or should also become a downstream edge.
     const combinedCycles = findCycles(allUpstreamDependencies);
-    const combinedCycleMembers = new Set(combinedCycles.keys());
     const peersOf = (fqn: string): Peers | undefined => {
       const members = combinedCycles.get(fqn);
       return members && { members };
@@ -1524,11 +1559,7 @@ const makePlan = <A>(
         if (downFqn === upFqn) continue;
         // Binding-only edge — exclude when both endpoints sit inside
         // the same SCC of the combined graph.
-        if (
-          !propDeps.has(upFqn) &&
-          combinedCycleMembers.has(upFqn) &&
-          combinedCycleMembers.has(downFqn)
-        ) {
+        if (!propDeps.has(upFqn) && combinedCycles.get(downFqn)?.has(upFqn)) {
           continue;
         }
         let downstream = directDownstream.get(upFqn);
@@ -2674,7 +2705,12 @@ const makePlan = <A>(
     // `RemovalPolicy.protect()`: refuse the whole plan, before anything is
     // applied, when it would start replacing or delete a protected resource. Both
     // the declaration and the persisted row count, so dropping `protect()`
-    // in the same deploy as the replacement is refused too.
+    // in the same deploy as the replacement is refused too. An `updating` row
+    // carries the declared policy of an update that may have failed, so the
+    // last successful deploy's policy on `old` counts as well.
+    const isProtected = (row: ResourceState | undefined) =>
+      row?.removalPolicy === "protect" ||
+      (row?.status === "updating" && row.old?.removalPolicy === "protect");
     yield* Effect.forEach(
       // An Action declared at a protected resource's FQN would overwrite its
       // row without ever planning a delete, abandoning the resource.
@@ -2690,15 +2726,15 @@ const makePlan = <A>(
             // Finishing a `replaced` row's drain only deletes an old generation
             // the dependents already left; the current one is untouched.
             !(node.state.status === "replaced" && !node.restart) &&
-            (node.resource.RemovalPolicy === "protect" || node.state.removalPolicy === "protect")
+            (node.resource.RemovalPolicy === "protect" || isProtected(node.state))
               ? [{ fqn, action: "replace" as const }]
               : [],
           ),
           ...Object.entries(deletions).flatMap(([fqn, node]) =>
-            node?.state.removalPolicy === "protect" ? [{ fqn, action: "delete" as const }] : [],
+            isProtected(node?.state) ? [{ fqn, action: "delete" as const }] : [],
           ),
           ...takenOverByActions.flatMap(([fqn, row]) =>
-            !isActionState(row) && (row as ResourceState | undefined)?.removalPolicy === "protect"
+            !isActionState(row) && isProtected(row as ResourceState | undefined)
               ? [{ fqn, action: "delete" as const }]
               : [],
           ),

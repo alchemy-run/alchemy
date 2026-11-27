@@ -277,13 +277,11 @@ export const TensorboardsExperimentsRunProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsTensorboardsExperimentsRuns({
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
             parent: news.parent,
             tensorboardRunId: runId,
-            body: {
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -301,6 +299,9 @@ export const TensorboardsExperimentsRunProvider = () =>
 
       if (labelsChanged || displayChanged || descriptionChanged) {
         current = yield* aiplatform.patchProjectsLocationsTensorboardsExperimentsRuns({
+          displayName,
+          description: news.description,
+          labels: desiredLabels,
           name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -309,12 +310,6 @@ export const TensorboardsExperimentsRunProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            description: news.description,
-            labels: desiredLabels,
-          },
         });
       }
 

@@ -4,6 +4,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { ServiceControlPolicyDocument } from "../IAM/Policy.ts";
 import * as IdentityCenter from "../IdentityCenter/index.ts";
+import type { Providers } from "../Providers.ts";
 import type { Account, AccountProps } from "./Account.ts";
 import { Account as OrganizationAccount } from "./Account.ts";
 import type { DelegatedAdministrator } from "./DelegatedAdministrator.ts";
@@ -395,7 +396,7 @@ const createOrganizationalUnits = ({
   organizationalUnits: Record<string, OrganizationalUnit>;
   accounts: Record<string, Account>;
   targets: Record<TenantTargetKey, { targetId: any }>;
-}): Effect.Effect<void, unknown, unknown> =>
+}): Effect.Effect<void, never, Providers> =>
   Effect.gen(function* () {
     for (const spec of specs) {
       const ou = yield* AwsOrganizationalUnit(`${id}${toLogicalIdSegment(spec.key)}Ou`, {

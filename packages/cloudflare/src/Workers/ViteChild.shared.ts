@@ -6,7 +6,6 @@ import type {
   Workflow,
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { BundleOutput } from "alchemy/Bundle/Bundle";
-import type { FoldkitBuildMetadata } from "../Website/FoldkitBuild.ts";
 import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
@@ -36,6 +35,8 @@ export interface ViteChildConfig {
     compatibility: { date: string; flags: string[] };
     main: string | undefined;
     viteEnvironments: { entry?: string; children?: string[] } | undefined;
+    /** Vite `--mode`; Vite's own default when undefined. */
+    viteMode: string | undefined;
     hasAssets: boolean;
     bindingDescriptors: WorkerBinding[];
     /** Binding name → opt-out of local emulation (`Alchemy.remote()`). */
@@ -81,10 +82,11 @@ export interface ViteBuildChildConfig {
    */
   env: Record<string, unknown>;
   main: string | undefined;
-  framework?: "foldkit";
   compatibilityDate: string | undefined;
   compatibilityFlags: string[] | undefined;
   viteEnvironments: { entry?: string; children?: string[] } | undefined;
+  /** Vite `--mode`; Vite's own default when undefined. */
+  mode: string | undefined;
   /** Absolute path the child writes the V8-serialized result to. */
   outputPath: string;
 }
@@ -92,7 +94,6 @@ export interface ViteBuildChildConfig {
 /** Result the build child writes to `outputPath` (V8-serialized). */
 export interface ViteBuildChildResult {
   clientDirectory: string | undefined;
-  foldkit: FoldkitBuildMetadata | undefined;
   base: string | undefined;
   serverBundle: BundleOutput | undefined;
   externalWorkspaces: string[];

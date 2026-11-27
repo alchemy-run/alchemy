@@ -1,4 +1,4 @@
-import * as sasportal from "@distilled.cloud/gcp/sasportal_v1alpha1";
+import * as sasportal from "@distilled.cloud/gcp/unstable/sasportal_v1alpha1";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -405,8 +405,8 @@ export const walkNodes = () =>
     const customers = yield* listCustomers();
     const located: LocatedNode[] = [];
     const seen = new Set<string>();
-    const queue: Array<{ parent: string; underCustomer: boolean }> = customers.flatMap(
-      (customer) => (customer.name ? [{ parent: customer.name, underCustomer: true }] : []),
+    const queue: Array<{ parent: string; underCustomer: boolean }> = customers.flatMap((customer) =>
+      customer.name ? [{ parent: customer.name, underCustomer: true }] : [],
     );
     while (queue.length > 0) {
       const batch = queue.splice(0, queue.length);

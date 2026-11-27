@@ -3,6 +3,7 @@ import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as AWSBindings from "../AWSBindings.ts";
+import { withGlobalRegion } from "../Region.ts";
 import type { Certificate } from "./Certificate.ts";
 
 /**
@@ -14,22 +15,17 @@ import type { Certificate } from "./Certificate.ts";
  * the operation, the IAM action(s), and whether the binding is scoped to one
  * certificate or to the whole account, so those are the only inputs.
  *
- * All calls are pinned to `us-east-1`, matching where the
+ * All calls are pinned to the partition's global region (`us-east-1` in
+ * `aws`), matching where the
  * {@link Certificate} resource provider requests certificates (the region
  * required for CloudFront viewer certificates).
  *
  * @internal — not exported from `index.ts`.
  */
 
-const ACM_REGION = "us-east-1" as const;
-
 type AcmRequirements = Credentials | AwsRegion | HttpClient.HttpClient;
 
-const withAcmRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  // `AwsRegion`'s service value is an `Effect<RegionName>` (see
-  // `@distilled.cloud/aws/Region`), so it must be provided as an effect, not
-  // a bare string.
-  effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(ACM_REGION)));
+const withAcmRegion = withGlobalRegion;
 
 export interface AcmHttpBindingConfig<Req extends object, Out, Err> {
   /**

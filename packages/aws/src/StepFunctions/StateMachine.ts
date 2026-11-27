@@ -13,6 +13,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { compileProgram, SfnCompileError } from "./Asl/compile.ts";
 import type { SfnEffect } from "./Asl/Program.ts";
@@ -558,7 +559,7 @@ export const StateMachineProvider = () =>
       const createPolicyName = (id: string) => createPhysicalName({ id, maxLength: 128 });
 
       const stateMachineArnOf = (region: string, accountId: string, name: string) =>
-        `arn:aws:states:${region}:${accountId}:stateMachine:${name}`;
+        `arn:${partitionOf(region)}:states:${region}:${accountId}:stateMachine:${name}`;
 
       const describeOrUndefined = Effect.fn(function* (stateMachineArn: string) {
         return yield* sfn
@@ -719,23 +720,22 @@ export const StateMachineProvider = () =>
         roleName: string | undefined,
       ) {
         const level = machine.loggingConfiguration?.level ?? "OFF";
-        const [tags, executionRolePolicy] = yield* Effect.all(
-          [
-            fetchObservedTags(machine.stateMachineArn),
-            roleName === undefined
-              ? Effect.undefined
-              : iam
-                  .getRolePolicy({
-                    RoleName: roleName,
-                    PolicyName: yield* createPolicyName(id),
-                  })
-                  .pipe(
-                    Effect.map((policy): unknown =>
-                      JSON.parse(decodeURIComponent(policy.PolicyDocument)),
-                    ),
-                    Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
+        const readExecutionRolePolicy =
+          roleName === undefined
+            ? Effect.undefined
+            : iam
+                .getRolePolicy({
+                  RoleName: roleName,
+                  PolicyName: yield* createPolicyName(id),
+                })
+                .pipe(
+                  Effect.map((policy): unknown =>
+                    JSON.parse(decodeURIComponent(policy.PolicyDocument)),
                   ),
-          ],
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
+                );
+        const [tags, executionRolePolicy] = yield* Effect.all(
+          [fetchObservedTags(machine.stateMachineArn), readExecutionRolePolicy],
           { concurrency: "unbounded" },
         );
         return {

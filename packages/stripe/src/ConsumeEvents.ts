@@ -30,6 +30,9 @@ export const webhookSecretEnvName = (path?: string): string =>
  * Derived from the delivery path so two subscriptions on different paths
  * don't collide.
  */
+/** Thin events arrive on their own event destination, under `<path>/thin`. */
+export const thinWebhookPath = (path?: string): string => `${webhookPath(path)}/thin`;
+
 export const webhookEndpointLogicalId = (path?: string): string =>
   `WebhookEndpoint${sanitizeKey(webhookPath(path))}`;
 

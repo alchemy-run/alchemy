@@ -109,6 +109,19 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * ### Build Modes
+ * Set `mode` to build with Vite's `--mode`, so the matching
+ * `.env.[mode]` file loads and `import.meta.env.MODE` is set. A stage can
+ * then build against its own endpoints.
+ *
+ * **Example:** One mode per stage
+ * ```typescript
+ * const stage = yield* Alchemy.Stage;
+ * const app = yield* Cloudflare.Website.Vite("Dashboard", {
+ *   mode: stage === "prod" ? "production" : "sandbox",
+ * });
+ * ```
+ *
  * ### Single-Page Applications
  * For SPAs (React, Vue, etc.), configure asset handling so unmatched
  * routes fall back to `index.html` and the client router takes over.
@@ -136,9 +149,9 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *   },
  * });
  * ```
- * {@link Foldkit | Cloudflare.Website.Foldkit} drives the same build and
- * derives asset routing from Foldkit's completed build metadata. It also
- * supplies SPA fallback for client-only apps.
+ * {@link Foldkit | Cloudflare.Website.Foldkit} derives asset routing from
+ * the app's rendering mode instead, including SPA fallback for client-only
+ * apps in dev and on deploy.
  *
  * **Example:** Octane SPA
  * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`
@@ -296,10 +309,11 @@ export const Vite: {
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,
-          main: undefined!,
+          main: null,
           vite: {
             main: props?.main,
             rootDir: props?.rootDir,
+            mode: props?.mode,
             memo: props?.memo,
             viteEnvironments: props?.viteEnvironments,
           },

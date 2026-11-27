@@ -1,10 +1,18 @@
 import {
+  makeContainerBootstrap,
+  resolveContainerRuntime,
+  type ContainerRuntimeSettings,
+} from "@alchemy.run/docker/ContainerRuntime";
+import {
+  computeStaticSourceHash,
+  imageSourceKind,
   makeContainerImageSource,
   type ImageAgent,
-  type ImageRegistryTarget,
   type ImageSourceLike,
+  type RegistryImageSource,
 } from "@alchemy.run/docker/ImageSource";
 import * as ecr from "@distilled.cloud/aws/ecr";
+import { NODE_PTY_PACKAGE, NODE_PTY_VERSION } from "alchemy/Runtime/TerminalNode";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -40,6 +48,24 @@ export {
   type ImageSourceProps,
   type RegistryImageSource,
 } from "@alchemy.run/docker/ImageSource";
+
+/**
+ * A pre-built registry image on ECS or EKS. By default it is mirrored into
+ * the resource's own ECR repository; `mirror: false` runs it from its
+ * registry instead.
+ */
+export interface EcrRegistryImageSource extends RegistryImageSource {
+  /**
+   * Copy the image into the resource's ECR repository before running it.
+   * Turn it off to have the task pull `image` from its registry, as for a
+   * public image such as `ghcr.io/convex/convex-backend`. Nothing is pulled or
+   * pushed from the deploying machine then, and no repository is created. The
+   * tasks need a route to the registry (a public IP or a NAT gateway), and
+   * each task start depends on that registry.
+   * @default true
+   */
+  mirror?: boolean;
+}
 
 /** The resolved (built/mirrored + pushed) image. */
 export interface ResolvedImage {
@@ -107,7 +133,7 @@ export interface ResolveImageOptions {
    * The props bag carrying the image source fields (`main` / `context` /
    * `image` plus their modifiers).
    */
-  source: ImageSourceLike;
+  source: ImageSourceLike & { mirror?: boolean };
   /** Name of the ECR repository to (auto-create and) push into. */
   repositoryName: string;
   /**
@@ -138,7 +164,13 @@ export interface ResolveImageOptions {
    * generated entry module source. Platform-specific (server vs one-shot
    * differ per platform), so the caller supplies it.
    */
-  bootstrap: (importPath: string) => string;
+  bootstrap?: (importPath: string) => string;
+  runtime?: ContainerRuntimeSettings;
+  /**
+   * The program serves a sandbox, so its image can open terminals. On
+   * Node.js, that installs {@link NODE_PTY_PACKAGE} beside the bundle.
+   */
+  terminals?: boolean;
   /**
    * Publish a sandbox agent beside an image that has no `main`. The image
    * itself is not changed: the agent is an image of its own in the same
@@ -183,6 +215,39 @@ const onRoleHost = <S extends ImageSourceLike>(source: S): S =>
  */
 export const makeImageSource = Effect.gen(function* () {
   const images = yield* makeContainerImageSource;
+
+  // EKS supplies its own bootstrap. ECS uses the matching process entry for
+  // the source's runtime.
+  const imageOptions = Effect.fnUntraced(function* <S extends ImageSourceLike>(options: {
+    source: S;
+    bootstrap?: (importPath: string) => string;
+    runtime?: ContainerRuntimeSettings;
+    terminals?: boolean;
+  }) {
+    const selected = options.runtime ?? (yield* resolveContainerRuntime(options.source.runtime));
+    const handler = options.source.handler ?? "default";
+    const bootstrap =
+      options.bootstrap ??
+      (selected.preset === "bun"
+        ? makeBunBootstrap(handler)
+        : makeContainerBootstrap(
+            selected.platformModule,
+            "@alchemy.run/aws/Bootstrap/EcsProcess",
+            handler,
+            "server",
+          ));
+    const source =
+      options.terminals && options.source.main !== undefined && selected.preset === "node"
+        ? {
+            ...options.source,
+            install: [
+              ...((options.source as { install?: ReadonlyArray<string> }).install ?? []),
+              `RUN mkdir -p /app && cd /app && npm install --no-fund --no-audit ${NODE_PTY_PACKAGE}@${NODE_PTY_VERSION}`,
+            ],
+          }
+        : options.source;
+    return { source: onRoleHost(source), runtime: selected, bootstrap };
+  });
 
   /**
    * Ensure the target ECR repository exists. Idempotent: tolerates
@@ -357,6 +422,21 @@ export const makeImageSource = Effect.gen(function* () {
    * tag is not already in ECR (crash-safe convergence).
    */
   const resolve = Effect.fn(function* (options: ResolveImageOptions) {
+    // `mirror: false`: the task pulls the image from its own registry.
+    if (
+      imageSourceKind(options.source) === "image" &&
+      options.source.mirror === false &&
+      options.agent === undefined
+    ) {
+      const codeHash = (yield* computeStaticSourceHash(options.source, options.platform))!;
+      return {
+        imageUri: options.source.image!,
+        repositoryName: options.repositoryName,
+        repositoryUri: options.repositoryUri ?? "",
+        codeHash,
+        agent: undefined,
+      } satisfies ResolvedImage;
+    }
     const target = {
       repositoryUri:
         options.repositoryUri !== undefined
@@ -364,9 +444,9 @@ export const makeImageSource = Effect.gen(function* () {
           : ensureRepository({ repositoryName: options.repositoryName, tags: options.tags }),
       hasTag: hasTag(options.repositoryName),
       credentials: getEcrRegistryCredentials,
-    } satisfies ImageRegistryTarget<any>;
+    };
     const resolved = yield* images.resolve(
-      { ...options, source: onRoleHost(options.source) },
+      { ...options, ...(yield* imageOptions(options)) },
       target,
     );
     return {
@@ -389,10 +469,18 @@ export const makeImageSource = Effect.gen(function* () {
     } satisfies ResolvedImage;
   });
 
-  const hash = (options: Parameters<typeof images.hash>[0]) =>
-    images.hash({ ...options, source: onRoleHost(options.source) });
-  const watchMain = (options: Parameters<typeof images.watchMain>[0]) =>
-    images.watchMain({ ...options, source: onRoleHost(options.source) });
+  const hash = (
+    options: Omit<Parameters<typeof images.hash>[0], "bootstrap"> &
+      Pick<ResolveImageOptions, "bootstrap">,
+  ) =>
+    Effect.flatMap(imageOptions(options), (selected) => images.hash({ ...options, ...selected }));
+  const watchMain = (
+    options: Omit<Parameters<typeof images.watchMain>[0], "bootstrap"> &
+      Pick<ResolveImageOptions, "bootstrap">,
+  ) =>
+    Effect.flatMap(imageOptions(options), (selected) =>
+      images.watchMain({ ...options, ...selected }),
+    );
 
   return { resolve, hash, watchMain };
 });

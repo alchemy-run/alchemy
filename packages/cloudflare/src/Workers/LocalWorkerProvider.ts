@@ -25,6 +25,7 @@ import { Stack } from "alchemy/Stack";
 import { unwrapRedacted } from "alchemy/Util";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import { LogAnnotation } from "alchemy/Util/LogAnnotation";
+import { initialCwd } from "alchemy/Util/Node";
 import { makeResourceLogger, makeResourceOutput } from "alchemy/Util/ResourceOutput";
 import { terminalStyle } from "alchemy/Util/Terminal";
 import { theme } from "alchemy/Util/Theme";
@@ -529,6 +530,7 @@ export const LocalWorkerProvider = () =>
               )
             : undefined,
           viteEnvironments: props.vite?.viteEnvironments,
+          viteMode: props.vite?.mode,
           viteRootDir: props.vite?.rootDir,
           bundleOptions: workerBundleOptions({
             id,
@@ -1271,7 +1273,7 @@ export const LocalWorkerProvider = () =>
               yield* proxy.unset();
               // The dev server and its workerd run in a child process rooted
               // at the app.
-              const root = path.resolve(rootDir ?? process.cwd());
+              const root = path.resolve(initialCwd, rootDir ?? ".");
               const accountId = yield* localAccountId;
               // Queue-consumer wiring can change while the child is starting
               // (a sibling `Consumer` reconcile), before the restart hook
@@ -1305,6 +1307,7 @@ export const LocalWorkerProvider = () =>
                         compatibility: worker.compatibility,
                         main: worker.viteMain,
                         viteEnvironments: worker.viteEnvironments,
+                        viteMode: worker.viteMode,
                         hasAssets: worker.hasAssets,
                         bindingDescriptors: worker.bindingDescriptors,
                         devRemote: worker.devRemote,
