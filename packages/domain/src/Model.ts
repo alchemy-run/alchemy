@@ -26,7 +26,6 @@ import {
   LazyViewNeedsOneSource,
   MissingRewriteHandler,
   MissingWorkflowEngine,
-  ProcessesUnsupported,
   ReservedMember,
   UnvalidatedRead,
 } from "./DefinitionError.ts";
@@ -43,7 +42,6 @@ import {
   type EmittedRange,
   type Json,
   type ListRange,
-  captureContext,
   type ModelHost,
   Platform,
   type PolicyStore,
@@ -138,7 +136,6 @@ export interface Members<
   Q extends ReadonlyArray<Query.Any> = readonly [],
   D extends ReadonlyArray<Decision.Any> = readonly [],
   C extends ReadonlyArray<Compaction.Any> = readonly [],
-  Pr extends ReadonlyArray<Process.Any> = readonly [],
 > {
   readonly aggregates: A;
   /**
@@ -160,17 +157,6 @@ export interface Members<
   readonly projections?: J;
   readonly streams?: S;
   readonly sagas?: G;
-  /**
-   * The AI processes of the model, each declared by name
-   * (`AI.Process<Triage>()("Triage", {})`). The platform hosts every session
-   * of one in an instance of its own, a policy or a saga reaches a session
-   * with `yield* Triage`, and `layer` requires each one's Layer for its
-   * prose. The model records each process as a view named after it, keyed
-   * by the session: its state is whether the session is working and what is
-   * queued, and its events carry the transcript items, in order. A view of
-   * the model can list the process in its `from` to follow its sessions.
-   */
-  readonly processes?: Pr;
   /** The queries it answers, from the stores its projections write. */
   readonly queries?: Q;
   /**
@@ -257,6 +243,7 @@ export interface ModelClass<
   Provided,
   Policies,
   Parts extends Servable = Servable,
+  Requires = never,
 > {
   new (_: never): {};
   readonly kind: "Model";
@@ -283,6 +270,8 @@ export interface ModelClass<
   /** The model's relations, by name. */
   readonly relations: { readonly [name: string]: Relation.Any };
   readonly definitions: Kernel.Definitions;
+  /** Type-level only: what the model's Layer requires besides a platform, the processes its views follow. */
+  readonly "~requires": Requires;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
    * projection Layers (`handlers`) are built after the aggregates, views and
@@ -295,7 +284,7 @@ export interface ModelClass<
   ): Layer.Layer<
     Provided | Internals,
     E,
-    Platform | SecureRandom.SecureRandom | Exclude<R, Provided>
+    Platform | SecureRandom.SecureRandom | Requires | Exclude<R, Provided>
   >;
 }
 
@@ -369,17 +358,19 @@ type UnhostedRead<A extends ReadonlyArray<Aggregate.Any>, D extends Decision.Any
   A[number]["aggregateName"]
 >;
 
-/** The view a model keeps for each of its processes, in order. */
-type ProcessViews<Pr extends ReadonlyArray<Process.Any>> = {
-  readonly [K in keyof Pr]: Process.ViewOf<Pr[K]>;
-};
+/**
+ * The views a model records for the processes its views follow: one for
+ * each process a view lists in its `from`.
+ */
+type Followed<V extends ReadonlyArray<View.Any>> = Extract<
+  V[number]["definition"]["from"][number],
+  View.Any & Process.Followed
+>;
 
-/** The aggregate a model keeps for each of its processes' sessions, in order. */
-type ProcessSessions<Pr extends ReadonlyArray<Process.Any>> = {
-  readonly [K in keyof Pr]: Process.SessionsOf<Pr[K]>;
-};
+/** The processes the views `V` follow. */
+type Follows<V extends ReadonlyArray<View.Any>> = Process.Identifier<Followed<V>["~process"]>;
 
-/** What a model provides: its members, and each process with what it records of it. */
+/** What a model provides: its members, and what it records of each process its views follow. */
 type ProvidedWith<
   A extends ReadonlyArray<Aggregate.Any>,
   V extends ReadonlyArray<View.Any>,
@@ -387,17 +378,15 @@ type ProvidedWith<
   S extends ReadonlyArray<DomainStream.Any>,
   G extends ReadonlyArray<Saga.Any>,
   D extends ReadonlyArray<Decision.Any>,
-  Pr extends ReadonlyArray<Process.Any>,
 > =
-  | ProvidedBy<
-      readonly [...A, ...ProcessSessions<Pr>],
-      readonly [...V, ...ProcessViews<Pr>],
-      J,
-      S,
-      G,
-      D
-    >
-  | Process.Identifier<Pr[number]>;
+  | ProvidedBy<A, V, J, S, G, D>
+  | Identifier<Followed<V>>
+  | Identifier<Followed<V>["definition"]["key"]>;
+
+/** The model's views, and the one it records for each process they follow. */
+type ViewsWith<V extends ReadonlyArray<View.Any>> = [Followed<V>] extends [never]
+  ? V
+  : ReadonlyArray<V[number] | Followed<V>>;
 
 /** What a model's members serve. */
 export interface ServableBy<
@@ -599,17 +588,17 @@ type HandledBy<
  * ```
  *
  * ### Breaking an import cycle
- * Give the members as a thunk when a member's file imports the model: an
- * AI process whose prose mentions the model's commands, which the model
- * lists. The thunk is read the first time the model is used, when both
+ * Give the members as a thunk when a member's file imports the model: a
+ * policy that holds an AI process whose prose mentions the model's
+ * commands. The thunk is read the first time the model is used, when both
  * files have loaded. The model's type is the same; given directly, its
  * members are checked as the file loads, so use a thunk only for a cycle.
  *
- * **Example:** A model whose process mentions it
+ * **Example:** A model whose policy holds a process that mentions it
  * ```typescript
  * export class Bank extends Domain.Model("Bank", () => ({
  *   aggregates: [Account],
- *   processes: [Assistant],
+ *   policies: [Assist],
  * })) {}
  * ```
  *
@@ -645,25 +634,36 @@ export const make = <
   const Q extends ReadonlyArray<Query.Any> = readonly [],
   const D extends ReadonlyArray<Decision.Any> = readonly [],
   const C extends ReadonlyArray<Compaction.Any> = readonly [],
-  const Pr extends ReadonlyArray<Process.Any> = readonly [],
 >(
   name: Name,
-  members: Thunk<Members<A, V, P, J, S, G, Q, D, C, Pr>>,
+  members: Thunk<Members<A, V, P, J, S, G, Q, D, C>>,
   annotations: Annotations = {},
 ): ModelClass<
   Name,
-  ProvidedWith<A, V, J, S, G, D, Pr>,
-  HandledBy<P, J, G, Q, V, S, C> | Process.Identifier<Pr[number]>,
-  ServableBy<A, readonly [...V, ...ProcessViews<Pr>], S, Q, D>
+  ProvidedWith<A, V, J, S, G, D>,
+  HandledBy<P, J, G, Q, V, S, C>,
+  ServableBy<A, ViewsWith<V>, S, Q, D>,
+  Follows<V>
 > &
-  Mentions<ProvidedWith<A, V, J, S, G, D, Pr>, A, V, D> => {
+  Mentions<ProvidedWith<A, V, J, S, G, D>, A, V, D> => {
   /** Everything the model is made of, read from its members once. */
   const read = memo(() => {
     const given = membersOf();
     const decisions = (given.decisions ?? []) as ReadonlyArray<Decision.Any>;
-    // What the model records of each process: an aggregate its sessions'
-    // objects record into, and a view named after it that serves it.
-    const recordings = (given.processes ?? []).map((process) => Process.recordingOf(process));
+    // A view that lists a process in its `from` reads the view the model
+    // records the process as: an aggregate each session's instance records
+    // into, and a view named after the process that serves it.
+    const follows = [
+      ...new Set(
+        (given.views ?? []).flatMap((view) =>
+          view.definition.from.flatMap((source) => {
+            const process = Process.processOf(source);
+            return process === undefined ? [] : [process];
+          }),
+        ),
+      ),
+    ];
+    const recordings = follows.map((process) => Process.recordingOf(process));
     const definitions: Kernel.Definitions = {
       aggregates: [...given.aggregates, ...recordings.map((recorded) => recorded.sessions)],
       decisions,
@@ -681,7 +681,7 @@ export const make = <
         ...decisions.map((decision) => decision.command),
       ]),
     ];
-    return { given, decisions, definitions, commands };
+    return { given, decisions, definitions, commands, follows };
   });
   const membersOf = memo(members);
   const inner = class {
@@ -732,17 +732,17 @@ export const make = <
       return read().given.queries ?? [];
     }
     static layer<E, R>(
-      handlers: Layer.Layer<HandledBy<P, J, G, Q, V, S, C> | Process.Identifier<Pr[number]>, E, R>,
+      handlers: Layer.Layer<HandledBy<P, J, G, Q, V, S, C>, E, R>,
       options?: LayerOptions,
     ) {
-      const { given, definitions } = read();
+      const { given, definitions, follows } = read();
       return Layer.effectContext(
         build(
           name,
           definitions,
           handlers,
           given.sagas ?? [],
-          given.processes ?? [],
+          follows,
           given.queries ?? [],
           Telemetry.resolve(options?.telemetry),
           options?.legacyData ?? true,
@@ -756,14 +756,15 @@ export const make = <
     ? withLateMembers(inner, () => mention())
     : inner) as unknown as ModelClass<
     Name,
-    ProvidedWith<A, V, J, S, G, D, Pr>,
-    HandledBy<P, J, G, Q, V, S, C> | Process.Identifier<Pr[number]>,
-    ServableBy<A, readonly [...V, ...ProcessViews<Pr>], S, Q, D>
+    ProvidedWith<A, V, J, S, G, D>,
+    HandledBy<P, J, G, Q, V, S, C>,
+    ServableBy<A, ViewsWith<V>, S, Q, D>,
+    Follows<V>
   > &
-    Mentions<ProvidedWith<A, V, J, S, G, D, Pr>, A, V, D>;
+    Mentions<ProvidedWith<A, V, J, S, G, D>, A, V, D>;
   // What a process mentions: each command, each aggregate (every command it
-  // takes) and each view, by name, on the model that hosts it. What the
-  // model records of a process is not mentioned.
+  // takes) and each view, by name. What the model records of a process is
+  // not mentioned.
   const mention = memo(() => {
     const { given, commands } = read();
     const mentioned: ReadonlyArray<readonly [string, Mention.Entries]> = [
@@ -853,7 +854,7 @@ const build = <A, E, R>(
   definitions: Kernel.Definitions,
   policies: Layer.Layer<A, E, R>,
   sagas: ReadonlyArray<Saga.Any>,
-  processes: ReadonlyArray<Process.Any>,
+  follows: ReadonlyArray<Process.Any>,
   queries: ReadonlyArray<Query.Any>,
   telemetry: Telemetry.Resolved,
   legacyData: boolean,
@@ -1067,46 +1068,20 @@ const build = <A, E, R>(
       for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, modelEngine));
     }
 
-    // Each session of a process lives in an instance of its own, and records
-    // what it reports in the aggregate the model keeps for the process.
-    // The process as this code built it: set once the handlers are built.
-    let built: Context.Context<unknown> | undefined;
-    // Everything the model provides, as an instance of a process is given it: set last.
-    let hosted: Context.Context<unknown> | undefined;
-    if (processes.length > 0) {
-      const host = platform.process;
-      if (host === undefined) {
-        return yield* Effect.die(
-          new DefinitionError({
-            reason: new ProcessesUnsupported({
-              processes: processes.map((process) => process.processName),
-            }),
-          }),
-        );
-      }
-      // An instance builds the handlers again, for itself: with what this
-      // Layer was given, and every client of the model.
-      const given = yield* captureContext();
-      const services = () => Context.merge(given, hosted ?? hosts) as Context.Context<never>;
-      for (const process of processes) {
-        const sessions = Context.getUnsafe(
+    // Built inside the instance of a session, the model keeps what the
+    // session reports in the aggregate it records the process in.
+    for (const process of follows) {
+      yield* Process.record(
+        process,
+        Context.getUnsafe(
           hosts,
           Process.recordingOf(process).sessions as Context.Key<unknown, unknown>,
-        );
-        const store = yield* host(Process.kitOf(process, policies, services, () => sessions));
-        hosts = Context.add(
-          hosts,
-          process,
-          Process.clientOf(process, store.call, () =>
-            Context.getUnsafe(built!, process as Context.Key<unknown, unknown>),
-          ),
-        );
-      }
+        ),
+      );
     }
 
     // Policies, projections and sagas are built with the clients available, then hosted.
     const implementations = yield* Layer.build(policies).pipe(Effect.provide(hosts));
-    built = implementations as Context.Context<unknown>;
     // Each guarded view's and stream's `validate`, traced as `Domain.validate <Name>`.
     for (const [name, entry] of [
       ...definitions.views.map((view) => [view.viewName, view] as const),
@@ -1293,7 +1268,7 @@ const build = <A, E, R>(
       caughtUp.set(stream.streamName, caughtUpOf(stream));
     }
 
-    hosted = Context.add(hosts, Internals, {
+    const hosted = Context.add(hosts, Internals, {
       kernel,
       aggregates: aggregateStores,
       views: viewStores,

@@ -1,4 +1,5 @@
 import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
@@ -15,13 +16,13 @@ import { Issue } from "./Board/Issue.aggregate.ts";
 import { IssueId } from "./Board/Issue.id.ts";
 import { IssueDetail } from "./Board/IssueDetail.view.ts";
 import { IssueWorkLive } from "./Board/IssueWork.policy.ts";
-import { TriageLive } from "./Board/Triage.process.ts";
 import { WebApi } from "./Board/WebApi.api.ts";
 import { GitHubIssues } from "./GitHubIssues.ts";
 import { Smart, SmartLlama } from "./Models.ts";
 import { PostAnswerLive } from "./PostAnswer.tool.ts";
 import { SandboxLive } from "./Sandbox.ts";
 import { SearchIssuesLive } from "./SearchIssues.tool.ts";
+import { TriageLive } from "./Triage.process.ts";
 
 /**
  * How a process runs: on Pi, on Llama, with these tools and a Boat sandbox.
@@ -41,20 +42,25 @@ const Agents = Layer.mergeAll(
 );
 
 /**
- * What the board's members do: its policy, and the prose of its process
- * with what a session runs on. Provided to the prose, so each session's
- * object builds its own harness.
+ * The board on Durable Objects: an aggregate, a view and a policy are each
+ * a class the platform declares, one instance per key. Its policy holds
+ * Triage, so it still needs one.
  */
-const Handlers = Layer.mergeAll(IssueWorkLive, TriageLive.pipe(Layer.provide(Agents)));
+const BoardLive = Board.layer(IssueWorkLive).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
 
 /**
- * Where the board runs: every member a Durable Object of this Worker. An
- * aggregate, a view, a policy and a Triage session are each a class the
- * platform declares, one instance per key.
+ * Triage on Durable Objects: one object per session, which builds the prose
+ * with what a session runs on and the board it mentions.
  */
-const BoardLive = Board.layer(Handlers).pipe(Layer.provide(DomainCloudflare.layerDurableObjects()));
+const TriageSessions = AICloudflare.layerDurableObjects(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+);
 
-const Live = Layer.mergeAll(BoardLive, GitHub.RepositoryEventSourceLive);
+const Live = Layer.mergeAll(BoardLive, GitHub.RepositoryEventSourceLive).pipe(
+  Layer.provide(TriageSessions),
+);
 
 /**
  * Receives the repository's events, serves the web app's Api at `/api`, and

@@ -12,15 +12,15 @@ import { IssueId } from "../src/Board/Issue.id.ts";
 import { IssueWorkLive } from "../src/Board/IssueWork.policy.ts";
 import { LabelIssue } from "../src/Board/LabelIssue.command.ts";
 import { started } from "../src/Board/Said.ts";
-import { Triage } from "../src/Board/Triage.process.ts";
 import { WebApi } from "../src/Board/WebApi.api.ts";
+import { Triage } from "../src/Triage.process.ts";
 import { listOf, Message, threadOf } from "../web/src/Board.ts";
 import { open } from "./App.ts";
 
 /**
  * Triage, played by code in place of a model: a session reads its message,
- * labels the issue and answers. The board hosts it as it hosts the real one,
- * and records what it does the same way.
+ * labels the issue and answers. It is hosted as the real one is, and the
+ * board records what it does the same way.
  */
 const TriagePlayed = AI.scripted(
   Triage,
@@ -34,10 +34,14 @@ const TriagePlayed = AI.scripted(
   }),
 );
 
-const Hosted = Board.layer(Layer.mergeAll(IssueWorkLive, TriagePlayed)).pipe(
+const BoardInMemory = Board.layer(IssueWorkLive).pipe(
   Layer.provideMerge(Domain.InMemory),
   Layer.provideMerge(SecureRandom.layerWebCrypto),
 );
+
+const TriageInMemory = AI.layerInMemory(TriagePlayed.pipe(Layer.provide(BoardInMemory)));
+
+const Hosted = Layer.mergeAll(BoardInMemory, TriageInMemory).pipe(Layer.provide(TriageInMemory));
 
 /** The page's client, with the board in this process instead of over a network. */
 const Live = WebApi.layerClientInProcess.pipe(Layer.provideMerge(Hosted));

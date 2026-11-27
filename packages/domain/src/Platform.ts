@@ -1,5 +1,4 @@
 import type { HttpEffect } from "alchemy/Http";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -1546,40 +1545,6 @@ export interface StreamStore {
 }
 
 /**
- * One process of a model, handed to a platform: how to build the object of
- * one of its sessions.
- */
-export interface ProcessKit {
-  readonly name: string;
-  /**
-   * Build one instance: it answers the calls made to the sessions it holds.
-   * `background` runs work that outlives the call that started it, for as
-   * long as the instance stays up.
-   */
-  readonly instance: (host: {
-    readonly background: (effect: Effect.Effect<void>) => Effect.Effect<void>;
-  }) => Effect.Effect<
-    {
-      readonly call: (
-        key: string,
-        method: string,
-        args: ReadonlyArray<Json>,
-      ) => Effect.Effect<Json, never, RuntimeContext>;
-    },
-    never,
-    RuntimeContext | Scope
-  >;
-}
-
-/**
- * What a platform provides for a process: a call to the instance that holds
- * the session `key`, one instance per key.
- */
-export interface ProcessStore {
-  readonly call: (key: string, method: string, args: ReadonlyArray<Json>) => Effect.Effect<Json>;
-}
-
-/**
  * Where one model is hosted. One factory per concept, each called once per
  * entity while the model's Layer is built. A factory may declare any
  * infrastructure (Durable Objects, buckets, queues) and returns the store the
@@ -1602,11 +1567,6 @@ export interface ModelHost {
     kit: ProjectionKit,
   ) => Effect.Effect<ProjectionStore>;
   readonly stream: (stream: DomainStream.Any, kit: StreamKit) => Effect.Effect<StreamStore>;
-  /**
-   * Host a process: each of its sessions in an instance of its own. A
-   * platform without it can't host a model that lists processes.
-   */
-  readonly process?: (kit: ProcessKit) => Effect.Effect<ProcessStore>;
   /**
    * Called once every store is built. A platform that keeps events across
    * deploys starts catching up the views and projections in `targets` (every

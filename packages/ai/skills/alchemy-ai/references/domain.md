@@ -1,40 +1,29 @@
 # Connecting a Domain model
 
-## List the process on the model
+## Declare the process
 
-A process is a member of the model. Declare it by name, and list it beside the aggregates and policies. The model's platform then hosts each session.
+A process is a member of no model. Declare it by name, in a file of its own beside the tools. It works with a model, or several, through what its prose mentions.
 
 ```typescript
-// src/Bank/Assistant.process.ts
+// src/Assistant.process.ts
 import * as AI from "@alchemy.run/ai";
 import { CurrentActor } from "./CurrentActor.ts";
 
 export class Assistant extends AI.Process<Assistant>()("Assistant", { as: [CurrentActor] }) {}
 ```
 
-```typescript
-// src/Bank/Bank.model.ts
-export class Bank extends Domain.Model("Bank", () => ({
-  aggregates: [Account],
-  views: [AccountSummary],
-  processes: [Assistant],
-})) {}
-```
-
-The members are a thunk because the process's prose mentions the model (below): see "Break the cycle with thunks".
-
 `as` on the declaration says what a session must be started as. Leave it out when nothing the prose mentions is behind a middleware.
 
-More: [List the process on the model](https://alchemy.run/ai/domain#list-the-process-on-the-model).
+More: [Declare the process](https://alchemy.run/ai/domain#declare-the-process).
 
 ## Mention commands and views through the model
 
 A model's commands, aggregates and views are members of its class. The prose is a Layer, beside the name in the process's file:
 
 ```typescript
-// src/Bank/Assistant.process.ts
+// src/Assistant.process.ts
 import * as AI from "@alchemy.run/ai";
-import { Bank } from "./Bank.model.ts";
+import { Bank } from "./Bank/Bank.model.ts";
 import { CurrentActor } from "./CurrentActor.ts";
 
 export class Assistant extends AI.Process<Assistant>()("Assistant", { as: [CurrentActor] }) {}
@@ -47,13 +36,13 @@ export const AssistantLive = Assistant.toLayer({
 `;
 ```
 
-Each is a tool (`Bank_DepositMoney_send`, `Bank_AccountSummary_get`). Give `AssistantLive` to `Bank.layer(...)` with the model's other handlers. Nothing unmentioned is reachable. `Bank.Account` is every command the aggregate takes; prefer single commands.
+Each is a tool (`Bank_DepositMoney_send`, `Bank_AccountSummary_get`). `AssistantLive` requires the bank: provide it the bank's Layer where the process is hosted (see [running.md](running.md)). Nothing unmentioned is reachable. `Bank.Account` is every command the aggregate takes; prefer single commands.
 
 More: [Mention a command or a view](https://alchemy.run/ai/domain#mention-a-command-or-a-view).
 
 ## Break the cycle with thunks
 
-The prose imports the model and the model imports the process: a cycle. Whichever file loads first would read the other's class before it exists. A thunk is read when the declaration is first used, once both have loaded:
+The prose imports the model, the model imports its policy, and the policy imports the process: a cycle. Whichever file loads first would read another's class before it exists. A thunk is read when the declaration is first used, once every file has loaded:
 
 - each mention in the prose: `${() => Bank.DepositMoney}`;
 - the model's members: `Domain.Model("Bank", () => ({ ... }))`;
@@ -99,7 +88,10 @@ State rules on the aggregate and verify them. A proved rule holds for every stat
 ```typescript
 // test/Board.verify.test.ts
 const TriageIdle = AI.scripted(Triage, Effect.succeed(() => Effect.succeed("")));
-const story = Story.make(Board, { layer: Layer.mergeAll(IssueWorkLive, TriageIdle) });
+const story = Story.make(Board, {
+  layer: IssueWorkLive,
+  host: (board) => AI.layerInMemory(TriageIdle.pipe(Layer.provide(board))),
+});
 
 it.effect(
   "no command, from a person or a session, breaks the board's rules",
@@ -117,7 +109,7 @@ More: [Prove what a session can't break](https://alchemy.run/ai/domain#prove-wha
 
 ## Let a policy hand it work
 
-A policy decides when there is work, and holds the process's client like any other member's. It never waits: `send` returns once the message is stored. Use the id of what the session works on as its key, and a `requestId`, since a policy can run twice for one event.
+A policy decides when there is work, and holds the process's client: its Layer requires the process, and so does the model's. It never waits: `send` returns once the message is stored. Use the id of what the session works on as its key, and a `requestId`, since a policy can run twice for one event.
 
 ```typescript
 // src/Board/IssueWork.policy.ts
@@ -140,11 +132,9 @@ A saga holds the client the same way, and may `prompt` inside an activity when a
 
 More: [Let a policy hand it work](https://alchemy.run/ai/domain#let-a-policy-hand-it-work).
 
-## Follow what a session does through the model
+## Follow what a session does from a model
 
-The model records each process it lists as a view named after it, keyed by the session. Nothing is declared for it. Its state is `{ status: "idle" | "working", queued }`; each event, `<Process>Activity`, carries the status, the queue and the transcript items stored since the last one. The session's own object sends each batch, through an eviction too.
-
-An Api serves it like any view (`Api.Triage.watch`, `Api.Triage.events`). A view of the model follows it by listing the process in `from` and handling `TriageActivity`:
+A view follows a process by listing it in `from` and handling `<Process>Activity`: the status, the queue and the transcript items stored since the last one. The source's id is the session's key. The session's own instance sends each batch, through an eviction too, to every model that follows it.
 
 ```typescript
 // src/Board/IssueList.view.ts
@@ -155,6 +145,8 @@ export class IssueList extends Domain.View("IssueList", () => ({
   // ...
 })) {}
 ```
+
+A model with such a view also keeps a view named after the process, keyed by the session, with nothing declared for it. Its state is `{ status: "idle" | "working", queued }` and its events are the same activity. An Api serves it like any view (`Api.Triage.watch`, `Api.Triage.events`).
 
 More: [Follow what a session does](https://alchemy.run/ai/domain#follow-what-a-session-does).
 

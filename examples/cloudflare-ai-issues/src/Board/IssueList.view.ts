@@ -2,10 +2,10 @@ import * as Domain from "@alchemy.run/domain";
 import { pipe } from "effect/Function";
 import * as Optic from "effect/Optic";
 import * as Schema from "effect/Schema";
+import { Triage } from "../Triage.process.ts";
 import { Issue } from "./Issue.aggregate.ts";
 import { IssueId } from "./Issue.id.ts";
 import { Label } from "./LabelIssue.command.ts";
-import { Triage } from "./Triage.process.ts";
 
 /** The one key the list is kept under. */
 export const ALL = "all";

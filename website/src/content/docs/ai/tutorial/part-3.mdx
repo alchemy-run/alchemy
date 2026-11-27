@@ -81,9 +81,9 @@ A policy reacts to events. Inside it, `yield* Triage` gives the process's client
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
+import { Triage } from "../Triage.process.ts";
 import { Issue } from "./Issue.aggregate.ts";
 import { IssueReported } from "./ReportIssue.command.ts";
-import { Triage } from "./Triage.process.ts";
 
 export class IssueWork extends Domain.Policy("IssueWork", {
   from: Issue,
@@ -104,7 +104,7 @@ export const IssueWorkLive = IssueWork.toLayer(
 );
 ```
 
-`send` returns once the message is stored, so the policy never waits for a model. A policy can run more than once for one event, and `requestId` keeps the message from reaching the session twice.
+The process is not a member of the board, and the board's policy uses it all the same: `IssueWorkLive` requires `Triage`. `send` returns once the message is stored, so the policy never waits for a model. A policy can run more than once for one event, and `requestId` keeps the message from reaching the session twice.
 
 ## Pass replies on
 
@@ -129,33 +129,83 @@ The reply's id is the message's, so a reply delivered twice is read once.
 import { IssueDetail } from "./IssueDetail.view.ts";
 +import { IssueWork } from "./IssueWork.policy.ts";
 
+export class Board extends Domain.Model("Board", {
+  aggregates: [Issue],
   views: [IssueDetail],
 +  policies: [IssueWork],
-  processes: [Triage],
+}) {}
 ```
+
+## Break the import cycle in the prose
+
+The files now import each other in a circle: the prose imports the board, the board imports the policy, and the policy imports `Triage`. Whichever loads first reads another before it exists. A thunk delays the read until it is used:
+
+```diff lang="typescript" title="src/Triage.process.ts"
+import { Board } from "./Board/Board.model.ts";
+
+-  Get the issue with ${Board.IssueDetail}: its key is the issue. Then send
+-  ${Board.LabelIssue}: bug when something is broken, feature when something
+-  new is asked for, question otherwise.
++  Get the issue with ${() => Board.IssueDetail}: its key is the issue. Then send
++  ${() => Board.LabelIssue}: bug when something is broken, feature when something
++  new is asked for, question otherwise.
+```
+
+The prose reads the board when a session first runs, once every file has loaded.
+
+## Give the board its members as a thunk
+
+The board reads its policy as it loads, so it takes its members as a thunk too:
+
+```diff lang="typescript" title="src/Board/Board.model.ts"
+import { IssueWork } from "./IssueWork.policy.ts";
+
+-export class Board extends Domain.Model("Board", {
++export class Board extends Domain.Model("Board", () => ({
+  aggregates: [Issue],
+  views: [IssueDetail],
+  policies: [IssueWork],
+-}) {}
++})) {}
+```
+
+With both lazy, the files load in any order. The board's type is the same as before. [Break the cycle with thunks](/ai/domain#break-the-cycle-with-thunks) says when a declaration needs one.
 
 ## Give the board its policy
 
-The policy's Layer goes beside the prose, in what `Board.layer` takes:
+`Board.layer` takes what the board's policies do:
 
-```diff lang="typescript" title="src/Board.ts"
+```diff lang="typescript" title="src/Sessions.ts"
 import { Board } from "./Board/Board.model.ts";
 +import { IssueWorkLive } from "./Board/IssueWork.policy.ts";
-import { TriageLive } from "./Board/Triage.process.ts";
+import { Smart, SmartLlama } from "./Models.ts";
 
--export const BoardLive = Board.layer(TriageLive.pipe(Layer.provide(Agents))).pipe(
-+const Handlers = Layer.mergeAll(IssueWorkLive, TriageLive.pipe(Layer.provide(Agents)));
-+
-+export const BoardLive = Board.layer(Handlers).pipe(
+-export const BoardLive = Board.layer(Layer.empty).pipe(
++const BoardLive = Board.layer(IssueWorkLive).pipe(
   Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 ```
 
-The policy and the session each run in an object of their own. The policy's call to `session.send` is a call from one to the other, and neither file says so.
+The policy holds `Triage`, so `BoardLive` now needs one. It is no longer exported: on its own it is incomplete.
+
+## Give the board its process
+
+The sessions need the board and the board needs the sessions. `TriageSessions` already takes the board. Provide it back to the board, and export the two together:
+
+```diff lang="typescript" title="src/Sessions.ts"
+-export const TriageSessions = AICloudflare.layerDurableObjects(
++const TriageSessions = AICloudflare.layerDurableObjects(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+);
++
++export const Live = BoardLive.pipe(Layer.provideMerge(TriageSessions));
+```
+
+The host closes the loop: the Layer it is given may need the process it provides, and the host supplies it, inside each session's object and outside. The policy and the session each run in an object of their own. The policy's call to `session.send` is a call from one to the other, and neither file says so.
 
 ## Tell the session about replies
 
-```diff lang="typescript" title="src/Board/Triage.process.ts"
+```diff lang="typescript" title="src/Triage.process.ts"
   ${() => Board.LabelIssue}: bug when something is broken, feature when something
   new is asked for, question otherwise.
 +
@@ -244,11 +294,11 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { BoardLive } from "./Board.ts";
 import { Issue } from "./Board/Issue.aggregate.ts";
 import { IssueId } from "./Board/Issue.id.ts";
 import { IssueDetail } from "./Board/IssueDetail.view.ts";
 import { GitHubIssues } from "./GitHubIssues.ts";
+import { Live as BoardLive } from "./Sessions.ts";
 
 const Live = Layer.mergeAll(BoardLive, GitHub.RepositoryEventSourceLive);
 
@@ -319,7 +369,7 @@ Reply on the issue that it was your own mistake, and the label changes to `quest
 ## What you have
 
 - A policy that hands each issue to its session, and passes replies on.
-- A board whose members reach each other by name: the policy holds the process's client.
+- A board and a process that use each other by name: the policy holds the process's client, and the prose mentions the board.
 - GitHub's events as commands, with no knowledge of processes.
 
 The session labels an issue it has never read the code for. [Part 4](/ai/tutorial/part-4) gives it the repository and lets it answer.

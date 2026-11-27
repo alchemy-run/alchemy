@@ -1,11 +1,11 @@
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
+import { Triage } from "../Triage.process.ts";
 import { IssueCommented } from "./CommentOnIssue.command.ts";
 import { Issue } from "./Issue.aggregate.ts";
 import { IssueReported } from "./ReportIssue.command.ts";
 import { replied, started } from "./Said.ts";
-import { Triage } from "./Triage.process.ts";
 
 /** A reported issue is handed to its Triage session; a reply on it is passed on. */
 export class IssueWork extends Domain.Policy("IssueWork", {

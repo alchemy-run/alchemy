@@ -1,7 +1,7 @@
 import { Board } from "./Board.ts";
 import { Triage } from "./Triage.ts";
 
-/** What a Triage session is told. It mentions the board, and the board lists the process. */
+/** What a Triage session is told. It mentions the board, whose policy holds the process. */
 export const TriageLive = Triage.toLayer({
   description: "Label one issue of the board as a bug, a feature or a question.",
 })`

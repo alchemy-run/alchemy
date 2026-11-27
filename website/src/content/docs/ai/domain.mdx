@@ -1,13 +1,13 @@
 ---
 title: Processes and Domain models
-description: List a process on a Domain model, mention the model's commands and views in its prose, say who each session acts as, and let a policy hand it work, so the whole app is one model and the processes are members of it.
+description: Mention a Domain model's commands and views in a process's prose, say who each session acts as, let a policy hand it work and a view follow what it does. A process belongs to no model, and can work with several.
 ---
 
-A process has no output, so it needs somewhere to report, and something has to decide when there is work for it. A [Domain model](/domain) is both. Write the app as one model: commands, aggregates, events, policies, views, and the processes that do part of the work. Workers and webhooks only bring the outside world in as commands, and Layers underneath say where it all runs.
+A process has no output, so it needs somewhere to report, and something has to decide when there is work for it. A [Domain model](/domain) is both. Write the rules as models: commands, aggregates, events, policies and views. A process is defined beside them: its prose mentions the models it works with, and a model's policies and views use the process. Workers and webhooks only bring the outside world in as commands, and Layers underneath say where it all runs.
 
-## List the process on the model
+## Declare the process
 
-A process is a member of the model, beside its aggregates and policies. Declare it by name and list it:
+A process is declared by name. It is a member of no model:
 
 ```typescript title="src/Assistant.process.ts"
 import * as AI from "@alchemy.run/ai";
@@ -16,20 +16,7 @@ import { CurrentActor } from "./CurrentActor.ts";
 export class Assistant extends AI.Process<Assistant>()("Assistant", { as: [CurrentActor] }) {}
 ```
 
-```typescript title="src/Bank.ts"
-import * as Domain from "@alchemy.run/domain";
-import { Account } from "./Account.aggregate.ts";
-import { AccountSummary } from "./AccountSummary.view.ts";
-import { Assistant } from "./Assistant.process.ts";
-
-export class Bank extends Domain.Model("Bank", {
-  aggregates: [Account],
-  views: [AccountSummary],
-  processes: [Assistant],
-}) {}
-```
-
-The model's platform hosts each session: see [Where sessions run](/ai/hosting).
+A host gives each of its sessions an instance of its own: see [Where sessions run](/ai/hosting).
 
 ## Mention a command or a view
 
@@ -52,11 +39,11 @@ export const AssistantLive = Assistant.toLayer({
 
 Each mention is a tool: `Bank_DepositMoney_send`, `Bank_WithdrawMoney_send` and `Bank_AccountSummary_get`, with the command's or the view's own schemas. Nothing else in the bank is within the session's reach. A rejection comes back to the model as the tool's failure, so it can read why and try again.
 
-The prose is a Layer among the model's handlers: give it to `Bank.layer(...)`.
+The prose requires the model it mentions: provide `AssistantLive` with the bank's Layer where you [host the process](/ai/hosting#host-the-process). Prose that mentions two models requires both.
 
 ## Break the cycle with thunks
 
-The prose mentions `Bank`, and `Bank` lists `Assistant`, so the two files import each other. Whichever loads first reads the other before it exists. A thunk delays the read until the declaration is first used, when both have loaded.
+The prose mentions `Bank`. Once a policy or a view of `Bank` uses `Assistant`, the files import each other in a cycle: the prose imports the model, the model imports the policy, and the policy imports the process. Whichever loads first reads another before it exists. A thunk delays the read until the declaration is first used, when all have loaded.
 
 Write each mention as a thunk, `${() => Bank.DepositMoney}`, as above. Give the model its members as a thunk too:
 
@@ -64,11 +51,11 @@ Write each mention as a thunk, `${() => Bank.DepositMoney}`, as above. Give the 
 export class Bank extends Domain.Model("Bank", () => ({
   aggregates: [Account],
   views: [AccountSummary],
-  processes: [Assistant],
+  policies: [Assist],
 })) {}
 ```
 
-A view or anything else in the cycle that lists the process takes a thunk the same way: `Domain.View("Busy", () => ({ from: [Assistant], ... }))`. Every declaration takes its props directly or as a thunk, and its type is the same either way. Use a thunk only where a cycle needs one: props given directly are checked as the file loads, which reports a mistake sooner. [Import cycles](/domain/model#break-an-import-cycle) says which declarations take one.
+A view that follows the process takes a thunk the same way: `Domain.View("Busy", () => ({ from: [Assistant], ... }))`. Every declaration takes its props directly or as a thunk, and its type is the same either way. Use a thunk only where a cycle needs one: props given directly are checked as the file loads, which reports a mistake sooner. [Import cycles](/domain/model#break-an-import-cycle) says which declarations take one.
 
 ## Mention an aggregate
 
@@ -145,16 +132,16 @@ transitions: {
 
 ## Let a policy hand it work
 
-A policy decides when there is work, and holds the process's client like any other member's. `yield* Triage` gives it, and `get` reaches the session of a key:
+A policy decides when there is work, and holds the process's client. `yield* Triage` gives it, and `get` reaches the session of a key:
 
-```typescript title="src/IssueWork.policy.ts"
+```typescript title="src/Board/IssueWork.policy.ts"
 import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
+import { Triage } from "../Triage.process.ts";
 import { IssueCommented } from "./CommentOnIssue.command.ts";
 import { Issue } from "./Issue.aggregate.ts";
 import { IssueReported } from "./ReportIssue.command.ts";
-import { Triage } from "./Triage.process.ts";
 
 export class IssueWork extends Domain.Policy("IssueWork", {
   from: Issue,
@@ -176,29 +163,15 @@ export const IssueWorkLive = IssueWork.toLayer(
 );
 ```
 
-A policy never waits for a session: `send` returns once the message is stored. A policy can run twice for one event, and `requestId` keeps a message from being sent twice. `Triage` reports by sending `LabelIssue`, which is an event another policy can react to.
+The policy's Layer requires `Triage`, and so does the model it is given to. A policy never waits for a session: `send` returns once the message is stored. A policy can run twice for one event, and `requestId` keeps a message from being sent twice. `Triage` reports by sending `LabelIssue`, which is an event another policy can react to.
 
 A [saga](/domain/saga) holds the client the same way, and may `prompt` a session inside an activity when a step needs its answer.
 
 ## Follow what a session does
 
-The model records each process it lists as a view named after it, keyed by the session. Nothing is declared for it. Its state is where the session stands, and its events carry the transcript:
+A model follows a process through a view. List the process in `from`, and handle its activity:
 
-```typescript
-// state: whether the session is working, and what is queued for it
-{ status: "idle" | "working", queued: ReadonlyArray<QueuedMessage> }
-
-// each event, TriageActivity: what the session did since the last one
-{ status, queued, items: ReadonlyArray<{ seq: number, item: SessionItem }> }
-```
-
-The session's own object sends each batch as it happens, and through an eviction, so the view holds every item the harness stored.
-
-An Api serves it like any view, and a page reads `BoardClient.Triage.watch` for the status and `BoardClient.Triage.events` for the transcript. See [Connect a front end](/ai/front-end).
-
-A view of the model can follow the process too. List it in `from`, and handle its activity:
-
-```typescript title="src/IssueList.view.ts"
+```typescript title="src/Board/IssueList.view.ts"
 export class IssueList extends Domain.View("IssueList", () => ({
   from: [Issue, Triage],
   key: Schema.String,
@@ -219,6 +192,22 @@ export class IssueList extends Domain.View("IssueList", () => ({
 ```
 
 It is a thunk because `Triage`'s prose mentions the board, which lists `IssueList`.
+
+Each `TriageActivity` is what a session did since the last one, and its source is the session:
+
+```typescript
+{ status: "idle" | "working", queued, items: ReadonlyArray<{ seq: number, item: SessionItem }> }
+```
+
+A model with such a view also keeps a view named after the process, keyed by the session. Nothing is declared for it. Its state is where the session stands, and its events are the same activity, so they carry the transcript:
+
+```typescript
+{ status: "idle" | "working", queued: ReadonlyArray<QueuedMessage> }
+```
+
+An Api serves it like any view, and a page reads `BoardClient.Triage.watch` for the status and `BoardClient.Triage.events` for the transcript. See [Connect a front end](/ai/front-end).
+
+The session's own instance sends each batch as it happens, and through an eviction, so the model holds every item the harness stored. Several models can follow one process.
 
 ## The outside world comes in as commands
 

@@ -1,13 +1,13 @@
 import * as AI from "@alchemy.run/ai";
-import { Answering } from "../Answering.process.ts";
-import { PostAnswer } from "../PostAnswer.tool.ts";
-import { SearchIssues } from "../SearchIssues.tool.ts";
-import { Board } from "./Board.model.ts";
+import { Answering } from "./Answering.process.ts";
+import { Board } from "./Board/Board.model.ts";
+import { PostAnswer } from "./PostAnswer.tool.ts";
+import { SearchIssues } from "./SearchIssues.tool.ts";
 
 /** Answers one issue and says what kind of issue it is. One session per issue. */
 export class Triage extends AI.Process<Triage>()("Triage", {}) {}
 
-// The board lists Triage, so the prose mentions its members as thunks.
+// The board's policy holds Triage, so the prose mentions the board's members as thunks.
 export const TriageLive = Triage.toLayer({
   description: "Answer one issue of the repository and say what kind of issue it is.",
 })`

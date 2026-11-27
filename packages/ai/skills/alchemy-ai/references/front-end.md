@@ -1,16 +1,16 @@
 # Serving agents to a front end
 
-A page talks to one thing: an Api over the Domain model. The model records each process it lists as a view named after it, so a session's status and transcript are already in the model, and the page reads them like any view.
+A page talks to one thing: an Api over the Domain model. A model that follows a process keeps a view named after it, so a session's status and transcript are in the model, and the page reads them like any view.
 
 For the model's blocks (aggregate, view, stream, projection, Api), use the `alchemy-domain` skill's `references/building-blocks.md`. For the page (client, Commands, Subscriptions, stories, hosting), use its `references/frontend.md`. This file covers only what is specific to sessions.
 
 ## Follow a session through the process's view
 
-Listing `Triage` in `processes` is all the recording there is. The model keeps a view named `Triage`, keyed by the session, so key sessions like the thing they work on. Its state is `{ status, queued }`; each event, `TriageActivity`, is a batch: the status, the queue and the items stored since the last one. The session's object sends each batch, the model drops items it already has, and a job on the object's alarm keeps it recording through an eviction.
+Listing `Triage` in a view's `from` is all the recording there is. The model then keeps a view named `Triage`, keyed by the session, so key sessions like the thing they work on. Its state is `{ status, queued }`; each event, `TriageActivity`, is a batch: the status, the queue and the items stored since the last one. The session's object sends each batch, the model drops items it already has, and a job on the object's alarm keeps it recording through an eviction.
 
 A page reads it with `BoardClient.Triage.watch` (the status) and `BoardClient.Triage.events` (the transcript, resumed from a cursor). The value Schemas (`SessionEntry`, `QueuedMessage`, `SessionStatus`) are in `@alchemy.run/ai/Session`; a browser can bundle them.
 
-A list of everything with an agent (the page's sidebar) is a view that lists the process in `from` beside the aggregates, kept under one key. It is a thunk, `Domain.View("IssueList", () => ({ from: [Issue, Triage], ... }))`, because the process's prose mentions the model that lists the view.
+A list of everything with an agent (the page's sidebar) is a view that lists the process in `from` beside the aggregates, kept under one key. It is a thunk, `Domain.View("IssueList", () => ({ from: [Issue, Triage], ... }))`, because the process's prose mentions the model that lists the view. That view is also what makes the model follow the process.
 
 Whole items only: a session reports no token deltas.
 

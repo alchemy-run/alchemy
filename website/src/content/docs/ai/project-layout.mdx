@@ -86,24 +86,24 @@ src/
 
 ## With a Domain model
 
-A Domain model's files follow [its own layout](/domain/project-layout), in a folder or a package of their own. A process the model lists is one of them, its name and its prose in one `.process.ts`. The prose mentions the model and the model lists the process, so the mentions and the model's members are [thunks](/ai/domain#break-the-cycle-with-thunks). Tools, and processes a session only follows, sit outside: the model never imports one.
+A Domain model's files follow [its own layout](/domain/project-layout), in a folder or a package of their own. A process is not one of them: it can work with several models, so it sits beside the tools, its name and its prose in one `.process.ts`. When the prose mentions a model whose policy or view uses the process, the mentions and the model's members are [thunks](/ai/domain#break-the-cycle-with-thunks).
 
 ```text
 src/
   Board/
     Board.model.ts
     Issue.aggregate.ts
-    IssueWork.policy.ts
+    IssueWork.policy.ts         hands each issue to its Triage session
     LabelIssue.command.ts
-    Triage.process.ts           the name the model lists, and what a session is told
   Answering.process.ts
   PostAnswer.tool.ts
-  Worker.ts                     the Layers: harness, model, sandbox, platform
+  Triage.process.ts             the name, and what a session is told
+  Worker.ts                     the Layers: harness, model, sandbox, hosts
 ```
 
 ## With a front end
 
-A page reads sessions through the model's `Triage` view, which the model keeps for the process: there is no file to write for it. The page is in `web/`, and imports only the model's Api, ids and value Schemas.
+A page reads sessions through the model's `Triage` view, which the model keeps once one of its views follows the process: there is no file to write for it. The page is in `web/`, and imports only the model's Api, ids and value Schemas.
 
 ```text
 src/

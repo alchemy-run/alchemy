@@ -5,7 +5,6 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scheduler from "effect/Scheduler";
-import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -2135,35 +2134,6 @@ export const make = (
                   Effect.asVoid,
                 ),
               ),
-          };
-        }),
-
-      // One instance per session, built the first time the session is called.
-      process: (kit) =>
-        Effect.sync(() => {
-          const scope = Scope.makeUnsafe();
-          type Instance = Effect.Success<ReturnType<typeof kit.instance>>;
-          const instances = stored(`process:${kit.name}`, () => new Map<string, Instance>());
-          const lock = Semaphore.makeUnsafe(1);
-          const instanceOf = (key: string) =>
-            lock.withPermits(1)(
-              Effect.suspend(() => {
-                const instance = instances.get(key);
-                if (instance !== undefined) return Effect.succeed(instance);
-                return kit
-                  .instance({ background: (effect) => Effect.asVoid(Effect.forkIn(effect, scope)) })
-                  .pipe(
-                    Effect.provideService(Scope.Scope, scope),
-                    Effect.tap((built) => Effect.sync(() => instances.set(key, built))),
-                  );
-              }),
-            );
-          return {
-            call: (key, method, args) =>
-              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- in memory, the caller's context is the runtime
-              Effect.flatMap(instanceOf(key), (instance) =>
-                instance.call(key, method, args),
-              ) as Effect.Effect<Json>,
           };
         }),
 

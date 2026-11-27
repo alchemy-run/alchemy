@@ -3,9 +3,9 @@ import { describe, expect, layer } from "@alchemy.run/test";
  * Which import cycles between a model and its members load, in every order.
  *
  * Each scenario under `fixtures/` is one help desk whose files import each
- * other in a cycle: the process's prose mentions the model, and the model
- * and a view list the process. They differ only in which of them are
- * written as thunks. Each entry file is loaded first in a fresh process, as
+ * other in a cycle: the process's prose mentions the model, the model's
+ * policy holds the process, and one of its views follows it. They differ
+ * only in which of them are written as thunks. Each entry file is loaded first in a fresh process, as
  * a Worker, a page or a test might, and the desk is then built and its
  * mentions resolved.
  */
@@ -43,7 +43,7 @@ const matrix = Effect.fn(function* (scenario: string, entries: ReadonlyArray<str
 });
 
 const desk = ["Desk.model.ts", "Workload.view.ts", "Helper.process.ts", "Handover.policy.ts"];
-const studio = ["Studio.model.ts", "Author.process.ts", "Reviewer.process.ts"];
+const studio = ["Author.process.ts", "Reviewer.process.ts"];
 const okOf = (results: Record<string, { readonly ok: boolean }>) =>
   Object.fromEntries(Object.entries(results).map(([entry, { ok }]) => [entry, ok]));
 
@@ -83,7 +83,7 @@ layer(BunServices.layer)("Domain: import cycles", (it) => {
       "a thunk in the model too loads unless the process's file is loaded first",
       () =>
         Effect.gen(function* () {
-          // The view still lists the process at once: loading the process
+          // The view still follows the process at once: loading the process
           // first loads the model, then the view, before the process exists.
           expect(okOf(yield* matrix("model-thunk", desk))).toEqual({
             "Desk.model.ts": true,
@@ -121,7 +121,6 @@ layer(BunServices.layer)("Domain: import cycles", (it) => {
       () =>
         Effect.gen(function* () {
           expect(okOf(yield* matrix("mutual-eager", studio))).toEqual({
-            "Studio.model.ts": false,
             "Author.process.ts": false,
             "Reviewer.process.ts": false,
           });
@@ -135,7 +134,6 @@ layer(BunServices.layer)("Domain: import cycles", (it) => {
         Effect.gen(function* () {
           const results = yield* matrix("mutual-lazy", studio);
           expect(okOf(results)).toEqual({
-            "Studio.model.ts": true,
             "Author.process.ts": true,
             "Reviewer.process.ts": true,
           });

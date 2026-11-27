@@ -86,8 +86,8 @@ export interface Any extends Context.Key<unknown, unknown> {
 export type Source = Aggregate.Any | Any;
 
 /**
- * What a view's `from` lists: an aggregate, a view, or a process of the
- * model, which stands for the view the model records it as.
+ * What a view's `from` lists: an aggregate, a view, or an `AI.Process`,
+ * which stands for the view the model records it as.
  */
 export type FromSource = Source | Process.Any;
 
@@ -239,7 +239,7 @@ export interface Definition<
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 > extends Read.Contract<Ms, Rejects> {
   /**
-   * The aggregates and views this view consumes. A process of the model
+   * The aggregates and views this view consumes. An `AI.Process`
    * stands for the view the model records it as: its events carry what each
    * session reports, and its state is where the session stands.
    */
@@ -521,11 +521,12 @@ export interface ViewKey<Name extends string> {
  * ```
  *
  * ### Following an AI process
- * A process the model lists is a source like a view: `from` it, and
- * handle `<Process>Activity`, each batch of what a session did. The
- * source's id is the session's key. A process's prose usually mentions
- * the model that lists this view, so give the definition as a thunk,
- * read when the view is first used, to break that import cycle.
+ * An `AI.Process` is a source like a view: `from` it, and handle
+ * `<Process>Activity`, each batch of what a session did. The source's id
+ * is the session's key. The model then records the process as a view
+ * named after it, and its Layer requires the process. A process's prose
+ * usually mentions the model that lists this view, so give the definition
+ * as a thunk, read when the view is first used, to break that import cycle.
  *
  * **Example:** Which issues have a session at work
  * ```typescript

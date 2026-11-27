@@ -442,11 +442,11 @@ const cloudflareHost = (
   );
 
 /**
- * Host a domain model on Cloudflare Durable Objects. Every aggregate, view,
- * policy and process becomes a Durable Object class on the host Worker,
+ * Host a domain model on Cloudflare Durable Objects. Every aggregate, view
+ * and policy becomes a Durable Object class on the host Worker,
  * declared while the model's Layer is built, so there are no bindings to
- * write. One instance per aggregate id, per view key, per policy and
- * source, and per session of a process.
+ * write. One instance per aggregate id, per view key, and per policy and
+ * source.
  *
  * Commands to one instance run one at a time, and their events, state and
  * outbox commit together. Deliveries to views and policies are at least once

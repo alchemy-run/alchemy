@@ -160,7 +160,7 @@ export class Issue extends Domain.Aggregate("Issue", {
 Rules that only forbid are kept by a board that does nothing. A `sometimes` entry says what has to be reachable:
 
 ```diff lang="typescript" title="src/Board/Board.model.ts"
-export class Board extends Domain.Model("Board", {
+export class Board extends Domain.Model("Board", () => ({
   policies: [IssueWork],
 +  sometimes: {
 +    AnIssueGetsLabeled: (board) =>
@@ -181,7 +181,7 @@ export class BoardApi extends Domain.Api("BoardApi", { model: Board }) {}
 
 ## Verify the board
 
-One test verifies all of it. `story` runs each sequence the prover finds on the real board in memory. `AI.scripted` plays `Triage` there in place of a model, and this one does nothing: the rules have to hold whatever a session does, and the prover sends a session's commands itself.
+One test verifies all of it. `story` runs each sequence the prover finds on the real board in memory. `AI.scripted` plays `Triage` there in place of a model, and `host` puts it beside the board the story hosts. This one does nothing: the rules have to hold whatever a session does, and the prover sends a session's commands itself.
 
 ```typescript title="test/Board.verify.test.ts"
 import * as AI from "@alchemy.run/ai";
@@ -194,10 +194,13 @@ import * as Layer from "effect/Layer";
 import { Board } from "../src/Board/Board.model.ts";
 import { BoardApi } from "../src/Board/BoardApi.api.ts";
 import { IssueWorkLive } from "../src/Board/IssueWork.policy.ts";
-import { Triage } from "../src/Board/Triage.process.ts";
+import { Triage } from "../src/Triage.process.ts";
 
 const TriageIdle = AI.scripted(Triage, Effect.succeed(() => Effect.succeed("")));
-const story = Story.make(Board, { layer: Layer.mergeAll(IssueWorkLive, TriageIdle) });
+const story = Story.make(Board, {
+  layer: IssueWorkLive,
+  host: (board) => AI.layerInMemory(TriageIdle.pipe(Layer.provide(board))),
+});
 
 it.effect(
   "no command, from a person or a session, breaks the board's rules",

@@ -51,15 +51,21 @@ const desk = Effect.gen(function* () {
     return { tools: harness.sessions.get("Helper/t-1")?.tools ?? [] };
   }).pipe(
     Effect.provide(
-      Desk.layer(Layer.mergeAll(HandoverLive, HelperLive.pipe(Layer.provide(layer)))).pipe(
-        Layer.provide(InMemory),
+      Layer.unwrap(
+        Effect.sync(() => {
+          // The desk needs a Helper, and the Helper's prose needs the desk.
+          const DeskLive = Desk.layer(HandoverLive).pipe(Layer.provide(InMemory));
+          const HelperHosted = AI.layerInMemory(
+            HelperLive.pipe(Layer.provide(Layer.mergeAll(layer, DeskLive))),
+          );
+          return DeskLive.pipe(Layer.provideMerge(HelperHosted));
+        }),
       ),
     ),
   );
 });
 
 const studio = Effect.gen(function* () {
-  const { Studio } = yield* Effect.promise(() => import(`./${scenario}/Studio.model.ts`));
   const { Author, AuthorLive } = yield* Effect.promise(
     () => import(`./${scenario}/Author.process.ts`),
   );
@@ -70,10 +76,9 @@ const studio = Effect.gen(function* () {
     yield* author.get("draft-1").send("Write it.");
     return { tools: harness.sessions.get("Author/draft-1")?.tools ?? [] };
   }).pipe(
+    // Each needs the other: hosted together, each is given the other's client.
     Effect.provide(
-      Studio.layer(Layer.mergeAll(AuthorLive, ReviewerLive).pipe(Layer.provide(layer))).pipe(
-        Layer.provide(InMemory),
-      ),
+      AI.layerInMemory(Layer.mergeAll(AuthorLive, ReviewerLive).pipe(Layer.provide(layer))),
     ),
   );
 });

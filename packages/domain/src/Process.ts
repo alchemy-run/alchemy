@@ -1,28 +1,29 @@
 /**
- * An `AI.Process` as a member of a model. The platform hosts each of its
- * sessions as an object of its own, and the model records what each session
- * reports: a view named after the process, keyed by the session, whose state
- * is where the session stands and whose events carry its transcript.
+ * An `AI.Process` as something a model follows. A view that lists a process
+ * in its `from` makes the model record what each session reports: a view
+ * named after the process, keyed by the session, whose state is where the
+ * session stands and whose events carry its transcript.
+ *
+ * The model hosts no session. Whatever does (`AI.layerInMemory`,
+ * `AICloudflare.layerDurableObjects`) builds the model inside each session's
+ * instance, where the model registers itself as somewhere the session's
+ * reports are kept.
  *
  * Nothing here imports `@alchemy.run/ai`: a process is an object with a
- * well-known key, which says how to serve a session, how to read what it
- * reports, and the schemas of a transcript item and a queued message.
+ * well-known key, which gives the schemas of a transcript item and a queued
+ * message.
  *
  * @module
  */
-import { Callbacks, makeCallback, type Callback } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import { InstanceSetup } from "alchemy/Workers/InstanceSetup";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as AggregateModule from "./Aggregate.ts";
 import * as CommandModule from "./Command.ts";
 import * as EventModule from "./Event.ts";
-import type { Json, ProcessKit } from "./Platform.ts";
 import * as ViewModule from "./View.ts";
 
 /** The key under which a process says how a model hosts it. */
@@ -36,48 +37,27 @@ export interface Sink {
   readonly write: (reports: ReadonlyArray<unknown>) => Effect.Effect<void, unknown, RuntimeContext>;
 }
 
-/** How code outside a session's object reaches it. */
-export interface Remote {
-  /** Call one of the methods `serve` returned, on the object of the session `key`. */
-  readonly call: (
-    key: string,
-    method: string,
-    ...args: ReadonlyArray<Json>
-  ) => Effect.Effect<Json, never, RuntimeContext>;
-}
+/**
+ * Where the instance of a session keeps what it reports, as its host reads
+ * it. A model that follows a process adds itself while it is built inside
+ * that instance. Absent anywhere else.
+ */
+export class Recorders extends Context.Service<
+  Recorders,
+  {
+    /** Keep what each session of the process named `process` reports in the sink `sink` gives for its key. */
+    readonly add: (process: string, sink: (key: string) => Sink) => void;
+  }
+>()("alchemy/AI/Recorders") {}
 
-/** How a model hosts a process: what the process itself knows of its sessions. */
+/** What a model reads of a process: its name, and what its sessions report. */
 export interface Hosted<
   Item extends Schema.Top = Schema.Top,
   Queued extends Schema.Top = Schema.Top,
 > {
   readonly name: string;
-  /** The methods, among those `serve` returns, after which a session may have something to report. */
-  readonly mutating: ReadonlyArray<string>;
   /** What a session reports, as schemas: one transcript item, and one queued message. */
   readonly reports: { readonly item: Item; readonly queued: Queued };
-  /** One session's methods over the process as its Layer built it: JSON in, JSON out. */
-  readonly serve: (
-    service: unknown,
-    key: string,
-  ) => Readonly<
-    Record<string, (...args: ReadonlyArray<any>) => Effect.Effect<Json, never, RuntimeContext>>
-  >;
-  /**
-   * Hand a session's reports to `sink`. `live` follows the session for as
-   * long as it runs. `catchUp` hands over what was stored and not kept, and
-   * says whether the session is done: idle, with nothing queued.
-   */
-  readonly record: (
-    service: unknown,
-    key: string,
-    sink: Sink,
-  ) => {
-    readonly live: Effect.Effect<void, unknown, RuntimeContext>;
-    readonly catchUp: Effect.Effect<boolean, unknown, RuntimeContext>;
-  };
-  /** The process's client over its sessions' objects. `local` is the process as this code built it. */
-  readonly client: (remote: Remote, local: () => unknown) => unknown;
 }
 
 /**
@@ -89,11 +69,11 @@ export interface Any extends Context.Key<any, any> {
   readonly [HostedTypeId]: Hosted;
 }
 
-/** Whether a value is a process a model can host. */
+/** Whether a value is a process a model can follow. */
 export const isProcess = (u: unknown): u is Any =>
   (typeof u === "object" || typeof u === "function") && u !== null && HostedTypeId in u;
 
-/** The service a process's Layer provides, and the model provides its client as. */
+/** The service a process's Layer provides. */
 export type Identifier<P> = P extends Context.Key<infer I, any> ? I : never;
 
 /** Whether a session is working on a turn. */
@@ -292,8 +272,13 @@ export type QueuedOf<P extends Any> = P[typeof HostedTypeId]["reports"]["queued"
 export type RecordingOf<P extends Any> = Recording<P["processName"], ItemOf<P>, QueuedOf<P>>;
 /** The view named after the process `P`: where each session stands, and its transcript. */
 export type ViewOf<P> = P extends Any
-  ? SessionView<P["processName"], ItemOf<P>, QueuedOf<P>>
+  ? SessionView<P["processName"], ItemOf<P>, QueuedOf<P>> & Followed<P>
   : never;
+/** Marks the view a model records a process as with the process it follows. */
+export interface Followed<P extends Any = Any> {
+  /** Type-level only: the process the view stands for. */
+  readonly "~process": P;
+}
 /** The aggregate that records the sessions of the process `P`. */
 export type SessionsOf<P> = P extends Any
   ? Sessions<P["processName"], ItemOf<P>, QueuedOf<P>>
@@ -306,13 +291,19 @@ export type ActivityOf<P> = P extends Any
 export type StandsOf<P> = P extends Any ? StandsState<QueuedOf<P>>["Type"] : never;
 
 const recordings = new WeakMap<object, unknown>();
+const followed = new WeakMap<object, Any>();
+
+/** The process a view stands for, when it is one a model records a process as. */
+export const processOf = (view: object): Any | undefined => followed.get(view);
 
 /** What a model records of a process: made once, so every model and view shares it. */
 export const recordingOf = <P extends Any>(process: P): RecordingOf<P> => {
   let made = recordings.get(process);
   if (made === undefined) {
     const { item, queued } = process[HostedTypeId].reports;
-    recordings.set(process, (made = recording(process.processName, item, queued)));
+    const recorded = recording(process.processName, item, queued);
+    recordings.set(process, (made = recorded));
+    followed.set(recorded.view, process);
   }
   return made as RecordingOf<P>;
 };
@@ -331,9 +322,6 @@ interface SessionsClient {
   }>;
   readonly send: (command: unknown) => Effect.Effect<unknown, unknown>;
 }
-
-/** How long a session that is not done is left before its reports are looked at again. */
-const RECORD_AGAIN = "5 seconds";
 
 /** Keep a session's reports in the aggregate that records it, one batch at a time. */
 const sinkOf = (
@@ -376,124 +364,21 @@ const sinkOf = (
 };
 
 /**
- * The object of one session: the process as the handlers' Layer builds it,
- * for this instance alone, and the recording of what it reports.
+ * Where the model is built inside the instance of a session, have the
+ * session's reports kept in the aggregate the model records the process in.
  *
  * @internal
  */
-export const kitOf = <A, E, R>(
+export const record = (
   process: Any,
-  /** The model's handlers: the process's own Layer is among them. */
-  handlers: Layer.Layer<A, E, R>,
-  /** What the handlers are built with: the model's clients, and what its Layer was given. */
-  services: () => Context.Context<never>,
   /** The client of the aggregate that records the process's sessions, as the model provides it. */
-  sessions: () => unknown,
-): ProcessKit => {
-  const hosted = process[HostedTypeId];
-  const mutating = new Set(hosted.mutating);
-  return {
-    name: process.processName,
-    instance: Effect.fn(function* ({ background }) {
-      const scope = yield* Effect.scope;
-      // What the instance itself runs with wins over what the model's Layer was given.
-      const ambient = yield* Effect.context<never>();
-      const setup: Array<Effect.Effect<void, never, RuntimeContext>> = [];
-      // A harness is one per instance, so the Layer is built here, apart from every other build.
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `services` holds what the handlers require
-      const built = yield* Layer.buildWithMemoMap(handlers, Layer.makeMemoMapUnsafe(), scope).pipe(
-        Effect.provideContext(
-          Context.merge(
-            Context.add(services(), InstanceSetup, { add: (effect) => void setup.push(effect) }),
-            Context.omit(InstanceSetup)(ambient),
-          ),
-        ),
-        Effect.orDie,
-      ) as Effect.Effect<Context.Context<unknown>>;
-      // What a library asked to run once the instance exists: a harness opens here.
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- an instance is built inside its runtime
-      for (const effect of setup) yield* effect as Effect.Effect<void>;
-      const service = Context.getUnsafe(built, process as Context.Key<unknown, unknown>);
-
-      const callbacks = yield* Effect.serviceOption(Callbacks);
-      const lock = yield* Semaphore.make(1);
-      const client = sessions() as SessionsClient;
-      const recorders = new Map<string, ReturnType<Hosted["record"]>>();
-      const recorderOf = (key: string) => {
-        let recorder = recorders.get(key);
-        if (recorder === undefined) {
-          recorders.set(
-            key,
-            (recorder = hosted.record(service, key, sinkOf(process, client, key, lock))),
-          );
-        }
-        return recorder;
-      };
-
-      const following = new Set<string>();
-      /** Follow the session live, once for as long as this instance lives. */
-      const follow = (key: string) =>
-        Effect.suspend(() => {
-          if (following.has(key)) return Effect.void;
-          following.add(key);
-          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- an instance's background work runs inside its runtime
-          const live = recorderOf(key).live.pipe(
-            Effect.ignore,
-            Effect.ensuring(Effect.sync(() => void following.delete(key))),
-          ) as Effect.Effect<void>;
-          return background(live);
-        });
-
-      /**
-       * What makes recording durable where an instance can be evicted: a job
-       * on its alarm, kept in its storage. It wakes the instance, keeps what
-       * was stored meanwhile, and comes back until the session is done.
-       */
-      let onRecord: Callback<string> | undefined;
-      const again = (key: string): Effect.Effect<void, never, RuntimeContext> =>
-        onRecord === undefined
-          ? Effect.void
-          : onRecord.schedule(key, { after: RECORD_AGAIN, payload: key }).pipe(Effect.orDie);
-      if (Option.isSome(callbacks)) {
-        onRecord = yield* makeCallback(
-          `record-${process.processName}`,
-          Effect.fn(function* (key: string) {
-            yield* follow(key);
-            if (!(yield* recorderOf(key).catchUp)) yield* again(key);
-          }, Effect.orDie),
-        ).pipe(Effect.provideService(Callbacks, callbacks.value));
-      }
-      /** Record from now until the session is done. */
-      const record = (key: string) => Effect.andThen(follow(key), again(key));
-
-      const methods = new Map<string, ReturnType<Hosted["serve"]>>();
-      return {
-        call: (key, method, args) =>
-          Effect.suspend(() => {
-            let served = methods.get(key);
-            if (served === undefined) methods.set(key, (served = hosted.serve(service, key)));
-            const run = served[method];
-            if (run === undefined) {
-              return Effect.die(new Error(`${process.processName} has no method ${method}`));
-            }
-            return mutating.has(method)
-              ? Effect.tap(run(...args), () => record(key))
-              : run(...args);
-          }),
-      };
-    }),
-  };
-};
-
-/**
- * The process's client as the model provides it: every call goes to the
- * object of the session it names.
- *
- * @internal
- */
-export const clientOf = (
-  process: Any,
-  call: (key: string, method: string, args: ReadonlyArray<Json>) => Effect.Effect<Json>,
-  local: () => unknown,
-): unknown =>
-  process[HostedTypeId].client({ call: (key, method, ...args) => call(key, method, args) }, local);
+  sessions: unknown,
+): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    const recorders = yield* Effect.serviceOption(Recorders);
+    if (Option.isNone(recorders)) return;
+    const lock = yield* Semaphore.make(1);
+    recorders.value.add(process.processName, (key) =>
+      sinkOf(process, sessions as SessionsClient, key, lock),
+    );
+  });

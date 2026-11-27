@@ -1,4 +1,5 @@
 import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Pi from "@alchemy.run/pi";
@@ -33,6 +34,11 @@ const Agents = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast)).pipe(
 /** What `withdraw` is given to reset a session's object: see {@link Resettable}. */
 const RESET = "reset-this-object";
 
+/** The board on Durable Objects. Its policy holds Triage, so it still needs one. */
+const BoardLive = Board.layer(IssueWorkLive).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
+
 /**
  * Lets a test reset a session's object, as an eviction in the middle of its
  * work does. Nothing outside an object can reset it, so the process is
@@ -58,12 +64,12 @@ const Resettable = Layer.effect(
       },
     };
   }),
-).pipe(Layer.provide(TriageLive.pipe(Layer.provide(Agents))));
+).pipe(Layer.provide(TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive)))));
 
-/** The board on Durable Objects: every member, and each Triage session, an object of this Worker. */
-const BoardLive = Board.layer(Layer.mergeAll(IssueWorkLive, Resettable)).pipe(
-  Layer.provide(DomainCloudflare.layerDurableObjects()),
-);
+/** Each Triage session in a Durable Object of this Worker, with the board its prose mentions. */
+const TriageSessions = AICloudflare.layerDurableObjects(Resettable);
+
+const Live = BoardLive.pipe(Layer.provideMerge(TriageSessions));
 
 /**
  * Stands in for a webhook: `POST /report/<issue>` and `POST /comment/<issue>`
@@ -153,5 +159,5 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
         ),
       ),
     };
-  }).pipe(Effect.provide(BoardLive)),
+  }).pipe(Effect.provide(Live)),
 ) {}

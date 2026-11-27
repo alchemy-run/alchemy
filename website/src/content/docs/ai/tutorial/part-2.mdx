@@ -1,13 +1,13 @@
 ---
 title: "Part 2: A board to report to"
-description: Give the board issues with an aggregate, two commands and a view, and mention the command and the view a Triage session may use, so it reports by sending a command.
+description: Declare a board of issues with an aggregate, two commands and a view, and mention the command and the view a Triage session may use, so it reports by sending a command.
 sidebar:
   order: 2
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-In [Part 1](/ai/tutorial/part-1) a session could only answer whoever prompted it. A process has no output, so it needs somewhere to report. This part gives the board issues, and lets a session read one and label it.
+In [Part 1](/ai/tutorial/part-1) a session could only answer whoever prompted it. A process has no output, so it needs somewhere to report. This part declares a board of issues, and lets a session read one and label it.
 
 ## Give issues an id
 
@@ -126,29 +126,30 @@ export class IssueDetail extends Domain.View(
 ) {}
 ```
 
-## Add them to the board
+## Name the board
 
-```diff lang="typescript" title="src/Board/Board.model.ts"
+A Domain model lists what runs together. The board is the aggregate and its view:
+
+```typescript title="src/Board/Board.model.ts"
 import * as Domain from "@alchemy.run/domain";
-+import { Issue } from "./Issue.aggregate.ts";
-+import { IssueDetail } from "./IssueDetail.view.ts";
-import { Triage } from "./Triage.process.ts";
+import { Issue } from "./Issue.aggregate.ts";
+import { IssueDetail } from "./IssueDetail.view.ts";
 
 export class Board extends Domain.Model("Board", {
--  aggregates: [],
-+  aggregates: [Issue],
-+  views: [IssueDetail],
-  processes: [Triage],
+  aggregates: [Issue],
+  views: [IssueDetail],
 }) {}
 ```
+
+`Triage` is not on the list. A process is not a member of a model: it works with one, or several, through what its prose mentions.
 
 ## Mention the board in the prose
 
 A model's commands and views are members of its class. Mention one, and a session may use it:
 
-```diff lang="typescript" title="src/Board/Triage.process.ts"
+```diff lang="typescript" title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
-+import { Board } from "./Board.model.ts";
++import { Board } from "./Board/Board.model.ts";
 
 -  You look after one issue of a GitHub repository.
 -  When you are told what the issue says, reply with one word:
@@ -157,34 +158,74 @@ import * as AI from "@alchemy.run/ai";
 +  You look after one issue of a GitHub repository. Your first message says
 +  which.
 +
-+  Get the issue with ${() => Board.IssueDetail}: its key is the issue. Then send
-+  ${() => Board.LabelIssue}: bug when something is broken, feature when something
++  Get the issue with ${Board.IssueDetail}: its key is the issue. Then send
++  ${Board.LabelIssue}: bug when something is broken, feature when something
 +  new is asked for, question otherwise.
 ```
 
 A session is told which issue is its own in its first message, because the prose is the same for every session. A `Triage` session can read an `IssueDetail` and send `LabelIssue`. `ReportIssue` is not mentioned, so it is out of the session's reach.
 
-Each mention is a thunk, `() => Board.LabelIssue`, because this file and the board's now import each other. The prose reads the board when a session first runs, once both have loaded.
+## Host the board
 
-## Give the board its members as a thunk
+The prose now requires the board. Host it on Durable Objects, which makes each aggregate and view a class of the Worker:
 
-The board reads `Triage` as it loads, so it takes its members as a thunk too:
+```diff lang="typescript" title="src/Sessions.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
++import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
++import { Board } from "./Board/Board.model.ts";
+import { Smart, SmartLlama } from "./Models.ts";
+import { TriageLive } from "./Triage.process.ts";
 
-```diff lang="typescript" title="src/Board/Board.model.ts"
-import { Triage } from "./Triage.process.ts";
-
--export class Board extends Domain.Model("Board", {
-+export class Board extends Domain.Model("Board", () => ({
-  aggregates: [Issue],
-  views: [IssueDetail],
-  processes: [Triage],
--}) {}
-+})) {}
+const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
+  Layer.provide(SmartLlama),
+);
++
++export const BoardLive = Board.layer(Layer.empty).pipe(
++  Layer.provide(DomainCloudflare.layerDurableObjects()),
++);
 ```
 
-With both lazy, the two files load in either order. The board's type is the same as before. [Break the cycle with thunks](/ai/domain#break-the-cycle-with-thunks) says when a declaration needs one.
+`Board.layer` takes what the board's policies do. It has none yet.
 
-The session is a member of the board, so it needs nothing more to reach it: `src/Board.ts` stays as it is.
+## Give the sessions the board
+
+Each session builds the prose inside its own object, so the board goes where the harness does:
+
+```diff lang="typescript" title="src/Sessions.ts"
+export const BoardLive = Board.layer(Layer.empty).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
+
+export const TriageSessions = AICloudflare.layerDurableObjects(
+-  TriageLive.pipe(Layer.provide(Agents)),
++  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+);
+```
+
+## Register Domain's providers
+
+The Stack that deploys the Worker registers Domain's providers beside Cloudflare's:
+
+```diff lang="typescript" title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
++import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import Worker from "./src/Worker.ts";
+
+export default Alchemy.Stack(
+  "CloudflareAiIssues",
+  {
+-    providers: Cloudflare.providers(),
++    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+    state: Alchemy.localState(),
+  },
+```
 
 ## Report from the Worker, and read the board
 
@@ -196,12 +237,13 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
-import { BoardLive } from "./Board.ts";
+import * as Layer from "effect/Layer";
 import { Issue } from "./Board/Issue.aggregate.ts";
 import { IssueId } from "./Board/Issue.id.ts";
 import { IssueDetail } from "./Board/IssueDetail.view.ts";
 import { ReportIssue } from "./Board/ReportIssue.command.ts";
-import { Triage } from "./Board/Triage.process.ts";
+import { BoardLive, TriageSessions } from "./Sessions.ts";
+import { Triage } from "./Triage.process.ts";
 
 export default class Worker extends Cloudflare.Worker<Worker>()(
   "Worker",
@@ -227,11 +269,13 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         return yield* HttpServerResponse.json(Option.getOrNull(detail));
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(BoardLive)),
+  }).pipe(Effect.provide(Layer.mergeAll(BoardLive, TriageSessions))),
 ) {}
 ```
 
 `send` returns once the message is stored. The same `requestId` on every call means a session is given its issue once.
+
+<PackageManagers add="@alchemy.run/domain" />
 
 <PackageManagers run="alchemy deploy" />
 
@@ -251,7 +295,7 @@ The label was put there by the session.
 
 ## What you have
 
-- A board with an `Issue` aggregate, two commands and a view.
+- A board with an `Issue` aggregate, two commands and a view, hosted on Durable Objects.
 - A process that mentions the one view and the one command it may use.
 - A session that reports by sending a command.
 

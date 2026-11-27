@@ -216,13 +216,13 @@ A [Domain model](/domain) is your business in code: what can happen, what did ha
 export class Board extends Domain.Model("Board", () => ({
   aggregates: [Issue],
   views: [IssueDetail],
-  processes: [Triage],
+  policies: [IssueWork],
 })) {}
 ```
 
-A process describes a business process over that model, and the model lists it. Its prose mentions the model's commands and views, and a session reads and acts through them:
+A process describes a business process over that model. It is a member of no model, and can work with several. Its prose mentions a model's commands and views, and a session reads and acts through them:
 
-```typescript title="src/Board/Triage.process.ts"
+```typescript title="src/Triage.process.ts"
 export const TriageLive = Triage.toLayer({
   description: "Say what kind of issue this is.",
 })`
@@ -232,7 +232,7 @@ export const TriageLive = Triage.toLayer({
 `;
 ```
 
-The prose and the model each name the other, so both are thunks, read once both files have loaded.
+The board's policy hands issues to `Triage`, so the prose and the model lead to each other. Both are thunks, read once every file has loaded.
 
 The model's rules hold whoever sends a command. A session cannot label an issue nobody reported, because the board rejects it. A session is started as someone, and every command it sends is sent as them:
 
@@ -240,7 +240,7 @@ The model's rules hold whoever sends a command. A session cannot label an issue 
 yield* assistant.start(customer.id, { as: CurrentActor.context(customer) });
 ```
 
-The two work in both directions. A policy of the model decides when there is work for a process, and Domain can [prove](/domain/verifying-models) the model's rules hold whatever a session sends.
+The two work in both directions. A policy of the model decides when there is work for a process, a view of the model follows what its sessions do, and Domain can [prove](/domain/verifying-models) the model's rules hold whatever a session sends.
 
 See [Processes and Domain models](/ai/domain).
 
@@ -313,23 +313,15 @@ On a long-lived machine, such as a container or a Fly Machine, the storage is a 
 const StorageLive = Pi.SqliteFile("/data/pi.sqlite");
 ```
 
-On Cloudflare it is a Durable Object, and you do not write it. A process is a member of your Domain model, beside its aggregates and policies:
+On Cloudflare it is a Durable Object, and you do not write it. Give the process's Layer to a host, and each session gets an object of its own:
 
-```typescript title="src/Board/Board.model.ts"
-export class Board extends Domain.Model("Board", {
-  aggregates: [Issue],
-  policies: [IssueWork],
-  processes: [Triage],
-}) {}
-```
-
-The Layer that hosts the model hosts each session, in an object of its own:
-
-```typescript title="src/Board.ts"
-export const BoardLive = Board.layer(Handlers).pipe(
-  Layer.provide(DomainCloudflare.layerDurableObjects()),
+```typescript title="src/Worker.ts"
+const TriageSessions = AICloudflare.layerDurableObjects(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
 );
 ```
+
+`Agents` is what a session runs on, and `BoardLive` is the model its prose mentions.
 
 A policy, a saga or a Worker then holds a session by its key, and each call goes to that session's object:
 
@@ -343,7 +335,7 @@ See [Where sessions run](/ai/hosting) and [Pi on other hosts](/pi/other-hosts).
 
 ## Front ends: watching a session live
 
-A session reports everything it does: its status, then each message, tool call and result. The model records each process it lists as a view named after it, with one key for each session. Its state is the agent's status, and its events carry the transcript:
+A session reports everything it does: its status, then each message, tool call and result. A model that follows a process, with a view that lists it in `from`, keeps a view named after it, with one key for each session. Its state is the agent's status, and its events carry the transcript:
 
 ```typescript title="web/src/Board.ts"
 status: BoardClient.Triage.watch({ key: open, toMessage: ({ state }) => ... }),
@@ -354,10 +346,10 @@ So a front end uses one Api. It sends commands, which a policy passes to the ses
 
 ## One program, down to the infrastructure
 
-Every reference above is typed, so the graph is checked from end to end. `Triage` mentions `PostAnswer`. `PostAnswerLive` uses `GitHub.CreateIssueComment` on `Repo`. The board lists `Triage`, its policy holds a session of it, and the Worker that hosts the board declares the Durable Objects they run in.
+Every reference above is typed, so the graph is checked from end to end. `Triage` mentions `PostAnswer`. `PostAnswerLive` uses `GitHub.CreateIssueComment` on `Repo`. The board's policy holds a session of `Triage`, and the Worker that hosts them declares the Durable Objects they run in.
 
 Alchemy deploys that graph. The binding in `PostAnswerLive` is also what gives the Worker its GitHub token and the repository to comment on. A process can do what its tools can do, and a tool can do what its bindings allow.
 
-So the model describes the work: commands, policies, views, and the processes among them. A Worker or a webhook is an entry point that brings the outside world in as commands. Layers connect it all to real implementations: an LLM, a harness, a sandbox, your resources, the Durable Objects it runs in. The same process runs on another harness, another LLM or another sandbox platform by changing a Layer.
+So the models and the processes describe the work: commands, policies and views, and the prose that works with them. A Worker or a webhook is an entry point that brings the outside world in as commands. Layers connect it all to real implementations: an LLM, a harness, a sandbox, your resources, the Durable Objects it runs in. The same process runs on another harness, another LLM or another sandbox platform by changing a Layer.
 
 Next, build one: the [tutorial](/ai/tutorial/part-1) puts these ideas to work on an issue board, one step at a time. Or read each concept in depth, starting with [Processes](/ai/processes).

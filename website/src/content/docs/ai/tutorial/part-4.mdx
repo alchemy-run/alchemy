@@ -40,9 +40,9 @@ See [Sandboxes](/ai/sandboxes) for the other platforms.
 
 `AI.Grep` and `AI.Read` are names every harness has a tool for. Mention them:
 
-```diff lang="typescript" title="src/Board/Triage.process.ts"
+```diff lang="typescript" title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
-import { Board } from "./Board.model.ts";
+import { Board } from "./Board/Board.model.ts";
 
 -  You look after one issue of a GitHub repository. Your first message says
 -  which.
@@ -65,7 +65,7 @@ import { Board } from "./Board.model.ts";
 
 `Pi.CodingTools` is Pi's own implementation of those names, working in the session's sandbox:
 
-```diff lang="typescript" title="src/Board.ts"
+```diff lang="typescript" title="src/Sessions.ts"
 import * as AI from "@alchemy.run/ai";
 +import * as Boat from "@alchemy.run/boat";
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
@@ -212,12 +212,12 @@ export class Answering extends AI.Process<Answering>()("Answering", {
 
 A session that mentions `Answering` always sees its description, and reads its prose only when it follows it:
 
-```diff lang="typescript" title="src/Board/Triage.process.ts"
+```diff lang="typescript" title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
-+import { Answering } from "../Answering.process.ts";
-+import { PostAnswer } from "../PostAnswer.tool.ts";
-+import { SearchIssues } from "../SearchIssues.tool.ts";
-import { Board } from "./Board.model.ts";
++import { Answering } from "./Answering.process.ts";
+import { Board } from "./Board/Board.model.ts";
++import { PostAnswer } from "./PostAnswer.tool.ts";
++import { SearchIssues } from "./SearchIssues.tool.ts";
 
 -  description: "Say what kind of issue this is.",
 +  description: "Answer one issue of the repository and say what kind of issue it is.",
@@ -240,7 +240,7 @@ import { Board } from "./Board.model.ts";
 
 ## Provide the tools
 
-```diff lang="typescript" title="src/Board.ts"
+```diff lang="typescript" title="src/Sessions.ts"
 import { Smart, SmartLlama } from "./Models.ts";
 +import { PostAnswerLive } from "./PostAnswer.tool.ts";
 import { SandboxLive } from "./Sandbox.ts";
@@ -284,9 +284,9 @@ curl "$URL/issues/2"
 
 ## Run it on OpenCode
 
-Every session so far ran on Pi. The harness is one constant in `src/Board.ts`:
+Every session so far ran on Pi. The harness is one constant in `src/Sessions.ts`:
 
-```diff lang="typescript" title="src/Board.ts"
+```diff lang="typescript" title="src/Sessions.ts"
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 -import * as Pi from "@alchemy.run/pi";
 -import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
@@ -316,7 +316,7 @@ The process, its prose, the board, the policy and the tools are unchanged. Sessi
 - [Processes](/ai/processes): sessions and the two ways to declare one.
 - [Processes that use processes](/ai/process-graphs): following, starting, and models.
 - [Processes and Domain models](/ai/domain): mentioning commands and views, who a session acts as, and policies that ask for work.
-- [Where sessions run](/ai/hosting): how a model hosts its processes, and how the rest of the model follows a session.
+- [Where sessions run](/ai/hosting): how a process is hosted, and how a model follows a session.
 
 ## Tear down
 

@@ -4176,25 +4176,6 @@ export const makePlatform = <R>(
                 }),
               ),
             ),
-          // One object per session: the process as its Layer builds it there.
-          process: (kit) =>
-            inInit(
-              Effect.gen(function* () {
-                const namespace = yield* object(
-                  `${kit.name}Process`,
-                  Effect.gen(function* () {
-                    const state = yield* ObjectState;
-                    return yield* kit.instance({
-                      background: (effect) => state.waitUntil(effect),
-                    });
-                  }),
-                );
-                return {
-                  call: (key, method, args) =>
-                    unwrapDefects<Json>(namespace.getByName(key).call(key, method, args)),
-                };
-              }),
-            ),
           policy: (policy, kit) =>
             inInit(
               Effect.gen(function* () {

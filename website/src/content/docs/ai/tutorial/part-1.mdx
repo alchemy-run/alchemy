@@ -1,6 +1,6 @@
 ---
 title: "Part 1: A process"
-description: Start an issue board run by AI processes. Declare a model, describe the work as a process, list the process on a Domain model that hosts each of its sessions, and ask a session from a Worker.
+description: Start an issue board run by AI processes. Declare a model, describe the work as a process, host each of its sessions in a Durable Object, and ask a session from a Worker.
 sidebar:
   order: 1
 ---
@@ -9,7 +9,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Build an issue board that looks after a GitHub repository. When someone opens an issue, a session reads the code, answers on the issue and says what kind of issue it is. When they reply, the same session carries on.
 
-The whole app is written as a [Domain model](/domain): commands, events, policies, views, and the AI process that does the work. Cloudflare, Durable Objects and the coding agent are Layers underneath it, and each can be changed without touching the model. This part declares the process and runs one session of it. The later parts give the board issues, connect it to GitHub, and give the session the repository.
+The app is a [Domain model](/domain) (commands, events, policies, views) and an AI process that works with it. Cloudflare, Durable Objects and the coding agent are Layers underneath, and each can be changed without touching either. This part declares the process and runs one session of it. The later parts give the board issues, connect it to GitHub, and give the session the repository.
 
 The finished code is in [`examples/cloudflare-ai-issues`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-ai-issues).
 
@@ -19,7 +19,7 @@ Finish [Cloudflare setup](/cloudflare/setup). Part 3 also needs [GitHub setup](/
 
 ## Install
 
-<PackageManagers add="@alchemy.run/ai @alchemy.run/pi @alchemy.run/domain @alchemy.run/cloudflare" />
+<PackageManagers add="@alchemy.run/ai @alchemy.run/pi @alchemy.run/cloudflare" />
 
 ## Declare a model
 
@@ -41,7 +41,7 @@ export const SmartLlama = AICloudflare.Model(Smart, {
 
 A process is a piece of work a model carries out. `Triage` is the name everything else uses for it:
 
-```typescript title="src/Board/Triage.process.ts"
+```typescript title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
 
 export class Triage extends AI.Process<Triage>()("Triage", {}) {}
@@ -51,7 +51,7 @@ export class Triage extends AI.Process<Triage>()("Triage", {}) {}
 
 A Layer gives the process its prose, which says how the work is done. It goes beside the name:
 
-```diff lang="typescript" title="src/Board/Triage.process.ts"
+```diff lang="typescript" title="src/Triage.process.ts"
 import * as AI from "@alchemy.run/ai";
 
 export class Triage extends AI.Process<Triage>()("Triage", {}) {}
@@ -66,27 +66,11 @@ export class Triage extends AI.Process<Triage>()("Triage", {}) {}
 +`;
 ```
 
-## Put the process on a board
-
-The board is a Domain model. For now it has one member, the process:
-
-```typescript title="src/Board/Board.model.ts"
-import * as Domain from "@alchemy.run/domain";
-import { Triage } from "./Triage.process.ts";
-
-export class Board extends Domain.Model("Board", {
-  aggregates: [],
-  processes: [Triage],
-}) {}
-```
-
-Nothing here says where a session runs. That is the next two steps.
-
 ## Say what a session runs on
 
 A session needs a harness to run on and a model to run with:
 
-```typescript title="src/Board.ts"
+```typescript title="src/Sessions.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
@@ -102,30 +86,29 @@ const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
 
 `Pi.HarnessLive` is the harness: a session runs on Pi, and keeps its conversation in the storage of the object it runs in. `AI.DefaultModel(Smart)` is the model a session runs on when nobody chose one. Part 4 runs the same sessions on OpenCode by changing `HarnessLive`.
 
-## Host the board
+## Host the sessions
 
-`Board.layer` takes what the board's members do, here the prose of its one process. The platform Layer says where they run:
+`AICloudflare.layerDurableObjects` takes the prose with what a session runs on, and gives back `Triage` with each session in a Durable Object of its own:
 
-```diff lang="typescript" title="src/Board.ts"
+```diff lang="typescript" title="src/Sessions.ts"
 import * as AI from "@alchemy.run/ai";
-+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
++import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Layer from "effect/Layer";
-+import { Board } from "./Board/Board.model.ts";
-+import { TriageLive } from "./Board/Triage.process.ts";
 import { Smart, SmartLlama } from "./Models.ts";
++import { TriageLive } from "./Triage.process.ts";
 
 const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
   Layer.provide(SmartLlama),
 );
 +
-+export const BoardLive = Board.layer(TriageLive.pipe(Layer.provide(Agents))).pipe(
-+  Layer.provide(DomainCloudflare.layerDurableObjects()),
++export const TriageSessions = AICloudflare.layerDurableObjects(
++  TriageLive.pipe(Layer.provide(Agents)),
 +);
 ```
 
-`DomainCloudflare.layerDurableObjects()` makes every member of the model a Durable Object class of the Worker that provides it. For `Triage` that is one object for each session: its conversation, its alarm and its harness are its own. You write no Durable Object.
+The Worker that provides it declares one Durable Object class for `Triage`. A session is one object of it: its conversation, its alarm and its harness are its own. You write no Durable Object.
 
 ## Ask a session from a Worker
 
@@ -136,8 +119,8 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { BoardLive } from "./Board.ts";
-import { Triage } from "./Board/Triage.process.ts";
+import { TriageSessions } from "./Sessions.ts";
+import { Triage } from "./Triage.process.ts";
 
 export default class Worker extends Cloudflare.Worker<Worker>()(
   "Worker",
@@ -155,7 +138,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         return HttpServerResponse.text(reply.text);
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(BoardLive)),
+  }).pipe(Effect.provide(TriageSessions)),
 ) {}
 ```
 
@@ -163,20 +146,18 @@ A session's first message makes it. `prompt` sends a message and waits for the a
 
 ## Deploy it
 
-A Stack with the Worker is the whole app. Domain's providers go beside Cloudflare's:
+A Stack with the Worker is the whole app:
 
 ```typescript title="alchemy.run.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import Worker from "./src/Worker.ts";
 
 export default Alchemy.Stack(
   "CloudflareAiIssues",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+    providers: Cloudflare.providers(),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
@@ -202,7 +183,7 @@ Send the same issue again and the session answers with the first message still i
 ## What you have
 
 - A process, `Triage`: a name, and prose that says how an issue is triaged.
-- A board that lists it, hosted on Durable Objects: one object for each session, running on Pi.
+- A Layer that hosts it on Durable Objects: one object for each session, running on Pi.
 - A Worker that asks a session by its key.
 
-The session can only answer whoever prompts it. [Part 2](/ai/tutorial/part-2) gives the board issues, and lets the session report to it.
+The session can only answer whoever prompts it. [Part 2](/ai/tutorial/part-2) adds a board of issues, and lets the session report to it.

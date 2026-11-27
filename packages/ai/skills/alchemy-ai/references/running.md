@@ -18,9 +18,9 @@ const HarnessLive = Layer.mergeAll(OpenCode.HarnessLive, OpenCode.CodingTools).p
 
 More: [Run processes on Pi](https://alchemy.run/ai/harnesses#run-processes-on-pi), [Run them on OpenCode instead](https://alchemy.run/ai/harnesses#run-them-on-opencode-instead).
 
-## Host the model, and its sessions with it
+## Host the model, then the process
 
-Give `Model.layer` the prose of each process, provided with what a session runs on, and provide the platform. `DomainCloudflare.layerDurableObjects()` declares a Durable Object class for every member on the Worker that provides it: for a process, one object for each session, named after its key. Do not write the object.
+Host the model as any model is. Then give `AICloudflare.layerDurableObjects` the prose of each process, provided with what a session runs on and the models it mentions. It gives back the same process, with one Durable Object for each session, named after its key. Do not write the object.
 
 ```typescript
 // src/Worker.ts
@@ -29,20 +29,25 @@ const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), PostAnswerLiv
   Layer.provide(Boat.CreateSandboxHttp),
 );
 
-const Handlers = Layer.mergeAll(IssueWorkLive, TriageLive.pipe(Layer.provide(Agents)));
-
-const BoardLive = Board.layer(Handlers).pipe(
+// Its policy holds Triage, so it still needs one.
+const BoardLive = Board.layer(IssueWorkLive).pipe(
   Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
+
+const TriageSessions = AICloudflare.layerDurableObjects(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+);
+
+const Live = BoardLive.pipe(Layer.provideMerge(TriageSessions));
 ```
 
-Provide `BoardLive` to the Worker, and register `DomainCloudflare.providers()` in the Stack. The prose's Layer is built again inside each session's object, so the harness and its storage belong to that one session.
+Provide `Live` to the Worker, and register `DomainCloudflare.providers()` in the Stack. The model needs the process and the process needs the model: the host closes that loop, so no thunk and no second build of the model is needed. The prose's Layer is built again inside each session's object, so the harness and its storage belong to that one session.
 
-More: [Host the model](https://alchemy.run/ai/hosting#host-the-model), [One object for each session](https://alchemy.run/ai/hosting#one-object-for-each-session).
+More: [Host the process](https://alchemy.run/ai/hosting#host-the-process), [One object for each session](https://alchemy.run/ai/hosting#one-object-for-each-session).
 
 ## Reach a session
 
-Anything given the model's Layer holds the client: a policy, a saga, a Worker. Each call goes to the session's object.
+Anything given the hosted process holds the client: a policy, a saga, a Worker. Each call goes to the session's object.
 
 ```typescript
 const triage = yield* Triage;
@@ -55,7 +60,7 @@ More: [Reach a session](https://alchemy.run/ai/hosting#reach-a-session).
 
 ## Run it in memory
 
-`Domain.InMemory` hosts the same model in one process, sessions included. `AI.scripted` plays a process in place of a model: it stores each message, runs your function as the turn, and stores its answer.
+`Domain.InMemory` hosts the model in one process and `AI.layerInMemory` hosts the process beside it. `AI.scripted` plays a process in place of a model: it stores each message, runs your function as the turn, and stores its answer.
 
 ```typescript
 const TriagePlayed = AI.scripted(
@@ -69,18 +74,20 @@ const TriagePlayed = AI.scripted(
   }),
 );
 
-const BoardInMemory = Board.layer(Layer.mergeAll(IssueWorkLive, TriagePlayed)).pipe(
-  Layer.provide(Domain.InMemory),
-);
+const BoardInMemory = Board.layer(IssueWorkLive).pipe(Layer.provide(Domain.InMemory));
+
+const TriageInMemory = AI.layerInMemory(TriagePlayed.pipe(Layer.provide(BoardInMemory)));
+
+const Live = BoardInMemory.pipe(Layer.provideMerge(TriageInMemory));
 ```
 
 More: [Run it in memory](https://alchemy.run/ai/hosting#run-it-in-memory).
 
-## Without a model
+## Without a host
 
-A process with its prose on its class can be yielded in a Durable Object you write. Its sessions then live in that object's storage, `get` is a local lookup, and nothing records them for you. Use it only when a session belongs to something that is already an object of yours.
+A process's Layer runs its sessions wherever it is built: yield the process in a Durable Object you write, and its sessions live in that object's storage. `get` is then a local lookup, and no model follows the sessions. Use it only when a session belongs to something that is already an object of yours.
 
-More: [Without a model](https://alchemy.run/ai/hosting#without-a-model).
+More: [Without a host](https://alchemy.run/ai/hosting#without-a-host).
 
 ## Give tools a sandbox
 
@@ -110,7 +117,7 @@ More: [A session survives its object](https://alchemy.run/ai/hosting#a-session-s
 const page = yield* triage.get(String(issue)).history({ take: 50 });
 ```
 
-Each item is a message, the tools an answer called, or a tool's result. To follow a session live, read the process's view on the model (`Api.Triage.events`): a hosted session's `events()` stays in its object.
+Each item is a message, the tools an answer called, or a tool's result. To follow a session live, read the process's view on a model that follows it (`Api.Triage.events`): a hosted session's `events()` stays in its object.
 
 More: [Read the transcript](https://alchemy.run/ai/processes#read-the-transcript), [Watch a session](https://alchemy.run/ai/processes#watch-a-session).
 

@@ -8,7 +8,7 @@ import * as Layer from "effect/Layer";
 import { Board } from "../src/Board/Board.model.ts";
 import { BoardApi } from "../src/Board/BoardApi.api.ts";
 import { IssueWorkLive } from "../src/Board/IssueWork.policy.ts";
-import { Triage } from "../src/Board/Triage.process.ts";
+import { Triage } from "../src/Triage.process.ts";
 
 // Each sequence the explorer finds is also run on the real board, in memory.
 // Triage is played by a stand-in that does nothing: the rules must hold
@@ -17,7 +17,10 @@ const TriageIdle = AI.scripted(
   Triage,
   Effect.succeed(() => Effect.succeed("")),
 );
-const story = Story.make(Board, { layer: Layer.mergeAll(IssueWorkLive, TriageIdle) });
+const story = Story.make(Board, {
+  layer: IssueWorkLive,
+  host: (board) => AI.layerInMemory(TriageIdle.pipe(Layer.provide(board))),
+});
 
 it.effect(
   "no command, from a person or a session, breaks the board's rules",

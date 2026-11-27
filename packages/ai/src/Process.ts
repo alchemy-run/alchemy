@@ -34,7 +34,7 @@ import {
 
 const ProcessTypeId = "~alchemy/AI/Process" as const;
 const SelfTypeId = "~alchemy/AI/Self" as const;
-/** The key under which a process says how a domain model hosts it. */
+/** The key under which a process says how its sessions are hosted, each in an instance of its own. */
 export const HostedTypeId = "~alchemy/AI/Hosted" as const;
 /** The key under which a term of another package says what mentioning it gives. */
 export const MentionTypeId = "~alchemy/AI/Mention" as const;
@@ -228,10 +228,25 @@ export type ProcessService<As = never> = ProcessClient<As> & {
   readonly "~stored"?: (as: Context.Context<never>) => Effect.Effect<Stored | undefined>;
 };
 
+/** A process declared by name, as a host reads it. */
+export interface DeclaredProcess extends Context.Key<unknown, ProcessService<any>> {
+  readonly processName: string;
+  readonly [HostedTypeId]: Hosted;
+}
+
+/**
+ * Every process declared by name in this program, by its key. A host is
+ * given a Layer, which does not say which processes it provides: it finds
+ * them here.
+ *
+ * @internal
+ */
+export const declared = new Map<string, DeclaredProcess>();
+
 /** A value that crosses from a session's object to its callers. */
 type Wire = unknown;
 
-/** How a session's reports reach the aggregate of a model that records them. */
+/** How a session's reports reach whoever keeps them: a Domain model that follows the process. */
 export interface Sink {
   /** The `seq` of the last item that was kept. */
   readonly cursor: Effect.Effect<number, unknown, RuntimeContext>;
@@ -241,8 +256,23 @@ export interface Sink {
   ) => Effect.Effect<void, unknown, RuntimeContext>;
 }
 
-/** How a process's client reaches the objects of its sessions. */
-interface Remote {
+/**
+ * Where the instance of a session keeps what it reports. A host provides it
+ * while it builds a process inside an instance, and whatever follows the
+ * process (a Domain model with a view `from` it) adds itself.
+ *
+ * @internal
+ */
+export class Recorders extends Context.Service<
+  Recorders,
+  {
+    /** Keep what each session of the process named `process` reports in the sink `sink` gives for its key. */
+    readonly add: (process: string, sink: (key: string) => Sink) => void;
+  }
+>()("alchemy/AI/Recorders") {}
+
+/** How a process's client reaches the instances of its sessions. */
+export interface Remote {
   readonly call: (
     key: string,
     method: string,
@@ -251,10 +281,10 @@ interface Remote {
 }
 
 /**
- * How a domain model hosts a process: each session in an object of its own
- * (`processes` on `Domain.Model`). `serve` is one session's methods inside
- * its object, `client` what everything else holds, and `record` hands what
- * the session reports to the model.
+ * How a host runs a process with each session in an instance of its own
+ * (`AI.layerInMemory`, `AICloudflare.layerDurableObjects`). `serve` is one
+ * session's methods inside its instance, `client` what everything else
+ * holds, and `record` hands what the session reports to whoever keeps it.
  *
  * @internal
  */
@@ -389,7 +419,7 @@ export interface ProcessTag<Service, Name extends string, As = never> extends Co
    *
    * A mention may be a thunk, `${() => Board.LabelIssue}`, read when the
    * prose is first used. Write one when the mentioned module imports this
-   * one, as a Domain model that lists the process does.
+   * one, as a Domain model whose policy holds the process does.
    */
   toLayer(options: {
     /** When to follow or start this process: what another process's model reads to choose it. */
@@ -886,7 +916,7 @@ const wireOptions = (options: SendOptions | undefined): WireOptions => ({
   ...(options?.model === undefined ? {} : { model: options.model.modelName }),
 });
 
-/** How a domain model hosts the process named `name`. */
+/** How a host runs the process named `name`. */
 const hostedAs = (name: string): Hosted => {
   const answer = <A>(
     effect: Effect.Effect<A, NotStarted | HarnessError, RuntimeContext>,
@@ -1021,11 +1051,11 @@ const hostedAs = (name: string): Hosted => {
           withdraw: (id) => sure(call(key, "withdraw", id)),
           interrupt: sure(call(key, "interrupt")),
           history: (options) => sure(call(key, "history", options ?? {})),
-          // A session's events stay in its object: the model reads what it recorded of them.
+          // A session's events stay in its instance: a model that follows the process records them.
           events: () =>
             Stream.die(
               new HarnessError({
-                message: `A session of ${name} is followed through the model that hosts it: read the model's ${name} view, whose events carry each session's transcript.`,
+                message: `A session of ${name} lives in an instance of its own, where its events stay. Follow it through a Domain model: a view with ${name} in its \`from\` receives ${name}Activity, and the model's ${name} view carries each session's transcript.`,
               }),
             ),
         }),
@@ -1079,28 +1109,10 @@ const hostedAs = (name: string): Hosted => {
  * const reply = yield* engineer.get("task-7").prompt("Also update the docs.");
  * ```
  *
- * A process declared by name is a member of a Domain model: list it in the
- * model's `processes`, and the model's platform hosts each session in an
- * instance of its own (a Durable Object on Cloudflare). A policy, a saga or
- * a Worker then holds a session by its key, and each call goes to that
- * session's instance.
- *
- * **Example:** A process on a Domain model
- * ```typescript
- * export class Workshop extends Domain.Model("Workshop", {
- *   aggregates: [Task],
- *   policies: [TaskWork],
- *   processes: [Engineer],
- * }) {}
- *
- * const Agents = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
- *   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLive)),
- * );
- *
- * export const WorkshopLive = Workshop.layer(
- *   Layer.mergeAll(TaskWorkLive, EngineerLive.pipe(Layer.provide(Agents))),
- * ).pipe(Layer.provide(DomainCloudflare.layerDurableObjects()));
- * ```
+ * Yielded like this, a session lives wherever the process's Layer was
+ * built. To give each session an instance of its own, hand the Layer to a
+ * host: `AI.layerInMemory`, or `AICloudflare.layerDurableObjects` for a
+ * Durable Object per session.
  */
 export const Process = (() =>
   (
@@ -1134,5 +1146,6 @@ export const Process = (() =>
           return Layer.effect(key, compile(definition));
         },
     });
+    declared.set(key.key, Declared as unknown as DeclaredProcess);
     return Object.setPrototypeOf(Declared, key);
   }) as unknown as ProcessConstructor;
