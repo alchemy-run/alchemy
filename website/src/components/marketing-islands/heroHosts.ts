@@ -22,9 +22,10 @@ export const HOST_TEMPLATE = `export default ⟨0⟩(
   }).pipe(Effect.provide(⟨2⟩)),
 );
 
-export class Fraud extends AI.Process<Fraud>()("Fraud", {
-  description: "Review one risky withdrawal.",
-})\`
+export class FraudReview extends AI.Process<FraudReview>()(
+  "FraudReview",
+  { description: "Review one risky withdrawal." },
+)\`
   Read the account with \${Bank.AccountSummary}.
   If it looks stolen, send \${Bank.FreezeAccount}.
 \` {}
@@ -143,10 +144,13 @@ export const HOST_TEMPLATE_COMPACT = `export default ⟨0⟩(
   }).pipe(Effect.provide(⟨2⟩)),
 );
 
-export class Fraud extends
-  AI.Process<Fraud>()("Fraud", {
-    description: "Review a withdrawal.",
-  })\`
+export class FraudReview extends
+  AI.Process<FraudReview>()(
+    "FraudReview",
+    {
+      description: "Review a withdrawal.",
+    },
+  )\`
     Read \${Bank.AccountSummary}. If it
     looks stolen, send
     \${Bank.FreezeAccount}.
