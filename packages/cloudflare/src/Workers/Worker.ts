@@ -42,6 +42,7 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
+import type { RetiringClass } from "./DurableObjectRetirement.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
@@ -1539,6 +1540,8 @@ export type Worker<Bindings = any> = Resource<
       hash: string | undefined;
     }[];
     crons?: string[];
+    /** Durable Object classes kept only while their objects move out: see `DurableObjectRetirement`. */
+    retiringClasses?: RetiringClass[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
     /**
      * Dev-only channel (like `hyperdrives`): binding name → opt-out of local

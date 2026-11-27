@@ -91,7 +91,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 ) {}
 ```
 
-Each aggregate, view and policy becomes a Durable Object class on this Worker while it starts, so there are no bindings or classes to write. A [query](/domain/query) has no key, so no object owns it: it runs in the Worker, where the store it reads (here, D1) is bound.
+Every aggregate, view and policy of the model lives in one Durable Object class named after it, `Bank.Domain`, declared while the Worker starts, so there are no bindings or classes to write. A [query](/domain/query) has no key, so no object owns it: it runs in the Worker, where the store it reads (here, D1) is bound.
 
 ## Deploy it
 
@@ -150,7 +150,9 @@ export default Alchemy.Stack(
 | A stream key, like the card of `a-1` | One Durable Object per stream and key |
 | A saga run, like transfer `t-1` | One Durable Object per saga and run, holding its steps' results |
 
-Sagas run on `Cloudflare.Workflows.layerDurableObjectEngine()`, the same engine you can use for plain Effect workflows. See [Effect workflows](/cloudflare/compute/effect-workflows).
+All of them are objects of the model's class, `Billing.Domain`, named after the definition and the key, like `Billing.AccountAggregate/a-1`. A Worker declares one class per model however many definitions each has, well within Cloudflare's 100 per Worker.
+
+Sagas run on the same engine as `Cloudflare.Workflows.layerDurableObjectEngine()`, which you can use for plain Effect workflows. See [Effect workflows](/cloudflare/compute/effect-workflows).
 
 ## Keep the model in a jurisdiction
 
@@ -171,15 +173,29 @@ A Durable Object in a jurisdiction is a different object from the one with the s
 
 ## Host several models in one Worker
 
-Each model's Durable Object classes are named after the model: `Billing.AccountAggregate` and `Audit.AccountAggregate` when both list `Account`, and `Billing.OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `DomainCloudflare.layerDurableObjects()`. Two different models with the same name in one Worker fail its deploy.
+Each model has its own class, `Billing.Domain` and `Audit.Domain`, even when both list `Account`, and its saga runs live there too. Their data never mixes, so several models can share one Worker and one `DomainCloudflare.layerDurableObjects()`. Removing a model from a Worker deletes its class and its data. Two different models with the same name in one Worker fail its deploy.
 
-Renaming a model renames its classes, and the model starts empty under the new names.
+Renaming a model renames its objects, and the model starts empty under the new names.
 
 ## Upgrade without losing data
 
-Models deployed before Domain version 0 named classes after the definition alone, like `AccountAggregate`. The next deploy renames each to the model's class with the Durable Object's [`renamedFrom`](/providers/cloudflare/workers/durableobject), so every aggregate, view row and running saga carries over.
+When an Alchemy release lays models out differently, the next deploy moves the deployed data to the new layout, so every aggregate, view row and running saga carries over.
 
-If two models in one Worker listed the same aggregate, they shared that class and its data, and only one can keep it. The deploy fails with `DurableObjectRenameConflict` until the others set `legacyData: false`:
+Domain version 0 gave each aggregate, view, policy, projection, stream and saga of each model a class of its own (`Billing.AccountAggregate`). Upgrading such a Worker keeps those classes while the deploy moves each of their objects into the model's class, `Billing.Domain`, storage, alarms and running sagas included, and waits until it has:
+
+```sh
+Moving Domain objects to Billing.Domain: 1,200/4,096 (42s) ...
+```
+
+A key called during the move moves first, so nothing is read from an empty object. The same deploy deletes each old class whose objects have all moved. A saga's runs were listed nowhere before, and Cloudflare lists an object a few minutes after it is written, so a saga's old class waits for a deploy at least 15 minutes later, which moves any run the first one didn't see.
+
+:::caution
+Don't schedule a command on a new aggregate in the ten minutes before the upgrade deploy. An aggregate with no events and only a scheduled command, written by the old code that recently, is in neither the model's directory nor Cloudflare's listing, so the deploy can delete its class with the command in it. Aggregates with an event, and anything written once the deploy has started, move as usual.
+:::
+
+Models deployed before Domain version 0 named classes after the definition alone, like `AccountAggregate`. The upgrade keeps each under its own name while it moves its objects the same way, so the deploy lists every class once and stays under Cloudflare's limit of 100 exports.
+
+If two models in one Worker listed the same aggregate, they shared that class and its data, and only one can keep it. The deploy fails with `AmbiguousDomainLegacyData` until the others set `legacyData: false`:
 
 ```typescript
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
