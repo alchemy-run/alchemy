@@ -1131,15 +1131,13 @@ export const ServiceProvider = () =>
               ? { repo: sourceRepo }
               : { image: sourceImage ?? "hashicorp/http-echo" };
           const existed = current !== undefined;
+          const attachRepoAfterSettings = sourceRepo !== undefined && props.branch !== undefined;
           if (current === undefined) {
             const created = yield* serviceCreate({
               projectId,
               environmentId,
               name,
-              source: initialSource,
-              ...(sourceRepo !== undefined && props.branch !== undefined
-                ? { branch: props.branch }
-                : {}),
+              ...(attachRepoAfterSettings ? {} : { source: initialSource }),
             }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
             current = created ?? (yield* findByName(projectId, name));
           }
@@ -1164,6 +1162,7 @@ export const ServiceProvider = () =>
                 source: initialSource,
               })
             : yield* waitForInstance(environmentId, current.id);
+          const repoPending = attachRepoAfterSettings && instance?.source?.repo == null;
 
           const publicDomain = props.publicDomain !== false;
           let domain: ServiceDomainRecord | undefined;
@@ -1223,7 +1222,7 @@ export const ServiceProvider = () =>
           const instanceDelta = instanceSettingsDelta({
             instance,
             sourceImage,
-            sourceRepo,
+            sourceRepo: repoPending ? undefined : sourceRepo,
             registryCredentials: undefined,
             props: {
               ...props,
@@ -1265,17 +1264,6 @@ export const ServiceProvider = () =>
             });
           let region = yield* placeRegion();
 
-          if (sourceRepo !== undefined) {
-            const branchChanged = yield* syncBranch({
-              projectId,
-              environmentId,
-              serviceId: current.id,
-              repo: sourceRepo,
-              branch: props.branch,
-            });
-            if (branchChanged) needsDeploy = true;
-          }
-
           if (localContext !== undefined) {
             const triggersChanged = yield* clearDeploymentTriggers({
               projectId,
@@ -1287,13 +1275,6 @@ export const ServiceProvider = () =>
               localSourceChanged = true;
             }
           }
-
-          yield* syncAutoUpdates({
-            projectId,
-            environmentId,
-            serviceId: current.id,
-            enabled: props.autoUpdates,
-          });
 
           const envChanged = yield* syncEnv({
             projectId,
@@ -1318,6 +1299,36 @@ export const ServiceProvider = () =>
             projectId,
             serviceId: current.id,
             mounts: bound.mounts,
+          });
+
+          if (sourceRepo !== undefined) {
+            const branchChanged = yield* syncBranch({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              repo: sourceRepo,
+              branch: props.branch,
+            });
+            if (branchChanged) needsDeploy = true;
+            if (repoPending) {
+              yield* serviceInstanceUpdate({
+                environmentId,
+                serviceId: current.id,
+                input: {
+                  source: { repo: sourceRepo },
+                  ...(instance?.numReplicas != null ? { numReplicas: instance.numReplicas } : {}),
+                },
+              });
+              needsDeploy = true;
+              instance = (yield* getInstance(environmentId, current.id)) ?? instance;
+            }
+          }
+
+          yield* syncAutoUpdates({
+            projectId,
+            environmentId,
+            serviceId: current.id,
+            enabled: props.autoUpdates,
           });
 
           const uploadSource = hostedMain !== undefined || localContext !== undefined;
