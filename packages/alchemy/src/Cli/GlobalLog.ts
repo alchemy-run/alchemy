@@ -203,8 +203,13 @@ export const lazyRunLog = Effect.fn(function* (
   const writer = yield* Effect.gen(function* () {
     const first = yield* Queue.take(lines);
     yield* fs.makeDirectory(dir, { recursive: true });
+    // The run log records the full command line (argv) and provider auth-flow
+    // breadcrumbs, so it can contain secrets (e.g. `profile edit --set
+    // apiToken=…`). Keep the directory and file owner-only on shared machines.
+    yield* fs.chmod(dir, 0o700).pipe(Effect.ignore);
     yield* pruneRunLogs(dir);
     yield* append([safeStringify(yield* runRecord(scope)), first]);
+    yield* fs.chmod(file, 0o600).pipe(Effect.ignore);
     return yield* Effect.forever(Effect.flatMap(Queue.takeAll(lines), append));
   }).pipe(
     // The queue ending stops the writer. Any other failure (an unwritable

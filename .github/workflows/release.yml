@@ -61,9 +61,15 @@ jobs:
 
       - id: release
         name: Prepare release
+        # Pass the dispatch input through the environment, never interpolated
+        # into the shell line: `${{ inputs.version }}` spliced directly would
+        # let a crafted version string break out of the quotes and run
+        # arbitrary commands in the release job.
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          node scripts/release/prepare.ts '${{ inputs.version }}' | tee -a "$GITHUB_OUTPUT"
+          node scripts/release/prepare.ts "$INPUT_VERSION" | tee -a "$GITHUB_OUTPUT"
 
       - name: Build release packages
         run: pnpm build:pkg

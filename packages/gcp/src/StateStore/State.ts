@@ -1,4 +1,5 @@
 import * as crypto from "node:crypto";
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
@@ -351,6 +352,54 @@ const syncStateBucketAccess = (bucket: string, project: string) =>
     }),
   );
 
+/** The last `/`-separated segment of a resource name (`projects/42` → `42`). */
+const lastSegment = (value: string): string => {
+  const parts = value.split("/");
+  return parts[parts.length - 1] || value;
+};
+
+/**
+ * Refuse to adopt a state bucket owned by a different project. Cloud Storage
+ * bucket names are a single global namespace, so an attacker can pre-create
+ * `alchemy-state-<project>` in their own project and grant the victim access;
+ * the victim would then observe the bucket, adopt it, and write their state
+ * where the attacker can read it. The bucket's `projectNumber` is the owning
+ * project, so compare it against ours and fail closed on a mismatch.
+ */
+const assertBucketOwnership = (bucket: string, project: string, ownerNumber: string | undefined) =>
+  Effect.gen(function* () {
+    if (ownerNumber === undefined || ownerNumber === "") {
+      // Cloud Storage reliably returns `projectNumber` on a bucket GET; if it
+      // is somehow absent we cannot verify, so warn rather than silently adopt.
+      yield* Effect.logWarning(
+        `Cloud Storage state store: bucket ${bucket} returned no owning project; cannot verify it belongs to ${project}.`,
+      );
+      return;
+    }
+    const ours = yield* resourcemanager.getProjects({ name: `projects/${project}` }).pipe(
+      Effect.map((resource): string | undefined => lastSegment(resource.name ?? "")),
+      // Without Resource Manager access we can't resolve our own number.
+      // Don't brick the store — warn and proceed on the common (self-owned)
+      // path; the hard refusal below still fires whenever we *can* confirm a
+      // foreign owner.
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+    if (ours === undefined) {
+      yield* Effect.logWarning(
+        `Cloud Storage state store: could not resolve project number for ${project}; skipping bucket-ownership check for ${bucket}.`,
+      );
+      return;
+    }
+    if (ours !== ownerNumber) {
+      return yield* new StateStoreError({
+        message:
+          `Refusing to use Cloud Storage bucket "${bucket}": it is owned by project ${ownerNumber}, ` +
+          `not ${ours} (${project}). Bucket names are a global namespace, so another project may have ` +
+          `created it. Use a different state bucket name, or remove the foreign bucket.`,
+      });
+    }
+  });
+
 /**
  * Observe-then-ensure the state bucket: create it if missing (tolerating
  * create races), then converge uniform access, public access prevention,
@@ -376,6 +425,8 @@ const ensureStateBucket = (bucket: string, project: string, location: string) =>
           Effect.catchTag("Conflict", () => Effect.void),
         );
     } else {
+      // Adopting an existing bucket: prove it is ours before writing state.
+      yield* assertBucketOwnership(bucket, project, observed.projectNumber);
       const drifted =
         observed.iamConfiguration?.uniformBucketLevelAccess?.enabled !== true ||
         observed.iamConfiguration?.publicAccessPrevention !== "enforced" ||
