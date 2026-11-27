@@ -301,6 +301,19 @@ first.version === retry.version; // true
 
 Both calls return the same receipt, and the money leaves the account once. Without a `commandId`, each send gets a fresh one.
 
+An id names one command. Through an Api, a send that reuses an id with another input fails with `CommandIdReused` and applies nothing:
+
+```typescript title="packages/server/test/withdrawOnce.ts"
+const other = yield* bank
+  .WithdrawMoney({ accountId, amount: 500 }, { commandId: requestId, ...mfa })
+  .pipe(Effect.flip);
+other._tag; // "CommandIdReused"
+```
+
+A front end that builds ids from its state can repeat ids it already sent when it restores old state, such as server-rendered state or a history entry. Send each new command under a new id.
+
+The instance keeps a fingerprint of each encoded command with its receipt: the SHA-256 of its JSON with object keys sorted, so the order of fields doesn't matter. A receipt stored before fingerprints has none, and answers a resend with any input. Commands sent in process, by a [policy](/domain/policy) or a saga step that runs again, keep their first receipt whatever input they send now. A command that a [Decision](/domain/decision) implements does too.
+
 Commands sent by a [policy](/domain/policy) get ids derived from the event that caused them, so a policy that runs twice for the same event sends the same commands, and each takes effect once.
 
 ## Send it later

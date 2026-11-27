@@ -38,6 +38,7 @@ import {
   reviseInputs,
   type StoredViewInput,
   revisionKey,
+  reusedBy,
   sendResultOf,
   stampRevisions,
   storedDecisionReceipt,
@@ -880,6 +881,9 @@ export const make = (
             Effect.gen(function* () {
               const current = instance(id);
               const duplicate = current.receipts.get(meta.commandId);
+              if (duplicate && reusedBy(duplicate, meta)) {
+                return { _tag: "Reused", commandId: meta.commandId } satisfies SendResult;
+              }
               if (duplicate) return sendResultOf(`${kit.name}/${id}`, duplicate, current.events);
               const result = yield* kit.handle({
                 id,
@@ -920,7 +924,7 @@ export const make = (
               };
               current.receipts.set(
                 meta.commandId,
-                storedResult(result.version, result.events.length, result.reply),
+                storedResult(result.version, result.events.length, result.reply, meta.fingerprint),
               );
               yield* announce(id);
               yield* enqueue(live.send, kit.deliver);

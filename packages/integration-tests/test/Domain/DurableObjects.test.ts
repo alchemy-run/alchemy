@@ -234,6 +234,9 @@ class Imports extends Domain.Model("Imports", {
   streams: [Lines],
 }) {}
 
+/** The ledger's command, sent the way a front end sends it. */
+class LedgerApi extends Domain.Api("LedgerApi", { model: Imports, commands: ["BookMany"] }) {}
+
 const importsOn = (platform: Layer.Layer<Domain.Platform, never, SecureRandom.SecureRandom>) =>
   Imports.layer(Layer.mergeAll(LinesWriterLive, AuditBookingsLive)).pipe(
     Layer.provideMerge(platform),
@@ -391,7 +394,81 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         }).pipe(Effect.scoped, Effect.provide(importsOn(platform()))),
       { timeout: 60_000 },
     );
+
+    it.live(
+      `a command id sent again with another input fails with CommandIdReused, on ${name}`,
+      () =>
+        Effect.gen(function* () {
+          const api = yield* LedgerApi.clientInProcess;
+          const ledgers = yield* Ledger;
+          const first = yield* api.BookMany({ id: "reused", count: 1 }, { commandId: "c-1" });
+          expect(first.version).toBe(1);
+
+          // The same input under the same id answers the first receipt.
+          expect(yield* api.BookMany({ id: "reused", count: 1 }, { commandId: "c-1" })).toEqual(
+            first,
+          );
+          // Built in another order, it is still the same input.
+          expect(yield* api.BookMany({ count: 1, id: "reused" }, { commandId: "c-1" })).toEqual(
+            first,
+          );
+
+          // Another input under that id applies nothing.
+          const reused = yield* api
+            .BookMany({ id: "reused", count: 5 }, { commandId: "c-1" })
+            .pipe(Effect.flip);
+          expect(reused).toBeInstanceOf(Domain.CommandIdReused);
+          expect(reused).toMatchObject({ _tag: "CommandIdReused", commandId: "c-1" });
+          expect(yield* ledgers.get("reused")).toEqual({ count: 1 });
+
+          // The first input still answers its receipt, and a new id applies the new input.
+          expect(yield* api.BookMany({ id: "reused", count: 1 }, { commandId: "c-1" })).toEqual(
+            first,
+          );
+          const next = yield* api.BookMany({ id: "reused", count: 5 }, { commandId: "c-2" });
+          expect(next.version).toBe(6);
+          expect(yield* ledgers.get("reused")).toEqual({ count: 6 });
+
+          // Sent in process, a policy or saga step that runs again keeps its first receipt.
+          const again = yield* ledgers.send(new BookMany({ id: "reused", count: 2 }), {
+            commandId: "c-2",
+          });
+          expect(again.version).toBe(6);
+          expect(yield* ledgers.get("reused")).toEqual({ count: 6 });
+        }).pipe(Effect.scoped, Effect.provide(importsOn(platform()))),
+      { timeout: 60_000 },
+    );
   }
+
+  it.live(
+    "a receipt stored without a fingerprint answers a resend with another input, as before",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        const api = yield* LedgerApi.clientInProcess;
+        const first = yield* api.BookMany({ id: "main", count: 1 }, { commandId: "c-1" });
+        // The receipt as an instance stored it before fingerprints.
+        const rows = [...disk.objects.entries()].find(([id]) =>
+          id.endsWith("LedgerAggregate/main"),
+        )![1].data;
+        const stored = rows.get("receipt:c-1") as {
+          readonly stored: { readonly fingerprint?: string };
+        };
+        expect(stored.stored.fingerprint).toMatch(/^[0-9a-f]{64}$/);
+        const { fingerprint: _, ...before } = stored.stored;
+        rows.set("receipt:c-1", { ...stored, stored: before });
+
+        expect(yield* api.BookMany({ id: "main", count: 5 }, { commandId: "c-1" })).toEqual(first);
+        expect(yield* (yield* Ledger).get("main")).toEqual({ count: 1 });
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          importsOn(DurableObjects.makePlatform(simHost({ rowsRead: 0 }, { disk }).host)),
+        ),
+      );
+    },
+    { timeout: 60_000 },
+  );
 
   it.live(
     "a stream's list reads only the page it returns",

@@ -362,6 +362,12 @@ export interface SendMeta {
   readonly trace?: Telemetry.TraceJson;
   /** Link to `trace` instead of continuing it: the command runs later (scheduled). */
   readonly link?: boolean;
+  /**
+   * A fingerprint of the encoded command, when an Api's caller named the
+   * command id. The instance keeps it with the receipt, and a resend under
+   * that id whose fingerprint differs answers `Reused` instead of the receipt.
+   */
+  readonly fingerprint?: string;
 }
 
 type AnyHandlers = { readonly [tag: string]: (...args: never[]) => unknown };
@@ -531,7 +537,15 @@ export type Schedulable<Def extends AnyDefinition> = Extract<
 export interface ClientImpl {
   readonly send: (
     command: { readonly _tag: string },
-    options?: SendOptions,
+    options?: SendOptions & {
+      /**
+       * Fail with `CommandIdReused` when `commandId` was sent before with
+       * another input, instead of answering the first receipt. An Api's
+       * command sets it: a front end can send an id again from state it
+       * restored.
+       */
+      readonly checkInput?: boolean;
+    },
   ) => Effect.Effect<Receipt, unknown>;
   readonly schedule: (
     command: { readonly _tag: string },

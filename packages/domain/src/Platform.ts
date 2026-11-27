@@ -324,6 +324,12 @@ export interface StoredReceipt {
   readonly version: number;
   readonly count: number;
   readonly reply: Json;
+  /**
+   * The command's fingerprint (see {@link fingerprintOf}), when an Api's
+   * caller named the command id. A receipt stored without one answers every
+   * resend, as receipts stored before fingerprints do.
+   */
+  readonly fingerprint?: string;
 }
 
 /** What an instance stores under a command id: its rejection, or its receipt. */
@@ -334,10 +340,57 @@ export type StoredResult =
   | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson };
 
 /** The stored form of an accepted command's result. */
-export const storedResult = (version: number, count: number, reply: Json): StoredResult => ({
+export const storedResult = (
+  version: number,
+  count: number,
+  reply: Json,
+  fingerprint?: string,
+): StoredResult => ({
   _tag: "Accepted",
-  stored: { version, count, reply },
+  stored:
+    fingerprint === undefined ? { version, count, reply } : { version, count, reply, fingerprint },
 });
+
+/** JSON with object keys sorted, so equal values give equal text. */
+const canonicalJson = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => (item === undefined ? "null" : canonicalJson(item))).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const record = value as Readonly<Record<string, unknown>>;
+    const keys = Object.keys(record)
+      .filter((key) => record[key] !== undefined)
+      .sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+};
+
+/**
+ * A command's fingerprint: the SHA-256 of its encoded form as canonical JSON
+ * (object keys sorted), in hex. Two sends of the same command give the same
+ * fingerprint, whatever order their fields were built in.
+ */
+export const fingerprintOf = (command: Json): Effect.Effect<string> =>
+  Effect.promise(() =>
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalJson(command))),
+  ).pipe(
+    Effect.map((digest) =>
+      Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    ),
+  );
+
+/**
+ * Whether a send reuses the id of a stored result with another command:
+ * both have a fingerprint, and they differ. A rejection is decided again on
+ * a resend, so it never counts.
+ */
+export const reusedBy = (result: StoredResult, meta: Aggregate.SendMeta): boolean =>
+  result._tag === "Accepted" &&
+  "stored" in result &&
+  result.stored.fingerprint !== undefined &&
+  meta.fingerprint !== undefined &&
+  result.stored.fingerprint !== meta.fingerprint;
 
 /**
  * A stored result as `send` answers it: its events are the rows of `events`
@@ -420,7 +473,9 @@ export type RollupResult = SeedResult | undefined;
  */
 export type SendResult =
   | { readonly _tag: "Rejected"; readonly rejection: Json }
-  | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson };
+  | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson }
+  /** The command id was sent before with another command (see {@link reusedBy}): nothing applied. */
+  | { readonly _tag: "Reused"; readonly commandId: string };
 
 /**
  * Result of {@link AggregateStore.import}: the receipt, or the version the

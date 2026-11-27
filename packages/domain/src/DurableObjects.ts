@@ -81,6 +81,7 @@ import {
   type RewriteStatus,
   type SeedResult,
   type SendResult,
+  reusedBy,
   sendResultOf,
   stampRevisions,
   type StoredEvent,
@@ -1457,6 +1458,9 @@ const aggregateObject = Effect.fn(function* (
     );
   const commitOnce = Effect.fn(function* (id: string, command: Json, meta: Aggregate.SendMeta) {
     const duplicate = yield* state.storage.get<StoredResult>(`receipt:${meta.commandId}`);
+    if (duplicate && reusedBy(duplicate, meta)) {
+      return { _tag: "Reused", commandId: meta.commandId } satisfies SendResult as SendResult;
+    }
     if (duplicate) return yield* resent(id, duplicate);
     const current = yield* storedMeta;
     if (current.held) return yield* new InstanceHeld();
@@ -1487,7 +1491,7 @@ const aggregateObject = Effect.fn(function* (
         if (!(yield* stillAt(current.version))) return STALE;
         yield* state.storage.put<StoredResult>(
           `receipt:${meta.commandId}`,
-          storedResult(result.version, result.events.length, result.reply),
+          storedResult(result.version, result.events.length, result.reply, meta.fingerprint),
         );
         yield* receiptKept(`receipt:${meta.commandId}`);
         yield* persist(id, current.version, result);

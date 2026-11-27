@@ -80,6 +80,15 @@ export const Commit = Schema.Struct({ stream: Schema.String, version: Schema.Num
 export type Commit = typeof Commit.Type;
 
 /**
+ * A command was sent again under its command id with another input. The
+ * id names the command first sent with it, so the new command is not
+ * applied: send it under a new id.
+ */
+export class CommandIdReused extends Schema.TaggedError<CommandIdReused>()("CommandIdReused", {
+  commandId: Schema.String,
+}) {}
+
+/**
  * What a client receives: the reply, and where the events were committed.
  * `stream` and `version` are the first stream it committed to: the one
  * instance an aggregate's command addresses. `commits` lists every stream,
@@ -102,7 +111,7 @@ export type CommandRpc<
   Tag,
   Schema.Struct<PayloadFields<F>>,
   Schema.Struct<SuccessFields<Reply>>,
-  Schema.Union<[...Rejects, typeof View.ConsistencyTimeout]>
+  Schema.Union<[...Rejects, typeof View.ConsistencyTimeout, typeof CommandIdReused]>
 >;
 
 /**
@@ -228,7 +237,9 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  *
  * ### Sending it once
  * Pass a `commandId`, and a resend with the same id returns the first
- * receipt instead of applying the command again.
+ * receipt instead of applying the command again. Through an Api, a resend
+ * with the same id and another input fails with `CommandIdReused`, and
+ * applies nothing.
  *
  * **Example:** An idempotent send through an Api
  * ```typescript
@@ -325,7 +336,7 @@ export const make = <
       commits: Schema.Array(Commit),
     }),
     // A command that committed can still time out waiting for a view (`consistency: "strong"`).
-    error: Schema.Union([...rejects, View.ConsistencyTimeout]),
+    error: Schema.Union([...rejects, View.ConsistencyTimeout, CommandIdReused]),
   });
   return build(
     tag,

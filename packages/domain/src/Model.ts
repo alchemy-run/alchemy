@@ -15,7 +15,7 @@ import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
 import * as CatchUp from "./CatchUp.ts";
-import type * as Command from "./Command.ts";
+import * as Command from "./Command.ts";
 import * as Compaction from "./Compaction.ts";
 import type * as Decision from "./Decision.ts";
 import {
@@ -43,6 +43,7 @@ import {
   type Json,
   type ListRange,
   type ModelHost,
+  fingerprintOf,
   Platform,
   type PolicyStore,
   type ProjectionStore,
@@ -1335,12 +1336,26 @@ const aggregateClient = (
         const result = yield* Effect.gen(function* () {
           const { id, meta } = yield* metaFor(target, command, options, false);
           const encoded = yield* settle(yield* kernel.encodeCommand(aggregate, command));
-          const result = yield* store.send(id, encoded, meta);
+          // An Api's caller can send an id again with another command (from
+          // state it restored), so the instance compares fingerprints. In
+          // process, a policy or saga step that runs again keeps its first
+          // receipt, whatever it would send now.
+          const fingerprint =
+            options?.checkInput === true && options.commandId !== undefined
+              ? yield* fingerprintOf(encoded)
+              : undefined;
+          const result = yield* store.send(
+            id,
+            encoded,
+            fingerprint === undefined ? meta : { ...meta, fingerprint },
+          );
           yield* Effect.annotateCurrentSpan(
             "domain.outcome",
             result._tag === "Accepted"
               ? "accepted"
-              : ((result.rejection as { readonly _tag?: string })._tag ?? "rejected"),
+              : result._tag === "Reused"
+                ? "reused"
+                : ((result.rejection as { readonly _tag?: string })._tag ?? "rejected"),
           );
           return result;
         }).pipe(
@@ -1349,6 +1364,9 @@ const aggregateClient = (
             spanOptions(target),
           ),
         );
+        if (result._tag === "Reused") {
+          return yield* Command.CommandIdReused.make({ commandId: result.commandId });
+        }
         return result._tag === "Rejected"
           ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))
           : yield* kernel.decodeReceipt(aggregate, command._tag, result.receipt);

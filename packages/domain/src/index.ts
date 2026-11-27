@@ -70,6 +70,9 @@ export declare namespace Command {
 }
 /** A request to change one aggregate. See {@link CommandModule.make}. */
 export const Command = CommandModule.make;
+/** A command id was sent again with another input. See {@link CommandModule.CommandIdReused}. */
+export const CommandIdReused = CommandModule.CommandIdReused;
+export type CommandIdReused = CommandModule.CommandIdReused;
 /** When the commands of a client answer, unless a call says otherwise. See {@link CommandModule.DefaultConsistency}. */
 export const DefaultConsistency = CommandModule.DefaultConsistency;
 

@@ -183,6 +183,21 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.scoped, Effect.provide(Wire)),
   );
 
+  it.live("a command id sent again with another input fails with CommandIdReused", () =>
+    Effect.gen(function* () {
+      const bank = yield* BankApi.client;
+      const first = yield* bank.Deposit({ id: "w-reused", amount: 1 }, { commandId: "d-1" });
+      expect(yield* bank.Deposit({ id: "w-reused", amount: 1 }, { commandId: "d-1" })).toEqual(
+        first,
+      );
+      const reused = yield* bank
+        .Deposit({ id: "w-reused", amount: 5 }, { commandId: "d-1" })
+        .pipe(Effect.flip);
+      expect(reused).toBeInstanceOf(Domain.CommandIdReused);
+      expect(reused).toMatchObject({ commandId: "d-1" });
+    }).pipe(Effect.scoped, Effect.provide(Wire)),
+  );
+
   it.live("an envelope keeps its command id and correlation id", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.client;

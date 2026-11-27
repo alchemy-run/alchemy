@@ -275,7 +275,11 @@ export interface Recorded<E, Id> {
 
 /** How a command is sent: its idempotency key and the call's headers. */
 export interface CommandOptions extends CallOptions {
-  /** A resend with the same id returns the first receipt instead of deciding again. */
+  /**
+   * A resend with the same id returns the first receipt instead of deciding
+   * again. A resend with the same id and another input fails with
+   * `CommandIdReused`.
+   */
   readonly commandId?: string;
   /**
    * When the command answers. `"eventual"` answers as soon as the events are
@@ -737,7 +741,7 @@ const handlersOf = (
         handlers[entry.tag] = ({ commandId, input, consistency }: CommandPayload) =>
           declared.effect(
             // oxlint-disable-next-line effecttsgo/new-schema-class -- `make` on a generic command class loses its instance type
-            aggregate.send(new entry(input), { commandId }).pipe(
+            aggregate.send(new entry(input), { commandId, checkInput: true }).pipe(
               // The events are committed. When asked to, answer once the views
               // have them, so a read after the answer includes the command.
               Effect.tap((receipt) =>
