@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as pathe from "pathe";
 import { effectUIFixture, effectUIMemo } from "../../Website/EffectUI.ts";
 import { expectDirectStatus, expectUrlContains } from "../Utils/Http.ts";
 import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
@@ -68,18 +69,22 @@ describe.concurrent(
     // `HtmlServerVite`'s server renders every page in workerd under
     // `alchemy dev`, prerendered ones included: each page stamps the
     // `count` query into its markup, which tells a render from a template.
+    // Its server code reads the Worker's bindings, as it does deployed.
     test.provider(
       "EffectUI dev: a server-rendered app renders in the local Worker",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
 
-          const rootDir = yield* effectUIFixture("hybrid");
+          const rootDir = yield* effectUIFixture("hybrid", {
+            overlay: pathe.resolve(import.meta.dirname, "effect-ui-env"),
+          });
           const site = yield* stack.deploy(
             Cloudflare.Website.EffectUI("EffectUISsrLocal", {
               rootDir,
               dev: { port: 0 },
               memo: effectUIMemo,
+              env: { GREETING: "hello from the local Worker" },
             }),
           );
 
@@ -95,10 +100,9 @@ describe.concurrent(
             timeout: "15 seconds",
             label: "effect-ui dev ssr deep link",
           });
-          // Rendered by the Worker in workerd, not by Vite's Node server.
-          yield* expectUrlContains(`${site.url!}/__runtime`, "Cloudflare-Workers", {
+          yield* expectUrlContains(`${site.url!}/__greeting`, "hello from the local Worker", {
             timeout: "15 seconds",
-            label: "effect-ui dev runtime",
+            label: "effect-ui dev binding",
           });
           yield* expectDirectStatus(`${site.url!}/not-a-page`, 404, {
             timeout: "15 seconds",

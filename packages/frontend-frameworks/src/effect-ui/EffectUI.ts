@@ -231,7 +231,7 @@ export const make: (
       context: Core.DeployTargetFinishContext,
     ) {
       const collector = yield* provide(Core.makeBuildOutputCollector({ entryEnvironment: "ssr" }));
-      const assetBase = yield* Effect.tryPromise({
+      const { assetBase, rendersPages } = yield* Effect.tryPromise({
         try: async () => {
           const builder = await vite.createBuilder(
             {
@@ -241,9 +241,13 @@ export const make: (
             null,
           );
           await builder.buildApp();
-          // The `base` the client's URLs were rewritten with, which the
-          // uploaded asset paths must agree with.
-          return (builder.environments.client?.config ?? builder.config).base;
+          return {
+            // The `base` the client's URLs were rewritten with, which the
+            // uploaded asset paths must agree with.
+            assetBase: (builder.environments.client?.config ?? builder.config).base,
+            // Whether the server is `HtmlServerVite`'s, not a custom `main`.
+            rendersPages: hasPlugin(builder.config.plugins, HTML_SERVER_PLUGIN_NAME),
+          };
         },
         catch: (cause) =>
           cause instanceof Core.FrameworkError ? cause : fail("Failed to build Effect UI", cause),
@@ -251,7 +255,11 @@ export const make: (
       const collected = yield* collector
         .collect()
         .pipe(Effect.mapError((error) => fail(error.message, error.cause)));
-      if (collected.serverModules?.length && collected.clientDirectory !== undefined) {
+      if (
+        rendersPages &&
+        collected.serverModules?.length &&
+        collected.clientDirectory !== undefined
+      ) {
         yield* provide(removeUnrenderedShell(collected.clientDirectory)).pipe(
           Effect.mapError((cause) => fail("Failed to collect Effect UI build output", cause)),
         );

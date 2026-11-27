@@ -61,6 +61,44 @@ describe.concurrent(
       );
     }
 
+    // A browser-only app with a custom `main`: the Worker answers its own
+    // routes and the asset layer still falls back to the shell.
+    test.provider(
+      "EffectUI: a browser-only app runs behind a custom Worker entry",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* effectUIFixture("spa", {
+            overlay: pathe.resolve(import.meta.dirname, "effect-ui-worker"),
+          });
+          const site = yield* stack.deploy(
+            Cloudflare.Website.EffectUI("FixEffectUIMain", {
+              rootDir,
+              main: "src/worker.ts",
+              workersDev: true,
+              compatibility: { date: "2026-11-01", flags: ["nodejs_compat"] },
+              memo: effectUIMemo,
+              env: { GREETING: "hello from main" },
+              assets: { runWorkerFirst: ["/api/*"] },
+            }),
+          );
+
+          yield* expectWorkerExists(site.workerName, accountId);
+          yield* expectUrlContains(`${site.url!}/api/greeting`, "hello from main", {
+            timeout: "30 seconds",
+            label: "effect-ui custom worker route",
+          });
+          yield* verifyEffectUIRendering(site.url!, "spa");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
+
     // Server code reads the Worker's bindings from `cloudflare:workers`,
     // imported per request since the build prerenders in Node.
     test.provider(
