@@ -9,6 +9,7 @@ import {
 } from "@alchemy.run/sql/Migrations";
 import { stripSslQueryParams } from "@alchemy.run/sql/PostgresDriver";
 import { applySqlImports, hashImports } from "@alchemy.run/sql/SqlFile";
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -17,16 +18,11 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { RenderDeployFailedError, RenderValidationError } from "./Errors.ts";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import { renderResourceLogs, renderResourceTail } from "./internal/Logs.ts";
 import { pollUntil } from "./internal/Poll.ts";
 import { toRedacted, unwrapSecret } from "./internal/Redacted.ts";
 import { buildIpAllowListField, syncResourceLogStream } from "./internal/ServiceBase.ts";
-import type {
-  WirePostgres,
-  WirePostgresConnectionInfo,
-  WireResourceLogStreamSetting,
-} from "./internal/WireTypes.ts";
 import { parsePostgresOrigin, toPooledPostgresUrl, type PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
 import type {
@@ -47,8 +43,6 @@ import type {
 export interface PostgresReadReplicaInput {
   /** Display name of the read replica instance. */
   name: string;
-  /** PostgreSQL configuration parameter overrides for the read replica. */
-  parameterOverrides?: Record<string, string>;
   /** Optional log stream override scoped to this read replica. */
   logStreamOverride?: LogStreamOverrideInput;
 }
@@ -58,8 +52,6 @@ export interface PostgresReadReplicaAttributes {
   id: string;
   /** Replica display name. */
   name: string;
-  /** PostgreSQL parameter overrides active on the replica. */
-  parameterOverrides?: Record<string, string>;
   /** Log stream override active on the replica, if configured. */
   logStreamOverride?: LogStreamOverrideAttributes;
 }
@@ -110,8 +102,6 @@ export interface PostgresProps {
   restoreFrom?: PostgresRestoreFrom;
   /** IPv4 CIDR blocks permitted to connect externally. */
   ipAllowList?: CidrBlockAndDescription[];
-  /** PostgreSQL configuration parameter overrides. */
-  parameterOverrides?: Record<string, string>;
   /** Read replica configurations attached to this primary database. */
   readReplicas?: PostgresReadReplicaInput[];
   /** Optional Datadog API key for monitoring integration (pass empty string to clear). */
@@ -166,8 +156,6 @@ export interface PostgresAttributes {
   dashboardUrl: string;
   /** IP allow list rules. */
   ipAllowList: CidrBlockAndDescription[];
-  /** PostgreSQL parameter overrides active on the database. */
-  parameterOverrides?: Record<string, string>;
   /** Reconciled read replicas. */
   readReplicas: PostgresReadReplicaAttributes[];
   /** Connection credentials & strings (redacted). */
@@ -216,7 +204,7 @@ export type Postgres = Resource<
 
 /**
  * A managed Render PostgreSQL database with automated backups, high availability,
- * read replicas, parameter overrides, and Alchemy SQL migration support.
+ * read replicas, and Alchemy SQL migration support.
  *
  * Connect from a Render service or foreign runtime via {@link ConnectPostgres}.
  *
@@ -254,11 +242,17 @@ const validateDiskSizeGB = (diskSizeGB: number | undefined) => {
   );
 };
 
+const listAllPostgres = (params: { readonly ownerId?: string[]; readonly name?: string[] }) =>
+  Api.paginateCursorList(
+    (cursor) => RenderSdk.listPostgres({ ...params, cursor, limit: 100 }),
+    (row) => row.postgres,
+  );
+
 const waitForPostgresAvailable = (postgresId: string) =>
   pollUntil({
     operation: "postgres provisioning",
     resourceId: postgresId,
-    check: Client.getPostgres(postgresId),
+    check: RenderSdk.getPostgres({ postgresId }),
     statusOf: (pg) => pg.status,
     failIf: (pg) => {
       if (pg.status === "unavailable" || pg.status === "recovery_failed") {
@@ -275,7 +269,7 @@ const waitForPostgresAvailable = (postgresId: string) =>
   });
 
 const hydratePostgres = (
-  pg: WirePostgres,
+  pg: RenderSdk.Postgres | RenderSdk.PostgresDetail,
   extraState?: {
     migrationsDir?: string | undefined;
     migrationsTable?: string | undefined;
@@ -284,24 +278,21 @@ const hydratePostgres = (
   },
 ) =>
   Effect.gen(function* () {
-    const connInfo: WirePostgresConnectionInfo = yield* Client.getPostgresConnectionInfo(pg.id);
-    const logStream = yield* Client.ignoreNotFound(Client.getResourceLogStream(pg.id));
-    const recovery = yield* Client.getPostgresRecovery(pg.id).pipe(
-      Effect.catchIf(
-        (e) =>
-          e._tag === "RenderNotFoundError" ||
-          e._tag === "RenderBadRequestError" ||
-          e._tag === "RenderForbiddenError",
-        () => Effect.undefined,
-      ),
+    const connInfo = yield* RenderSdk.getPostgresConnectionInfo({ postgresId: pg.id });
+    const logStream = yield* Api.ignoreNotFound(
+      RenderSdk.getResourceLogStream({ resourceId: pg.id }),
+    );
+    const recovery = yield* Api.ignoreNotFound(
+      RenderSdk.getPostgresRecoveryInfo({ postgresId: pg.id }),
     );
     const replicaAttrs: PostgresReadReplicaAttributes[] = [];
     for (const replica of pg.readReplicas ?? []) {
-      const rLog = yield* Client.ignoreNotFound(Client.getResourceLogStream(replica.id));
+      const rLog = yield* Api.ignoreNotFound(
+        RenderSdk.getResourceLogStream({ resourceId: replica.id }),
+      );
       replicaAttrs.push({
         id: replica.id,
         name: replica.name,
-        parameterOverrides: replica.parameterOverrides,
         logStreamOverride: rLog?.setting
           ? {
               resourceId: rLog.resourceId ?? replica.id,
@@ -311,14 +302,15 @@ const hydratePostgres = (
           : undefined,
       });
     }
-    const connectionPool = pg.connectionPool ?? "none";
+    const connectionPool: PostgresConnectionPool =
+      pg.connectionPool === "pgbouncer" ? "pgbouncer" : "none";
     const isPooled = connectionPool === "pgbouncer";
-    const pooledExternal = isPooled
-      ? toPooledPostgresUrl(connInfo.externalConnectionString)
-      : undefined;
-    const pooledInternal = isPooled
-      ? toPooledPostgresUrl(connInfo.internalConnectionString)
-      : undefined;
+    const externalUrl = unwrapSecret(connInfo.externalConnectionString);
+    const internalUrl = unwrapSecret(connInfo.internalConnectionString);
+    const password = unwrapSecret(connInfo.password);
+    const psqlCommand = unwrapSecret(connInfo.psqlCommand);
+    const pooledExternal = isPooled ? toPooledPostgresUrl(externalUrl) : undefined;
+    const pooledInternal = isPooled ? toPooledPostgresUrl(internalUrl) : undefined;
     return {
       id: pg.id,
       name: pg.name,
@@ -338,21 +330,20 @@ const hydratePostgres = (
       suspended: pg.suspended,
       dashboardUrl: pg.dashboardUrl,
       ipAllowList: pg.ipAllowList ?? [],
-      parameterOverrides: pg.parameterOverrides,
       readReplicas: replicaAttrs,
       connectionInfo: {
-        externalConnectionString: toRedacted(connInfo.externalConnectionString),
-        internalConnectionString: toRedacted(connInfo.internalConnectionString),
+        externalConnectionString: toRedacted(externalUrl),
+        internalConnectionString: toRedacted(internalUrl),
         ...(pooledInternal !== undefined
           ? { pooledInternalConnectionString: toRedacted(pooledInternal) }
           : {}),
         ...(pooledExternal !== undefined
           ? { pooledExternalConnectionString: toRedacted(pooledExternal) }
           : {}),
-        password: toRedacted(connInfo.password),
-        psqlCommand: toRedacted(connInfo.psqlCommand),
+        password: toRedacted(password),
+        psqlCommand: toRedacted(psqlCommand),
       },
-      origin: parsePostgresOrigin(connInfo.externalConnectionString),
+      origin: parsePostgresOrigin(externalUrl),
       ...(pooledExternal !== undefined
         ? { pooledOrigin: parsePostgresOrigin(pooledExternal) }
         : {}),
@@ -379,21 +370,21 @@ export const listPostgresExports = (
   postgresId: string,
 ): Effect.Effect<
   PostgresExportInfo[],
-  Effect.Error<ReturnType<typeof Client.listPostgresExports>>,
-  Effect.Services<ReturnType<typeof Client.listPostgresExports>>
-> => Client.listPostgresExports(postgresId);
+  Effect.Error<ReturnType<typeof RenderSdk.listPostgresExport>>,
+  Effect.Services<ReturnType<typeof RenderSdk.listPostgresExport>>
+> => RenderSdk.listPostgresExport({ postgresId });
 
 /** Trigger a new logical database export on a Render Postgres database. */
 export const createPostgresExport = (
   postgresId: string,
 ): Effect.Effect<
-  PostgresExportInfo,
-  Effect.Error<ReturnType<typeof Client.createPostgresExport>>,
-  Effect.Services<ReturnType<typeof Client.createPostgresExport>>
-> => Client.createPostgresExport(postgresId);
+  void,
+  Effect.Error<ReturnType<typeof RenderSdk.createPostgresExport>>,
+  Effect.Services<ReturnType<typeof RenderSdk.createPostgresExport>>
+> => RenderSdk.createPostgresExport({ postgresId }).pipe(Effect.asVoid);
 
 const syncReplicaLogStreams = (
-  pg: WirePostgres,
+  pg: RenderSdk.Postgres | RenderSdk.PostgresDetail,
   desiredReplicas: ReadonlyArray<PostgresReadReplicaInput> | undefined,
   existingReplicas: ReadonlyArray<PostgresReadReplicaAttributes>,
 ) =>
@@ -404,7 +395,9 @@ const syncReplicaLogStreams = (
     const existingById = new Map(existingReplicas.map((r) => [r.id, r.logStreamOverride]));
     for (const replica of pg.readReplicas ?? []) {
       const desiredLog = desiredByName.get(replica.name);
-      const currentLog: WireResourceLogStreamSetting | undefined = existingById.get(replica.id);
+      const currentLog: RenderSdk.GetResourceLogStreamResponse | undefined = existingById.get(
+        replica.id,
+      );
       yield* syncResourceLogStream(replica.id, currentLog, desiredLog);
     }
   });
@@ -496,7 +489,7 @@ export const PostgresProvider = () =>
       }),
       read: Effect.fn(function* ({ id, olds, output, previous }) {
         if (output?.id) {
-          const pg = yield* Client.ignoreNotFound(Client.getPostgres(output.id));
+          const pg = yield* Api.ignoreNotFound(RenderSdk.getPostgres({ postgresId: output.id }));
           if (!pg) return undefined;
           return yield* hydratePostgres(pg, {
             migrationsDir: output.migrationsDir,
@@ -510,8 +503,8 @@ export const PostgresProvider = () =>
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-        const all = yield* Client.listPostgres({ ownerId: [ownerId], name: [desiredName] });
+        const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+        const all = yield* listAllPostgres({ ownerId: [ownerId], name: [desiredName] });
         const matched = all.find((p) => p.name === desiredName);
         if (!matched) return undefined;
         const attrs = yield* hydratePostgres(matched);
@@ -519,49 +512,47 @@ export const PostgresProvider = () =>
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const pg = yield* Client.ignoreNotFound(Client.getPostgres(props.id));
+          const pg = yield* Api.ignoreNotFound(RenderSdk.getPostgres({ postgresId: props.id }));
           return pg ? yield* hydratePostgres(pg) : undefined;
         }
         if (props.name) {
-          const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-          const all = yield* Client.listPostgres({ ownerId: [ownerId], name: [props.name] });
+          const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+          const all = yield* listAllPostgres({ ownerId: [ownerId], name: [props.name] });
           const matched = all.find((p) => p.name === props.name);
           return matched ? yield* hydratePostgres(matched) : undefined;
         }
         return undefined;
       }),
       list: Effect.fn(function* () {
-        const ownerId = yield* Client.resolveOwnerId();
-        const all = yield* Client.listPostgres({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId();
+        const all = yield* listAllPostgres({ ownerId: [ownerId] });
         return yield* Effect.forEach(all, (pg) => hydratePostgres(pg));
       }),
       reconcile: Effect.fn(function* ({ id, news, olds, output }) {
         yield* validateDiskSizeGB(news.diskSizeGB);
         const desiredName = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getPostgres(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getPostgres({ postgresId: output.id }))
           : undefined;
 
-        let latestPg: WirePostgres;
+        let latestPg: RenderSdk.PostgresDetail;
         if (!existing) {
           if (news.restoreFrom) {
-            const restored = yield* Client.triggerPostgresRecovery(
-              news.restoreFrom.sourcePostgresId,
-              {
-                restoreName: desiredName,
-                restoreTime: news.restoreFrom.restoreTime,
-                ...(news.plan !== undefined ? { plan: news.plan } : {}),
-              },
-            );
+            const restored = yield* RenderSdk.recoverPostgres({
+              postgresId: news.restoreFrom.sourcePostgresId,
+              restoreName: desiredName,
+              restoreTime: news.restoreFrom.restoreTime,
+              ...(news.plan !== undefined ? { plan: news.plan } : {}),
+            });
             latestPg = yield* waitForPostgresAvailable(restored.id);
             const hasPostRestorePatch =
               news.connectionPool !== undefined ||
               news.ipAllowList !== undefined ||
-              news.parameterOverrides !== undefined ||
               news.enableDiskAutoscaling !== undefined ||
               news.enableHighAvailability !== undefined;
             if (hasPostRestorePatch) {
-              yield* Client.updatePostgres(latestPg.id, {
+              yield* RenderSdk.updatePostgres({
+                postgresId: latestPg.id,
                 ...(news.connectionPool !== undefined
                   ? { connectionPool: news.connectionPool }
                   : {}),
@@ -572,23 +563,20 @@ export const PostgresProvider = () =>
                   ? { enableHighAvailability: news.enableHighAvailability }
                   : {}),
                 ...(news.ipAllowList !== undefined ? { ipAllowList: news.ipAllowList } : {}),
-                ...(news.parameterOverrides !== undefined
-                  ? { parameterOverrides: news.parameterOverrides }
-                  : {}),
               });
               latestPg = yield* waitForPostgresAvailable(latestPg.id);
             }
             if (news.environmentId !== undefined) {
-              yield* Client.syncResourceEnvironment(
+              yield* Api.syncResourceEnvironment(
                 latestPg.id,
                 latestPg.environmentId,
                 news.environmentId,
               );
-              latestPg = yield* Client.getPostgres(latestPg.id);
+              latestPg = yield* RenderSdk.getPostgres({ postgresId: latestPg.id });
             }
           } else {
-            const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-            const created = yield* Client.createPostgres({
+            const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+            const created = yield* RenderSdk.createPostgres({
               name: desiredName,
               ownerId,
               plan: news.plan ?? "free",
@@ -606,22 +594,14 @@ export const PostgresProvider = () =>
                 : {}),
               ...(news.connectionPool !== undefined ? { connectionPool: news.connectionPool } : {}),
               ...(news.ipAllowList !== undefined ? { ipAllowList: news.ipAllowList } : {}),
-              ...(news.parameterOverrides !== undefined
-                ? { parameterOverrides: news.parameterOverrides }
-                : {}),
               ...(news.readReplicas !== undefined
                 ? {
                     readReplicas: news.readReplicas.map((r) => ({
                       name: r.name,
-                      ...(r.parameterOverrides !== undefined
-                        ? { parameterOverrides: r.parameterOverrides }
-                        : {}),
                     })),
                   }
                 : {}),
-              ...(news.datadogApiKey !== undefined
-                ? { datadogAPIKey: unwrapSecret(news.datadogApiKey) }
-                : {}),
+              ...(news.datadogApiKey !== undefined ? { datadogAPIKey: news.datadogApiKey } : {}),
               ...(news.datadogSite !== undefined ? { datadogSite: news.datadogSite } : {}),
             });
             latestPg = yield* waitForPostgresAvailable(created.id);
@@ -633,15 +613,9 @@ export const PostgresProvider = () =>
           yield* syncReplicaLogStreams(latestPg, news.readReplicas, []);
         } else {
           const ipAllowList = buildIpAllowListField(news.ipAllowList, olds?.ipAllowList);
-          const clearParams =
-            news.parameterOverrides === undefined && olds?.parameterOverrides !== undefined;
-          const parameterOverrides = clearParams
-            ? {}
-            : !deepEqual(news.parameterOverrides, olds?.parameterOverrides)
-              ? news.parameterOverrides
-              : undefined;
 
-          const updated = yield* Client.updatePostgres(existing.id, {
+          const updated = yield* RenderSdk.updatePostgres({
+            postgresId: existing.id,
             name: desiredName,
             ...(news.plan !== undefined ? { plan: news.plan } : {}),
             ...(news.diskSizeGB !== undefined ? { diskSizeGB: news.diskSizeGB } : {}),
@@ -653,50 +627,46 @@ export const PostgresProvider = () =>
               : {}),
             ...(news.connectionPool !== undefined ? { connectionPool: news.connectionPool } : {}),
             ...(ipAllowList !== undefined ? { ipAllowList } : {}),
-            ...(parameterOverrides !== undefined ? { parameterOverrides } : {}),
             ...(news.readReplicas !== undefined
               ? {
                   readReplicas: news.readReplicas.map((r) => ({
                     name: r.name,
-                    ...(r.parameterOverrides !== undefined
-                      ? { parameterOverrides: r.parameterOverrides }
-                      : {}),
                   })),
                 }
               : {}),
-            ...(news.datadogApiKey !== undefined
-              ? { datadogAPIKey: unwrapSecret(news.datadogApiKey) }
-              : {}),
+            ...(news.datadogApiKey !== undefined ? { datadogAPIKey: news.datadogApiKey } : {}),
             ...(news.datadogSite !== undefined ? { datadogSite: news.datadogSite } : {}),
           });
 
-          yield* Client.syncResourceEnvironment(
+          yield* Api.syncResourceEnvironment(
             existing.id,
             updated.environmentId ?? existing.environmentId,
             news.environmentId,
           );
 
-          const currentLog = yield* Client.ignoreNotFound(Client.getResourceLogStream(existing.id));
+          const currentLog = yield* Api.ignoreNotFound(
+            RenderSdk.getResourceLogStream({ resourceId: existing.id }),
+          );
           yield* syncResourceLogStream(existing.id, currentLog, news.logStreamOverride);
           yield* syncReplicaLogStreams(updated, news.readReplicas, output?.readReplicas ?? []);
           latestPg =
             updated.status === "creating" || updated.status === "updating_instance"
               ? yield* waitForPostgresAvailable(updated.id)
-              : yield* Client.getPostgres(updated.id);
+              : yield* RenderSdk.getPostgres({ postgresId: updated.id });
         }
 
         if (news.suspended === true && latestPg.suspended !== "suspended") {
-          yield* Client.suspendPostgres(latestPg.id);
-          latestPg = yield* Client.getPostgres(latestPg.id);
+          yield* RenderSdk.suspendPostgres({ postgresId: latestPg.id });
+          latestPg = yield* RenderSdk.getPostgres({ postgresId: latestPg.id });
         } else if (news.suspended === false && latestPg.suspended === "suspended") {
-          yield* Client.resumePostgres(latestPg.id);
+          yield* RenderSdk.resumePostgres({ postgresId: latestPg.id });
           latestPg = yield* waitForPostgresAvailable(latestPg.id);
         }
 
         const migInput = migrationsInputOf(news);
-        const connInfo = yield* Client.getPostgresConnectionInfo(latestPg.id);
+        const connInfo = yield* RenderSdk.getPostgresConnectionInfo({ postgresId: latestPg.id });
         const pgConfig = {
-          connectionString: stripSslQueryParams(connInfo.externalConnectionString),
+          connectionString: stripSslQueryParams(unwrapSecret(connInfo.externalConnectionString)),
           ssl: { rejectUnauthorized: false },
         };
         const pgConnectOptions = {
@@ -740,7 +710,7 @@ export const PostgresProvider = () =>
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deletePostgres(output.id);
+        yield* Api.deleteIdempotent(RenderSdk.deletePostgres({ postgresId: output.id }));
       }),
       logs: Effect.fn(function* ({ output, options }) {
         return yield* renderResourceLogs({

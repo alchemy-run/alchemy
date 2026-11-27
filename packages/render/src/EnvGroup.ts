@@ -1,3 +1,4 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -5,10 +6,9 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import { toRedacted, unwrapSecret } from "./internal/Redacted.ts";
 import { envVarsToWire, secretFilesToWire } from "./internal/ServiceBase.ts";
-import type { WireEnvGroup, WireEnvVar } from "./internal/WireTypes.ts";
 import type { Providers } from "./Providers.ts";
 import type { EnvVarValueSpec, SecretFileOutput, SecretString } from "./Types.ts";
 
@@ -86,9 +86,9 @@ export interface EnvGroup extends Resource<
 
 export const EnvGroup = Resource<EnvGroup>("Render.EnvGroup");
 
-const mapEnvGroup = (group: WireEnvGroup): EnvGroupAttributes => {
+const mapEnvGroup = (group: RenderSdk.CreateEnvGroupResponse): EnvGroupAttributes => {
   const envVars: Record<string, Redacted.Redacted<string>> = {};
-  for (const ev of group.envVars) {
+  for (const ev of group.envVars ?? []) {
     envVars[ev.key] = toRedacted(ev.value);
   }
   return {
@@ -97,7 +97,10 @@ const mapEnvGroup = (group: WireEnvGroup): EnvGroupAttributes => {
     ownerId: group.ownerId,
     environmentId: group.environmentId,
     envVars,
-    secretFiles: group.secretFiles.map((f) => ({ name: f.name, content: toRedacted(f.content) })),
+    secretFiles: (group.secretFiles ?? []).map((f) => ({
+      name: f.name,
+      content: toRedacted(f.content),
+    })),
     serviceIds: group.serviceLinks.map((s) => s.id),
     createdAt: group.createdAt,
     updatedAt: group.updatedAt,
@@ -118,7 +121,7 @@ export const EnvGroupProvider = () =>
       }),
       read: Effect.fn(function* ({ id, olds, output, previous }) {
         if (output?.id) {
-          const group = yield* Client.ignoreNotFound(Client.getEnvGroup(output.id));
+          const group = yield* Api.ignoreNotFound(RenderSdk.getEnvGroup({ envGroupId: output.id }));
           return group ? mapEnvGroup(group) : undefined;
         }
         const explicitName =
@@ -126,36 +129,36 @@ export const EnvGroupProvider = () =>
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-        const list = yield* Client.listEnvGroups({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+        const list = yield* RenderSdk.listEnvGroups({ ownerId: [ownerId], limit: 100 });
         const matched = list.find((g) => g.name === desiredName);
         if (!matched) return undefined;
-        const full = yield* Client.ignoreNotFound(Client.getEnvGroup(matched.id));
+        const full = yield* Api.ignoreNotFound(RenderSdk.getEnvGroup({ envGroupId: matched.id }));
         if (!full) return undefined;
         const attrs = mapEnvGroup(full);
         return explicitName === undefined || full.id === previous?.id ? attrs : Unowned(attrs);
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const group = yield* Client.ignoreNotFound(Client.getEnvGroup(props.id));
+          const group = yield* Api.ignoreNotFound(RenderSdk.getEnvGroup({ envGroupId: props.id }));
           return group ? mapEnvGroup(group) : undefined;
         }
         if (props.name) {
-          const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-          const list = yield* Client.listEnvGroups({ ownerId: [ownerId] });
+          const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+          const list = yield* RenderSdk.listEnvGroups({ ownerId: [ownerId], limit: 100 });
           const matched = list.find((g) => g.name === props.name);
           if (!matched) return undefined;
-          const full = yield* Client.ignoreNotFound(Client.getEnvGroup(matched.id));
+          const full = yield* Api.ignoreNotFound(RenderSdk.getEnvGroup({ envGroupId: matched.id }));
           return full ? mapEnvGroup(full) : undefined;
         }
         return undefined;
       }),
       list: Effect.fn(function* () {
-        const ownerId = yield* Client.resolveOwnerId();
-        const metas = yield* Client.listEnvGroups({ ownerId: [ownerId] });
-        return yield* Effect.forEach(metas, (meta) => Client.getEnvGroup(meta.id)).pipe(
-          Effect.map((groups) => groups.map(mapEnvGroup)),
-        );
+        const ownerId = yield* Api.resolveOwnerId();
+        const metas = yield* RenderSdk.listEnvGroups({ ownerId: [ownerId], limit: 100 });
+        return yield* Effect.forEach(metas, (meta) =>
+          RenderSdk.getEnvGroup({ envGroupId: meta.id }),
+        ).pipe(Effect.map((groups) => groups.map(mapEnvGroup)));
       }),
       reconcile: Effect.fn(function* ({ id, news, output }) {
         const name = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
@@ -163,14 +166,14 @@ export const EnvGroupProvider = () =>
         const desiredSecretFiles = news.secretFiles ?? {};
 
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getEnvGroup(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getEnvGroup({ envGroupId: output.id }))
           : undefined;
 
         if (!existing) {
-          const ownerId = yield* Client.resolveOwnerId(news.ownerId);
+          const ownerId = yield* Api.resolveOwnerId(news.ownerId);
           const wireVars = envVarsToWire(desiredEnvVars, [], false);
           const wireFiles = secretFilesToWire(desiredSecretFiles);
-          const created = yield* Client.createEnvGroup({
+          const created = yield* RenderSdk.createEnvGroup({
             name,
             ownerId,
             ...(news.environmentId !== undefined ? { environmentId: news.environmentId } : {}),
@@ -180,13 +183,20 @@ export const EnvGroupProvider = () =>
           return mapEnvGroup(created);
         }
 
-        const existingVarMap = new Map<string, WireEnvVar>(existing.envVars.map((v) => [v.key, v]));
+        const existingVars = existing.envVars ?? [];
+        const existingVarMap = new Map<string, RenderSdk.EnvVar>(
+          existingVars.map((v) => [v.key, v]),
+        );
 
         for (const [key, spec] of Object.entries(desiredEnvVars)) {
           const existingVar = existingVarMap.get(key);
           if (typeof spec === "object" && spec !== null && "generateValue" in spec) {
             if (spec.generateValue && !existingVar) {
-              yield* Client.putEnvGroupEnvVar(existing.id, key, { generateValue: true });
+              yield* RenderSdk.updateEnvGroupEnvVar({
+                envGroupId: existing.id,
+                envVarKey: key,
+                body: { generateValue: true },
+              });
             }
             continue;
           }
@@ -194,43 +204,54 @@ export const EnvGroupProvider = () =>
             typeof spec === "object" && spec !== null && "value" in spec ? spec.value : spec,
           );
           if (!existingVar || existingVar.value !== rawValue) {
-            yield* Client.putEnvGroupEnvVar(existing.id, key, { value: rawValue });
+            yield* RenderSdk.updateEnvGroupEnvVar({
+              envGroupId: existing.id,
+              envVarKey: key,
+              body: { value: rawValue },
+            });
           }
         }
-        for (const ev of existing.envVars) {
+        for (const ev of existingVars) {
           if (!(ev.key in desiredEnvVars)) {
-            yield* Client.deleteEnvGroupEnvVar(existing.id, ev.key);
+            yield* RenderSdk.deleteEnvGroupEnvVar({
+              envGroupId: existing.id,
+              envVarKey: ev.key,
+            });
           }
         }
 
-        const existingFileMap = new Map(existing.secretFiles.map((f) => [f.name, f.content]));
+        const existingFiles = existing.secretFiles ?? [];
+        const existingFileMap = new Map(existingFiles.map((f) => [f.name, f.content]));
         for (const [fileName, content] of Object.entries(desiredSecretFiles)) {
           const raw = unwrapSecret(content);
           if (existingFileMap.get(fileName) !== raw) {
-            yield* Client.putEnvGroupSecretFile(existing.id, fileName, raw);
+            yield* RenderSdk.updateEnvGroupSecretFile({
+              envGroupId: existing.id,
+              envVarKey: fileName,
+              content: raw,
+            });
           }
         }
-        for (const sf of existing.secretFiles) {
+        for (const sf of existingFiles) {
           if (!(sf.name in desiredSecretFiles)) {
-            yield* Client.deleteEnvGroupSecretFile(existing.id, sf.name);
+            yield* RenderSdk.deleteEnvGroupSecretFile({
+              envGroupId: existing.id,
+              envVarKey: sf.name,
+            });
           }
         }
 
-        yield* Client.syncResourceEnvironment(
-          existing.id,
-          existing.environmentId,
-          news.environmentId,
-        );
+        yield* Api.syncResourceEnvironment(existing.id, existing.environmentId, news.environmentId);
 
         const updated =
           existing.name !== name
-            ? yield* Client.updateEnvGroupName(existing.id, name)
-            : yield* Client.getEnvGroup(existing.id);
+            ? yield* RenderSdk.updateEnvGroup({ envGroupId: existing.id, name })
+            : yield* RenderSdk.getEnvGroup({ envGroupId: existing.id });
         return mapEnvGroup(updated);
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteEnvGroup(output.id);
+        yield* Api.deleteIdempotent(RenderSdk.deleteEnvGroup({ envGroupId: output.id }));
       }),
     }),
   );

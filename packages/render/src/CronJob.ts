@@ -1,17 +1,20 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import { renderResourceLogs, renderResourceTail } from "./internal/Logs.ts";
 import {
-  buildEnvSpecificDetailsCreate,
+  buildCronEnvSpecificDetailsCreate,
   buildEnvSpecificDetailsUpdate,
   buildSourceFieldsCreate,
+  deleteServiceById,
   envVarsToWire,
   findServiceByLookup,
   hydrateService,
+  listAllServices,
   listServicesByType,
   mapBaseServiceAttrs,
   mergeBoundEnvVars,
@@ -89,11 +92,14 @@ export interface CronJob extends Resource<
 
 export const CronJob = Resource<CronJob>("Render.CronJob");
 
-const mapCronJob = (data: HydratedServiceData): CronJobAttributes => ({
-  ...mapBaseServiceAttrs(data),
-  schedule: data.service.serviceDetails.schedule ?? "",
-  lastSuccessfulRunAt: data.service.serviceDetails.lastSuccessfulRunAt,
-});
+const mapCronJob = (data: HydratedServiceData): CronJobAttributes => {
+  const d = data.service.serviceDetails;
+  return {
+    ...mapBaseServiceAttrs(data),
+    schedule: "schedule" in d ? d.schedule : "",
+    lastSuccessfulRunAt: "lastSuccessfulRunAt" in d ? d.lastSuccessfulRunAt : undefined,
+  };
+};
 
 export const CronJobProvider = () =>
   Provider.effect(
@@ -151,7 +157,7 @@ export const CronJobProvider = () =>
         yield* validateRuntimeSource(news.runtimeSource, news.startCommand);
         const desiredName = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getService(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getService({ serviceId: output.id }))
           : undefined;
         const mergedEnv = mergeBoundEnvVars(
           news.envVars,
@@ -160,39 +166,45 @@ export const CronJobProvider = () =>
         const runtime = runtimeOfSource(news.runtimeSource);
 
         if (!existing) {
-          const ownerId = yield* Client.resolveOwnerId(news.ownerId);
+          const ownerId = yield* Api.resolveOwnerId(news.ownerId);
           const envVarsWire = envVarsToWire(mergedEnv, [], false);
           const secretFilesWire = secretFilesToWire(news.secretFiles);
-          const createdRes = yield* Client.createService({
+          const serviceDetails: RenderSdk.CronJobDetailsPOST = {
+            runtime,
+            plan: news.plan ?? "starter",
+            ...(news.region !== undefined ? { region: news.region } : {}),
+            schedule: news.schedule,
+            envSpecificDetails: buildCronEnvSpecificDetailsCreate(
+              news.runtimeSource,
+              news.startCommand,
+            ),
+          };
+          const createdRes = yield* RenderSdk.createService({
+            ...buildSourceFieldsCreate(news.runtimeSource, ownerId),
             name: desiredName,
             ownerId,
             type: "cron_job",
             ...(news.rootDirectory !== undefined ? { rootDir: news.rootDirectory } : {}),
             ...(envVarsWire.length > 0 ? { envVars: envVarsWire } : {}),
             ...(secretFilesWire.length > 0 ? { secretFiles: secretFilesWire } : {}),
-            serviceDetails: {
-              runtime,
-              plan: news.plan ?? "starter",
-              ...(news.buildPlan !== undefined ? { buildPlan: news.buildPlan } : {}),
-              ...(news.region !== undefined ? { region: news.region } : {}),
-              schedule: news.schedule,
-              envSpecificDetails: buildEnvSpecificDetailsCreate(
-                news.runtimeSource,
-                news.startCommand,
-              ),
-            },
-            ...buildSourceFieldsCreate(news.runtimeSource, ownerId),
+            serviceDetails,
           });
           const service = createdRes.service
             ? createdRes.service
-            : yield* Client.listServices({
+            : yield* listAllServices({
                 ownerId: [ownerId],
                 name: [desiredName],
                 type: ["cron_job"],
               }).pipe(Effect.map((rows) => rows[0]));
 
+          if (!service) {
+            return yield* new RenderSdk.NotFound({
+              message: `Render cron job "${desiredName}" was not returned after creation.`,
+            });
+          }
+
           if (news.environmentId !== undefined) {
-            yield* Client.syncResourceEnvironment(
+            yield* Api.syncResourceEnvironment(
               service.id,
               service.environmentId,
               news.environmentId,
@@ -208,32 +220,33 @@ export const CronJobProvider = () =>
           if (news.waitForDeployCompletion) {
             yield* waitForServiceLive("Render.CronJob", service.id);
           }
-          const fresh = yield* Client.getService(service.id);
+          const fresh = yield* RenderSdk.getService({ serviceId: service.id });
           return mapCronJob(yield* hydrateService(fresh));
         }
 
         const hydratedBefore = yield* hydrateService(existing);
-        yield* Client.updateService(existing.id, {
+        const serviceDetails: RenderSdk.CronJobDetailsPATCH = {
+          runtime,
+          plan: news.plan ?? "starter",
+          schedule: news.schedule,
+          envSpecificDetails: buildEnvSpecificDetailsUpdate(news.runtimeSource, news.startCommand),
+        };
+        yield* RenderSdk.updateService({
+          ...buildSourceFieldsCreate(news.runtimeSource, existing.ownerId),
+          serviceId: existing.id,
           name: desiredName,
           ...(news.rootDirectory !== undefined ? { rootDir: news.rootDirectory } : {}),
-          serviceDetails: {
-            runtime,
-            plan: news.plan ?? "starter",
-            ...(news.buildPlan !== undefined ? { buildPlan: news.buildPlan } : {}),
-            schedule: news.schedule,
-            envSpecificDetails: buildEnvSpecificDetailsUpdate(
-              news.runtimeSource,
-              news.startCommand,
-            ),
-          },
-          ...buildSourceFieldsCreate(news.runtimeSource, existing.ownerId),
+          serviceDetails,
         });
 
-        yield* Client.putServiceEnvVars(
-          existing.id,
-          envVarsToWire(mergedEnv, hydratedBefore.envVars, true),
-        );
-        yield* Client.putServiceSecretFiles(existing.id, secretFilesToWire(news.secretFiles));
+        yield* RenderSdk.updateEnvVarsForService({
+          serviceId: existing.id,
+          body: envVarsToWire(mergedEnv, hydratedBefore.envVars, true),
+        });
+        yield* RenderSdk.updateSecretFilesForService({
+          serviceId: existing.id,
+          body: secretFilesToWire(news.secretFiles),
+        });
         yield* syncNotificationOverride(
           existing.id,
           news.notificationOverride,
@@ -244,25 +257,21 @@ export const CronJobProvider = () =>
           hydratedBefore.logStreamOverride,
           news.logStreamOverride,
         );
-        yield* Client.syncResourceEnvironment(
-          existing.id,
-          existing.environmentId,
-          news.environmentId,
-        );
+        yield* Api.syncResourceEnvironment(existing.id, existing.environmentId, news.environmentId);
         yield* syncServiceSuspension(existing.id, existing.suspended, news.suspended);
 
         if (!news.skipDeployAfterUpdate) {
-          yield* Client.createDeploy(existing.id);
+          yield* RenderSdk.createDeploy({ serviceId: existing.id });
         }
         if (news.waitForDeployCompletion) {
           yield* waitForServiceLive("Render.CronJob", existing.id);
         }
-        const refreshed = yield* Client.getService(existing.id);
+        const refreshed = yield* RenderSdk.getService({ serviceId: existing.id });
         return mapCronJob(yield* hydrateService(refreshed));
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteService(output.id);
+        yield* deleteServiceById(output.id);
       }),
     }),
   );

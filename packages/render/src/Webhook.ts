@@ -1,13 +1,13 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Client from "./internal/Client.ts";
+import type * as Redacted from "effect/Redacted";
+import * as Api from "./internal/Api.ts";
 import { toRedacted } from "./internal/Redacted.ts";
-import type { WireWebhook } from "./internal/WireTypes.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface WebhookProps {
@@ -76,7 +76,7 @@ export type Webhook = Resource<
  */
 export const Webhook = Resource<Webhook>("Render.Webhook");
 
-const mapWebhook = (w: WireWebhook): WebhookAttributes => ({
+const mapWebhook = (w: RenderSdk.Schema14): WebhookAttributes => ({
   id: w.id,
   name: w.name,
   url: w.url,
@@ -84,6 +84,12 @@ const mapWebhook = (w: WireWebhook): WebhookAttributes => ({
   eventFilter: w.eventFilter ?? [],
   secret: toRedacted(w.secret),
 });
+
+const listWebhooksForOwner = (ownerId: string) =>
+  Api.paginateCursorList(
+    (cursor) => RenderSdk.listWebhooks({ ownerId: [ownerId], cursor, limit: 100 }),
+    (row) => row.webhook,
+  );
 
 export const WebhookProvider = () =>
   Provider.effect(
@@ -96,7 +102,7 @@ export const WebhookProvider = () =>
       }),
       read: Effect.fn(function* ({ id, olds, output, previous }) {
         if (output?.id) {
-          const w = yield* Client.ignoreNotFound(Client.getWebhook(output.id));
+          const w = yield* Api.ignoreNotFound(RenderSdk.getWebhook({ webhookId: output.id }));
           return w ? mapWebhook(w) : undefined;
         }
         const explicitName =
@@ -104,8 +110,8 @@ export const WebhookProvider = () =>
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-        const all = yield* Client.listWebhooks({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+        const all = yield* listWebhooksForOwner(ownerId);
         const matched = all.find((w) => w.name === desiredName);
         if (!matched) return undefined;
         const attrs = mapWebhook(matched);
@@ -113,31 +119,31 @@ export const WebhookProvider = () =>
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const w = yield* Client.ignoreNotFound(Client.getWebhook(props.id));
+          const w = yield* Api.ignoreNotFound(RenderSdk.getWebhook({ webhookId: props.id }));
           return w ? mapWebhook(w) : undefined;
         }
         if (props.name) {
-          const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-          const all = yield* Client.listWebhooks({ ownerId: [ownerId] });
+          const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+          const all = yield* listWebhooksForOwner(ownerId);
           const matched = all.find((w) => w.name === props.name);
           return matched ? mapWebhook(matched) : undefined;
         }
         return undefined;
       }),
       list: Effect.fn(function* () {
-        const ownerId = yield* Client.resolveOwnerId();
-        const all = yield* Client.listWebhooks({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId();
+        const all = yield* listWebhooksForOwner(ownerId);
         return all.map(mapWebhook);
       }),
       reconcile: Effect.fn(function* ({ id, news, output }) {
         const desiredName = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getWebhook(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getWebhook({ webhookId: output.id }))
           : undefined;
 
         if (!existing) {
-          const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-          const created = yield* Client.createWebhook({
+          const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+          const created = yield* RenderSdk.createWebhook({
             ownerId,
             name: desiredName,
             url: news.url,
@@ -147,7 +153,8 @@ export const WebhookProvider = () =>
           return mapWebhook(created);
         }
 
-        const updated = yield* Client.updateWebhook(existing.id, {
+        const updated = yield* RenderSdk.updateWebhook({
+          webhookId: existing.id,
           name: desiredName,
           url: news.url,
           enabled: news.enabled ?? true,
@@ -157,7 +164,7 @@ export const WebhookProvider = () =>
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteWebhook(output.id);
+        yield* Api.deleteIdempotent(RenderSdk.deleteWebhook({ webhookId: output.id }));
       }),
     }),
   );

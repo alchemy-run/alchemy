@@ -1,8 +1,9 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import type { Providers } from "./Providers.ts";
 import type { NotifySettingV2 } from "./Types.ts";
 
@@ -79,21 +80,22 @@ export const NotificationSettingProvider = () =>
       read: Effect.fn(function* ({ olds, output }) {
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
-        const ownerId = output?.ownerId ?? (yield* Client.resolveOwnerId(explicitOwnerId));
-        const res = yield* Client.ignoreNotFound(Client.getOwnerNotificationSettings(ownerId));
+        const ownerId = output?.ownerId ?? (yield* Api.resolveOwnerId(explicitOwnerId));
+        const res = yield* Api.ignoreNotFound(RenderSdk.getOwnerNotificationSettings({ ownerId }));
         return res ?? undefined;
       }),
       lookup: Effect.fn(function* (props) {
-        const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-        const res = yield* Client.ignoreNotFound(Client.getOwnerNotificationSettings(ownerId));
+        const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+        const res = yield* Api.ignoreNotFound(RenderSdk.getOwnerNotificationSettings({ ownerId }));
         return res ?? undefined;
       }),
       list: Effect.fn(function* () {
         return [];
       }),
       reconcile: Effect.fn(function* ({ news }) {
-        const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-        return yield* Client.patchOwnerNotificationSettings(ownerId, {
+        const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+        return yield* RenderSdk.patchOwnerNotificationSettings({
+          ownerId,
           ...(news.emailEnabled !== undefined ? { emailEnabled: news.emailEnabled } : {}),
           ...(news.notificationsToSend !== undefined
             ? { notificationsToSend: news.notificationsToSend }

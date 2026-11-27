@@ -1,10 +1,11 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import type { Providers } from "./Providers.ts";
 import type { CidrBlockAndDescription, ProtectedStatus } from "./Types.ts";
 
@@ -110,25 +111,18 @@ const DEFAULT_ENVIRONMENTS: Record<string, ProjectEnvironmentConfig> = {
 };
 
 const hydrateProject = (
-  proj: {
-    id: string;
-    name: string;
-    owner: { id: string };
-    environmentIds: string[];
-    createdAt: string;
-    updatedAt: string;
-  },
+  proj: RenderSdk.Project,
   keyHintById?: Map<string, string>,
   desiredByKey?: Record<string, ProjectEnvironmentConfig>,
 ): Effect.Effect<
   ProjectAttributes,
-  Effect.Error<ReturnType<typeof Client.getEnvironment>>,
-  Effect.Services<ReturnType<typeof Client.getEnvironment>>
+  Exclude<RenderSdk.GetEnvironmentError, { readonly _tag: "NotFound" }>,
+  RenderSdk.RenderOpContext
 > =>
   Effect.gen(function* () {
     const environments: Record<string, ProjectEnvironmentAttributes> = {};
     for (const envId of proj.environmentIds) {
-      const env = yield* Client.ignoreNotFound(Client.getEnvironment(envId));
+      const env = yield* Api.ignoreNotFound(RenderSdk.getEnvironment({ environmentId: envId }));
       if (!env) continue;
       let key = keyHintById?.get(env.id);
       if (!key && desiredByKey) {
@@ -156,6 +150,12 @@ const hydrateProject = (
     };
   });
 
+const listProjectsForOwner = (ownerId: string) =>
+  Api.paginateCursorList(
+    (cursor) => RenderSdk.listProjects({ ownerId: [ownerId], cursor, limit: 100 }),
+    (row) => row.project,
+  );
+
 export const ProjectProvider = () =>
   Provider.effect(
     Project,
@@ -167,7 +167,7 @@ export const ProjectProvider = () =>
       }),
       read: Effect.fn(function* ({ id, olds, output, previous }) {
         if (output?.id) {
-          const proj = yield* Client.ignoreNotFound(Client.getProject(output.id));
+          const proj = yield* Api.ignoreNotFound(RenderSdk.getProject({ projectId: output.id }));
           if (!proj) return undefined;
           const keyHint = new Map<string, string>();
           for (const [key, val] of Object.entries(output.environments ?? {})) {
@@ -180,8 +180,8 @@ export const ProjectProvider = () =>
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-        const all = yield* Client.listProjects({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+        const all = yield* listProjectsForOwner(ownerId);
         const matched = all.find((p) => p.name === desiredName);
         if (!matched) return undefined;
         const attrs = yield* hydrateProject(matched);
@@ -189,20 +189,20 @@ export const ProjectProvider = () =>
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const proj = yield* Client.ignoreNotFound(Client.getProject(props.id));
+          const proj = yield* Api.ignoreNotFound(RenderSdk.getProject({ projectId: props.id }));
           return proj ? yield* hydrateProject(proj) : undefined;
         }
         if (props.name) {
-          const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-          const all = yield* Client.listProjects({ ownerId: [ownerId] });
+          const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+          const all = yield* listProjectsForOwner(ownerId);
           const matched = all.find((p) => p.name === props.name);
           return matched ? yield* hydrateProject(matched) : undefined;
         }
         return undefined;
       }),
       list: Effect.fn(function* () {
-        const ownerId = yield* Client.resolveOwnerId();
-        const all = yield* Client.listProjects({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId();
+        const all = yield* listProjectsForOwner(ownerId);
         return yield* Effect.forEach(all, (proj) => hydrateProject(proj));
       }),
       reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -210,12 +210,12 @@ export const ProjectProvider = () =>
         const desiredEnvs = news.environments ?? DEFAULT_ENVIRONMENTS;
 
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getProject(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getProject({ projectId: output.id }))
           : undefined;
 
         if (!existing) {
-          const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-          const created = yield* Client.createProject({
+          const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+          const created = yield* RenderSdk.createProject({
             name: desiredName,
             ownerId,
             environments: Object.values(desiredEnvs).map((env) => ({
@@ -230,7 +230,7 @@ export const ProjectProvider = () =>
 
         const updatedProj =
           existing.name !== desiredName
-            ? yield* Client.updateProject(existing.id, { name: desiredName })
+            ? yield* RenderSdk.updateProject({ projectId: existing.id, name: desiredName })
             : existing;
 
         const currentByKey = output?.environments ?? {};
@@ -244,7 +244,8 @@ export const ProjectProvider = () =>
           if (prev?.id && existing.environmentIds.includes(prev.id)) {
             keptEnvIds.add(prev.id);
             keyHint.set(prev.id, key);
-            yield* Client.updateEnvironment(prev.id, {
+            yield* RenderSdk.updateEnvironment({
+              environmentId: prev.id,
               name: desiredEnv.name,
               protectedStatus: desiredEnv.protectedStatus ?? "unprotected",
               networkIsolationEnabled: desiredEnv.networkIsolated ?? false,
@@ -255,7 +256,7 @@ export const ProjectProvider = () =>
                   : {}),
             });
           } else {
-            const createdEnv = yield* Client.createEnvironment({
+            const createdEnv = yield* RenderSdk.createEnvironment({
               projectId: existing.id,
               name: desiredEnv.name,
               protectedStatus: desiredEnv.protectedStatus ?? "unprotected",
@@ -271,16 +272,16 @@ export const ProjectProvider = () =>
 
         for (const oldEnv of Object.values(currentByKey)) {
           if (!keptEnvIds.has(oldEnv.id)) {
-            yield* Client.deleteEnvironment(oldEnv.id);
+            yield* Api.deleteIdempotent(RenderSdk.deleteEnvironment({ environmentId: oldEnv.id }));
           }
         }
 
-        const refreshed = yield* Client.getProject(updatedProj.id);
+        const refreshed = yield* RenderSdk.getProject({ projectId: updatedProj.id });
         return yield* hydrateProject(refreshed, keyHint, desiredEnvs);
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteProject(output.id);
+        yield* Api.deleteIdempotent(RenderSdk.deleteProject({ projectId: output.id }));
       }),
     }),
   );

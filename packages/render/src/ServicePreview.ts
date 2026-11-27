@@ -1,3 +1,4 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -5,13 +6,14 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
-import { RenderNotFoundError } from "./Errors.ts";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import { renderResourceLogs, renderResourceTail } from "./internal/Logs.ts";
 import { toRedacted } from "./internal/Redacted.ts";
 import {
+  deleteServiceById,
   envVarsToWire,
   hydrateService,
+  listAllServices,
   mergeBoundEnvVars,
   waitForServiceLive,
   type HydratedServiceData,
@@ -125,10 +127,10 @@ const mapServicePreview = (
     slug: s.slug,
     type: s.type,
     ownerId: s.ownerId,
-    url: d.url,
+    url: "url" in d ? d.url : undefined,
     imagePath: s.imagePath,
-    plan: d.plan,
-    region: d.region,
+    plan: "plan" in d ? d.plan : undefined,
+    region: "region" in d ? d.region : undefined,
     dashboardUrl: s.dashboardUrl,
     suspended: s.suspended,
     envVars,
@@ -164,7 +166,7 @@ export const ServicePreviewProvider = () =>
           output?.baseServiceId ??
           (typeof olds?.baseServiceId === "string" ? olds.baseServiceId : "");
         if (output?.id) {
-          const svc = yield* Client.ignoreNotFound(Client.getService(output.id));
+          const svc = yield* Api.ignoreNotFound(RenderSdk.getService({ serviceId: output.id }));
           return svc ? mapServicePreview(yield* hydrateService(svc), baseServiceId) : undefined;
         }
         const explicitName =
@@ -172,8 +174,8 @@ export const ServicePreviewProvider = () =>
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-        const list = yield* Client.listServices({ ownerId: [ownerId], name: [desiredName] });
+        const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+        const list = yield* listAllServices({ ownerId: [ownerId], name: [desiredName] });
         const matched = list.find((s) => s.name === desiredName);
         if (!matched) return undefined;
         const attrs = mapServicePreview(yield* hydrateService(matched), baseServiceId);
@@ -181,12 +183,12 @@ export const ServicePreviewProvider = () =>
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const svc = yield* Client.ignoreNotFound(Client.getService(props.id));
+          const svc = yield* Api.ignoreNotFound(RenderSdk.getService({ serviceId: props.id }));
           return svc ? mapServicePreview(yield* hydrateService(svc), "") : undefined;
         }
         if (props.name) {
-          const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-          const list = yield* Client.listServices({ ownerId: [ownerId], name: [props.name] });
+          const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+          const list = yield* listAllServices({ ownerId: [ownerId], name: [props.name] });
           const matched = list.find((s) => s.name === props.name);
           return matched ? mapServicePreview(yield* hydrateService(matched), "") : undefined;
         }
@@ -199,7 +201,7 @@ export const ServicePreviewProvider = () =>
       reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
         const desiredName = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getService(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getService({ serviceId: output.id }))
           : undefined;
         const mergedEnv = mergeBoundEnvVars(
           news.envVars,
@@ -208,32 +210,32 @@ export const ServicePreviewProvider = () =>
 
         let serviceId: string;
         if (!existing) {
-          const created = yield* Client.createServicePreview(news.baseServiceId, {
+          const created = yield* RenderSdk.previewService({
+            serviceId: news.baseServiceId,
             imagePath: news.imagePath,
             name: desiredName,
             ...(news.plan !== undefined ? { plan: news.plan } : {}),
           });
           const service = created.service
             ? created.service
-            : yield* Client.listServices({ name: [desiredName] }).pipe(
-                Effect.map((rows) => rows[0]),
-              );
+            : yield* listAllServices({ name: [desiredName] }).pipe(Effect.map((rows) => rows[0]));
           if (!service) {
-            return yield* new RenderNotFoundError({
-              status: 404,
-              method: "POST",
-              path: `/services/${encodeURIComponent(news.baseServiceId)}/preview`,
+            return yield* new RenderSdk.NotFound({
               message: `Render preview service "${desiredName}" was not returned after creation.`,
             });
           }
           serviceId = service.id;
           if (Object.keys(mergedEnv).length > 0) {
-            yield* Client.putServiceEnvVars(serviceId, envVarsToWire(mergedEnv, [], false));
+            yield* RenderSdk.updateEnvVarsForService({
+              serviceId,
+              body: envVarsToWire(mergedEnv, [], false),
+            });
           }
         } else {
           serviceId = existing.id;
           const hydratedBefore = yield* hydrateService(existing);
-          yield* Client.updateService(serviceId, {
+          yield* RenderSdk.updateService({
+            serviceId,
             name: desiredName,
             image: { ownerId: existing.ownerId, imagePath: news.imagePath },
             ...(news.plan !== undefined ? { serviceDetails: { plan: news.plan } } : {}),
@@ -243,10 +245,10 @@ export const ServicePreviewProvider = () =>
             bindings.length > 0 ||
             hydratedBefore.envVars.length > 0
           ) {
-            yield* Client.putServiceEnvVars(
+            yield* RenderSdk.updateEnvVarsForService({
               serviceId,
-              envVarsToWire(mergedEnv, hydratedBefore.envVars, true),
-            );
+              body: envVarsToWire(mergedEnv, hydratedBefore.envVars, true),
+            });
           }
         }
 
@@ -254,12 +256,12 @@ export const ServicePreviewProvider = () =>
           yield* waitForServiceLive("Render.ServicePreview", serviceId);
         }
 
-        const fresh = yield* Client.getService(serviceId);
+        const fresh = yield* RenderSdk.getService({ serviceId });
         return mapServicePreview(yield* hydrateService(fresh), news.baseServiceId);
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteService(output.id);
+        yield* deleteServiceById(output.id);
       }),
       logs: Effect.fn(function* ({ output, options }) {
         return yield* renderResourceLogs({

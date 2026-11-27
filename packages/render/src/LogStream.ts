@@ -1,10 +1,11 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Client from "./internal/Client.ts";
-import { toRedacted, unwrapOptionalSecret } from "./internal/Redacted.ts";
+import type * as Redacted from "effect/Redacted";
+import * as Api from "./internal/Api.ts";
+import { toRedacted } from "./internal/Redacted.ts";
 import type { Providers } from "./Providers.ts";
 import type { LogStreamPreviewSetting, SecretString } from "./Types.ts";
 
@@ -78,8 +79,8 @@ export const LogStreamProvider = () =>
       read: Effect.fn(function* ({ olds, output }) {
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
-        const ownerId = output?.ownerId ?? (yield* Client.resolveOwnerId(explicitOwnerId));
-        const setting = yield* Client.ignoreNotFound(Client.getOwnerLogStream(ownerId));
+        const ownerId = output?.ownerId ?? (yield* Api.resolveOwnerId(explicitOwnerId));
+        const setting = yield* Api.ignoreNotFound(RenderSdk.getOwnerLogStream({ ownerId }));
         if (!setting || !setting.endpoint) return undefined;
         return {
           ownerId: setting.ownerId ?? ownerId,
@@ -89,8 +90,8 @@ export const LogStreamProvider = () =>
         };
       }),
       lookup: Effect.fn(function* (props) {
-        const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-        const setting = yield* Client.ignoreNotFound(Client.getOwnerLogStream(ownerId));
+        const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+        const setting = yield* Api.ignoreNotFound(RenderSdk.getOwnerLogStream({ ownerId }));
         if (!setting || !setting.endpoint) return undefined;
         return {
           ownerId: setting.ownerId ?? ownerId,
@@ -102,9 +103,10 @@ export const LogStreamProvider = () =>
         return [];
       }),
       reconcile: Effect.fn(function* ({ news }) {
-        const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-        const token = unwrapOptionalSecret(news.token);
-        const updated = yield* Client.putOwnerLogStream(ownerId, {
+        const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+        const token = news.token !== undefined ? toRedacted(news.token) : undefined;
+        const updated = yield* RenderSdk.updateOwnerLogStream({
+          ownerId,
           preview: news.preview ?? "send",
           endpoint: news.endpoint,
           ...(token !== undefined ? { token } : {}),
@@ -113,12 +115,12 @@ export const LogStreamProvider = () =>
           ownerId: updated.ownerId ?? ownerId,
           endpoint: updated.endpoint ?? news.endpoint,
           preview: updated.preview ?? news.preview ?? "send",
-          ...(news.token !== undefined ? { token: toRedacted(news.token) } : {}),
+          ...(token !== undefined ? { token } : {}),
         };
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.ownerId) return;
-        yield* Client.deleteOwnerLogStream(output.ownerId);
+        yield* Api.deleteIdempotent(RenderSdk.deleteOwnerLogStream({ ownerId: output.ownerId }));
       }),
     }),
   );

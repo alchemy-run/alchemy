@@ -109,7 +109,7 @@ export type ServiceType =
 
 export type AutoDeployTrigger = "off" | "commit" | "checksPass";
 
-export type PreviewsGeneration = "off" | "manual" | "automatic";
+export type PreviewsGeneration = "off" | "manual" | "automatic" | (string & {});
 
 export type ProtectedStatus = "protected" | "unprotected";
 

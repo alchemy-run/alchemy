@@ -1,12 +1,13 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Client from "./internal/Client.ts";
-import { toRedacted, unwrapSecret } from "./internal/Redacted.ts";
+import type * as Redacted from "effect/Redacted";
+import * as Api from "./internal/Api.ts";
+import { toRedacted } from "./internal/Redacted.ts";
 import type { Providers } from "./Providers.ts";
 import type { RegistryType, SecretString } from "./Types.ts";
 
@@ -77,7 +78,7 @@ export interface RegistryCredential extends Resource<
 export const RegistryCredential = Resource<RegistryCredential>("Render.RegistryCredential");
 
 const mapCredential = (
-  cred: { id: string; name: string; registry: string; username: string; updatedAt: string },
+  cred: RenderSdk.RegistryCredential,
   authToken?: SecretString,
 ): RegistryCredentialAttributes => ({
   id: cred.id,
@@ -99,7 +100,9 @@ export const RegistryCredentialProvider = () =>
       }),
       read: Effect.fn(function* ({ id, olds, output, previous }) {
         if (output?.id) {
-          const cred = yield* Client.ignoreNotFound(Client.getRegistryCredential(output.id));
+          const cred = yield* Api.ignoreNotFound(
+            RenderSdk.getRegistryCredential({ registryCredentialId: output.id }),
+          );
           return cred ? mapCredential(cred, output.authToken) : undefined;
         }
         const explicitName =
@@ -107,8 +110,11 @@ export const RegistryCredentialProvider = () =>
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-        const list = yield* Client.listRegistryCredentials({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+        const list = yield* RenderSdk.listRegistryCredentials({
+          ownerId: [ownerId],
+          limit: 100,
+        });
         const matched = list.find((c) => c.name === desiredName);
         if (!matched) return undefined;
         const attrs = mapCredential(matched);
@@ -116,32 +122,42 @@ export const RegistryCredentialProvider = () =>
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const cred = yield* Client.ignoreNotFound(Client.getRegistryCredential(props.id));
+          const cred = yield* Api.ignoreNotFound(
+            RenderSdk.getRegistryCredential({ registryCredentialId: props.id }),
+          );
           return cred ? mapCredential(cred) : undefined;
         }
         if (props.name) {
-          const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-          const list = yield* Client.listRegistryCredentials({ ownerId: [ownerId] });
+          const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+          const list = yield* RenderSdk.listRegistryCredentials({
+            ownerId: [ownerId],
+            limit: 100,
+          });
           const matched = list.find((c) => c.name === props.name);
           return matched ? mapCredential(matched) : undefined;
         }
         return undefined;
       }),
       list: Effect.fn(function* () {
-        const ownerId = yield* Client.resolveOwnerId();
-        const list = yield* Client.listRegistryCredentials({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId();
+        const list = yield* RenderSdk.listRegistryCredentials({
+          ownerId: [ownerId],
+          limit: 100,
+        });
         return list.map((c) => mapCredential(c));
       }),
       reconcile: Effect.fn(function* ({ id, news, output }) {
         const name = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const authToken = unwrapSecret(news.authToken);
+        const authToken = toRedacted(news.authToken);
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getRegistryCredential(output.id))
+          ? yield* Api.ignoreNotFound(
+              RenderSdk.getRegistryCredential({ registryCredentialId: output.id }),
+            )
           : undefined;
 
         if (!existing) {
-          const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-          const created = yield* Client.createRegistryCredential({
+          const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+          const created = yield* RenderSdk.createRegistryCredential({
             name,
             ownerId,
             registry: news.registry,
@@ -151,7 +167,8 @@ export const RegistryCredentialProvider = () =>
           return mapCredential(created, news.authToken);
         }
 
-        const updated = yield* Client.updateRegistryCredential(existing.id, {
+        const updated = yield* RenderSdk.updateRegistryCredential({
+          registryCredentialId: existing.id,
           name,
           registry: news.registry,
           username: news.username,
@@ -161,7 +178,9 @@ export const RegistryCredentialProvider = () =>
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteRegistryCredential(output.id);
+        yield* Api.deleteIdempotent(
+          RenderSdk.deleteRegistryCredential({ registryCredentialId: output.id }),
+        );
       }),
     }),
   );

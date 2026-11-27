@@ -1,14 +1,9 @@
+import type { CancelTaskRunError, CreateTaskError, GetTaskRunError } from "@distilled.cloud/render";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
-import type * as HttpClient from "effect/http/HttpClient";
-import type { RenderCredentials } from "./Credentials.ts";
-import type {
-  RenderApiError,
-  RenderOperationTimeoutError,
-  RenderTaskRunFailedError,
-} from "./Errors.ts";
+import type { RenderOperationTimeoutError, RenderTaskRunFailedError } from "./Errors.ts";
 import type { TaskRunStatus } from "./Types.ts";
 import type { Workflow } from "./Workflow.ts";
 
@@ -17,7 +12,7 @@ export interface TaskRunInfo {
   readonly id: string;
   /** Qualified task identifier (`<workflow-slug>/<task-name>`). */
   readonly task: string;
-  /** Execution lifecycle status (`"pending"`, `"running"`, `"completed"`, `"failed"`, `"canceled"`). */
+  /** Execution lifecycle status (`"pending"`, `"running"`, `"completed"`, `"succeeded"`, `"failed"`, `"canceled"`). */
   readonly status: TaskRunStatus;
   /** JSON input payload passed to the task run. */
   readonly input?: unknown;
@@ -58,27 +53,23 @@ export interface RunWorkflowTaskClient {
   readonly trigger: (
     taskName: string,
     input?: unknown,
-  ) => Effect.Effect<
-    TaskRunInfo,
-    RenderApiError | WorkflowSlugMissing,
-    HttpClient.HttpClient | RenderCredentials | RuntimeContext
-  >;
+  ) => Effect.Effect<TaskRunInfo, CreateTaskError | WorkflowSlugMissing, RuntimeContext>;
   /** Fetch the current status and results of a task run (`GET /v1/task-runs/{id}`). */
-  readonly getRun: (
-    taskRunId: string,
-  ) => Effect.Effect<TaskRunInfo, RenderApiError, HttpClient.HttpClient | RenderCredentials>;
+  readonly getRun: (taskRunId: string) => Effect.Effect<TaskRunInfo, GetTaskRunError>;
   /** Cancel an in-progress task run (`DELETE /v1/task-runs/{id}`). */
-  readonly cancelRun: (
-    taskRunId: string,
-  ) => Effect.Effect<void, RenderApiError, HttpClient.HttpClient | RenderCredentials>;
+  readonly cancelRun: (taskRunId: string) => Effect.Effect<void, CancelTaskRunError>;
   /** Trigger a task run and poll until completion, failing with {@link RenderTaskRunFailedError} on failure. */
   readonly runAndWait: (
     taskName: string,
     input?: unknown,
   ) => Effect.Effect<
     TaskRunInfo,
-    RenderApiError | RenderOperationTimeoutError | RenderTaskRunFailedError | WorkflowSlugMissing,
-    HttpClient.HttpClient | RenderCredentials | RuntimeContext
+    | CreateTaskError
+    | GetTaskRunError
+    | RenderOperationTimeoutError
+    | RenderTaskRunFailedError
+    | WorkflowSlugMissing,
+    RuntimeContext
   >;
 }
 
@@ -86,9 +77,9 @@ export interface RunWorkflowTaskClient {
  * Bind a Render {@link Workflow} to a Render compute service or foreign
  * runtime host to invoke workflow tasks via `/v1/task-runs`.
  *
- * At deploy time on Render hosts, injects `RENDER_WORKFLOW_<ID>_SLUG` and
- * `RENDER_WORKFLOW_<ID>_ID`. On foreign `RuntimeContext` hosts, binds both into
- * the ambient `RuntimeContext`. Provide {@link RunWorkflowTaskHttp}.
+ * At deploy time, binds `RENDER_WORKFLOW_<ID>_SLUG`, `RENDER_WORKFLOW_<ID>_ID`,
+ * and Render API credentials into the host's `RuntimeContext`. Provide
+ * {@link RunWorkflowTaskHttp}.
  *
  * **Example:** Trigger and await a workflow task from a web handler
  * ```typescript

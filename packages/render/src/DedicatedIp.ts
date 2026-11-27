@@ -1,3 +1,4 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -5,9 +6,8 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { RenderDeployFailedError } from "./Errors.ts";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import { pollUntil } from "./internal/Poll.ts";
-import type { WireDedicatedIp } from "./internal/WireTypes.ts";
 import type { Providers } from "./Providers.ts";
 import type { DedicatedIpStatus, Region } from "./Types.ts";
 
@@ -87,7 +87,7 @@ export type DedicatedIp = Resource<
  */
 export const DedicatedIp = Resource<DedicatedIp>("Render.DedicatedIp");
 
-const mapDedicatedIp = (dip: WireDedicatedIp): DedicatedIpAttributes => ({
+const mapDedicatedIp = (dip: RenderSdk.DedicatedIP): DedicatedIpAttributes => ({
   id: dip.id,
   name: dip.name,
   ownerId: dip.ownerId,
@@ -104,7 +104,7 @@ const waitForDedicatedIpRunning = (id: string) =>
   pollUntil({
     operation: "dedicated IP allocation",
     resourceId: id,
-    check: Client.getDedicatedIp(id),
+    check: RenderSdk.getDedicatedIp({ dedicatedIpId: id }),
     statusOf: (dip) => dip.status,
     failIf: (dip) => {
       if (dip.status === "FAILED" || dip.status === "DELETING" || dip.status === "DELETED") {
@@ -140,7 +140,9 @@ export const DedicatedIpProvider = () =>
       }),
       read: Effect.fn(function* ({ id, olds, output, previous }) {
         if (output?.id) {
-          const dip = yield* Client.ignoreNotFound(Client.getDedicatedIp(output.id));
+          const dip = yield* Api.ignoreNotFound(
+            RenderSdk.getDedicatedIp({ dedicatedIpId: output.id }),
+          );
           return dip ? mapDedicatedIp(dip) : undefined;
         }
         const explicitName =
@@ -148,8 +150,8 @@ export const DedicatedIpProvider = () =>
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-        const all = yield* Client.listDedicatedIps({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+        const all = yield* RenderSdk.listDedicatedIps({ ownerId });
         const matched = all.find((d) => d.name === desiredName);
         if (!matched) return undefined;
         const attrs = mapDedicatedIp(matched);
@@ -157,31 +159,33 @@ export const DedicatedIpProvider = () =>
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const dip = yield* Client.ignoreNotFound(Client.getDedicatedIp(props.id));
+          const dip = yield* Api.ignoreNotFound(
+            RenderSdk.getDedicatedIp({ dedicatedIpId: props.id }),
+          );
           return dip ? mapDedicatedIp(dip) : undefined;
         }
         if (props.name) {
-          const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-          const all = yield* Client.listDedicatedIps({ ownerId: [ownerId] });
+          const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+          const all = yield* RenderSdk.listDedicatedIps({ ownerId });
           const matched = all.find((d) => d.name === props.name);
           return matched ? mapDedicatedIp(matched) : undefined;
         }
         return undefined;
       }),
       list: Effect.fn(function* () {
-        const ownerId = yield* Client.resolveOwnerId();
-        const all = yield* Client.listDedicatedIps({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId();
+        const all = yield* RenderSdk.listDedicatedIps({ ownerId });
         return all.map(mapDedicatedIp);
       }),
       reconcile: Effect.fn(function* ({ id, news, output }) {
         const desiredName = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getDedicatedIp(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getDedicatedIp({ dedicatedIpId: output.id }))
           : undefined;
 
         if (!existing) {
-          const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-          const created = yield* Client.createDedicatedIp({
+          const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+          const created = yield* RenderSdk.createDedicatedIp({
             name: desiredName,
             ownerId,
             region: news.region,
@@ -193,7 +197,8 @@ export const DedicatedIpProvider = () =>
           return mapDedicatedIp(ready);
         }
 
-        const updated = yield* Client.updateDedicatedIp(existing.id, {
+        const updated = yield* RenderSdk.updateDedicatedIp({
+          dedicatedIpId: existing.id,
           name: desiredName,
           ...(news.description !== undefined ? { description: news.description } : {}),
           ...(news.environmentIds !== undefined ? { environmentIds: news.environmentIds } : {}),
@@ -202,7 +207,7 @@ export const DedicatedIpProvider = () =>
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteDedicatedIp(output.id);
+        yield* Api.deleteIdempotent(RenderSdk.deleteDedicatedIp({ dedicatedIpId: output.id }));
       }),
     }),
   );

@@ -1,10 +1,11 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import type * as Effect from "effect/Effect";
 import * as EffectMod from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { RenderDeployFailedError, RenderNotFoundError, RenderValidationError } from "../Errors.ts";
+import { RenderDeployFailedError, RenderValidationError } from "../Errors.ts";
 import type { RenderServiceBinding } from "../RenderBindings.ts";
 import type {
   AutoscalingConfig,
@@ -27,21 +28,9 @@ import type {
   SecretString,
   ServiceType,
 } from "../Types.ts";
-import * as Client from "./Client.ts";
+import * as Api from "./Api.ts";
 import { pollUntil } from "./Poll.ts";
 import { toRedacted, unwrapSecret } from "./Redacted.ts";
-import type {
-  WireCustomDomain,
-  WireDockerDetails,
-  WireEnvVar,
-  WireEnvVarInput,
-  WireNativeEnvironmentDetails,
-  WireNotificationOverride,
-  WireResourceLogStreamSetting,
-  WireSecretFile,
-  WireService,
-  WireServiceDetails,
-} from "./WireTypes.ts";
 
 export interface BaseServiceProps {
   /** Service name, unique within the Render workspace. If omitted, a deterministic physical name is generated. */
@@ -218,7 +207,7 @@ export const validateRuntimeSource = (source: RuntimeSource, startCommand?: stri
 export const buildEnvSpecificDetailsCreate = (
   source: RuntimeSource,
   startCommand?: string,
-): Record<string, unknown> => {
+): RenderSdk.EnvSpecificDetailsPOST => {
   if (source.docker) {
     return {
       ...(startCommand !== undefined ? { dockerCommand: startCommand } : {}),
@@ -238,10 +227,38 @@ export const buildEnvSpecificDetailsCreate = (
   };
 };
 
+/**
+ * `@distilled.cloud/render` `CronJobDetailsPOST` types `envSpecificDetails` with
+ * the response union `EnvSpecificDetails`; this builds compatible details cleanly.
+ */
+export const buildCronEnvSpecificDetailsCreate = (
+  source: RuntimeSource,
+  startCommand?: string,
+): RenderSdk.EnvSpecificDetails => {
+  if (source.docker) {
+    return {
+      dockerCommand: startCommand ?? "",
+      dockerContext: source.docker.context ?? ".",
+      dockerfilePath: source.docker.dockerfilePath ?? "./Dockerfile",
+    };
+  }
+  if (source.image) {
+    return {
+      dockerCommand: startCommand ?? "",
+      dockerContext: ".",
+      dockerfilePath: "./Dockerfile",
+    };
+  }
+  return {
+    buildCommand: source.nativeRuntime.buildCommand,
+    startCommand: startCommand ?? "",
+  };
+};
+
 export const buildEnvSpecificDetailsUpdate = (
   source: RuntimeSource,
   startCommand?: string,
-): Record<string, unknown> => {
+): RenderSdk.EnvSpecificDetailsPATCH => {
   if (source.docker) {
     return {
       dockerCommand: startCommand ?? "",
@@ -267,26 +284,21 @@ const autoDeployFields = (source: {
   autoDeploy?: boolean;
   autoDeployTrigger?: string;
   buildFilter?: BuildFilter;
-}) => {
-  const fields: Record<string, unknown> = {};
-  if (source.autoDeployTrigger !== undefined) {
-    fields.autoDeployTrigger = source.autoDeployTrigger;
-  } else {
-    fields.autoDeploy = source.autoDeploy === false ? "no" : "yes";
-  }
-  if (source.buildFilter !== undefined) {
-    fields.buildFilter = {
-      paths: source.buildFilter.paths ?? [],
-      ignoredPaths: source.buildFilter.ignoredPaths ?? [],
-    };
-  }
-  return fields;
-};
+}) => ({
+  ...(source.autoDeployTrigger !== undefined
+    ? { autoDeployTrigger: source.autoDeployTrigger }
+    : { autoDeploy: source.autoDeploy === false ? ("no" as const) : ("yes" as const) }),
+  ...(source.buildFilter !== undefined
+    ? {
+        buildFilter: {
+          paths: source.buildFilter.paths ?? [],
+          ignoredPaths: source.buildFilter.ignoredPaths ?? [],
+        },
+      }
+    : {}),
+});
 
-export const buildSourceFieldsCreate = (
-  source: RuntimeSource,
-  ownerId: string,
-): Record<string, unknown> => {
+export const buildSourceFieldsCreate = (source: RuntimeSource, ownerId: string) => {
   if (source.nativeRuntime) {
     return {
       repo: source.nativeRuntime.repo,
@@ -339,11 +351,11 @@ export const mergeBoundEnvVars = (
 
 export const envVarsToWire = (
   envMap: Record<string, EnvVarValueSpec>,
-  existingWire: ReadonlyArray<WireEnvVar>,
+  existingWire: ReadonlyArray<RenderSdk.EnvVar>,
   preserveGenerated: boolean,
-): WireEnvVarInput[] => {
+): RenderSdk.Schema6 => {
   const existingByKey = new Map(existingWire.map((ev) => [ev.key, ev.value]));
-  const result: WireEnvVarInput[] = [];
+  const result: RenderSdk.Schema6 = [];
   for (const [key, spec] of Object.entries(envMap)) {
     if (typeof spec === "object" && spec !== null && "generateValue" in spec) {
       if (spec.generateValue) {
@@ -365,7 +377,7 @@ export const envVarsToWire = (
 
 export const secretFilesToWire = (
   secretFiles: Record<string, SecretString> | undefined,
-): WireSecretFile[] => {
+): Array<{ name: string; content: string }> => {
   if (!secretFiles) return [];
   return Object.entries(secretFiles).map(([name, content]) => ({
     name,
@@ -373,9 +385,22 @@ export const secretFilesToWire = (
   }));
 };
 
+export const listAllServices = (params: {
+  readonly ownerId?: string[];
+  readonly name?: string[];
+  readonly type?: RenderSdk.ServiceType[];
+}) =>
+  Api.paginateCursorList(
+    (cursor) => RenderSdk.listServices({ ...params, cursor, limit: 100 }),
+    (row) => row.service,
+  );
+
+export const deleteServiceById = (serviceId: string) =>
+  Api.deleteIdempotent(RenderSdk.deleteService({ serviceId }));
+
 export const syncCustomDomains = (
   serviceId: string,
-  existing: ReadonlyArray<WireCustomDomain>,
+  existing: ReadonlyArray<RenderSdk.CustomDomain>,
   desiredNames: ReadonlyArray<string> | undefined,
   verify = false,
 ) =>
@@ -384,19 +409,24 @@ export const syncCustomDomains = (
     const existingNames = new Set(existing.map((d) => d.name));
     for (const domain of existing) {
       if (!desired.has(domain.name)) {
-        yield* Client.deleteCustomDomain(serviceId, domain.id);
+        yield* Api.deleteIdempotent(
+          RenderSdk.deleteCustomDomain({ serviceId, customDomainNameOrID: domain.id }),
+        );
       }
     }
     for (const name of desired) {
       if (!existingNames.has(name)) {
-        yield* Client.createCustomDomain(serviceId, name);
+        yield* RenderSdk.createCustomDomain({ serviceId, name });
       }
     }
     if (verify && desired.size > 0) {
-      const current = yield* Client.listCustomDomains(serviceId);
+      const current = yield* Api.paginateCursorList(
+        (cursor) => RenderSdk.listCustomDomains({ serviceId, cursor, limit: 100 }),
+        (row) => row.customDomain,
+      );
       for (const domain of current) {
         if (desired.has(domain.name) && domain.verificationStatus !== "verified") {
-          yield* Client.verifyCustomDomain(serviceId, domain.id);
+          yield* RenderSdk.refreshCustomDomain({ serviceId, customDomainNameOrID: domain.id });
         }
       }
     }
@@ -408,27 +438,27 @@ export const syncServiceSuspension = (
   desiredSuspended: boolean | undefined,
 ) => {
   if (desiredSuspended === true && currentSuspended !== "suspended") {
-    return Client.suspendService(serviceId);
+    return RenderSdk.suspendService({ serviceId }).pipe(EffectMod.asVoid);
   }
   if (desiredSuspended === false && currentSuspended === "suspended") {
-    return Client.resumeService(serviceId);
+    return RenderSdk.resumeService({ serviceId }).pipe(EffectMod.asVoid);
   }
   return EffectMod.void;
 };
 
 export const syncDisk = (
   serviceId: string,
-  current: WireServiceDetails["disk"],
+  current: RenderSdk.WebServiceDetailsDisk | undefined,
   desired: DiskConfig | undefined,
 ) =>
   EffectMod.gen(function* () {
     if (!current && !desired) return;
     if (current && !desired) {
-      yield* Client.deleteDisk(current.id);
+      yield* Api.deleteIdempotent(RenderSdk.deleteDisk({ diskId: current.id }));
       return;
     }
     if (!current && desired) {
-      yield* Client.addDisk({
+      yield* RenderSdk.addDisk({
         serviceId,
         name: desired.name,
         mountPath: desired.mountPath,
@@ -443,7 +473,8 @@ export const syncDisk = (
         current.mountPath !== desired.mountPath ||
         current.sizeGB !== targetSize
       ) {
-        yield* Client.updateDisk(current.id, {
+        yield* RenderSdk.updateDisk({
+          diskId: current.id,
           name: desired.name,
           mountPath: desired.mountPath,
           sizeGB: targetSize,
@@ -454,20 +485,24 @@ export const syncDisk = (
 
 export const syncScalingAndAutoscaling = (
   serviceId: string,
-  current: WireServiceDetails,
+  current: RenderSdk.ServiceServiceDetails,
   desiredAutoscaling: AutoscalingConfig | undefined,
   desiredNumInstances: number | undefined,
 ) =>
   EffectMod.gen(function* () {
+    const currentNumInstances = "numInstances" in current ? current.numInstances : undefined;
+    const currentAutoscaling = "autoscaling" in current ? current.autoscaling : undefined;
+
     if (desiredNumInstances !== undefined && desiredNumInstances > 0) {
-      if (current.numInstances !== desiredNumInstances) {
-        yield* Client.scaleService(serviceId, desiredNumInstances);
+      if (currentNumInstances !== desiredNumInstances) {
+        yield* RenderSdk.scaleService({ serviceId, numInstances: desiredNumInstances });
       }
     }
-    if (!desiredAutoscaling && current.autoscaling) {
-      yield* Client.deleteAutoscaling(serviceId);
-    } else if (desiredAutoscaling && !deepEqual(current.autoscaling, desiredAutoscaling)) {
-      yield* Client.putAutoscaling(serviceId, {
+    if (!desiredAutoscaling && currentAutoscaling) {
+      yield* Api.deleteIdempotent(RenderSdk.deleteAutoscalingConfig({ serviceId }));
+    } else if (desiredAutoscaling && !deepEqual(currentAutoscaling, desiredAutoscaling)) {
+      yield* RenderSdk.autoscaleService({
+        serviceId,
         enabled: desiredAutoscaling.enabled,
         min: desiredAutoscaling.min,
         max: desiredAutoscaling.max,
@@ -483,13 +518,15 @@ export const syncNotificationOverride = (
 ) =>
   EffectMod.gen(function* () {
     if (desired) {
-      return yield* Client.patchServiceNotificationOverride(serviceId, {
+      return yield* RenderSdk.patchServiceNotificationOverrides({
+        serviceId,
         notificationsToSend: desired.notificationsToSend ?? "default",
         previewNotificationsEnabled: desired.previewNotificationsEnabled ?? "default",
       });
     }
     if (hasCurrent) {
-      return yield* Client.patchServiceNotificationOverride(serviceId, {
+      return yield* RenderSdk.patchServiceNotificationOverrides({
+        serviceId,
         notificationsToSend: "default",
         previewNotificationsEnabled: "default",
       });
@@ -499,20 +536,21 @@ export const syncNotificationOverride = (
 
 export const syncResourceLogStream = (
   resourceId: string,
-  current: WireResourceLogStreamSetting | undefined,
+  current: RenderSdk.GetResourceLogStreamResponse | undefined,
   desired: LogStreamOverrideInput | undefined,
 ) =>
   EffectMod.gen(function* () {
     if (!desired && !current) return undefined;
     if (!desired && current) {
-      yield* Client.deleteResourceLogStream(resourceId);
+      yield* Api.deleteIdempotent(RenderSdk.deleteResourceLogStream({ resourceId }));
       return undefined;
     }
     if (desired) {
-      return yield* Client.putResourceLogStream(resourceId, {
+      return yield* RenderSdk.updateResourceLogStream({
+        resourceId,
         setting: desired.setting,
         ...(desired.endpoint !== undefined ? { endpoint: desired.endpoint } : {}),
-        ...(desired.token !== undefined ? { token: unwrapSecret(desired.token) } : {}),
+        ...(desired.token !== undefined ? { token: desired.token } : {}),
       });
     }
     return undefined;
@@ -522,7 +560,9 @@ export const waitForServiceLive = (resourceType: string, serviceId: string) =>
   pollUntil({
     operation: "deploy",
     resourceId: serviceId,
-    check: Client.listDeploys(serviceId),
+    check: RenderSdk.listDeploys({ serviceId, limit: 5 }).pipe(
+      EffectMod.map((rows) => rows.flatMap((row) => (row.deploy ? [row.deploy] : []))),
+    ),
     statusOf: (deploys) => deploys[0]?.status,
     failIf: (deploys) => {
       const latest = deploys[0];
@@ -547,34 +587,46 @@ export const waitForServiceLive = (resourceType: string, serviceId: string) =>
   }).pipe(EffectMod.asVoid);
 
 export interface HydratedServiceData {
-  readonly service: WireService;
-  readonly envVars: WireEnvVar[];
-  readonly secretFiles: WireSecretFile[];
-  readonly customDomains: WireCustomDomain[];
-  readonly notificationOverride?: WireNotificationOverride;
-  readonly logStreamOverride?: WireResourceLogStreamSetting;
+  readonly service: RenderSdk.Service;
+  readonly envVars: RenderSdk.EnvVar[];
+  readonly secretFiles: RenderSdk.SecretFile[];
+  readonly customDomains: RenderSdk.CustomDomain[];
+  readonly notificationOverride?: RenderSdk.GetServiceNotificationOverridesResponse;
+  readonly logStreamOverride?: RenderSdk.GetResourceLogStreamResponse;
 }
 
 const supportsCustomDomains = (type: ServiceType) =>
   type === "web_service" || type === "static_site";
 
 export const hydrateService = (
-  service: WireService,
+  service: RenderSdk.Service,
 ): Effect.Effect<
   HydratedServiceData,
-  Effect.Error<ReturnType<typeof Client.getService>>,
-  Effect.Services<ReturnType<typeof Client.getService>>
+  Effect.Error<ReturnType<typeof RenderSdk.getService>>,
+  Effect.Services<ReturnType<typeof RenderSdk.getService>>
 > =>
   EffectMod.gen(function* () {
-    const envVars = yield* Client.listServiceEnvVars(service.id);
-    const secretFiles = yield* Client.listServiceSecretFiles(service.id);
-    const customDomains = supportsCustomDomains(service.type)
-      ? yield* Client.listCustomDomains(service.id)
-      : [];
-    const notificationOverride = yield* Client.ignoreNotFound(
-      Client.getServiceNotificationOverride(service.id),
+    const envVars = yield* Api.paginateCursorList(
+      (cursor) => RenderSdk.getEnvVarsForService({ serviceId: service.id, cursor, limit: 100 }),
+      (row) => row.envVar,
     );
-    const logStreamOverride = yield* Client.ignoreNotFound(Client.getResourceLogStream(service.id));
+    const secretFiles = yield* Api.paginateCursorList(
+      (cursor) =>
+        RenderSdk.listSecretFilesForService({ serviceId: service.id, cursor, limit: 100 }),
+      (row) => row.secretFile,
+    );
+    const customDomains = supportsCustomDomains(service.type)
+      ? yield* Api.paginateCursorList(
+          (cursor) => RenderSdk.listCustomDomains({ serviceId: service.id, cursor, limit: 100 }),
+          (row) => row.customDomain,
+        )
+      : [];
+    const notificationOverride = yield* Api.ignoreNotFound(
+      RenderSdk.getServiceNotificationOverrides({ serviceId: service.id }),
+    );
+    const logStreamOverride = yield* Api.ignoreNotFound(
+      RenderSdk.getResourceLogStream({ resourceId: service.id }),
+    );
     return {
       service,
       envVars,
@@ -585,26 +637,31 @@ export const hydrateService = (
     };
   });
 
-const extractNativeOrDocker = (details: WireServiceDetails) => {
-  const envDetails = details.envSpecificDetails;
-  if (!envDetails || typeof envDetails !== "object") {
+const extractNativeOrDocker = (details: RenderSdk.ServiceServiceDetails) => {
+  if (!("envSpecificDetails" in details) || !details.envSpecificDetails) {
     return {};
   }
+  const envDetails = details.envSpecificDetails;
   if ("buildCommand" in envDetails) {
-    const nat = envDetails as WireNativeEnvironmentDetails;
     return {
-      buildCommand: nat.buildCommand,
-      startCommand: nat.startCommand.length > 0 ? nat.startCommand : undefined,
+      buildCommand: envDetails.buildCommand,
+      startCommand: envDetails.startCommand.length > 0 ? envDetails.startCommand : undefined,
       preDeployCommand:
-        nat.preDeployCommand && nat.preDeployCommand.length > 0 ? nat.preDeployCommand : undefined,
+        envDetails.preDeployCommand && envDetails.preDeployCommand.length > 0
+          ? envDetails.preDeployCommand
+          : undefined,
     };
   }
-  const doc = envDetails as WireDockerDetails;
   return {
-    startCommand: doc.dockerCommand && doc.dockerCommand.length > 0 ? doc.dockerCommand : undefined,
+    startCommand:
+      envDetails.dockerCommand && envDetails.dockerCommand.length > 0
+        ? envDetails.dockerCommand
+        : undefined,
     preDeployCommand:
-      doc.preDeployCommand && doc.preDeployCommand.length > 0 ? doc.preDeployCommand : undefined,
-    registryCredentialId: doc.registryCredential?.id,
+      envDetails.preDeployCommand && envDetails.preDeployCommand.length > 0
+        ? envDetails.preDeployCommand
+        : undefined,
+    registryCredentialId: envDetails.registryCredential?.id,
   };
 };
 
@@ -616,21 +673,28 @@ export const mapBaseServiceAttrs = (data: HydratedServiceData): ServiceAttribute
   for (const ev of data.envVars) {
     envVarsRecord[ev.key] = toRedacted(ev.value);
   }
+  const runtime =
+    "runtime" in d ? d.runtime : "env" in d && typeof d.env === "string" ? d.env : "unknown";
+  const disk = "disk" in d ? d.disk : undefined;
+
   return {
     id: s.id,
     name: s.name,
     slug: s.slug,
     ownerId: s.ownerId,
     environmentId: s.environmentId,
-    runtime: d.runtime ?? d.env ?? "unknown",
-    plan: d.plan,
-    region: d.region,
-    buildPlan: d.buildPlan,
+    runtime,
+    plan: "plan" in d ? d.plan : undefined,
+    region: "region" in d ? d.region : undefined,
+    buildPlan: "buildPlan" in d ? d.buildPlan : undefined,
     repo: s.repo,
     branch: s.branch,
     imagePath: s.imagePath,
     rootDirectory: s.rootDir,
-    buildCommand: d.buildCommand ?? extracted.buildCommand,
+    buildCommand:
+      "buildCommand" in d && typeof d.buildCommand === "string"
+        ? d.buildCommand
+        : extracted.buildCommand,
     startCommand: extracted.startCommand,
     preDeployCommand: extracted.preDeployCommand,
     autoDeploy: s.autoDeploy === "yes",
@@ -639,20 +703,20 @@ export const mapBaseServiceAttrs = (data: HydratedServiceData): ServiceAttribute
     registryCredentialId: s.registryCredential?.id ?? extracted.registryCredentialId,
     dashboardUrl: s.dashboardUrl,
     suspended: s.suspended,
-    maxShutdownDelaySeconds: d.maxShutdownDelaySeconds,
-    previews: d.previews,
+    maxShutdownDelaySeconds: "maxShutdownDelaySeconds" in d ? d.maxShutdownDelaySeconds : undefined,
+    previews: "previews" in d ? d.previews : undefined,
     envVars: envVarsRecord,
     secretFiles: data.secretFiles.map((f) => ({ name: f.name, content: toRedacted(f.content) })),
-    disk: d.disk
+    disk: disk
       ? {
-          id: d.disk.id,
-          name: d.disk.name,
-          mountPath: d.disk.mountPath,
-          sizeGB: d.disk.sizeGB,
+          id: disk.id,
+          name: disk.name,
+          mountPath: disk.mountPath,
+          sizeGB: disk.sizeGB,
         }
       : undefined,
-    numInstances: d.numInstances,
-    autoscaling: d.autoscaling,
+    numInstances: "numInstances" in d ? d.numInstances : undefined,
+    autoscaling: "autoscaling" in d ? d.autoscaling : undefined,
     notificationOverride: data.notificationOverride
       ? {
           notificationsToSend: data.notificationOverride.notificationsToSend,
@@ -666,13 +730,15 @@ export const mapBaseServiceAttrs = (data: HydratedServiceData): ServiceAttribute
           endpoint: data.logStreamOverride.endpoint,
         }
       : undefined,
-    sshAddress: d.sshAddress,
+    sshAddress: "sshAddress" in d ? d.sshAddress : undefined,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
   };
 };
 
-export const mapCustomDomains = (domains: ReadonlyArray<WireCustomDomain>): CustomDomainInfo[] =>
+export const mapCustomDomains = (
+  domains: ReadonlyArray<RenderSdk.CustomDomain>,
+): CustomDomainInfo[] =>
   domains.map((d) => ({
     id: d.id,
     name: d.name,
@@ -707,7 +773,7 @@ export const readServiceForProvider = <
     };
 
     if (options.output?.id) {
-      const svc = yield* Client.ignoreNotFound(Client.getService(options.output.id));
+      const svc = yield* Api.ignoreNotFound(RenderSdk.getService({ serviceId: options.output.id }));
       if (!svc || svc.type !== options.serviceType) return undefined;
       const hydrated = yield* hydrateService(svc);
       return yield* toAttrsEffect(hydrated);
@@ -723,8 +789,8 @@ export const readServiceForProvider = <
         : undefined;
     const desiredName =
       explicitName ?? (yield* createPhysicalName({ id: options.id, maxLength: 64 }));
-    const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-    const list = yield* Client.listServices({
+    const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+    const list = yield* listAllServices({
       ownerId: [ownerId],
       name: [desiredName],
       type: [options.serviceType],
@@ -758,8 +824,8 @@ export const observeServiceForProvider = (options: {
         : undefined;
     const desiredName =
       explicitName ?? (yield* createPhysicalName({ id: options.id, maxLength: 64 }));
-    const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-    const list = yield* Client.listServices({
+    const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+    const list = yield* listAllServices({
       ownerId: [ownerId],
       name: [desiredName],
       type: [options.serviceType],
@@ -814,9 +880,9 @@ export const precreateLongRunningService = <
     yield* validateRuntimeSource(news.runtimeSource, startCmd);
 
     const desiredName = news.name ?? (yield* createPhysicalName({ id: options.id, maxLength: 64 }));
-    const ownerId = yield* Client.resolveOwnerId(news.ownerId);
+    const ownerId = yield* Api.resolveOwnerId(news.ownerId);
 
-    const existingList = yield* Client.listServices({
+    const existingList = yield* listAllServices({
       ownerId: [ownerId],
       name: [desiredName],
       type: [options.serviceType],
@@ -831,42 +897,39 @@ export const precreateLongRunningService = <
     const plan = typeof rawPlan === "string" ? rawPlan : options.defaultPlan;
     const runtime = runtimeOfSource(news.runtimeSource);
     const sourceFields = buildSourceFieldsCreate(news.runtimeSource, ownerId);
-    const createdRes = yield* Client.createService({
+    const envSpecificDetails = buildEnvSpecificDetailsCreate(news.runtimeSource, startCmd);
+    const sharedDetails: RenderSdk.PrivateServiceDetailsPOST = {
+      runtime,
+      plan,
+      ...(news.region !== undefined ? { region: news.region } : {}),
+      numInstances: isResolved(news.numInstances) ? (news.numInstances ?? 1) : 1,
+      envSpecificDetails,
+    };
+
+    const createdRes = yield* RenderSdk.createService({
+      ...sourceFields,
       name: desiredName,
       ownerId,
       type: options.serviceType,
-      ...sourceFields,
       autoDeploy: "no",
-      serviceDetails: {
-        runtime,
-        plan,
-        ...(news.buildPlan !== undefined && isResolved(news.buildPlan)
-          ? { buildPlan: news.buildPlan }
-          : {}),
-        ...(news.region !== undefined ? { region: news.region } : {}),
-        numInstances: isResolved(news.numInstances) ? (news.numInstances ?? 1) : 1,
-        envSpecificDetails: buildEnvSpecificDetailsCreate(news.runtimeSource, startCmd),
-      },
+      serviceDetails: sharedDetails,
     });
 
     const service = createdRes.service
       ? createdRes.service
-      : yield* Client.listServices({
+      : yield* listAllServices({
           ownerId: [ownerId],
           name: [desiredName],
           type: [options.serviceType],
         }).pipe(EffectMod.map((rows) => rows.find((s) => s.name === desiredName)));
 
     if (!service) {
-      return yield* new RenderNotFoundError({
-        status: 404,
-        method: "POST",
-        path: "/services",
+      return yield* new RenderSdk.NotFound({
         message: `Render precreated service "${desiredName}" was not returned after creation.`,
       });
     }
 
-    const fresh = yield* Client.getService(service.id);
+    const fresh = yield* RenderSdk.getService({ serviceId: service.id });
     return options.toAttributes(yield* hydrateService(fresh));
   });
 
@@ -876,13 +939,13 @@ export const findServiceByLookup = (
 ) =>
   EffectMod.gen(function* () {
     if (props.id) {
-      const svc = yield* Client.ignoreNotFound(Client.getService(props.id));
+      const svc = yield* Api.ignoreNotFound(RenderSdk.getService({ serviceId: props.id }));
       if (!svc || svc.type !== serviceType) return undefined;
       return yield* hydrateService(svc);
     }
     if (!props.name) return undefined;
-    const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-    const list = yield* Client.listServices({
+    const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+    const list = yield* listAllServices({
       ownerId: [ownerId],
       name: [props.name],
       type: [serviceType],
@@ -894,8 +957,8 @@ export const findServiceByLookup = (
 
 export const listServicesByType = (serviceType: ServiceType) =>
   EffectMod.gen(function* () {
-    const ownerId = yield* Client.resolveOwnerId();
-    const list = yield* Client.listServices({ ownerId: [ownerId], type: [serviceType] });
+    const ownerId = yield* Api.resolveOwnerId();
+    const list = yield* listAllServices({ ownerId: [ownerId], type: [serviceType] });
     return yield* EffectMod.forEach(list, hydrateService);
   });
 
@@ -913,7 +976,7 @@ export const buildIpAllowListField = (
 export const pickMaintenanceMode = (
   news: MaintenanceMode | undefined,
   olds: MaintenanceMode | undefined,
-) => {
+): RenderSdk.MaintenanceMode | undefined => {
   if (news !== undefined) {
     return { enabled: news.enabled ?? false, uri: news.uri ?? "" };
   }
@@ -927,7 +990,7 @@ export const pickRenderSubdomainPolicy = (
   news: RenderSubdomainPolicy | undefined,
 ): RenderSubdomainPolicy | undefined => news;
 
-export const pickPreviews = (news: LongRunningServiceProps) => {
+export const pickPreviews = (news: LongRunningServiceProps): RenderSdk.Previews | undefined => {
   if (news.previews !== undefined) {
     return { generation: news.previews.generation ?? "off" };
   }
@@ -954,8 +1017,14 @@ export const reconcileLongRunningService = <
   readonly desiredName: string;
   readonly bindings: ReadonlyArray<RenderServiceBinding>;
   readonly defaultPlan: string;
-  readonly extraCreateDetails: (news: Props, olds: Props | undefined) => Record<string, unknown>;
-  readonly extraUpdateDetails: (news: Props, olds: Props | undefined) => Record<string, unknown>;
+  readonly extraCreateDetails: (
+    news: Props,
+    olds: Props | undefined,
+  ) => Partial<RenderSdk.WebServiceDetailsPOST>;
+  readonly extraUpdateDetails: (
+    news: Props,
+    olds: Props | undefined,
+  ) => Partial<RenderSdk.WebServiceDetailsPATCH>;
   readonly extraDesiredCustomDomains?: (news: Props) => ReadonlyArray<string> | undefined;
   readonly extraVerifyCustomDomains?: (news: Props) => boolean | undefined;
   readonly toAttributes: (data: HydratedServiceData) => Attrs;
@@ -965,22 +1034,28 @@ export const reconcileLongRunningService = <
     yield* validateRuntimeSource(news.runtimeSource, news.startCommand);
 
     const existing = output?.id
-      ? yield* Client.ignoreNotFound(Client.getService(output.id))
+      ? yield* Api.ignoreNotFound(RenderSdk.getService({ serviceId: output.id }))
       : undefined;
 
     const mergedEnv = mergeBoundEnvVars(news.envVars, options.bindings);
     const runtime = runtimeOfSource(news.runtimeSource);
 
     if (!existing) {
-      const ownerId = yield* Client.resolveOwnerId(news.ownerId);
+      const ownerId = yield* Api.resolveOwnerId(news.ownerId);
       const envVarsWire = envVarsToWire(mergedEnv, [], false);
       const secretFilesWire = secretFilesToWire(news.secretFiles);
-      const serviceDetails: Record<string, unknown> = {
+      const previews = pickPreviews(news);
+      const pullRequestPreviewsEnabled =
+        news.pullRequestPreviewsEnabled !== undefined
+          ? news.pullRequestPreviewsEnabled
+            ? ("yes" as const)
+            : ("no" as const)
+          : undefined;
+      const serviceDetails: RenderSdk.WebServiceDetailsPOST = {
         runtime,
         plan:
           ("plan" in news && typeof news.plan === "string" ? news.plan : undefined) ??
           options.defaultPlan,
-        ...(news.buildPlan !== undefined ? { buildPlan: news.buildPlan } : {}),
         ...(news.region !== undefined ? { region: news.region } : {}),
         numInstances: news.numInstances ?? 1,
         envSpecificDetails: buildEnvSpecificDetailsCreate(news.runtimeSource, news.startCommand),
@@ -998,14 +1073,13 @@ export const reconcileLongRunningService = <
         ...(news.maxShutdownDelaySeconds !== undefined
           ? { maxShutdownDelaySeconds: news.maxShutdownDelaySeconds }
           : {}),
-        ...(pickPreviews(news) !== undefined ? { previews: pickPreviews(news) } : {}),
-        ...(news.pullRequestPreviewsEnabled !== undefined
-          ? { pullRequestPreviewsEnabled: news.pullRequestPreviewsEnabled ? "yes" : "no" }
-          : {}),
+        ...(previews !== undefined ? { previews } : {}),
+        ...(pullRequestPreviewsEnabled !== undefined ? { pullRequestPreviewsEnabled } : {}),
         ...options.extraCreateDetails(news, olds),
       };
 
-      const createdRes = yield* Client.createService({
+      const createdRes = yield* RenderSdk.createService({
+        ...buildSourceFieldsCreate(news.runtimeSource, ownerId),
         name: options.desiredName,
         ownerId,
         type: options.serviceType,
@@ -1013,32 +1087,24 @@ export const reconcileLongRunningService = <
         ...(envVarsWire.length > 0 ? { envVars: envVarsWire } : {}),
         ...(secretFilesWire.length > 0 ? { secretFiles: secretFilesWire } : {}),
         serviceDetails,
-        ...buildSourceFieldsCreate(news.runtimeSource, ownerId),
       });
 
       const service = createdRes.service
         ? createdRes.service
-        : yield* Client.listServices({
+        : yield* listAllServices({
             ownerId: [ownerId],
             name: [options.desiredName],
             type: [options.serviceType],
           }).pipe(EffectMod.map((rows) => rows[0]));
 
       if (!service) {
-        return yield* new RenderNotFoundError({
-          status: 404,
-          method: "POST",
-          path: "/services",
+        return yield* new RenderSdk.NotFound({
           message: `Render service "${options.desiredName}" was not returned after creation.`,
         });
       }
 
       if (news.environmentId !== undefined) {
-        yield* Client.syncResourceEnvironment(
-          service.id,
-          service.environmentId,
-          news.environmentId,
-        );
+        yield* Api.syncResourceEnvironment(service.id, service.environmentId, news.environmentId);
       }
 
       if (options.extraDesiredCustomDomains) {
@@ -1066,7 +1132,7 @@ export const reconcileLongRunningService = <
         yield* waitForServiceLive(options.resourceType, service.id);
       }
 
-      const fresh = yield* Client.getService(service.id);
+      const fresh = yield* RenderSdk.getService({ serviceId: service.id });
       const hydrated = yield* hydrateService(fresh);
       return options.toAttributes(hydrated);
     }
@@ -1079,38 +1145,48 @@ export const reconcileLongRunningService = <
       news.numInstances,
     );
 
-    const updateDetails: Record<string, unknown> = {
+    const previews = pickPreviews(news);
+    const pullRequestPreviewsEnabled =
+      news.pullRequestPreviewsEnabled !== undefined
+        ? news.pullRequestPreviewsEnabled
+          ? ("yes" as const)
+          : ("no" as const)
+        : undefined;
+    const updateDetails: RenderSdk.WebServiceDetailsPATCH = {
       runtime,
       plan:
         ("plan" in news && typeof news.plan === "string" ? news.plan : undefined) ??
         options.defaultPlan,
-      ...(news.buildPlan !== undefined ? { buildPlan: news.buildPlan } : {}),
       envSpecificDetails: buildEnvSpecificDetailsUpdate(news.runtimeSource, news.startCommand),
       preDeployCommand: news.preDeployCommand ?? "",
       ...(news.maxShutdownDelaySeconds !== undefined
         ? { maxShutdownDelaySeconds: news.maxShutdownDelaySeconds }
         : {}),
-      ...(pickPreviews(news) !== undefined ? { previews: pickPreviews(news) } : {}),
-      ...(news.pullRequestPreviewsEnabled !== undefined
-        ? { pullRequestPreviewsEnabled: news.pullRequestPreviewsEnabled ? "yes" : "no" }
-        : {}),
+      ...(previews !== undefined ? { previews } : {}),
+      ...(pullRequestPreviewsEnabled !== undefined ? { pullRequestPreviewsEnabled } : {}),
       ...options.extraUpdateDetails(news, olds),
     };
 
-    yield* Client.updateService(existing.id, {
+    yield* RenderSdk.updateService({
+      ...buildSourceFieldsCreate(news.runtimeSource, existing.ownerId),
+      serviceId: existing.id,
       name: options.desiredName,
       ...(news.rootDirectory !== undefined ? { rootDir: news.rootDirectory } : {}),
       serviceDetails: updateDetails,
-      ...buildSourceFieldsCreate(news.runtimeSource, existing.ownerId),
     });
 
     const desiredEnvWire = envVarsToWire(mergedEnv, hydratedBefore.envVars, true);
-    yield* Client.putServiceEnvVars(existing.id, desiredEnvWire);
+    yield* RenderSdk.updateEnvVarsForService({ serviceId: existing.id, body: desiredEnvWire });
 
     const desiredFilesWire = secretFilesToWire(news.secretFiles);
-    yield* Client.putServiceSecretFiles(existing.id, desiredFilesWire);
+    yield* RenderSdk.updateSecretFilesForService({
+      serviceId: existing.id,
+      body: desiredFilesWire,
+    });
 
-    yield* syncDisk(existing.id, existing.serviceDetails.disk, news.disk);
+    const existingDisk =
+      "disk" in existing.serviceDetails ? existing.serviceDetails.disk : undefined;
+    yield* syncDisk(existing.id, existingDisk, news.disk);
     yield* syncNotificationOverride(
       existing.id,
       news.notificationOverride,
@@ -1121,7 +1197,7 @@ export const reconcileLongRunningService = <
       hydratedBefore.logStreamOverride,
       news.logStreamOverride,
     );
-    yield* Client.syncResourceEnvironment(existing.id, existing.environmentId, news.environmentId);
+    yield* Api.syncResourceEnvironment(existing.id, existing.environmentId, news.environmentId);
 
     if (options.extraDesiredCustomDomains) {
       yield* syncCustomDomains(
@@ -1135,14 +1211,14 @@ export const reconcileLongRunningService = <
     yield* syncServiceSuspension(existing.id, existing.suspended, news.suspended);
 
     if (!news.skipDeployAfterUpdate) {
-      yield* Client.createDeploy(existing.id);
+      yield* RenderSdk.createDeploy({ serviceId: existing.id });
     }
 
     if (news.waitForDeployCompletion) {
       yield* waitForServiceLive(options.resourceType, existing.id);
     }
 
-    const refreshed = yield* Client.getService(existing.id);
+    const refreshed = yield* RenderSdk.getService({ serviceId: existing.id });
     const hydratedAfter = yield* hydrateService(refreshed);
     return options.toAttributes(hydratedAfter);
   });

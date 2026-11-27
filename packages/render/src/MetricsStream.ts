@@ -1,10 +1,11 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
-import * as Client from "./internal/Client.ts";
-import { toRedacted, unwrapOptionalSecret } from "./internal/Redacted.ts";
+import type * as Redacted from "effect/Redacted";
+import * as Api from "./internal/Api.ts";
+import { toRedacted } from "./internal/Redacted.ts";
 import type { Providers } from "./Providers.ts";
 import type { OtelProviderType, SecretString } from "./Types.ts";
 
@@ -78,23 +79,23 @@ export const MetricsStreamProvider = () =>
       read: Effect.fn(function* ({ olds, output }) {
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
-        const ownerId = output?.ownerId ?? (yield* Client.resolveOwnerId(explicitOwnerId));
-        const stream = yield* Client.ignoreNotFound(Client.getOwnerMetricsStream(ownerId));
+        const ownerId = output?.ownerId ?? (yield* Api.resolveOwnerId(explicitOwnerId));
+        const stream = yield* Api.ignoreNotFound(RenderSdk.getOwnerMetricsStream({ ownerId }));
         if (!stream || !stream.url) return undefined;
         return {
           ownerId: stream.ownerId ?? ownerId,
-          provider: stream.provider,
+          provider: stream.provider as OtelProviderType,
           url: stream.url,
           ...(output?.token !== undefined ? { token: output.token } : {}),
         };
       }),
       lookup: Effect.fn(function* (props) {
-        const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-        const stream = yield* Client.ignoreNotFound(Client.getOwnerMetricsStream(ownerId));
+        const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+        const stream = yield* Api.ignoreNotFound(RenderSdk.getOwnerMetricsStream({ ownerId }));
         if (!stream || !stream.url) return undefined;
         return {
           ownerId: stream.ownerId ?? ownerId,
-          provider: stream.provider,
+          provider: stream.provider as OtelProviderType,
           url: stream.url,
         };
       }),
@@ -102,23 +103,26 @@ export const MetricsStreamProvider = () =>
         return [];
       }),
       reconcile: Effect.fn(function* ({ news }) {
-        const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-        const token = unwrapOptionalSecret(news.token);
-        const updated = yield* Client.putOwnerMetricsStream(ownerId, {
+        const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+        const token = toRedacted(news.token);
+        const updated = yield* RenderSdk.upsertOwnerMetricsStream({
+          ownerId,
           provider: news.provider,
           url: news.url,
-          ...(token !== undefined ? { token } : {}),
+          token,
         });
         return {
           ownerId: updated.ownerId ?? ownerId,
-          provider: updated.provider ?? news.provider,
+          provider: (updated.provider ?? news.provider) as OtelProviderType,
           url: updated.url ?? news.url,
-          token: toRedacted(news.token),
+          token,
         };
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.ownerId) return;
-        yield* Client.deleteOwnerMetricsStream(output.ownerId);
+        yield* Api.deleteIdempotent(
+          RenderSdk.deleteOwnerMetricsStream({ ownerId: output.ownerId }),
+        );
       }),
     }),
   );

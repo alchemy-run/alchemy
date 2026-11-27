@@ -2,12 +2,11 @@ import type { WriteClient } from "@alchemy.run/redis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 import type { KeyValue } from "./KeyValue.ts";
-import type { Redis } from "./Redis.ts";
 
 export type WriteKeyValueClient = WriteClient;
 
 /**
- * Bind a Render {@link KeyValue} or {@link Redis} datastore with write access.
+ * Bind a Render {@link KeyValue} datastore with write access.
  *
  * Provide {@link WriteKeyValueHttp}.
  *
@@ -24,7 +23,7 @@ export type WriteKeyValueClient = WriteClient;
 export interface WriteKeyValue extends Binding.Service<
   WriteKeyValue,
   "Render.WriteKeyValue",
-  (instance: KeyValue | Redis) => Effect.Effect<WriteKeyValueClient>
+  (instance: KeyValue) => Effect.Effect<WriteKeyValueClient>
 > {}
 
 export const WriteKeyValue = Binding.Service<WriteKeyValue>("Render.WriteKeyValue");

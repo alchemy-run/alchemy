@@ -1,4 +1,3 @@
-import * as Binding from "alchemy/Binding";
 import * as Output from "alchemy/Output";
 import { CurrentRuntimeContext, sanitizeKey, type RuntimeContext } from "alchemy/RuntimeContext";
 import * as Config from "effect/Config";
@@ -14,7 +13,7 @@ import {
   type ConnectServiceClient,
   type ConnectableService,
 } from "./ConnectService.ts";
-import { isRenderHost } from "./RenderBindings.ts";
+import * as RenderBindings from "./RenderBindings.ts";
 
 /** Normalize Render public or private `host:port` service addresses into a base HTTP URL. */
 export const normalizeServiceUrl = (raw: string | undefined, slug: string): string => {
@@ -28,7 +27,11 @@ export const normalizeServiceUrl = (raw: string | undefined, slug: string): stri
 };
 
 const readConfigString = (key: string): Effect.Effect<string | undefined> =>
-  Config.String(key).pipe(Config.option, Effect.orDie, Effect.map(Option.getOrUndefined));
+  Config.String(key).pipe(
+    Config.option,
+    Effect.map(Option.getOrUndefined),
+    Effect.orElseSucceed(() => undefined),
+  );
 
 const runtimeOutput = <A>(
   key: string,
@@ -81,8 +84,9 @@ const resolveString = (
  */
 export const ConnectServiceHttp = Layer.effect(
   ConnectService,
-  Effect.succeed(
-    Effect.fn(function* (service: ConnectableService) {
+  Effect.gen(function* () {
+    const bind = yield* RenderBindings.Bind;
+    return Effect.fn(function* (service: ConnectableService) {
       const keys = connectServiceEnvKeys(service);
       const resourceName = service.LogicalId;
 
@@ -110,21 +114,12 @@ export const ConnectServiceHttp = Layer.effect(
       const slugOutput: Output.Output<string> | string = rawSlug;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isRenderHost(host)) {
-          yield* host.bind`${service}`({
-            env: {
-              [keys.url]: urlOutput,
-              [keys.slug]: slugOutput,
-            },
-          });
-        } else {
-          const rt = yield* CurrentRuntimeContext;
-          if (rt) {
-            yield* rt.set(sanitizeKey(keys.url), Output.asOutput(urlOutput));
-            yield* rt.set(sanitizeKey(keys.slug), Output.asOutput(slugOutput));
-          }
-        }
+        yield* bind`Render.ConnectService(${service})`({
+          env: {
+            [sanitizeKey(keys.url)]: Output.asOutput(urlOutput),
+            [sanitizeKey(keys.slug)]: Output.asOutput(slugOutput),
+          },
+        });
       }
 
       const url = resolveString(keys.url, urlOutput, resourceName);
@@ -137,6 +132,7 @@ export const ConnectServiceHttp = Layer.effect(
           Effect.gen(function* () {
             const baseUrl = yield* url;
             const http = yield* HttpClient.HttpClient;
+            // Calls the user's own deployed service endpoint rather than the Render API.
             const req =
               request.url.startsWith("http://") || request.url.startsWith("https://")
                 ? request
@@ -144,6 +140,6 @@ export const ConnectServiceHttp = Layer.effect(
             return yield* http.execute(req);
           }),
       } satisfies ConnectServiceClient;
-    }),
-  ),
+    });
+  }),
 );

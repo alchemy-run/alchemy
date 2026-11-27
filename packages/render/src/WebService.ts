@@ -1,12 +1,13 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Client from "./internal/Client.ts";
 import { renderResourceLogs, renderResourceTail } from "./internal/Logs.ts";
 import {
   buildIpAllowListField,
+  deleteServiceById,
   findServiceByLookup,
   listServicesByType,
   mapBaseServiceAttrs,
@@ -125,23 +126,25 @@ export const purgeServiceCache = (
   serviceId: string,
 ): Effect.Effect<
   void,
-  Effect.Error<ReturnType<typeof Client.purgeServiceCache>>,
-  Effect.Services<ReturnType<typeof Client.purgeServiceCache>>
-> => Client.purgeServiceCache(serviceId);
+  Effect.Error<ReturnType<typeof RenderSdk.purgeCache>>,
+  Effect.Services<ReturnType<typeof RenderSdk.purgeCache>>
+> => RenderSdk.purgeCache({ serviceId }).pipe(Effect.asVoid);
 
 const mapWebService = (data: HydratedServiceData): WebServiceAttributes => {
   const base = mapBaseServiceAttrs(data);
   const d = data.service.serviceDetails;
+  const cacheProfile =
+    "cache" in d && d.cache?.profile ? (d.cache.profile as CacheProfile) : undefined;
   return {
     ...base,
-    url: d.url,
-    healthCheckPath: d.healthCheckPath,
-    openPorts: d.openPorts ?? [],
+    url: "url" in d ? d.url : undefined,
+    healthCheckPath: "healthCheckPath" in d ? d.healthCheckPath : undefined,
+    openPorts: "openPorts" in d && d.openPorts ? d.openPorts : [],
     customDomains: mapCustomDomains(data.customDomains),
-    cacheProfile: d.cache?.profile,
-    ipAllowList: d.ipAllowList,
-    maintenanceMode: d.maintenanceMode,
-    renderSubdomainPolicy: d.renderSubdomainPolicy,
+    cacheProfile,
+    ipAllowList: "ipAllowList" in d ? d.ipAllowList : undefined,
+    maintenanceMode: "maintenanceMode" in d ? d.maintenanceMode : undefined,
+    renderSubdomainPolicy: "renderSubdomainPolicy" in d ? d.renderSubdomainPolicy : undefined,
   };
 };
 
@@ -257,7 +260,7 @@ export const WebServiceProvider = () =>
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteService(output.id);
+        yield* deleteServiceById(output.id);
       }),
     }),
   );

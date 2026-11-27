@@ -23,7 +23,6 @@ import { PrivateService, PrivateServiceProvider } from "./PrivateService.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import { ReadKeyValueHttp } from "./ReadKeyValueHttp.ts";
 import { ReadWriteKeyValueHttp } from "./ReadWriteKeyValueHttp.ts";
-import { Redis, RedisProvider } from "./Redis.ts";
 import { RegistryCredential, RegistryCredentialProvider } from "./RegistryCredential.ts";
 import { RunWorkflowTaskHttp } from "./RunWorkflowTaskHttp.ts";
 import { ServicePreview, ServicePreviewProvider } from "./ServicePreview.ts";
@@ -34,11 +33,14 @@ import { Workflow, WorkflowProvider } from "./Workflow.ts";
 import { WriteKeyValueHttp } from "./WriteKeyValueHttp.ts";
 
 export {
-  DEFAULT_API_BASE_URL,
-  RenderCredentials,
+  Credentials,
+  CredentialsFromEnv,
+  OwnerId,
   RenderPollConfig,
+  fromApiKey,
   fromAuthProvider,
-  fromConfig,
+  ownerId,
+  ownerIdFromAuthProvider,
   type PollConfig,
   type RenderClientConfig,
 } from "./Credentials.ts";
@@ -68,7 +70,6 @@ export const providers = () =>
       Postgres,
       PrivateService,
       Project,
-      Redis,
       RegistryCredential,
       ServicePreview,
       StaticSite,
@@ -93,7 +94,6 @@ export const providers = () =>
         PostgresProvider(),
         PrivateServiceProvider(),
         ProjectProvider(),
-        RedisProvider(),
         RegistryCredentialProvider(),
         ServicePreviewProvider(),
         StaticSiteProvider(),
@@ -112,7 +112,8 @@ export const providers = () =>
         ReadWriteKeyValueHttp,
       ),
     ),
-    Layer.provideMerge(Credentials.fromAuthProvider()),
+    Layer.provideMerge(Credentials.providedOrDefault()),
+    Layer.provideMerge(Credentials.ownerIdProvidedOrDefault()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(RenderAuth),
     Layer.provideMerge(ProfileStoreLive),

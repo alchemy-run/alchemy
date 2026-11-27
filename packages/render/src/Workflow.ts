@@ -1,17 +1,17 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import { RenderDeployFailedError, RenderValidationError } from "./Errors.ts";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import { renderResourceLogs, renderResourceTail } from "./internal/Logs.ts";
 import { pollUntil } from "./internal/Poll.ts";
 import { toRedacted } from "./internal/Redacted.ts";
 import { envVarsToWire } from "./internal/ServiceBase.ts";
-import type { WireWorkflow } from "./internal/WireTypes.ts";
 import type { Providers } from "./Providers.ts";
 import type { AutoDeployTrigger, EnvVarValueSpec, Region, WorkflowRuntime } from "./Types.ts";
 
@@ -38,11 +38,11 @@ export interface WorkflowProps {
   runCommand: string;
   /** Automatic version deployment trigger (`"commit"`, `"checksPass"`, or `"off"`). */
   autoDeployTrigger?: AutoDeployTrigger;
-  /** Environment variables configured on the workflow service. */
+  /** Environment variables configured on the workflow service during creation. */
   envVars?: Record<string, EnvVarValueSpec>;
   /** Deploy a workflow version immediately after reconcile. */
   deployVersion?: boolean;
-  /** Poll until the deployed workflow version reaches `"live"` / `"ready"`. */
+  /** Poll until the deployed workflow version reaches `"ready"`. */
   waitForVersionCompletion?: boolean;
 }
 
@@ -125,8 +125,16 @@ export interface Workflow extends Resource<
 
 export const Workflow = Resource<Workflow>("Render.Workflow");
 
+type RenderWorkflowModel = RenderSdk.CreateWorkflowResponse;
+
+const listAllWorkflows = (params: { readonly ownerId?: string[]; readonly name?: string[] }) =>
+  Api.paginateCursorList(
+    (cursor) => RenderSdk.listWorkflows({ ...params, cursor, limit: 100 }),
+    (row) => row.workflow,
+  );
+
 const mapWorkflow = (
-  w: WireWorkflow,
+  w: RenderWorkflowModel,
   envVars: Record<string, Redacted.Redacted<string>> = {},
 ): WorkflowAttributes => ({
   id: w.id,
@@ -135,11 +143,11 @@ const mapWorkflow = (
   ownerId: w.ownerId,
   environmentId: w.environmentId,
   region: w.region,
-  runtime: w.buildConfig?.runtime ?? w.runtime ?? "node",
-  repo: w.buildConfig?.repo ?? w.repo ?? "",
-  branch: w.buildConfig?.branch ?? w.branch,
-  rootDirectory: w.buildConfig?.rootDir ?? w.rootDir,
-  buildCommand: w.buildConfig?.buildCommand ?? w.buildCommand,
+  runtime: w.buildConfig.runtime,
+  repo: w.buildConfig.repo,
+  branch: w.buildConfig.branch,
+  rootDirectory: w.buildConfig.rootDir,
+  buildCommand: w.buildConfig.buildCommand,
   runCommand: w.runCommand,
   autoDeployTrigger: w.autoDeployTrigger,
   defaultVersionId: w.defaultVersionId,
@@ -175,10 +183,10 @@ const waitForWorkflowVersionLive = (versionId: string) =>
   pollUntil({
     operation: "workflow version deployment",
     resourceId: versionId,
-    check: Client.getWorkflowVersion(versionId),
+    check: RenderSdk.getWorkflowVersion({ workflowVersionId: versionId }),
     statusOf: (v) => v.status,
     failIf: (v) => {
-      if (v.status === "failed" || v.status === "build_failed" || v.status === "canceled") {
+      if (v.status === "build_failed" || v.status === "registration_failed") {
         return new RenderDeployFailedError({
           resourceType: "Render.Workflow",
           resourceId: versionId,
@@ -188,7 +196,7 @@ const waitForWorkflowVersionLive = (versionId: string) =>
       }
       return undefined;
     },
-    isDone: (v) => v.status === "live" || v.status === "ready" || v.status === "succeeded",
+    isDone: (v) => v.status === "ready",
   });
 
 const envVarsStateFromProps = (
@@ -226,7 +234,7 @@ export const WorkflowProvider = () =>
       }),
       read: Effect.fn(function* ({ id, olds, output, previous }) {
         if (output?.id) {
-          const wf = yield* Client.ignoreNotFound(Client.getWorkflow(output.id));
+          const wf = yield* Api.ignoreNotFound(RenderSdk.getWorkflow({ workflowId: output.id }));
           return wf ? mapWorkflow(wf, output.envVars ?? {}) : undefined;
         }
         const explicitName =
@@ -234,8 +242,8 @@ export const WorkflowProvider = () =>
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-        const list = yield* Client.listWorkflows({ ownerId: [ownerId], name: [desiredName] });
+        const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+        const list = yield* listAllWorkflows({ ownerId: [ownerId], name: [desiredName] });
         const matched = list.find((w) => w.name === desiredName);
         if (!matched) return undefined;
         const attrs = mapWorkflow(matched);
@@ -243,41 +251,41 @@ export const WorkflowProvider = () =>
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const wf = yield* Client.ignoreNotFound(Client.getWorkflow(props.id));
+          const wf = yield* Api.ignoreNotFound(RenderSdk.getWorkflow({ workflowId: props.id }));
           return wf ? mapWorkflow(wf) : undefined;
         }
         if (props.name) {
-          const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-          const all = yield* Client.listWorkflows({ ownerId: [ownerId], name: [props.name] });
+          const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+          const all = yield* listAllWorkflows({ ownerId: [ownerId], name: [props.name] });
           const matched = all.find((w) => w.name === props.name);
           return matched ? mapWorkflow(matched) : undefined;
         }
         return undefined;
       }),
       list: Effect.fn(function* () {
-        const ownerId = yield* Client.resolveOwnerId();
-        const all = yield* Client.listWorkflows({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId();
+        const all = yield* listAllWorkflows({ ownerId: [ownerId] });
         return all.map((w) => mapWorkflow(w));
       }),
       reconcile: Effect.fn(function* ({ id, news, output }) {
         yield* validateWorkflowProps(news);
         const desiredName = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getWorkflow(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getWorkflow({ workflowId: output.id }))
           : undefined;
         const envVarsWire = envVarsToWire(news.envVars ?? {}, [], false);
         const buildConfig = {
           runtime: news.runtime,
           repo: news.repo,
+          buildCommand: news.buildCommand ?? "",
           ...(news.branch !== undefined ? { branch: news.branch } : {}),
           ...(news.rootDirectory !== undefined ? { rootDir: news.rootDirectory } : {}),
-          ...(news.buildCommand !== undefined ? { buildCommand: news.buildCommand } : {}),
         };
 
-        let reconciled: WireWorkflow;
+        let reconciled: RenderWorkflowModel;
         if (!existing) {
-          const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-          reconciled = yield* Client.createWorkflow({
+          const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+          reconciled = yield* RenderSdk.createWorkflow({
             name: desiredName,
             ownerId,
             region: news.region ?? "oregon",
@@ -289,39 +297,46 @@ export const WorkflowProvider = () =>
             ...(envVarsWire.length > 0 ? { envVars: envVarsWire } : {}),
           });
         } else {
-          reconciled = yield* Client.updateWorkflow(existing.id, {
+          reconciled = yield* RenderSdk.updateWorkflow({
+            workflowId: existing.id,
             name: desiredName,
             runCommand: news.runCommand,
             buildConfig,
             ...(news.autoDeployTrigger !== undefined
               ? { autoDeployTrigger: news.autoDeployTrigger }
               : {}),
-            ...(news.envVars !== undefined ? { envVars: envVarsWire } : {}),
           });
         }
 
         if (news.environmentId !== undefined || existing?.environmentId !== undefined) {
-          yield* Client.syncResourceEnvironment(
+          yield* Api.syncResourceEnvironment(
             reconciled.id,
             reconciled.environmentId ?? existing?.environmentId,
             news.environmentId,
           );
-          reconciled = yield* Client.getWorkflow(reconciled.id);
+          reconciled = yield* RenderSdk.getWorkflow({ workflowId: reconciled.id });
         }
 
         if (news.deployVersion) {
-          const version = yield* Client.createWorkflowVersion(reconciled.id);
+          yield* RenderSdk.createWorkflowVersion({ workflowId: reconciled.id });
           if (news.waitForVersionCompletion) {
-            yield* waitForWorkflowVersionLive(version.id);
+            const versions = yield* RenderSdk.listWorkflowVersions({
+              workflowID: [reconciled.id],
+              limit: 1,
+            });
+            const latestId = versions[0]?.workflowVersion?.id;
+            if (latestId) {
+              yield* waitForWorkflowVersionLive(latestId);
+            }
           }
-          reconciled = yield* Client.getWorkflow(reconciled.id);
+          reconciled = yield* RenderSdk.getWorkflow({ workflowId: reconciled.id });
         }
 
         return mapWorkflow(reconciled, envVarsStateFromProps(news.envVars));
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteWorkflow(output.id);
+        yield* Api.deleteIdempotent(RenderSdk.deleteWorkflow({ workflowId: output.id }));
       }),
       logs: Effect.fn(function* ({ output, options }) {
         return yield* renderResourceLogs({

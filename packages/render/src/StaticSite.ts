@@ -1,17 +1,20 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import { renderResourceLogs, renderResourceTail } from "./internal/Logs.ts";
 import { toRedacted } from "./internal/Redacted.ts";
 import {
   buildIpAllowListField,
+  deleteServiceById,
   envVarsToWire,
   findServiceByLookup,
   hydrateService,
+  listAllServices,
   listServicesByType,
   mapCustomDomains,
   mergeBoundEnvVars,
@@ -206,8 +209,14 @@ const hydrateAndMapStaticSite = (data: HydratedServiceData) =>
   Effect.gen(function* () {
     const s = data.service;
     const d = s.serviceDetails;
-    const headers = yield* Client.listHeaders(s.id);
-    const routes = yield* Client.listRoutes(s.id);
+    const headers = yield* Api.paginateCursorList(
+      (cursor) => RenderSdk.listHeaders({ serviceId: s.id, cursor, limit: 100 }),
+      (row) => row.header,
+    );
+    const routes = yield* Api.paginateCursorList(
+      (cursor) => RenderSdk.listRoutes({ serviceId: s.id, cursor, limit: 100 }),
+      (row) => row.route,
+    );
     const envVars: Record<string, Redacted.Redacted<string>> = {};
     for (const ev of data.envVars) {
       envVars[ev.key] = toRedacted(ev.value);
@@ -218,13 +227,13 @@ const hydrateAndMapStaticSite = (data: HydratedServiceData) =>
       slug: s.slug,
       ownerId: s.ownerId,
       environmentId: s.environmentId,
-      url: d.url,
+      url: "url" in d ? d.url : undefined,
       repo: s.repo,
       branch: s.branch,
       rootDirectory: s.rootDir,
-      buildCommand: d.buildCommand,
-      publishPath: d.publishPath,
-      buildPlan: d.buildPlan,
+      buildCommand: "buildCommand" in d ? d.buildCommand : undefined,
+      publishPath: "publishPath" in d ? d.publishPath : undefined,
+      buildPlan: "buildPlan" in d ? d.buildPlan : undefined,
       suspended: s.suspended,
       autoDeploy: s.autoDeploy === "yes",
       autoDeployTrigger: s.autoDeployTrigger,
@@ -239,9 +248,9 @@ const hydrateAndMapStaticSite = (data: HydratedServiceData) =>
         priority: r.priority,
       })),
       customDomains: mapCustomDomains(data.customDomains),
-      ipAllowList: d.ipAllowList,
-      renderSubdomainPolicy: d.renderSubdomainPolicy,
-      previews: d.previews,
+      ipAllowList: "ipAllowList" in d ? d.ipAllowList : undefined,
+      renderSubdomainPolicy: "renderSubdomainPolicy" in d ? d.renderSubdomainPolicy : undefined,
+      previews: "previews" in d ? d.previews : undefined,
       notificationOverride: data.notificationOverride
         ? {
             notificationsToSend: data.notificationOverride.notificationsToSend,
@@ -306,22 +315,42 @@ export const StaticSiteProvider = () =>
       reconcile: Effect.fn(function* ({ id, news, olds, output, bindings }) {
         const desiredName = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getService(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getService({ serviceId: output.id }))
           : undefined;
         const mergedEnv = mergeBoundEnvVars(
           news.envVars,
           bindings.map((b) => b.data),
         );
 
-        const autoDeployPart: Record<string, unknown> =
+        const autoDeployPart =
           news.autoDeployTrigger !== undefined
             ? { autoDeployTrigger: news.autoDeployTrigger }
-            : { autoDeploy: news.autoDeploy === false ? "no" : "yes" };
+            : { autoDeploy: news.autoDeploy === false ? ("no" as const) : ("yes" as const) };
 
         if (!existing) {
-          const ownerId = yield* Client.resolveOwnerId(news.ownerId);
+          const ownerId = yield* Api.resolveOwnerId(news.ownerId);
           const envVarsWire = envVarsToWire(mergedEnv, [], false);
-          const createdRes = yield* Client.createService({
+          const pullRequestPreviewsEnabled =
+            news.pullRequestPreviewsEnabled !== undefined
+              ? news.pullRequestPreviewsEnabled
+                ? ("yes" as const)
+                : ("no" as const)
+              : undefined;
+          const serviceDetails: RenderSdk.StaticSiteDetailsPOST = {
+            buildCommand: news.buildCommand,
+            publishPath: news.publishPath ?? "public",
+            ...(news.headers !== undefined ? { headers: news.headers } : {}),
+            ...(news.routes !== undefined ? { routes: news.routes } : {}),
+            ...(news.ipAllowList !== undefined ? { ipAllowList: news.ipAllowList } : {}),
+            ...(news.renderSubdomainPolicy !== undefined
+              ? { renderSubdomainPolicy: news.renderSubdomainPolicy }
+              : {}),
+            ...(news.previews !== undefined
+              ? { previews: { generation: news.previews.generation ?? "off" } }
+              : {}),
+            ...(pullRequestPreviewsEnabled !== undefined ? { pullRequestPreviewsEnabled } : {}),
+          };
+          const createdRes = yield* RenderSdk.createService({
             name: desiredName,
             ownerId,
             type: "static_site",
@@ -338,35 +367,25 @@ export const StaticSiteProvider = () =>
                 }
               : {}),
             ...(envVarsWire.length > 0 ? { envVars: envVarsWire } : {}),
-            serviceDetails: {
-              buildCommand: news.buildCommand,
-              publishPath: news.publishPath ?? "public",
-              ...(news.buildPlan !== undefined ? { buildPlan: news.buildPlan } : {}),
-              ...(news.headers !== undefined ? { headers: news.headers } : {}),
-              ...(news.routes !== undefined ? { routes: news.routes } : {}),
-              ...(news.ipAllowList !== undefined ? { ipAllowList: news.ipAllowList } : {}),
-              ...(news.renderSubdomainPolicy !== undefined
-                ? { renderSubdomainPolicy: news.renderSubdomainPolicy }
-                : {}),
-              ...(news.previews !== undefined
-                ? { previews: { generation: news.previews.generation ?? "off" } }
-                : {}),
-              ...(news.pullRequestPreviewsEnabled !== undefined
-                ? { pullRequestPreviewsEnabled: news.pullRequestPreviewsEnabled ? "yes" : "no" }
-                : {}),
-            },
+            serviceDetails,
           });
 
           const service = createdRes.service
             ? createdRes.service
-            : yield* Client.listServices({
+            : yield* listAllServices({
                 ownerId: [ownerId],
                 name: [desiredName],
                 type: ["static_site"],
               }).pipe(Effect.map((rows) => rows[0]));
 
+          if (!service) {
+            return yield* new RenderSdk.NotFound({
+              message: `Render static site "${desiredName}" was not returned after creation.`,
+            });
+          }
+
           if (news.environmentId !== undefined) {
-            yield* Client.syncResourceEnvironment(
+            yield* Api.syncResourceEnvironment(
               service.id,
               service.environmentId,
               news.environmentId,
@@ -385,14 +404,33 @@ export const StaticSiteProvider = () =>
           if (news.waitForDeployCompletion) {
             yield* waitForServiceLive("Render.StaticSite", service.id);
           }
-          const fresh = yield* Client.getService(service.id);
+          const fresh = yield* RenderSdk.getService({ serviceId: service.id });
           return yield* hydrateAndMapStaticSite(yield* hydrateService(fresh));
         }
 
         const hydratedBefore = yield* hydrateService(existing);
         const ipAllowList = buildIpAllowListField(news.ipAllowList, olds?.ipAllowList);
+        const pullRequestPreviewsEnabled =
+          news.pullRequestPreviewsEnabled !== undefined
+            ? news.pullRequestPreviewsEnabled
+              ? ("yes" as const)
+              : ("no" as const)
+            : undefined;
+        const serviceDetails: RenderSdk.StaticSiteDetailsPATCH = {
+          buildCommand: news.buildCommand,
+          publishPath: news.publishPath ?? "public",
+          ...(ipAllowList !== undefined ? { ipAllowList } : {}),
+          ...(news.renderSubdomainPolicy !== undefined
+            ? { renderSubdomainPolicy: news.renderSubdomainPolicy }
+            : {}),
+          ...(news.previews !== undefined
+            ? { previews: { generation: news.previews.generation ?? "off" } }
+            : {}),
+          ...(pullRequestPreviewsEnabled !== undefined ? { pullRequestPreviewsEnabled } : {}),
+        };
 
-        yield* Client.updateService(existing.id, {
+        yield* RenderSdk.updateService({
+          serviceId: existing.id,
           name: desiredName,
           repo: news.repo,
           branch: news.branch,
@@ -406,32 +444,18 @@ export const StaticSiteProvider = () =>
                 },
               }
             : {}),
-          serviceDetails: {
-            buildCommand: news.buildCommand,
-            publishPath: news.publishPath ?? "public",
-            ...(news.buildPlan !== undefined ? { buildPlan: news.buildPlan } : {}),
-            ...(ipAllowList !== undefined ? { ipAllowList } : {}),
-            ...(news.renderSubdomainPolicy !== undefined
-              ? { renderSubdomainPolicy: news.renderSubdomainPolicy }
-              : {}),
-            ...(news.previews !== undefined
-              ? { previews: { generation: news.previews.generation ?? "off" } }
-              : {}),
-            ...(news.pullRequestPreviewsEnabled !== undefined
-              ? { pullRequestPreviewsEnabled: news.pullRequestPreviewsEnabled ? "yes" : "no" }
-              : {}),
-          },
+          serviceDetails,
         });
 
-        yield* Client.putServiceEnvVars(
-          existing.id,
-          envVarsToWire(mergedEnv, hydratedBefore.envVars, true),
-        );
+        yield* RenderSdk.updateEnvVarsForService({
+          serviceId: existing.id,
+          body: envVarsToWire(mergedEnv, hydratedBefore.envVars, true),
+        });
         if (news.headers !== undefined || olds?.headers !== undefined) {
-          yield* Client.putHeaders(existing.id, news.headers ?? []);
+          yield* RenderSdk.updateHeaders({ serviceId: existing.id, body: news.headers ?? [] });
         }
         if (news.routes !== undefined || olds?.routes !== undefined) {
-          yield* Client.putRoutes(existing.id, news.routes ?? []);
+          yield* RenderSdk.putRoutes({ serviceId: existing.id, body: news.routes ?? [] });
         }
         yield* syncCustomDomains(
           existing.id,
@@ -449,26 +473,22 @@ export const StaticSiteProvider = () =>
           hydratedBefore.logStreamOverride,
           news.logStreamOverride,
         );
-        yield* Client.syncResourceEnvironment(
-          existing.id,
-          existing.environmentId,
-          news.environmentId,
-        );
+        yield* Api.syncResourceEnvironment(existing.id, existing.environmentId, news.environmentId);
         yield* syncServiceSuspension(existing.id, existing.suspended, news.suspended);
 
         if (!news.skipDeployAfterUpdate) {
-          yield* Client.createDeploy(existing.id);
+          yield* RenderSdk.createDeploy({ serviceId: existing.id });
         }
         if (news.waitForDeployCompletion) {
           yield* waitForServiceLive("Render.StaticSite", existing.id);
         }
 
-        const refreshed = yield* Client.getService(existing.id);
+        const refreshed = yield* RenderSdk.getService({ serviceId: existing.id });
         return yield* hydrateAndMapStaticSite(yield* hydrateService(refreshed));
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteService(output.id);
+        yield* deleteServiceById(output.id);
       }),
     }),
   );

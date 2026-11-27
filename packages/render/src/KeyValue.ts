@@ -1,17 +1,17 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import { RenderDeployFailedError } from "./Errors.ts";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import { renderResourceLogs, renderResourceTail } from "./internal/Logs.ts";
 import { pollUntil } from "./internal/Poll.ts";
-import { toRedacted } from "./internal/Redacted.ts";
+import { toRedacted, unwrapSecret } from "./internal/Redacted.ts";
 import { buildIpAllowListField, syncResourceLogStream } from "./internal/ServiceBase.ts";
-import type { WireKeyValue, WireKeyValueConnectionInfo } from "./internal/WireTypes.ts";
 import type { Providers } from "./Providers.ts";
 import type {
   CidrBlockAndDescription,
@@ -130,13 +130,19 @@ export type KeyValue = Resource<
  */
 export const KeyValue = Resource<KeyValue>("Render.KeyValue");
 
-const waitForKeyValueAvailable = (instance: WireKeyValue) =>
+const listAllKeyValue = (params: { readonly ownerId?: string[]; readonly name?: string[] }) =>
+  Api.paginateCursorList(
+    (cursor) => RenderSdk.listKeyValue({ ...params, cursor, limit: 100 }),
+    (row) => row.keyValue,
+  );
+
+const waitForKeyValueAvailable = (instance: RenderSdk.KeyValue | RenderSdk.KeyValueDetail) =>
   instance.status !== "creating"
     ? Effect.succeed(instance)
     : pollUntil({
         operation: "key-value provisioning",
         resourceId: instance.id,
-        check: Client.getKeyValue(instance.id),
+        check: RenderSdk.getKeyValue({ redisId: instance.id }),
         statusOf: (kv) => kv.status,
         failIf: (kv) =>
           kv.status === "unavailable"
@@ -150,10 +156,12 @@ const waitForKeyValueAvailable = (instance: WireKeyValue) =>
         isDone: (kv) => kv.status !== "creating",
       });
 
-const hydrateKeyValue = (kv: WireKeyValue) =>
+const hydrateKeyValue = (kv: RenderSdk.KeyValue | RenderSdk.KeyValueDetail) =>
   Effect.gen(function* () {
-    const connInfo: WireKeyValueConnectionInfo = yield* Client.getKeyValueConnectionInfo(kv.id);
-    const logStream = yield* Client.ignoreNotFound(Client.getResourceLogStream(kv.id));
+    const connInfo = yield* RenderSdk.getKeyValueConnectionInfo({ redisId: kv.id });
+    const logStream = yield* Api.ignoreNotFound(
+      RenderSdk.getResourceLogStream({ resourceId: kv.id }),
+    );
     return {
       id: kv.id,
       name: kv.name,
@@ -167,9 +175,9 @@ const hydrateKeyValue = (kv: WireKeyValue) =>
       persistenceMode: kv.options?.persistenceMode,
       ipAllowList: kv.ipAllowList ?? [],
       connectionInfo: {
-        externalConnectionString: toRedacted(connInfo.externalConnectionString),
-        internalConnectionString: toRedacted(connInfo.internalConnectionString),
-        cliCommand: toRedacted(connInfo.cliCommand),
+        externalConnectionString: toRedacted(unwrapSecret(connInfo.externalConnectionString)),
+        internalConnectionString: toRedacted(unwrapSecret(connInfo.internalConnectionString)),
+        cliCommand: toRedacted(unwrapSecret(connInfo.cliCommand)),
       },
       logStreamOverride: logStream?.setting
         ? {
@@ -178,7 +186,8 @@ const hydrateKeyValue = (kv: WireKeyValue) =>
             endpoint: logStream.endpoint,
           }
         : undefined,
-      dashboardUrl: kv.dashboardUrl,
+      dashboardUrl:
+        "dashboardUrl" in kv && typeof kv.dashboardUrl === "string" ? kv.dashboardUrl : undefined,
       createdAt: kv.createdAt,
       updatedAt: kv.updatedAt,
     } satisfies KeyValueAttributes;
@@ -205,7 +214,7 @@ export const KeyValueProvider = () =>
       }),
       read: Effect.fn(function* ({ id, olds, output, previous }) {
         if (output?.id) {
-          const kv = yield* Client.ignoreNotFound(Client.getKeyValue(output.id));
+          const kv = yield* Api.ignoreNotFound(RenderSdk.getKeyValue({ redisId: output.id }));
           return kv ? yield* hydrateKeyValue(kv) : undefined;
         }
         const explicitName =
@@ -213,8 +222,8 @@ export const KeyValueProvider = () =>
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-        const all = yield* Client.listKeyValue({ ownerId: [ownerId], name: [desiredName] });
+        const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+        const all = yield* listAllKeyValue({ ownerId: [ownerId], name: [desiredName] });
         const matched = all.find((k) => k.name === desiredName);
         if (!matched) return undefined;
         const attrs = yield* hydrateKeyValue(matched);
@@ -222,31 +231,31 @@ export const KeyValueProvider = () =>
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const kv = yield* Client.ignoreNotFound(Client.getKeyValue(props.id));
+          const kv = yield* Api.ignoreNotFound(RenderSdk.getKeyValue({ redisId: props.id }));
           return kv ? yield* hydrateKeyValue(kv) : undefined;
         }
         if (props.name) {
-          const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-          const all = yield* Client.listKeyValue({ ownerId: [ownerId], name: [props.name] });
+          const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+          const all = yield* listAllKeyValue({ ownerId: [ownerId], name: [props.name] });
           const matched = all.find((k) => k.name === props.name);
           return matched ? yield* hydrateKeyValue(matched) : undefined;
         }
         return undefined;
       }),
       list: Effect.fn(function* () {
-        const ownerId = yield* Client.resolveOwnerId();
-        const all = yield* Client.listKeyValue({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId();
+        const all = yield* listAllKeyValue({ ownerId: [ownerId] });
         return yield* Effect.forEach(all, hydrateKeyValue);
       }),
       reconcile: Effect.fn(function* ({ id, news, olds, output }) {
         const desiredName = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getKeyValue(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getKeyValue({ redisId: output.id }))
           : undefined;
 
         if (!existing) {
-          const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-          const created = yield* Client.createKeyValue({
+          const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+          const created = yield* RenderSdk.createKeyValue({
             name: desiredName,
             ownerId,
             plan: news.plan ?? "free",
@@ -268,7 +277,8 @@ export const KeyValueProvider = () =>
         }
 
         const ipAllowList = buildIpAllowListField(news.ipAllowList, olds?.ipAllowList);
-        const updated = yield* Client.updateKeyValue(existing.id, {
+        const updated = yield* RenderSdk.updateKeyValue({
+          redisId: existing.id,
           name: desiredName,
           ...(news.plan !== undefined ? { plan: news.plan } : {}),
           ...(news.maxmemoryPolicy !== undefined ? { maxmemoryPolicy: news.maxmemoryPolicy } : {}),
@@ -276,19 +286,21 @@ export const KeyValueProvider = () =>
           ...(ipAllowList !== undefined ? { ipAllowList } : {}),
         });
         const ready = yield* waitForKeyValueAvailable(updated);
-        yield* Client.syncResourceEnvironment(
+        yield* Api.syncResourceEnvironment(
           ready.id,
           ready.environmentId ?? existing.environmentId,
           news.environmentId,
         );
-        const currentLog = yield* Client.ignoreNotFound(Client.getResourceLogStream(ready.id));
+        const currentLog = yield* Api.ignoreNotFound(
+          RenderSdk.getResourceLogStream({ resourceId: ready.id }),
+        );
         yield* syncResourceLogStream(ready.id, currentLog, news.logStreamOverride);
-        const refreshed = yield* Client.getKeyValue(ready.id);
+        const refreshed = yield* RenderSdk.getKeyValue({ redisId: ready.id });
         return yield* hydrateKeyValue(refreshed);
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteKeyValue(output.id);
+        yield* Api.deleteIdempotent(RenderSdk.deleteKeyValue({ redisId: output.id }));
       }),
       logs: Effect.fn(function* ({ output, options }) {
         return yield* renderResourceLogs({

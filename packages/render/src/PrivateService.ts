@@ -3,9 +3,9 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Client from "./internal/Client.ts";
 import { renderResourceLogs, renderResourceTail } from "./internal/Logs.ts";
 import {
+  deleteServiceById,
   findServiceByLookup,
   listServicesByType,
   mapBaseServiceAttrs,
@@ -73,11 +73,14 @@ export interface PrivateService extends Resource<
 
 export const PrivateService = Resource<PrivateService>("Render.PrivateService");
 
-const mapPrivateService = (data: HydratedServiceData): PrivateServiceAttributes => ({
-  ...mapBaseServiceAttrs(data),
-  url: data.service.serviceDetails.url,
-  openPorts: data.service.serviceDetails.openPorts ?? [],
-});
+const mapPrivateService = (data: HydratedServiceData): PrivateServiceAttributes => {
+  const d = data.service.serviceDetails;
+  return {
+    ...mapBaseServiceAttrs(data),
+    url: "url" in d ? d.url : undefined,
+    openPorts: "openPorts" in d && d.openPorts ? d.openPorts : [],
+  };
+};
 
 export const PrivateServiceProvider = () =>
   Provider.effect(
@@ -168,7 +171,7 @@ export const PrivateServiceProvider = () =>
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteService(output.id);
+        yield* deleteServiceById(output.id);
       }),
     }),
   );

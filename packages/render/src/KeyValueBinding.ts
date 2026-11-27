@@ -1,6 +1,5 @@
 import type { Url } from "@alchemy.run/redis";
 import { UrlMissing as RedisUrlMissing } from "@alchemy.run/redis";
-import * as Binding from "alchemy/Binding";
 import * as Output from "alchemy/Output";
 import { CurrentRuntimeContext, sanitizeKey, type RuntimeContext } from "alchemy/RuntimeContext";
 import * as Config from "effect/Config";
@@ -8,17 +7,16 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { KeyValue } from "./KeyValue.ts";
-import type { Redis } from "./Redis.ts";
-import { isRenderHost } from "./RenderBindings.ts";
+import * as RenderBindings from "./RenderBindings.ts";
 
 /**
- * Shared scaffolding for Render Key Value and Redis bindings.
+ * Shared scaffolding for Render Key Value bindings.
  *
  * NOT exported from `index.ts`.
  */
 export const REDIS_URL_ENV = "REDIS_URL";
 
-export const keyValueEnvKeys = (instance: Pick<KeyValue | Redis, "LogicalId">) => {
+export const keyValueEnvKeys = (instance: Pick<KeyValue, "LogicalId">) => {
   const id = instance.LogicalId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
   return {
     internal: `RENDER_KV_${id}_INTERNAL`,
@@ -29,9 +27,9 @@ export const keyValueEnvKeys = (instance: Pick<KeyValue | Redis, "LogicalId">) =
 const readConfigUrl = (key: string): Effect.Effect<string | undefined> =>
   Config.Redacted(key).pipe(
     Config.option,
-    Effect.orDie,
     Effect.map(Option.getOrUndefined),
     Effect.map((v) => (v !== undefined ? Redacted.value(v) : undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 const runtimeOutput = <A>(
@@ -69,32 +67,27 @@ const readUrlCandidate = (
 export const makeKeyValueBinding = <Client>(options: {
   readonly makeClient: (url: Url) => Client;
 }) =>
-  Effect.succeed(
-    Effect.fn(function* (instance: KeyValue | Redis) {
+  Effect.gen(function* () {
+    const bind = yield* RenderBindings.Bind;
+    return Effect.fn(function* (instance: KeyValue) {
       const keys = keyValueEnvKeys(instance);
       const resourceName = instance.LogicalId;
-      let preferExternal = false;
+      const rt = yield* CurrentRuntimeContext;
+      const isRenderRuntime = rt?.Type.startsWith("Render.") ?? false;
+      const preferExternal = !isRenderRuntime;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const host = yield* Binding.Host;
-        if (isRenderHost(host)) {
-          yield* host.bind`${instance}`({
-            env: {
-              [keys.internal]: instance.connectionInfo.internalConnectionString,
-              [keys.external]: instance.connectionInfo.externalConnectionString,
-              [REDIS_URL_ENV]: instance.connectionInfo.internalConnectionString,
-            },
-          });
-        } else {
-          preferExternal = true;
-          const rt = yield* CurrentRuntimeContext;
-          if (rt) {
-            yield* rt.set(
-              sanitizeKey(keys.external),
-              instance.connectionInfo.externalConnectionString,
-            );
-          }
-        }
+        yield* bind`Render.KeyValue(${instance})`({
+          env: isRenderRuntime
+            ? {
+                [keys.internal]: instance.connectionInfo.internalConnectionString,
+                [keys.external]: instance.connectionInfo.externalConnectionString,
+                [REDIS_URL_ENV]: instance.connectionInfo.internalConnectionString,
+              }
+            : {
+                [sanitizeKey(keys.external)]: instance.connectionInfo.externalConnectionString,
+              },
+        });
       }
 
       const url: Url = Effect.gen(function* () {
@@ -121,5 +114,5 @@ export const makeKeyValueBinding = <Client>(options: {
       });
 
       return options.makeClient(url);
-    }),
-  );
+    });
+  });

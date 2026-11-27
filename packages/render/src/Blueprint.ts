@@ -1,11 +1,11 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { RenderNotFoundError, RenderValidationError } from "./Errors.ts";
-import * as Client from "./internal/Client.ts";
-import type { WireBlueprintDetail, WireBlueprintSync } from "./internal/WireTypes.ts";
+import { RenderValidationError } from "./Errors.ts";
+import * as Api from "./internal/Api.ts";
 import type { Providers } from "./Providers.ts";
 import type { BlueprintStatus } from "./Types.ts";
 
@@ -21,7 +21,7 @@ export interface BlueprintResourceSummary {
 export interface BlueprintSyncSummary {
   /** Blueprint sync ID (`syc-...`). */
   readonly id: string;
-  /** Sync state (for example `"succeeded"`, `"running"`, `"failed"`). */
+  /** Sync state (for example `"success"`, `"running"`, `"error"`). */
   readonly state: string;
   /** Commit SHA associated with the sync, if present. */
   readonly commitId?: string;
@@ -123,9 +123,15 @@ export interface Blueprint extends Resource<
 
 export const Blueprint = Resource<Blueprint>("Render.Blueprint");
 
+const listAllBlueprints = (ownerId: string) =>
+  Api.paginateCursorList(
+    (cursor) => RenderSdk.listBlueprints({ ownerId: [ownerId], cursor, limit: 100 }),
+    (row) => row.blueprint,
+  );
+
 const mapBlueprint = (
-  detail: WireBlueprintDetail,
-  syncs: ReadonlyArray<WireBlueprintSync>,
+  detail: RenderSdk.GetBlueprintResponse,
+  syncs: ReadonlyArray<RenderSdk.SyncWithCursorSync>,
 ): BlueprintAttributes => ({
   id: detail.id,
   name: detail.name,
@@ -136,37 +142,38 @@ const mapBlueprint = (
   status: detail.status,
   autoSync: detail.autoSync,
   lastSync: detail.lastSync,
-  resources: (detail.resources ?? []).map((r) => ({ id: r.id, name: r.name, type: r.type })),
+  resources: detail.resources.map((r) => ({ id: r.id, name: r.name, type: r.type })),
   recentSyncs: syncs.map((s) => ({
     id: s.id,
     state: s.state,
-    commitId: s.commit?.id,
+    commitId: s.commit.id,
     startedAt: s.startedAt,
     completedAt: s.completedAt,
   })),
 });
 
-const hydrateBlueprint = (id: string) =>
+const hydrateBlueprint = (blueprintId: string) =>
   Effect.gen(function* () {
-    const detail = yield* Client.getBlueprint(id);
-    const syncs = yield* Client.listBlueprintSyncs(id).pipe(
-      Effect.catchIf(
-        (e) => e._tag === "RenderNotFoundError" || e._tag === "RenderForbiddenError",
-        () => Effect.succeed([] as WireBlueprintSync[]),
-      ),
-    );
+    const detail = yield* RenderSdk.getBlueprint({ blueprintId });
+    const syncs =
+      (yield* Api.ignoreNotFound(
+        Api.paginateCursorList(
+          (cursor) => RenderSdk.listBlueprintSyncs({ blueprintId, cursor, limit: 100 }),
+          (row) => row.sync,
+        ),
+      )) ?? [];
     return mapBlueprint(detail, syncs);
   });
 
+const formatValidationErrors = (validation: RenderSdk.ValidateBlueprintResponse): string =>
+  validation.errors?.map((e) => (e.path ? `${e.path}: ${e.error}` : e.error)).join("; ") ||
+  "Blueprint YAML validation failed.";
+
 /** Validate a `render.yaml` Blueprint document against Render's `/v1/blueprints/validate` endpoint. */
-export const validateBlueprint = (options: {
-  readonly ownerId?: string;
-  readonly yaml: string;
-  readonly filename?: string;
-}) =>
+export const validateBlueprint = (options: { readonly ownerId?: string; readonly yaml: string }) =>
   Effect.gen(function* () {
-    const ownerId = yield* Client.resolveOwnerId(options.ownerId);
-    return yield* Client.validateBlueprint(ownerId, options.yaml, options.filename);
+    const ownerId = yield* Api.resolveOwnerId(options.ownerId);
+    return yield* RenderSdk.validateBlueprint({ ownerId, file: options.yaml });
   });
 
 const resolveBlueprintTargetId = (resolvedId: string | undefined, news: BlueprintProps) =>
@@ -181,14 +188,11 @@ const resolveBlueprintTargetId = (resolvedId: string | undefined, news: Blueprin
           "Render Blueprint requires either blueprintId or the name of an existing connected Blueprint.",
       });
     }
-    const ownerId = yield* Client.resolveOwnerId(news.ownerId);
-    const all = yield* Client.listBlueprints({ ownerId: [ownerId] });
+    const ownerId = yield* Api.resolveOwnerId(news.ownerId);
+    const all = yield* listAllBlueprints(ownerId);
     const matched = all.find((b) => b.name === news.name);
     if (!matched) {
-      return yield* new RenderNotFoundError({
-        status: 404,
-        method: "GET",
-        path: "/blueprints",
+      return yield* new RenderSdk.NotFound({
         message: `Blueprint "${news.name}" not found on Render owner ${ownerId}.`,
       });
     }
@@ -210,7 +214,9 @@ export const BlueprintProvider = () =>
       }),
       read: Effect.fn(function* ({ olds, output, previous }) {
         if (output?.id) {
-          const detail = yield* Client.ignoreNotFound(Client.getBlueprint(output.id));
+          const detail = yield* Api.ignoreNotFound(
+            RenderSdk.getBlueprint({ blueprintId: output.id }),
+          );
           return detail ? yield* hydrateBlueprint(detail.id) : undefined;
         }
         const explicitId =
@@ -218,7 +224,9 @@ export const BlueprintProvider = () =>
             ? olds.blueprintId
             : undefined;
         if (explicitId) {
-          const detail = yield* Client.ignoreNotFound(Client.getBlueprint(explicitId));
+          const detail = yield* Api.ignoreNotFound(
+            RenderSdk.getBlueprint({ blueprintId: explicitId }),
+          );
           if (!detail) return undefined;
           const attrs = yield* hydrateBlueprint(detail.id);
           return detail.id === previous?.id ? attrs : Unowned(attrs);
@@ -228,8 +236,8 @@ export const BlueprintProvider = () =>
         if (!explicitName) return undefined;
         const explicitOwnerId =
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
-        const ownerId = yield* Client.resolveOwnerId(explicitOwnerId);
-        const all = yield* Client.listBlueprints({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
+        const all = yield* listAllBlueprints(ownerId);
         const matched = all.find((b) => b.name === explicitName);
         if (!matched) return undefined;
         const attrs = yield* hydrateBlueprint(matched.id);
@@ -237,33 +245,38 @@ export const BlueprintProvider = () =>
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const detail = yield* Client.ignoreNotFound(Client.getBlueprint(props.id));
+          const detail = yield* Api.ignoreNotFound(
+            RenderSdk.getBlueprint({ blueprintId: props.id }),
+          );
           return detail ? yield* hydrateBlueprint(detail.id) : undefined;
         }
         if (props.name) {
-          const ownerId = yield* Client.resolveOwnerId(props.ownerId);
-          const all = yield* Client.listBlueprints({ ownerId: [ownerId] });
+          const ownerId = yield* Api.resolveOwnerId(props.ownerId);
+          const all = yield* listAllBlueprints(ownerId);
           const matched = all.find((b) => b.name === props.name);
           return matched ? yield* hydrateBlueprint(matched.id) : undefined;
         }
         return undefined;
       }),
       list: Effect.fn(function* () {
-        const ownerId = yield* Client.resolveOwnerId();
-        const all = yield* Client.listBlueprints({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId();
+        const all = yield* listAllBlueprints(ownerId);
         return yield* Effect.forEach(all, (b) => hydrateBlueprint(b.id));
       }),
       reconcile: Effect.fn(function* ({ news, output }) {
         const targetId = yield* resolveBlueprintTargetId(output?.id ?? news.blueprintId, news);
 
-        const current = yield* Client.getBlueprint(targetId);
+        const current = yield* RenderSdk.getBlueprint({ blueprintId: targetId });
 
         if (news.validateYaml !== undefined) {
-          const validation = yield* Client.validateBlueprint(current.ownerId, news.validateYaml);
+          const validation = yield* RenderSdk.validateBlueprint({
+            ownerId: current.ownerId,
+            file: news.validateYaml,
+          });
           if (validation.valid === false) {
             return yield* new RenderValidationError({
               field: "validateYaml",
-              message: validation.error ?? "Blueprint YAML validation failed.",
+              message: formatValidationErrors(validation),
             });
           }
         }
@@ -277,7 +290,7 @@ export const BlueprintProvider = () =>
         if (news.path !== undefined && news.path !== current.path) patch.path = news.path;
 
         if (Object.keys(patch).length > 0) {
-          yield* Client.updateBlueprint(current.id, patch);
+          yield* RenderSdk.updateBlueprint({ blueprintId: current.id, ...patch });
         }
 
         return yield* hydrateBlueprint(current.id);
@@ -286,7 +299,7 @@ export const BlueprintProvider = () =>
         if (!output?.id || olds?.disconnectOnDelete !== true) {
           return;
         }
-        yield* Client.deleteBlueprint(output.id);
+        yield* Api.deleteIdempotent(RenderSdk.disconnectBlueprint({ blueprintId: output.id }));
       }),
     }),
   );

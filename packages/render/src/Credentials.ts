@@ -1,15 +1,18 @@
-import { CredentialsUnavailable, lazyCredentials } from "alchemy/Auth/Resolve";
+import type { ConfigError } from "@distilled.cloud/core/errors";
+import { Credentials } from "@distilled.cloud/render";
+import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import {
-  DEFAULT_API_BASE_URL,
-  RENDER_AUTH_PROVIDER_NAME,
-  type RenderResolvedCredentials,
-} from "./AuthProvider.ts";
+import * as Option from "effect/Option";
+import { RENDER_AUTH_PROVIDER_NAME, type RenderResolvedCredentials } from "./AuthProvider.ts";
 
-export { DEFAULT_API_BASE_URL } from "./AuthProvider.ts";
+export {
+  Credentials,
+  CredentialsFromEnv,
+  fromApiKey,
+  type Config as RenderClientConfig,
+} from "@distilled.cloud/render";
 
 export interface PollConfig {
   readonly intervalMs: number;
@@ -25,53 +28,73 @@ export class RenderPollConfig extends Context.Service<RenderPollConfig, PollConf
   "Render.PollConfig",
 ) {}
 
-export interface RenderClientConfig {
-  readonly apiKey: Redacted.Redacted<string>;
-  readonly ownerId?: string;
-  readonly apiBaseUrl: string;
-}
-
 /**
- * Lazy credentials handle for Render REST API v1 calls. Resolved on each API
- * request rather than eagerly in layer construction so `alchemy plan` / dry
- * contexts without credentials still compose cleanly.
+ * Optional default Render workspace/owner ID (`tea-...` / `usr-...`) resolved
+ * from {@link ownerId}, stored Alchemy profile config, or `RENDER_OWNER_ID`.
  */
-export class RenderCredentials extends Context.Service<
-  RenderCredentials,
-  Effect.Effect<RenderClientConfig, CredentialsUnavailable>
->()("Render.Credentials") {}
+export class OwnerId extends Context.Service<OwnerId, Effect.Effect<string | undefined>>()(
+  "Render.OwnerId",
+) {}
 
 /**
- * Build a {@link RenderCredentials} layer backed by Alchemy's profile/CI
+ * Provide an explicit Render workspace/owner ID layer (matching `AWS.Region`).
+ */
+export const ownerId = (id: string): Layer.Layer<OwnerId> =>
+  Layer.succeed(OwnerId, Effect.succeed(id));
+
+/**
+ * Build a {@link Credentials} layer backed by Alchemy's profile/CI
  * AuthProvider (`RenderAuth`).
  */
 export const fromAuthProvider = () =>
   Layer.effect(
-    RenderCredentials,
-    lazyCredentials<RenderResolvedCredentials, CredentialsUnavailable>()(
+    Credentials,
+    // `Credentials` reports missing auth as `CredentialsUnavailable` (surfaced by
+    // the engine as `CredentialsRequired`) rather than failing with `ConfigError`.
+    lazyCredentials<RenderResolvedCredentials, ConfigError>()(
       RENDER_AUTH_PROVIDER_NAME,
       (creds) => ({
         apiKey: creds.apiKey,
-        ownerId: creds.ownerId,
         apiBaseUrl: creds.apiBaseUrl,
       }),
-    ),
+    ).pipe(Effect.map(Effect.orDie)),
   );
 
 /**
- * Build an explicit {@link RenderCredentials} layer for programmatic or local
- * emulator setups (e.g. pointing at a mock `apiBaseUrl`).
+ * Build an {@link OwnerId} layer reading the optional `ownerId` configured on
+ * the active Alchemy profile or `RENDER_OWNER_ID`.
  */
-export const fromConfig = (config: {
-  readonly apiKey: string | Redacted.Redacted<string>;
-  readonly ownerId?: string;
-  readonly apiBaseUrl?: string;
-}) =>
-  Layer.succeed(
-    RenderCredentials,
-    Effect.succeed({
-      apiKey: typeof config.apiKey === "string" ? Redacted.make(config.apiKey) : config.apiKey,
-      ownerId: config.ownerId,
-      apiBaseUrl: (config.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/+$/, ""),
-    }),
+export const ownerIdFromAuthProvider = () =>
+  Layer.effect(
+    OwnerId,
+    lazyCredentials<RenderResolvedCredentials>()(
+      RENDER_AUTH_PROVIDER_NAME,
+      (creds) => creds.ownerId,
+    ).pipe(Effect.map(Effect.orDie)),
+  );
+
+/**
+ * Use an externally provided {@link Credentials} layer when present, otherwise
+ * fall back to {@link fromAuthProvider}.
+ */
+export const providedOrDefault = () =>
+  Credentials.pipe(
+    Effect.serviceOption,
+    Effect.map((provided) =>
+      Option.isSome(provided) ? Layer.succeed(Credentials, provided.value) : fromAuthProvider(),
+    ),
+    Layer.unwrap,
+  );
+
+/**
+ * Use an externally provided {@link OwnerId} layer when present, otherwise
+ * fall back to {@link ownerIdFromAuthProvider}.
+ */
+export const ownerIdProvidedOrDefault = () =>
+  OwnerId.pipe(
+    Effect.serviceOption,
+    Effect.map((provided) =>
+      Option.isSome(provided) ? Layer.succeed(OwnerId, provided.value) : ownerIdFromAuthProvider(),
+    ),
+    Layer.unwrap,
   );

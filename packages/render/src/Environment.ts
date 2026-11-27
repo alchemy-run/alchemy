@@ -1,10 +1,11 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Client from "./internal/Client.ts";
+import * as Api from "./internal/Api.ts";
 import type { Providers } from "./Providers.ts";
 import type { CidrBlockAndDescription, ProtectedStatus } from "./Types.ts";
 
@@ -38,7 +39,7 @@ export interface EnvironmentAttributes {
   serviceIds: string[];
   /** Attached Postgres database IDs. */
   databasesIds: string[];
-  /** Attached Redis / Key Value IDs. */
+  /** Attached Key Value IDs. */
   redisIds: string[];
   /** Attached environment group IDs. */
   envGroupIds: string[];
@@ -82,18 +83,7 @@ export interface Environment extends Resource<
 
 export const Environment = Resource<Environment>("Render.Environment");
 
-const mapEnvironment = (env: {
-  id: string;
-  projectId: string;
-  name: string;
-  protectedStatus: ProtectedStatus;
-  networkIsolationEnabled: boolean;
-  ipAllowList?: CidrBlockAndDescription[];
-  serviceIds?: string[];
-  databasesIds?: string[];
-  redisIds?: string[];
-  envGroupIds?: string[];
-}): EnvironmentAttributes => ({
+const mapEnvironment = (env: RenderSdk.Environment): EnvironmentAttributes => ({
   id: env.id,
   projectId: env.projectId,
   name: env.name,
@@ -105,6 +95,12 @@ const mapEnvironment = (env: {
   redisIds: env.redisIds ?? [],
   envGroupIds: env.envGroupIds ?? [],
 });
+
+const listEnvironmentsByProjectIds = (projectId: string[]) =>
+  Api.paginateCursorList(
+    (cursor) => RenderSdk.listEnvironments({ projectId, cursor, limit: 100 }),
+    (row) => row.environment,
+  );
 
 export const EnvironmentProvider = () =>
   Provider.effect(
@@ -125,7 +121,9 @@ export const EnvironmentProvider = () =>
       }),
       read: Effect.fn(function* ({ id, olds, output, previous }) {
         if (output?.id) {
-          const env = yield* Client.ignoreNotFound(Client.getEnvironment(output.id));
+          const env = yield* Api.ignoreNotFound(
+            RenderSdk.getEnvironment({ environmentId: output.id }),
+          );
           return env ? mapEnvironment(env) : undefined;
         }
         const projectId =
@@ -136,7 +134,7 @@ export const EnvironmentProvider = () =>
         const explicitName =
           typeof olds?.name === "string" && olds.name.length > 0 ? olds.name : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
-        const all = yield* Client.listEnvironments({ projectId: [projectId] });
+        const all = yield* listEnvironmentsByProjectIds([projectId]);
         const matched = all.find((e) => e.name === desiredName);
         if (!matched) return undefined;
         const attrs = mapEnvironment(matched);
@@ -144,33 +142,36 @@ export const EnvironmentProvider = () =>
       }),
       lookup: Effect.fn(function* (props) {
         if (props.id) {
-          const env = yield* Client.ignoreNotFound(Client.getEnvironment(props.id));
+          const env = yield* Api.ignoreNotFound(
+            RenderSdk.getEnvironment({ environmentId: props.id }),
+          );
           return env ? mapEnvironment(env) : undefined;
         }
         if (props.projectId && props.name) {
-          const all = yield* Client.listEnvironments({ projectId: [props.projectId] });
+          const all = yield* listEnvironmentsByProjectIds([props.projectId]);
           const matched = all.find((e) => e.name === props.name);
           return matched ? mapEnvironment(matched) : undefined;
         }
         return undefined;
       }),
       list: Effect.fn(function* () {
-        const ownerId = yield* Client.resolveOwnerId();
-        const projects = yield* Client.listProjects({ ownerId: [ownerId] });
+        const ownerId = yield* Api.resolveOwnerId();
+        const projects = yield* Api.paginateCursorList(
+          (cursor) => RenderSdk.listProjects({ ownerId: [ownerId], cursor, limit: 100 }),
+          (row) => row.project,
+        );
         if (projects.length === 0) return [];
-        const all = yield* Client.listEnvironments({
-          projectId: projects.map((p) => p.id),
-        });
+        const all = yield* listEnvironmentsByProjectIds(projects.map((p) => p.id));
         return all.map(mapEnvironment);
       }),
       reconcile: Effect.fn(function* ({ id, news, olds, output }) {
         const name = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const existing = output?.id
-          ? yield* Client.ignoreNotFound(Client.getEnvironment(output.id))
+          ? yield* Api.ignoreNotFound(RenderSdk.getEnvironment({ environmentId: output.id }))
           : undefined;
 
         if (!existing) {
-          const created = yield* Client.createEnvironment({
+          const created = yield* RenderSdk.createEnvironment({
             projectId: news.projectId,
             name,
             protectedStatus: news.protectedStatus ?? "unprotected",
@@ -180,7 +181,8 @@ export const EnvironmentProvider = () =>
           return mapEnvironment(created);
         }
 
-        const updated = yield* Client.updateEnvironment(existing.id, {
+        const updated = yield* RenderSdk.updateEnvironment({
+          environmentId: existing.id,
           name,
           protectedStatus: news.protectedStatus ?? "unprotected",
           networkIsolationEnabled: news.networkIsolated ?? false,
@@ -194,7 +196,7 @@ export const EnvironmentProvider = () =>
       }),
       delete: Effect.fn(function* ({ output }) {
         if (!output?.id) return;
-        yield* Client.deleteEnvironment(output.id);
+        yield* Api.deleteIdempotent(RenderSdk.deleteEnvironment({ environmentId: output.id }));
       }),
     }),
   );
