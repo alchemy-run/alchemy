@@ -372,7 +372,10 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
         else group.push(frame);
       }
       const terms = new Map<string, Term>();
+      /** Terms that have no host, whatever uses them. */
+      const hostless = new Set<string>();
       for (const [id, group] of byId) {
+        if (group.some((frame) => loose.has(frame))) hostless.add(id);
         const refs = new Map<string, Reference>();
         for (const frame of group) {
           for (const reference of references.get(frame)?.values() ?? []) {
@@ -396,6 +399,22 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
             a.to !== b.to ? (a.to < b.to ? -1 : 1) : a.relation < b.relation ? -1 : 1,
           ),
         });
+      }
+      // A term built outside every host (a tool whose Layer the runtime
+      // provides) is where the one host that uses it is.
+      const users = new Map<string, Set<string>>();
+      for (const term of terms.values()) {
+        if (term.host === undefined) continue;
+        for (const { to } of term.references) {
+          const hosts = users.get(to);
+          if (hosts === undefined) users.set(to, new Set([term.host]));
+          else hosts.add(term.host);
+        }
+      }
+      for (const [id, hosts] of users) {
+        const term = terms.get(id);
+        if (term === undefined || term.host !== undefined || hostless.has(id)) continue;
+        if (hosts.size === 1) terms.set(id, { ...term, host: [...hosts][0]! });
       }
       // A term that is only referred to (a piece of a Domain model) has no
       // build of its own: it is a term all the same, so every reference resolves.

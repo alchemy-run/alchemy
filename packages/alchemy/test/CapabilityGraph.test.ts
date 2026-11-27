@@ -31,6 +31,7 @@ import {
   policyOf,
   reach,
   recordAcquisition,
+  refer,
   standsFor,
 } from "@/CapabilityGraph.ts";
 import { Platform } from "@/Platform.ts";
@@ -439,7 +440,11 @@ describe("CapabilityGraph", { tags: ["unit"] }, () => {
       yield* observed(
         graph,
         Effect.all([
-          framed("Process", "outer")(framed("Process", "inner")(Effect.void)),
+          framed(
+            "Process",
+            "outer",
+          )(Effect.andThen(refer("uses", "Tool", "used"), framed("Process", "inner")(Effect.void))),
+          framed("Tool", "used")(Effect.void),
           framed("Tool", "beside")(Effect.void),
           hostedBy("Process", "outer", "JobsObject"),
         ]),
@@ -447,7 +452,10 @@ describe("CapabilityGraph", { tags: ["unit"] }, () => {
       expect(graph.describe().map(({ id, host }) => ({ id, host }))).toEqual([
         { id: "Process:inner", host: "JobsObject" },
         { id: "Process:outer", host: "JobsObject" },
+        // Used by nothing that is hosted.
         { id: "Tool:beside", host: undefined },
+        // Built beside the process, and used by it alone.
+        { id: "Tool:used", host: "JobsObject" },
       ]);
     }),
   );
