@@ -203,9 +203,14 @@ const encodeR2Object = (value: R2ObjectLike, body?: { base64: string }): Encoded
   return { $: "r2-object", fields, ...(body !== undefined ? { body } : {}) };
 };
 
-const decodeArg = async (env: Env, binding: string, arg: EncodedValue): Promise<unknown> => {
+const decodeArg = async (
+  env: Env,
+  binding: string,
+  arg: EncodedValue,
+  acquired?: Array<unknown>,
+): Promise<unknown> => {
   if (arg.$ === "chain") {
-    return evaluateChain(env, binding, arg.chain);
+    return evaluateChain(env, binding, arg.chain, acquired);
   }
   if (arg.$ === "durable-object-id") {
     const namespace = env[binding] as DurableObjectNamespace | undefined;
@@ -219,10 +224,17 @@ const decodeArg = async (env: Env, binding: string, arg: EncodedValue): Promise<
   return decodeValue(arg);
 };
 
+/**
+ * Evaluate a binding's call chain. Each step's result, and each chain passed as
+ * an argument, is pushed onto `acquired` for the caller to dispose once it is
+ * done with the final result: disposing a step any earlier would break the
+ * next call on it.
+ */
 const evaluateChain = async (
   env: Env,
   binding: string,
   chain: Array<EncodedChainSegment>,
+  acquired?: Array<unknown>,
 ): Promise<unknown> => {
   let target: unknown = env[binding];
   if (target === undefined) {
@@ -230,7 +242,9 @@ const evaluateChain = async (
   }
   let path = binding;
   for (const segment of chain) {
-    const args = await Promise.all(segment.args.map((arg) => decodeArg(env, binding, arg)));
+    const args = await Promise.all(
+      segment.args.map((arg) => decodeArg(env, binding, arg, acquired)),
+    );
     const method = (target as Record<string, unknown> | null)?.[segment.method];
     if (typeof method !== "function") {
       const targetObject = target as object | null;
@@ -249,6 +263,7 @@ const evaluateChain = async (
     // Reflect.apply (never `method.apply`): property access on workers RPC
     // method stubs turns "apply" into an RPC path segment instead of calling.
     target = await Reflect.apply(method as (...args: Array<unknown>) => unknown, target, args);
+    acquired?.push(target);
     path += `.${segment.method}(…)`;
   }
   return target;
@@ -311,17 +326,23 @@ const handleCall = async (request: WorkerRequest, env: Env): Promise<Response> =
   if (typeof binding !== "string" || !Array.isArray(chain)) {
     throw new ProxyRequestError("platform-proxy: malformed /call request body");
   }
-  const result = await evaluateChain(env, binding, chain);
+  const acquired: Array<unknown> = [];
   try {
-    return await encodeResult(result);
+    return await encodeResult(await evaluateChain(env, binding, chain, acquired));
   } finally {
+    disposeAcquired(acquired);
+  }
+};
+
+/** Dispose the RPC results a call acquired, last first, each once. */
+const disposeAcquired = (acquired: Array<unknown>) => {
+  for (const value of [...new Set(acquired)].reverse()) {
     // Streams become the response body and must stay live until it is consumed.
-    if (!(result instanceof ReadableStream)) {
-      try {
-        (result as Partial<Disposable> | null | undefined)?.[Symbol.dispose]?.();
-      } catch {
-        // Preserve the encoded response, or the original encoding error.
-      }
+    if (value instanceof ReadableStream) continue;
+    try {
+      (value as Partial<Disposable> | null | undefined)?.[Symbol.dispose]?.();
+    } catch {
+      // Preserve the encoded response, or the original error.
     }
   }
 };

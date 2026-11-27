@@ -99,6 +99,56 @@ describe("platform-proxy RPC result lifetime", () => {
     expect(dispose).not.toHaveBeenCalled();
   });
 
+  it("disposes every result of a chain and of a chained argument, last first", async () => {
+    const order: Array<string> = [];
+    const disposable = <T extends object>(name: string, value: T) =>
+      Object.assign(value, { [Symbol.dispose]: () => order.push(name) });
+    const arg = disposable("arg", { id: "x" });
+    const repo = disposable("repo", { read: (input: unknown) => disposable("result", { input }) });
+    const response = await worker.fetch(
+      new Request(`http://platform-proxy.test${PATH_CALL}`, {
+        method: "POST",
+        headers: { [HEADER_TOKEN]: "test-token", "content-type": "application/json" },
+        body: JSON.stringify({
+          binding: "TEST",
+          chain: [
+            { method: "repo", args: [] },
+            { method: "read", args: [{ $: "chain", chain: [{ method: "arg", args: [] }] }] },
+          ],
+        }),
+      }) as Parameters<typeof worker.fetch>[0],
+      {
+        [BINDING_PLATFORM_PROXY_TOKEN]: "test-token",
+        TEST: { repo: () => repo, arg: () => arg },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(order).toEqual(["result", "arg", "repo"]);
+  });
+
+  it("disposes the results acquired before a later step fails", async () => {
+    const dispose = vi.fn();
+    const repo = { [Symbol.dispose]: dispose };
+    const response = await worker.fetch(
+      new Request(`http://platform-proxy.test${PATH_CALL}`, {
+        method: "POST",
+        headers: { [HEADER_TOKEN]: "test-token", "content-type": "application/json" },
+        body: JSON.stringify({
+          binding: "TEST",
+          chain: [
+            { method: "repo", args: [] },
+            { method: "missing", args: [] },
+          ],
+        }),
+      }) as Parameters<typeof worker.fetch>[0],
+      { [BINDING_PLATFORM_PROXY_TOKEN]: "test-token", TEST: { repo: () => repo } },
+    );
+
+    expect(response.status).not.toBe(200);
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
   it.each([null, undefined, false, 42, "plain result"])(
     "preserves a primitive or nullish result: %s",
     async (value) => {
