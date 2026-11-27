@@ -299,7 +299,7 @@ The AWS hub: overview, What is AWS? (accounts, regions, IAM, resources and ARNs,
 - [What is AWS?](https://alchemy.run/aws/what-is-aws) — The concepts behind AWS — accounts, regions, IAM identities and policies, resources and ARNs, runtimes, event sources, VPCs and the edge — and how @alchemy.run/aws models each of them.
 - [Accounts and regions](https://alchemy.run/aws/accounts-and-regions) — How AWS accounts isolate resources, how regions and Availability Zones place them, and how profiles and stages choose where each Alchemy deploy goes.
 - [IAM and bindings](https://alchemy.run/aws/iam) — How IAM identities, roles, trust, resource-based policies and tag-based access (ABAC) work on AWS, and how Alchemy bindings write each runtime's least-privilege policies from the calls its code makes.
-- [Setup](https://alchemy.run/aws/setup) — Connect Alchemy to AWS with SSO, console login, stored access keys, or CI environment credentials.
+- [Setup](https://alchemy.run/aws/setup) — Connect Alchemy to AWS with an AWS CLI profile (console login, SSO, credential_process, assumed roles), stored access keys, or CI environment credentials.
 - [Local development](https://alchemy.run/aws/local-development) — alchemy dev runs your AWS stack on your machine — Lambda in Docker containers, local S3/DynamoDB/SQS, event sources firing, hot reload — with no AWS account or credentials required.
 - [Choosing a runtime](https://alchemy.run/aws/compute/choosing-a-runtime) — How Lambda Functions, Lambda Web Functions, ECS, EKS and EC2 differ in how they run your code, scale and cost, and how to choose one for each part of an app.
 
