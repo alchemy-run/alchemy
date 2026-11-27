@@ -1,4 +1,4 @@
-import * as Neon from "@distilled.cloud/neon";
+import * as Neon from "@distilled.cloud/neon/unstable/neon";
 import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";

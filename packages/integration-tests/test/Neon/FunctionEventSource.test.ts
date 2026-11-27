@@ -1,7 +1,7 @@
 import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as Api from "@distilled.cloud/neon";
+import * as Api from "@distilled.cloud/neon/unstable/neon";
 import * as Alchemy from "alchemy";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";

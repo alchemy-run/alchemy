@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 import {
   attributesToRecord,
@@ -187,7 +188,7 @@ const toAttrs = (
   return {
     name: resourceName(organization, appGroup, app, consumerKey),
     consumerKey,
-    consumerSecret: key.consumerSecret,
+    consumerSecret: revealOptional(key.consumerSecret),
     appGroup: appGroupIdOf(appGroup),
     app: appNameOf(app),
     organization: orgIdOf(organization),
@@ -315,7 +316,7 @@ export const AppgroupsAppsKeyProvider = () =>
                   toAttrs(
                     {
                       consumerKey: credential.consumerKey,
-                      consumerSecret: credential.consumerSecret,
+                      consumerSecret: revealOptional(credential.consumerSecret),
                       scopes: credential.scopes,
                       status: credential.status,
                       attributes: credential.attributes,

@@ -28,8 +28,10 @@ export interface ConnectionProps {
  * short of capacity (`StorageCommandCapacity`). Behind a load balancer the same window
  * shows up as 502/503/504 until its instances boot and pass health checks,
  * which takes several minutes on fresh instances (a three-engine cluster forms
- * after its engines boot). A resource reconciled
- * right after its control plane starts would otherwise fail.
+ * after its engines boot). A platform that routes to the engine (Railway)
+ * answers with its own 404 page while the engine starts or restarts
+ * (`EngineNotReady`), for under a minute. A resource reconciled right after
+ * its control plane starts would otherwise fail.
  */
 export const withConnection =
   (
@@ -66,6 +68,14 @@ export const withConnection =
         schedule: Schedule.spaced("5 seconds").pipe(
           Schedule.upTo({ duration: options.unreachableWait ?? options.wait ?? "10 minutes" }),
         ),
+      }),
+      // The platform's router answered for an engine that is starting. The
+      // same page answers for a host that serves no engine, so this wait is
+      // bounded rather than the whole startup budget.
+      Effect.retry({
+        while: (error) => error._tag === "EngineNotReady",
+        schedule: Schedule.spaced("5 seconds"),
+        times: 10,
       }),
       // Answering but still forming: always worth the whole wait.
       Effect.retry({

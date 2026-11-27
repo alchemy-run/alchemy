@@ -88,7 +88,6 @@
     "./ContentWarehouse": "./src/ContentWarehouse/index.ts",
     "./DataCatalog": "./src/DataCatalog/index.ts",
     "./Dataform": "./src/Dataform/index.ts",
-    "./DataLabeling": "./src/DataLabeling/index.ts",
     "./DataLineage": "./src/DataLineage/index.ts",
     "./DataManager": "./src/DataManager/index.ts",
     "./DataMigration": "./src/DataMigration/index.ts",
@@ -131,7 +130,6 @@
     "./ManagedIdentities": "./src/ManagedIdentities/index.ts",
     "./ManagedKafka": "./src/ManagedKafka/index.ts",
     "./Memcache": "./src/Memcache/index.ts",
-    "./MerchantApiReviews": "./src/MerchantApiReviews/index.ts",
     "./Metastore": "./src/Metastore/index.ts",
     "./MigrationCenter": "./src/MigrationCenter/index.ts",
     "./ML": "./src/ML/index.ts",
@@ -500,11 +498,6 @@
         "bun": "./src/Dataform/index.ts",
         "default": "./lib/Dataform/index.js"
       },
-      "./DataLabeling": {
-        "types": "./lib/DataLabeling/index.d.ts",
-        "bun": "./src/DataLabeling/index.ts",
-        "default": "./lib/DataLabeling/index.js"
-      },
       "./DataLineage": {
         "types": "./lib/DataLineage/index.d.ts",
         "bun": "./src/DataLineage/index.ts",
@@ -714,11 +707,6 @@
         "types": "./lib/Memcache/index.d.ts",
         "bun": "./src/Memcache/index.ts",
         "default": "./lib/Memcache/index.js"
-      },
-      "./MerchantApiReviews": {
-        "types": "./lib/MerchantApiReviews/index.d.ts",
-        "bun": "./src/MerchantApiReviews/index.ts",
-        "default": "./lib/MerchantApiReviews/index.js"
       },
       "./Metastore": {
         "types": "./lib/Metastore/index.d.ts",

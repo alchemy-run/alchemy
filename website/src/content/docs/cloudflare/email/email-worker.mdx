@@ -138,6 +138,25 @@ yield* Cloudflare.email({ zone: "example.com" }).subscribe((message) =>
 );
 ```
 
+## Test it under `alchemy dev`
+
+A local Worker isn't uploaded, so under `alchemy dev` the event
+source creates no `Email.Routing`, `Email.Rule` or
+`Email.CatchAll`. Run dev on its own stage: on your deployed stage,
+the dev run removes that stage's rule. Send mail to the local
+Worker through its trigger route instead, with the raw message as
+the body:
+
+```sh
+curl -X POST "http://localhost:1337/cdn-cgi/handler/email?from=sender@example.com&to=inbox@example.com" \
+  --data-binary @message.eml
+```
+
+The route answers `200` once the handler accepts the message, or
+`400` with the reason after `setReject`. A Worker piped through
+`Alchemy.remote()` runs on Cloudflare, so its routing is created as
+on deploy.
+
 ## Bring your own routing
 
 If you're already managing `Email.Routing` / `Email.Rule` resources

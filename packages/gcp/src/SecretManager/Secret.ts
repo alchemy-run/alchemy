@@ -13,6 +13,7 @@ import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { DeleteNotConfirmed } from "../Errors.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -404,7 +405,7 @@ const latestVersion = (name: string) =>
   secretmanager.accessProjectsSecretsVersions({ name: `${name}/versions/latest` }).pipe(
     Effect.map((response) => ({
       name: response.name,
-      value: Buffer.from(response.payload?.data ?? "", "base64").toString("utf8"),
+      value: Buffer.from(revealOptional(response.payload?.data) ?? "", "base64").toString("utf8"),
     })),
     Effect.catchTag(["NotFound", "SecretVersionNotEnabled"], () => Effect.undefined),
   );

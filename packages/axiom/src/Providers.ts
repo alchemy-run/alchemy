@@ -54,7 +54,7 @@ export const providers = () =>
       ),
     ),
     Layer.provideMerge(Layer.succeed(AxiomRetry, DeployRetry.policy)),
-    Layer.provideMerge(Credentials.fromAuthProvider()),
+    Layer.provideMerge(Credentials.providedOrDefault()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(AxiomAuth),
     Layer.provideMerge(ProfileStoreLive),

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectionParent,
@@ -238,7 +239,7 @@ const genericOf = (
       ? {
           tokenEndpoint: service.oauthConfig.tokenEndpoint,
           clientId: service.oauthConfig.clientId,
-          clientSecret: service.oauthConfig.clientSecret,
+          clientSecret: revealOptional(service.oauthConfig.clientSecret),
           secretVersionForClientSecret: service.oauthConfig.secretVersionForClientSecret,
           scopes: service.oauthConfig.scopes ? [...service.oauthConfig.scopes] : undefined,
         }

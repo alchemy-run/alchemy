@@ -1,4 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
+import * as NeonUnstable from "@distilled.cloud/neon/unstable/neon";
 import { OwnedBySomeoneElse, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
@@ -221,11 +222,13 @@ export const authSettingsMatch = (observed: object, desired: object) =>
   );
 
 const observeAuth = (scope: { projectId: string; branchId: string }) =>
-  Neon.getNeonAuth(authRequest(scope)).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+  NeonUnstable.getNeonAuth(authRequest(scope)).pipe(
+    Effect.catchTag("NotFound", () => Effect.undefined),
+  );
 
 const attributes = Effect.fn(function* (
   scope: { projectId: string; branchId: string },
-  observed: Neon.NeonAuthIntegration,
+  observed: NeonUnstable.NeonAuthIntegration,
 ) {
   if (observed.auth_provider !== "better_auth" || !observed.base_url) {
     return yield* new InvalidManagedAuth({
@@ -354,7 +357,7 @@ export const AuthProvider = () =>
         });
       }
       if (!observed) {
-        yield* Neon.createNeonAuth({
+        yield* NeonUnstable.createNeonAuth({
           ...request,
           auth_provider: "better_auth",
           database_name: database,
@@ -374,7 +377,7 @@ export const AuthProvider = () =>
             }),
           ),
         );
-        observed = yield* Neon.getNeonAuth(request);
+        observed = yield* NeonUnstable.getNeonAuth(request);
       }
       yield* attributes(scope, observed);
       if (news.database !== undefined && observed.db_name !== news.database) {
@@ -459,11 +462,11 @@ export const AuthProvider = () =>
           });
         }
       }
-      return yield* attributes(scope, yield* Neon.getNeonAuth(request));
+      return yield* attributes(scope, yield* NeonUnstable.getNeonAuth(request));
     }),
     delete: Effect.fn(function* ({ output }) {
       if (yield* observeAuth(output)) {
-        yield* Neon.disableNeonAuth(authRequest(output)).pipe(
+        yield* NeonUnstable.disableNeonAuth(authRequest(output)).pipe(
           Effect.catchTag("NotFound", () => Effect.void),
         );
       }

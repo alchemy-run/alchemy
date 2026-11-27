@@ -43,7 +43,11 @@ export const makeSpriteAuth = (
 ): SpriteAuth => ({
   authorize: (eff) => {
     if (globalThis.__ALCHEMY_RUNTIME__) {
-      return eff.pipe(Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)));
+      // Without `FLY_API_TOKEN` the env layer fails when it is built; `authorize`
+      // adds no error, so that dies.
+      return eff.pipe(
+        Effect.provide(Layer.mergeAll(Layer.orDie(CredentialsFromEnv), FetchHttpClient.layer)),
+      );
     }
     return eff.pipe(Effect.provideContext(ambient));
   },

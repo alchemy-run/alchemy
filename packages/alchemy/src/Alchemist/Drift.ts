@@ -19,6 +19,11 @@ export interface DriftedResource {
   /** `skipped`: not checked (no `read`, or an interrupted deploy); see `reason`. */
   readonly status: "in-sync" | "drifted" | "missing" | "skipped";
   readonly reason?: string | undefined;
+  /**
+   * Set for `skipped`: `unstable` is an interrupted deploy that `deploy` must
+   * recover; `unreadable` is a provider with no `read`, which drift can never check.
+   */
+  readonly skip?: "unstable" | "unreadable" | undefined;
   readonly actual?: unknown;
 }
 
@@ -47,6 +52,14 @@ export interface ScanOptions extends BuildOptions {
 /** Whether the drift check found anything worth repairing. */
 export const hasDrift = (scan: DriftScan): boolean =>
   scan.resources.some((resource) => resource.status === "drifted" || resource.status === "missing");
+
+/**
+ * Whether the drift check left out a resource that an interrupted deploy left
+ * mid-flight, so a clean result does not cover it. Resources whose provider
+ * has no `read` are not counted: drift can never check them.
+ */
+export const hasUnchecked = (scan: DriftScan): boolean =>
+  scan.resources.some((resource) => resource.skip === "unstable");
 
 const status = (action: string): DriftedResource["status"] =>
   action === "unchanged"
@@ -78,6 +91,7 @@ export const scan = Effect.fn("Alchemist.Drift.scan")(function* (input: ScanOpti
       resourceType: resource.resourceType,
       status: status(resource.action),
       reason: resource.reason,
+      skip: resource.skip,
       actual: resource.attr,
     })),
     summary: summarize(plan),

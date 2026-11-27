@@ -1,11 +1,11 @@
 import * as Category from "@distilled.cloud/core/category";
+import { deleteProject } from "@distilled.cloud/prisma/management";
 import {
   type GetServicesResponse,
   deleteService,
   deleteDeployment,
-  deleteProject,
   getServices,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";

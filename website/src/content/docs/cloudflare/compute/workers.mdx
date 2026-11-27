@@ -533,6 +533,37 @@ export default {
 arguments and returns promises. Without the type argument `env.API` is a
 plain `Fetcher` with only `fetch` and `connect`.
 
+### Two Workers that bind each other
+
+When each of two async Workers binds the other, neither declaration can
+yield the other: each would still be declaring when the other read it,
+and the plan fails with `DeclarationCycleError`. Declare one normally,
+and reach it from the other with `Worker.ref` and its logical id:
+
+```typescript
+import type { Dispatch } from "./src/dispatcher.ts";
+import type { Verify } from "./src/auth.ts";
+
+const auth = yield* Cloudflare.Worker("Auth", {
+  main: "./src/auth.ts",
+  env: {
+    DISPATCHER: Cloudflare.WorkerEntrypoint<Dispatch>(
+      yield* Cloudflare.Worker.ref("Dispatcher"),
+      "Dispatch",
+    ),
+  },
+});
+
+const dispatcher = yield* Cloudflare.Worker("Dispatcher", {
+  main: "./src/dispatcher.ts",
+  env: { AUTH: Cloudflare.WorkerEntrypoint<Verify>(auth, "Verify") },
+});
+```
+
+A ref to a Worker this stack declares binds to the declaration, so both
+deploy together in one deploy, from nothing (see
+[References](/infrastructure-as-code/references#reference-a-resource-declared-in-this-stack)).
+
 ### This Worker's default export
 
 `Cloudflare.WorkerEntrypoint()` with no arguments binds the Worker to itself:

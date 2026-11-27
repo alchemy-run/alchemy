@@ -3,10 +3,8 @@ import * as BigDecimal from "effect/BigDecimal";
 import * as BigInt_ from "effect/BigInt";
 import * as Boolean_ from "effect/Boolean";
 import * as Brand_ from "effect/Brand";
-import * as Bytes_ from "effect/Bytes";
 import * as ByteSize_ from "effect/ByteSize";
 import * as Chunk_ from "effect/Chunk";
-import * as Combiner_ from "effect/Combiner";
 import * as Cron_ from "effect/Cron";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -34,9 +32,9 @@ import * as PrimaryKey_ from "effect/PrimaryKey";
 import * as Rational from "effect/Rational";
 import * as Record_ from "effect/Record";
 import * as Redacted from "effect/Redacted";
-import * as Reducer_ from "effect/Reducer";
 import * as RegExp_ from "effect/RegExp";
 import * as Result from "effect/Result";
+import * as Schema_ from "effect/Schema";
 import * as SemVer_ from "effect/SemVer";
 import * as SemVerRange_ from "effect/SemVerRange";
 import * as Stream from "effect/Stream";
@@ -63,9 +61,7 @@ const PURE: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   "effect/Boolean": Boolean_,
   "effect/Brand": Brand_,
   "effect/ByteSize": ByteSize_,
-  "effect/Bytes": Bytes_,
   "effect/Chunk": Chunk_,
-  "effect/Combiner": Combiner_,
   "effect/Cron": Cron_,
   "effect/Duration": Duration,
   "effect/Equal": Equal_,
@@ -91,7 +87,6 @@ const PURE: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   "effect/Rational": Rational,
   "effect/Record": Record_,
   "effect/Redacted": Redacted,
-  "effect/Reducer": Reducer_,
   "effect/RegExp": RegExp_,
   "effect/Result": Result,
   "effect/SemVer": SemVer_,
@@ -104,6 +99,9 @@ const PURE: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   "effect/Tuple": Tuple_,
   "effect/UndefinedOr": UndefinedOr_,
 };
+
+/** The modules whose functions are run as they are, where the prover knows every argument. */
+export const modules: ReadonlyArray<string> = Object.keys(PURE).sort();
 
 /** The functions of those modules that read the clock when they are not given a time. */
 const CLOCKED: ReadonlySet<string> = new Set([
@@ -127,6 +125,28 @@ export const hostOf = (module: string, path: ReadonlyArray<string>): unknown => 
   }
   return found;
 };
+
+/**
+ * What `effect/Schema` gives under a name. A schema is built, never run: the
+ * prover calls none of these on an input, and builds a schema from them only
+ * where it knows every part.
+ */
+export const schemaOf = (module: string, path: ReadonlyArray<string>): unknown => {
+  if (module !== "effect/Schema") return undefined;
+  let found: unknown = Schema_;
+  for (const key of path) {
+    if ((typeof found !== "object" && typeof found !== "function") || found === null)
+      return undefined;
+    found = (found as Readonly<Record<string, unknown>>)[key];
+  }
+  return found;
+};
+
+/**
+ * The schema, or the check of one, each value the prover does not look inside
+ * stands for: a schema built from it is then built from the real one.
+ */
+export const schemas = new WeakMap<object, unknown>();
 
 // A function the library gave back, as the value the prover calls, and the other way.
 const functions = new WeakMap<object, (...args: ReadonlyArray<unknown>) => unknown>();
@@ -167,8 +187,10 @@ export const real = (v: V): { readonly value: unknown } | undefined => {
       return { value: undefined };
     case "Host":
       return { value: v.value };
+    case "Opaque":
+      return schemas.has(v) ? { value: schemas.get(v) } : undefined;
     case "Lib": {
-      const host = v.host ?? hostOf(v.module, v.path);
+      const host = v.host ?? hostOf(v.module, v.path) ?? schemaOf(v.module, v.path);
       return host === undefined ? undefined : { value: host };
     }
     case "Native": {

@@ -365,7 +365,7 @@ export const TemplateProvider = () =>
         const created = yield* integrations
           .createProjectsLocationsTemplates({
             parent,
-            body,
+            ...body,
           })
           .pipe(Effect.catchTag("Conflict", () => findTemplateByDescription(parent, description)));
         current = created ?? undefined;
@@ -402,6 +402,7 @@ export const TemplateProvider = () =>
         sharedChanged
       ) {
         current = yield* integrations.patchProjectsLocationsTemplates({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "displayName" : undefined,
@@ -416,7 +417,6 @@ export const TemplateProvider = () =>
             visibilityChanged ? "visibility" : undefined,
             sharedChanged ? "sharedWith" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

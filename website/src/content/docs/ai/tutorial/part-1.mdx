@@ -1,0 +1,166 @@
+---
+title: "Part 1: A process"
+description: Start an issue board run by AI processes. Declare a model, describe the work as a process, run a session of it in a Durable Object on a harness, and ask it from a Worker.
+sidebar:
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+Build an issue board that looks after a GitHub repository. When someone opens an issue, a session reads the code, answers on the issue and says what kind of issue it is. When they reply, the same session carries on.
+
+Nothing in the board names a coding agent. The work is described as a process, and the harness that runs it is one Layer you can change at the end. This part declares the process and runs one session of it. The later parts give it a board to report to, connect it to GitHub, and give it the repository.
+
+The finished code is in [`examples/cloudflare-ai-issues`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-ai-issues).
+
+## Prerequisites
+
+Finish [Cloudflare setup](/cloudflare/setup). Part 3 also needs [GitHub setup](/github/setup), and Part 4 [Boat setup](/boat/setup).
+
+## Install
+
+<PackageManagers add="@alchemy.run/ai @alchemy.run/pi @alchemy.run/cloudflare" />
+
+## Declare a model
+
+A model is a name. `SmartLlama` says which LLM answers under it: Llama 3.3 on Workers AI, through the Worker's own AI binding.
+
+```typescript title="src/Models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+
+export class Smart extends AI.Model<Smart>()("smart") {}
+
+export const SmartLlama = AICloudflare.Model(Smart, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  parameters: { temperature: 0, maxTokens: 2048 },
+});
+```
+
+## Describe the work
+
+A process is prose that says how a piece of work is done. `Triage` says what to do with an issue:
+
+```typescript title="src/Triage.process.ts"
+import * as AI from "@alchemy.run/ai";
+
+export class Triage extends AI.Process<Triage>()("Triage", {
+  description: "Say what kind of issue this is.",
+})`
+  You look after one issue of a GitHub repository.
+  When you are told what the issue says, reply with one word:
+  bug when something is broken, feature when something new is asked for,
+  question otherwise.
+` {}
+```
+
+Running `Triage` requires a harness to run on and a model to run with, and nothing else yet.
+
+## Run it in a Durable Object
+
+A session needs somewhere to keep its conversation. Yield the process in a Durable Object's outer Effect, and provide its Layers once:
+
+```typescript title="src/Agents.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { SmartLlama, Smart } from "./Models.ts";
+import { Triage } from "./Triage.process.ts";
+
+const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObjectStorage));
+
+const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(Layer.provide(SmartLlama));
+
+export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()(
+  "IssueAgents",
+  Effect.gen(function* () {
+    const triage = yield* Triage;
+
+    return Effect.succeed({
+      ask: Effect.fn(function* (issue: string, text: string) {
+        const reply = yield* triage.get(issue).prompt(text);
+        return reply.text;
+      }, Effect.orDie),
+    });
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+`Pi.HarnessLive` is the harness: the session runs on Pi, in this object, on its storage. `AI.DefaultModel(Smart)` is the model a session runs on when nobody chose one. Part 4 runs the same session on OpenCode by changing `HarnessLive`.
+
+`get` reaches a session by a key you choose, here the issue, and the session's first message makes it. `prompt` sends a message and waits for the answer.
+
+## Call it from a Worker
+
+Each issue gets its own object, named after the issue:
+
+```typescript title="src/Worker.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import IssueAgents from "./Agents.ts";
+
+export default class Worker extends Cloudflare.Worker<Worker>()(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const agents = yield* IssueAgents;
+
+    return {
+      // POST /issues/<number> with what the issue says.
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const [, , number] = new URL(request.url, "http://board").pathname.split("/");
+        if (number === undefined) return HttpServerResponse.text("not found", { status: 404 });
+        const answer = yield* agents.getByName(number).ask(number, yield* request.text);
+        return HttpServerResponse.text(answer);
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+## Deploy it
+
+A Stack with the Worker is the whole app:
+
+```typescript title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Worker from "./src/Worker.ts";
+
+export default Alchemy.Stack(
+  "CloudflareAiIssues",
+  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const worker = yield* Worker;
+    return { url: worker.url };
+  }),
+);
+```
+
+<PackageManagers run="alchemy deploy" />
+
+## Try it
+
+Send the Worker what an issue says:
+
+```sh
+curl -X POST "$URL/issues/1" -d "The app crashes when I open the settings page."
+# bug
+```
+
+Send the same issue again and the session answers with the first message still in its conversation.
+
+## What you have
+
+- A process, `Triage`: prose that says how an issue is triaged.
+- A Durable Object for each issue, where its session runs on Pi.
+- A Worker that asks an issue's object.
+
+The session can only answer whoever prompts it. [Part 2](/ai/tutorial/part-2) gives it a board to report to.

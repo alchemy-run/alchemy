@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import { reveal } from "../internal/SdkSecret.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -583,7 +584,7 @@ const toSecret = (
   secret: bigqueryconnection.ConnectorConfigurationSecret | undefined,
 ): ConnectorSecret | undefined => {
   if (secret === undefined) return undefined;
-  return secret.plaintext !== undefined ? { plaintext: secret.plaintext } : undefined;
+  return secret.plaintext !== undefined ? { plaintext: reveal(secret.plaintext) } : undefined;
 };
 
 const toParameterMap = (

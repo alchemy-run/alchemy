@@ -249,11 +249,9 @@ export const IntegrationsVersionsTestCasesProvider = () =>
           .createProjectsLocationsIntegrationsVersionsTestCases({
             parent: version,
             testCaseId,
-            body: {
-              displayName,
-              description,
-              triggerId: news.triggerId,
-            },
+            displayName,
+            description,
+            triggerId: news.triggerId,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(version, id)));
         current = created ?? (yield* findOwned(version, id));
@@ -276,12 +274,9 @@ export const IntegrationsVersionsTestCasesProvider = () =>
             descriptionChanged ? "description" : undefined,
             triggerChanged ? "trigger_id" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            description,
-            triggerId: news.triggerId,
-          },
+          displayName,
+          description,
+          triggerId: news.triggerId,
         });
       }
 

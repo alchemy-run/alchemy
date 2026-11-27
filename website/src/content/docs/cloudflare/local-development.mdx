@@ -132,7 +132,9 @@ Worker-only bindings are simulated too:
 - **Email, both directions** — a `send_email` binding persists
   messages as `.eml` files under `.alchemy/local/email`, and a
   `POST` to `/cdn-cgi/handler/email` drives your `email()` handler
-  with accept, reject, and reply semantics.
+  (or `Cloudflare.email().subscribe(...)`) with accept, reject, and
+  reply semantics. A local Worker's subscription creates no Email
+  Routing on the zone.
 - **Browser Rendering** — `env.BROWSER` drives a locally-launched
   headless Chrome over CDP; `@cloudflare/puppeteer` works
   unchanged.

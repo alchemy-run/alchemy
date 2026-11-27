@@ -1,6 +1,7 @@
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
 import { numeric, promote } from "./Compare.ts";
@@ -41,8 +42,10 @@ import * as Rationals from "./Models/Rationals.ts";
 import * as Results from "./Models/Results.ts";
 import * as Streams from "./Models/Streams.ts";
 import * as Strings from "./Models/Strings.ts";
+import * as Waits from "./Models/Waits.ts";
 import type { Term } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
+import * as Symbolic from "./Symbolic.ts";
 import type { Eval, OpticStep, Site, V } from "./Value.ts";
 
 export type { Host, Model } from "./Kit.ts";
@@ -90,7 +93,9 @@ export const make = (host: Host) => {
         );
       return tag.value === step.tag ? through(rest, source, change, site) : Effect.succeed(source);
     }
-    return through(rest, source.fields[step.key] ?? Value.undef, change, site).pipe(
+    return Effect.flatMap(host.member(source, step.key, site), (focus) =>
+      through(rest, focus, change, site),
+    ).pipe(
       Effect.map((changed) => Value.obj({ ...source.fields, [step.key]: changed }, source.brand)),
     );
   };
@@ -175,15 +180,23 @@ export const make = (host: Host) => {
       pick: (a: string, b: string) => string,
     ): Model =>
     (args, site) => {
-      const [a, b] = args;
-      if (args.length !== 2 || !a || !b) return wrongArguments(site, name);
-      if (a._tag === "Num" && b._tag === "Num")
-        return Effect.succeed(Value.num(fold(a.value, b.value)));
-      const left = numeric(a);
-      const right = numeric(b);
-      if (!left || !right) return wrongArguments(site, name);
-      const [x, y] = promote(left, right);
-      return Effect.succeed(Value.term(x.sort, pick(x.text, y.text)));
+      // Of any number of numbers, taken two at a time. Of none it is an infinity, which is not read.
+      const [first, ...rest] = args;
+      if (!first || !numeric(first)) return wrongArguments(site, name);
+      let made: V = first;
+      for (const next of rest) {
+        const left = numeric(made);
+        const right = numeric(next);
+        if (!left || !right || Value.isBig(next) || Value.isBig(made))
+          return wrongArguments(site, name);
+        if (made._tag === "Num" && next._tag === "Num") {
+          made = Value.num(fold(made.value, next.value));
+          continue;
+        }
+        const [x, y] = promote(left, right);
+        made = Value.term(x.sort, pick(x.text, y.text));
+      }
+      return Effect.succeed(made);
     };
 
   // The date of a UTC time, as text: `formatIsoDate` and `formatIsoDateUtc` give the same.
@@ -433,7 +446,7 @@ export const make = (host: Host) => {
       if (pattern._tag === "Obj" && pattern.brand === undefined) {
         if (input._tag !== "Obj") return false;
         for (const [key, part] of Object.entries(pattern.fields))
-          if (!(yield* takes(part, input.fields[key] ?? Value.undef, site))) return false;
+          if (!(yield* takes(part, yield* host.member(input, key, site), site))) return false;
         return true;
       }
       return yield* host.decide(yield* host.equal(input, pattern, site), site);
@@ -445,7 +458,7 @@ export const make = (host: Host) => {
     (input, site) =>
       Effect.gen(function* () {
         if (input._tag !== "Obj") return false;
-        const tag = input.fields[field] ?? Value.undef;
+        const tag = yield* host.member(input, field, site);
         for (const value of values)
           if (yield* host.decide(yield* host.equal(tag, value, site), site)) return true;
         return false;
@@ -1298,6 +1311,7 @@ export const make = (host: Host) => {
   const cells = Cells.make(kit, (key, args, site) => models[key]!(args, site));
   const exits = Exits.make(kit);
   const rationals = Rationals.make(kit);
+  const waits = Waits.make(kit);
 
   const written: Record<string, Model> = {
     ...own,
@@ -1314,6 +1328,7 @@ export const make = (host: Host) => {
     ...cells.models,
     ...exits.models,
     ...rationals.models,
+    ...waits.models,
   };
 
   // A `Chunk` and an `Iterable` are read as the array of their items: the
@@ -1325,6 +1340,21 @@ export const make = (host: Host) => {
     if (CHUNK.has(name)) models[`effect/Chunk:${name}`] = model;
     if (ITERABLE.has(name)) models[`effect/Iterable:${name}`] = model;
   }
+  // `Iterable.makeBy(f, { length })` takes the function first, and gives as many items as it is told to.
+  models["effect/Iterable:makeBy"] = ([f, options], site) => {
+    const length = options?._tag === "Obj" ? options.fields.length : undefined;
+    return f && length?._tag === "Num" && Number.isInteger(length.value)
+      ? Effect.forEach(
+          Array.from({ length: Math.max(1, Math.floor(length.value)) }, (_, i) => i),
+          (i) => host.call(f, [Value.num(i)], site),
+        ).pipe(Effect.map(arr))
+      : Effect.fail(
+          Value.notTranslated(
+            site,
+            "Iterable.makeBy is given no length the prover can see: it then gives items without end",
+          ),
+        );
+  };
   const identity: Model = ([self], site) =>
     kit.itemsOf(self) ? Effect.succeed(arr(kit.itemsOf(self)!)) : wrongArguments(site, "Chunk");
   for (const name of ["toArray", "toReadonlyArray", "fromArrayUnsafe", "fromNonEmptyArrayUnsafe"])
@@ -1371,8 +1401,157 @@ export const make = (host: Host) => {
   const keyOf = (lib: V & { readonly _tag: "Lib" }): string =>
     `${lib.module}:${lib.path.join(".")}`;
 
+  /** A tagged union of `effect/Schema`: its tag's name, and the schema of each case. */
+  const unionOf = (
+    schema: unknown,
+  ): { readonly tag: string; readonly cases: Readonly<Record<string, unknown>> } | undefined => {
+    const union = schema as { readonly tag?: unknown; readonly cases?: unknown; guards?: unknown };
+    return Schema.isSchema(schema) &&
+      typeof union.tag === "string" &&
+      typeof union.cases === "object" &&
+      union.cases !== null &&
+      typeof union.guards === "object"
+      ? { tag: union.tag, cases: union.cases as Readonly<Record<string, unknown>> }
+      : undefined;
+  };
+
+  /**
+   * What a function of `effect/Schema` makes. A tagged union built from values
+   * the prover knows is the schema itself, as the file would have made it;
+   * any other schema is one the prover does not look inside.
+   */
+  const schemaOf = (lib: V & { readonly _tag: "Lib" }, args: ReadonlyArray<V>): V => {
+    const unseen = (): V => ({ _tag: "Opaque", what: "a schema" });
+    const fn = lib.host ?? Known.schemaOf(lib.module, lib.path);
+    if (typeof fn !== "function") return unseen();
+    const given: Array<unknown> = [];
+    for (const arg of args) {
+      const made = Known.real(arg);
+      if (!made) return unseen();
+      given.push(made.value);
+    }
+    try {
+      // `Schema.Int.check(...)` is a method of the schema it is called on.
+      const self = Known.schemaOf(lib.module, lib.path.slice(0, -1));
+      const made: unknown = (fn as (...args: ReadonlyArray<unknown>) => unknown).apply(self, given);
+      // A tagged union is kept: its helpers are functions the code calls on values.
+      if (unionOf(made)) return { _tag: "Host", value: made, name: `Schema.${lib.path.join(".")}` };
+      // Any other schema is not looked inside, and stands for the real one where a schema is built from it.
+      const kept = unseen();
+      if ((typeof made === "object" || typeof made === "function") && made !== null)
+        Known.schemas.set(kept, made);
+      return kept;
+    } catch {
+      return unseen();
+    }
+  };
+
+  /**
+   * `Status.guards`, `Status.isAnyOf`, `Status.match` and `Status.matchOrElse`
+   * of a tagged union: each reads the value's tag, and a guard also asks that
+   * the value is one its case allows.
+   */
+  const unionMember = (schema: unknown, key: string, name: string): V | undefined => {
+    const union = unionOf(schema);
+    if (!union) return undefined;
+    const seen = (value: V | undefined): value is V =>
+      value !== undefined && value._tag !== "Opaque" && value._tag !== "Applied";
+    /** Whether the value's tag is the one named, known or as a formula. */
+    const tagged = (value: V, tag: string, site: Site): Eval<boolean | string> =>
+      value._tag !== "Obj" || (value.brand !== undefined && Brands.SEALED.has(value.brand.kind))
+        ? Effect.succeed(false)
+        : host
+            .equal(value.fields[union.tag] ?? Value.undef, Value.str(tag), site)
+            .pipe(Effect.flatMap((equal) => host.truth(equal, site)));
+    /** The case's handler, called with the value: the first case whose tag the value has. */
+    const matching = (
+      value: V | undefined,
+      cases: V | undefined,
+      orElse: V | undefined,
+      what: string,
+      site: Site,
+    ): Eval<V> =>
+      Effect.gen(function* () {
+        if (!seen(value) || cases?._tag !== "Obj") return yield* wrongArguments(site, what);
+        for (const tag of Object.keys(union.cases)) {
+          const is = yield* tagged(value, tag, site);
+          if (typeof is === "boolean" ? !is : !(yield* host.branch(is))) continue;
+          const handler = cases.fields[tag] ?? orElse;
+          return handler
+            ? yield* host.call(handler, [value], site)
+            : yield* wrongArguments(site, what);
+        }
+        return orElse ? yield* host.call(orElse, [value], site) : yield* wrongArguments(site, what);
+      });
+    switch (key) {
+      case "guards":
+        return Value.obj(
+          Object.fromEntries(
+            Object.entries(union.cases).map(([tag, member]) => [
+              tag,
+              native(`${name}.guards.${tag}`, ([value], site) => {
+                const ast = Symbolic.typeOf(member);
+                return seen(value) && ast
+                  ? Effect.succeed(Compare.fromTruth(Symbolic.fits(value, ast, host.current.run)))
+                  : wrongArguments(site, `${name}.guards.${tag}`);
+              }),
+            ]),
+          ),
+        );
+      case "isAnyOf":
+        return native(`${name}.isAnyOf`, ([tags], site) => {
+          const names = Kit.tagsOf(tags);
+          return names === undefined
+            ? wrongArguments(site, `${name}.isAnyOf`)
+            : Effect.succeed(
+                native(`${name}.isAnyOf`, ([value], at) =>
+                  seen(value)
+                    ? Effect.forEach(names, (tag) => tagged(value, tag, at)).pipe(
+                        Effect.map((parts) => Compare.fromTruth(Compare.any(parts) ?? false)),
+                      )
+                    : wrongArguments(at, `${name}.isAnyOf`),
+                ),
+              );
+        });
+      case "match":
+        return native(`${name}.match`, (args, site) =>
+          args.length >= 2
+            ? matching(args[0], args[1], undefined, `${name}.match`, site)
+            : Effect.succeed(
+                native(`${name}.match`, ([value], at) =>
+                  matching(value, args[0], undefined, `${name}.match`, at),
+                ),
+              ),
+        );
+      case "matchOrElse":
+        return native(`${name}.matchOrElse`, (args, site) =>
+          args.length >= 3
+            ? matching(args[0], args[1], args[2], `${name}.matchOrElse`, site)
+            : Effect.succeed(
+                native(`${name}.matchOrElse`, ([value], at) =>
+                  matching(value, args[0], args[1], `${name}.matchOrElse`, at),
+                ),
+              ),
+        );
+      default:
+        return undefined;
+    }
+  };
+
   return {
+    /**
+     * Every library function and value the prover has a model for, as
+     * `module:path`, and every method of a string it reads.
+     */
+    surface: {
+      library: [...Object.keys(models), ...Object.keys(values), ...Object.keys(clocks)].sort(),
+      strings: [...strings.names].sort(),
+    },
     opticMember,
+    /** A member of a latch or a semaphore: `latch.open`, `semaphore.withPermits`. */
+    waitMember: waits.member,
+    /** A helper of a tagged union of `effect/Schema`, as a value the code calls. */
+    unionMember,
     /** A method of a string, as a value the code calls. */
     stringMember: strings.member,
     /** What `yield*` gives inside `Option.gen` and `Result.gen`. */
@@ -1423,12 +1602,11 @@ export const make = (host: Host) => {
       const made = computed();
       if (made) return Effect.succeed(made);
       // A schema is built, never run: what it describes is read where it is used.
-      if (lib.module === "effect/Schema")
-        return Effect.succeed<V>({ _tag: "Opaque", what: "a schema" });
+      if (lib.module === "effect/Schema") return Effect.succeed(schemaOf(lib, args));
       return Effect.fail(
         Value.notTranslated(
           site,
-          `calls ${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}, which the prover has no model for`,
+          `calls ${[lib.module.replace(/^effect\//, ""), ...lib.path].join(".")}, which the prover has no model for`,
           true,
         ),
       );
