@@ -9,6 +9,7 @@ import * as RivetNode from "@alchemy.run/rivet/Node";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
+import * as Namespaces from "@distilled.cloud/rivet/namespaces";
 import * as Pools from "@distilled.cloud/rivet/pools";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
@@ -19,7 +20,7 @@ import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformanc
 import { CLASS_SECRET, ClassSecretConfig } from "./fixtures/class-secret.ts";
 import { Counter } from "./fixtures/counter-declaration.ts";
 import { secretMembers, workerPools } from "./fixtures/gcp-checks.ts";
-import { Cluster } from "./fixtures/gcp/cluster.ts";
+import { Cluster, TokenReader } from "./fixtures/gcp/cluster.ts";
 import { CounterLive } from "./fixtures/gcp/counter-live.ts";
 import Front from "./fixtures/gcp/front.ts";
 import { PrivateCluster, PrivateServices } from "./fixtures/gcp/private-cluster.ts";
@@ -34,6 +35,12 @@ const sharedStack = Core.scratchStack(testOptions, "RivetGcpConformance", import
 
 let baseUrl = "";
 let rust: RustTarget;
+let joinable: {
+  endpoint: string;
+  tokenSecret: string;
+  reader: string;
+  token: Redacted.Redacted<string>;
+};
 
 // A Rust Durable Object on a pool of its own, reading a secret of the
 // stack's besides the control plane's token, and run as a service account
@@ -53,8 +60,23 @@ const program = (named: boolean) =>
         }).pipe(Layer.provide(Cluster)),
       ),
     );
-    return { url: front.uri, rust: rustTarget(actors), extra: extra.name, account };
-  }).pipe(Effect.provide(CounterLive.pipe(Layer.provide(ClassSecretConfig))));
+    // What another stack joins the control plane with.
+    const cluster = yield* Rivet.Cluster;
+    const reader = yield* TokenReader;
+    return {
+      url: front.uri,
+      rust: rustTarget(actors),
+      extra: extra.name,
+      account,
+      endpoint: cluster.endpoint,
+      tokenSecret: cluster.tokenSecret,
+      token: cluster.token,
+      reader: reader.email,
+    };
+  }).pipe(
+    // One Layer, so the pool's control plane and this one are built once.
+    Effect.provide(Layer.mergeAll(CounterLive.pipe(Layer.provide(ClassSecretConfig)), Cluster)),
+  );
 const accessor = "roles/secretmanager.secretAccessor";
 /** Out-of-band reads run with the GCP credentials and project the stack deploys with. */
 const gcp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -94,6 +116,12 @@ describe.skipIf(!!process.env.FAST)(
         const out = yield* sharedStack.deploy(program(false));
         const url = out.url;
         rust = out.rust as RustTarget;
+        joinable = {
+          endpoint: String(out.endpoint),
+          tokenSecret: String(out.tokenSecret),
+          reader: String(out.reader),
+          token: out.token as Redacted.Redacted<string>,
+        };
         expect(url).toBeTruthy();
         baseUrl = String(url).replace(/\/+$/, "");
         yield* waitForReady(baseUrl, { attempts: 40, base: "3 seconds" });
@@ -137,6 +165,42 @@ describe.skipIf(!!process.env.FAST)(
         }),
       ),
       { timeout: 120_000, ...rustPool },
+    );
+
+    test(
+      "another stack joins with the control plane's endpoint and token secret",
+      gcp(
+        Effect.gen(function* () {
+          // Only the token's secret is granted to the reader, by the control plane.
+          expect(joinable.tokenSecret).toMatch(/^projects\/[^/]+\/secrets\/[^/]+$/);
+          expect(yield* secretMembers(joinable.tokenSecret, accessor)).toContain(
+            `serviceAccount:${joinable.reader}`,
+          );
+          // The app's stack reads the token as itself and creates its namespace with it.
+          const app = Core.scratchStack(testOptions, "RivetGcpJoin", import.meta.url);
+          yield* app.destroy();
+          const joined = yield* app.deploy(
+            Effect.gen(function* () {
+              const cluster = yield* Rivet.Cluster;
+              return { namespace: cluster.namespace };
+            }).pipe(
+              Effect.provide(
+                RivetGCP.ControlPlane("Joined", {
+                  endpoint: joinable.endpoint,
+                  tokenSecret: joinable.tokenSecret,
+                }),
+              ),
+            ),
+          );
+          expect(joined.namespace).not.toBe("default");
+          const found = yield* Namespaces.listNamespaces({ name: String(joined.namespace) }).pipe(
+            withConnection({ endpoint: joinable.endpoint, token: joinable.token }),
+          );
+          expect(found.namespaces.map((ns) => ns.name)).toEqual([joined.namespace]);
+          yield* app.destroy();
+        }),
+      ),
+      { timeout: 300_000 },
     );
 
     test(

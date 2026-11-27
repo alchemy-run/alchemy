@@ -127,6 +127,7 @@
     "@alchemy.run/hetzner": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/railway": "workspace:*",
+    "@distilled.cloud/gcp": "workspace:*",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
@@ -140,6 +141,7 @@
     "@alchemy.run/hetzner": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/railway": "workspace:*",
+    "@distilled.cloud/gcp": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
@@ -163,6 +165,9 @@
       "optional": true
     },
     "@alchemy.run/kubernetes": {
+      "optional": true
+    },
+    "@distilled.cloud/gcp": {
       "optional": true
     }
   },

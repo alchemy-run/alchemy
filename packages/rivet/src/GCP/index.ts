@@ -4,6 +4,7 @@
  * Requires `@alchemy.run/gcp`.
  */
 export * from "./ComputeEngineControlPlane.ts";
+export * from "./ControlPlane.ts";
 export * from "./ComputeEnginePool.ts";
 export * from "./CloudRunPool.ts";
 export * from "./ServicesPool.ts";

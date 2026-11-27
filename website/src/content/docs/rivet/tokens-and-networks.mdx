@@ -114,13 +114,13 @@ The app deploy creates its namespace, its pools and its callers, and none of the
 
 The app deploy still holds the admin token, and so do its nodes and callers. A leaked deploy can read and change every namespace on that control plane. It cannot stop the engines, read their disks or bucket, or change their network: those take the cloud's credentials, which it doesn't have.
 
-[GCP](/rivet/gcp#deploy-the-control-plane-on-its-own) shows the projects, the identities and where the token is kept.
+On GCP, the app joins with [`RivetGCP.ControlPlane`](/rivet/gcp#deploy-the-control-plane-on-its-own) instead, which reads the token from the control plane's own secret.
 
 ## In CI
 
 A deploy that declares a control plane needs the credentials of the cloud it runs on, read the way that provider reads them in CI: `AWS_*` for AWS, `HCLOUD_TOKEN` for Hetzner, and so on. A control plane you run creates its own admin token, so it needs nothing from Rivet.
 
-A deploy that [joins a control plane](#keep-app-deploys-away-from-the-control-plane) needs its address and admin token, and the credentials of the cloud its own pools and callers run on.
+A deploy that [joins a control plane](#keep-app-deploys-away-from-the-control-plane) needs its address and admin token, and the credentials of the cloud its own pools and callers run on. On GCP, `RivetGCP.ControlPlane` reads the token from the control plane's secret as the deploy's own identity, so CI holds no token at all.
 
 A Rivet Cloud control plane needs a cluster token from the Rivet dashboard and the cluster's name. `RivetCloud.ControlPlane` reads them from the environment:
 
