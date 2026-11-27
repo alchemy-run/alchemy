@@ -12,6 +12,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -576,7 +577,7 @@ const fromGithubEnterprise = (
   if (config === undefined) return undefined;
   return compact({
     hostUri: config.hostUri,
-    apiKey: config.apiKey,
+    apiKey: revealOptional(config.apiKey),
     appId: config.appId,
     appSlug: config.appSlug,
     privateKeySecretVersion: config.privateKeySecretVersion,

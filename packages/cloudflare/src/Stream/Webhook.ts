@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { toRedacted } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 
 const TypeId = "Cloudflare.Stream.Webhook" as const;
@@ -162,5 +163,5 @@ const toAttributes = (
   accountId,
   notificationUrl: webhook.notificationUrl ?? "",
   modified: webhook.modified ?? undefined,
-  secret: Redacted.make(webhook.secret ?? ""),
+  secret: toRedacted(webhook.secret ?? ""),
 });

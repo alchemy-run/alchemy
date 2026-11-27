@@ -27,6 +27,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { fnv1a64, type GcpIamGrant } from "../Host.ts";
 import { createInternalLabels } from "../Labels.ts";
+import { revealOptional } from "./SdkSecret.ts";
 
 /** The role that lets a host's service account read its secrets. */
 export const SECRET_ACCESSOR = "roles/secretmanager.secretAccessor";
@@ -136,7 +137,7 @@ const syncSecretValue = Effect.fn(function* (name: string, value: string) {
   const latest = yield* secretmanager
     .accessProjectsSecretsVersions({ name: `${name}/versions/latest` })
     .pipe(Effect.catchTag(["NotFound", "SecretVersionNotEnabled"], () => Effect.undefined));
-  const data = latest?.payload?.data;
+  const data = revealOptional(latest?.payload?.data);
   const observed = data === undefined ? undefined : Buffer.from(data, "base64").toString("utf8");
   if (latest?.name !== undefined && observed === value) {
     return versionOf(latest.name);

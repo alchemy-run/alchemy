@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 
 export type ServiceAccountKeyProps = {
@@ -123,7 +124,7 @@ export const ServiceAccountKeyProvider = () =>
       return {
         name,
         serviceAccount: news.serviceAccount,
-        ...(yield* decodeKeyFile(name, key.privateKeyData ?? "")),
+        ...(yield* decodeKeyFile(name, revealOptional(key.privateKeyData) ?? "")),
       };
     }),
 
