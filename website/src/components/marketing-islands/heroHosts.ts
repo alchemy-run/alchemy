@@ -128,9 +128,9 @@ export const hostSource = (values: readonly string[]) =>
   HOST_TEMPLATE.replace(/⟨(\d)⟩/g, (_, i: string) => values[+i]!);
 
 /**
- * The same program for narrow screens: the props sit one per line, the
- * prose wraps, and the aggregate's handlers are folded to their names, so
- * no line passes ~42 columns. Slot ⟨1⟩ holds the host's extra props on a line of their own.
+ * The same program for narrow screens: the props sit one per line, and the
+ * process's declaration and the aggregate's handlers are folded to their
+ * names, so no line passes ~42 columns and the card stays short. Slot ⟨1⟩ holds the host's extra props on a line of their own.
  */
 export const HOST_TEMPLATE_COMPACT = `export default ⟨0⟩(
   "Api",
@@ -145,16 +145,10 @@ export const HOST_TEMPLATE_COMPACT = `export default ⟨0⟩(
 );
 
 export class FraudReview extends
-  AI.Process<FraudReview>()(
-    "FraudReview",
-    {
-      description: "Review a withdrawal.",
-    },
-  )\`
-    Read \${Bank.AccountSummary}. If it
-    looks stolen, send
-    \${Bank.FreezeAccount}.
-  \` {}
+  AI.Process("FraudReview")\`
+  Read \${Bank.AccountSummary}. If it looks
+  stolen, send \${Bank.FreezeAccount}.
+\` {}
 
 export class Account extends
   Domain.Aggregate("Account", {
