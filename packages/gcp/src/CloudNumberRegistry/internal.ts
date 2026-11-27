@@ -1,4 +1,4 @@
-import * as cnr from "@distilled.cloud/gcp/cloudnumberregistry_v1alpha";
+import * as cnr from "@distilled.cloud/gcp/unstable/cloudnumberregistry_v1alpha";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";

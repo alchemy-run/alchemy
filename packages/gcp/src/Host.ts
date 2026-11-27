@@ -1,5 +1,5 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
+import * as iam from "@distilled.cloud/gcp/iam_v1";
 import type { ResourceBinding } from "alchemy/Resource";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
@@ -121,7 +121,7 @@ export const defaultComputeServiceAccount = (project: string) =>
   );
 
 /** 64-bit FNV-1a, hex. Deterministic and dependency-free. */
-const fnv1a64 = (input: string): string => {
+export const fnv1a64 = (input: string): string => {
   let hash = 0xcbf29ce484222325n;
   for (let index = 0; index < input.length; index++) {
     hash ^= BigInt(input.charCodeAt(index));

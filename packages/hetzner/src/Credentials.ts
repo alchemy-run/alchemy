@@ -1,6 +1,6 @@
-import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials } from "@distilled.cloud/hetzner";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HETZNER_AUTH_PROVIDER_NAME, type HetznerResolvedCredentials } from "./AuthProvider.ts";
 
@@ -22,11 +22,10 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    lazyCredentials<HetznerResolvedCredentials, ConfigError>()(
-      HETZNER_AUTH_PROVIDER_NAME,
-      (creds) => ({
-        token: creds.token,
-        apiBaseUrl: creds.apiBaseUrl,
-      }),
-    ),
+    // `Credentials` has no error channel: a failed resolution dies, and the
+    // engine reports it as `CredentialsRequired`.
+    lazyCredentials<HetznerResolvedCredentials>()(HETZNER_AUTH_PROVIDER_NAME, (creds) => ({
+      token: creds.token,
+      apiBaseUrl: creds.apiBaseUrl,
+    })).pipe(Effect.map(Effect.orDie)),
   );

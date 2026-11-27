@@ -15,6 +15,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import * as TestClock from "effect/testing/TestClock";
 import { type Disk, type Intercept, simHost, type Stats } from "./sim-host.ts";
 
 // ---------------------------------------------------------------- a ledger with a view and a stream
@@ -878,7 +879,12 @@ const COUNTS_V1 = `${COUNTS}V1`;
 
 /** A sim host for one test, with what the projection's handler ran and a switch to fail it. */
 const countingSim = (
-  options: { readonly failPut?: (key: string) => boolean; readonly inputGate?: boolean } = {},
+  options: {
+    readonly failPut?: (key: string) => boolean;
+    readonly inputGate?: boolean;
+    /** Answers true for a call between objects that should fail, by its method. */
+    readonly failCall?: (method: string) => boolean;
+  } = {},
 ) => {
   const stats: Stats = { rowsRead: 0, bytesWritten: 0 };
   /** What the key's object was sent, as a counter's outbox sends it. */
@@ -889,11 +895,12 @@ const countingSim = (
       if (call.cls.startsWith(COUNTS) && call.method === "receive") {
         received.push(call.args[1] as Record<string, unknown>);
       }
+      if (options.failCall?.(call.method)) return Effect.die(new Error(`${call.method} failed`));
       return run;
     },
   });
   const handled: Array<string> = [];
-  const store = { failing: false, attempts: 0 };
+  const store = { failing: false, attempts: 0, millisPerBatch: 0 };
   const layer = (version = 0, size = 100) =>
     Counting.layer(
       AllCounts.toLayer(
@@ -901,6 +908,7 @@ const countingSim = (
           Effect.fn(function* (batch) {
             store.attempts += 1;
             if (store.failing) return yield* Effect.die(new Error("the store is down"));
+            if (store.millisPerBatch > 0) yield* Effect.sleep(store.millisPerBatch);
             for (const { envelope } of batch) handled.push(`${envelope.stream}#${envelope.seq}`);
           }),
         ),
@@ -924,6 +932,11 @@ const countingSim = (
         .map(([row, value]) => [row.slice(prefix.length), value]),
     );
   const meta = (cls = COUNTS) => rows(cls).get("meta") as Record<string, unknown>;
+  /** The keys the run's root still has to tell that every source's history is in. */
+  const waiting = () =>
+    [...sim.disk.objects.values()].flatMap((object) =>
+      [...object.data.keys()].filter((row) => row.startsWith("rw:")),
+    );
   /** A failed drain has let go of the key: the next one runs at once, not after the lease. */
   const released = eventually(() => !rows().has("drain-lease"));
   /** Deliver to the key directly, as a counter's outbox does (at least once, so again too). */
@@ -947,6 +960,7 @@ const countingSim = (
     rows,
     prefixed,
     meta,
+    waiting,
     released,
     receive,
     checkpoints,
@@ -989,6 +1003,42 @@ class Recounting extends Domain.Model("Recounting", {
   projections: [AllCounts],
   rewrites: [Recount],
 }) {}
+
+describe("a projection key's first input", { tags: ["unit"] }, () => {
+  it.live(
+    "is handled as soon as the run has every source's history: the run tells the key",
+    () => {
+      const t = countingSim();
+      return Effect.gen(function* () {
+        // The key holds its first input until the run is past its barrier. No scanner
+        // pushed it history, so no scanner tells it: it asks the run, which does.
+        const receipt = yield* (yield* Counter).send(new Count({ id: "a" }));
+        yield* AllCounts.caughtUp(receipt, { timeout: "2 seconds" });
+        expect(t.handled).toEqual(["Counter/a#1"]);
+        expect(t.waiting()).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 30_000 },
+  );
+
+  it.live(
+    "is handled once the run reaches a key it could not tell at first",
+    () => {
+      const failing = { left: 1 };
+      const t = countingSim({
+        failCall: (method) => method === "bfConsumerReady" && failing.left-- > 0,
+      });
+      return Effect.gen(function* () {
+        const receipt = yield* (yield* Counter).send(new Count({ id: "a" }));
+        yield* AllCounts.caughtUp(receipt, { timeout: "10 seconds" });
+        expect(failing.left).toBeLessThan(1);
+        expect(t.handled).toEqual(["Counter/a#1"]);
+        expect(t.waiting()).toEqual([]);
+      }).pipe(Effect.scoped, Effect.provide(t.layer()));
+    },
+    { timeout: 30_000 },
+  );
+});
 
 describe("a projection key fed by many sources", { tags: ["unit"] }, () => {
   it.live(
@@ -1040,6 +1090,31 @@ describe("a projection key fed by many sources", { tags: ["unit"] }, () => {
     },
     { timeout: 60_000 },
   );
+
+  it.effect("a drain that runs longer than its lease is never joined by a second one", () => {
+    const t = countingSim();
+    /** Let virtual time pass, a second at a time, until `done`. */
+    const until = Effect.fn(function* (done: () => boolean, seconds: number) {
+      for (let s = 0; s < seconds && !done(); s++) {
+        yield* TestClock.adjust("1 second");
+        yield* TestClock.withLive(Effect.sleep("1 millis"));
+      }
+    });
+    return Effect.gen(function* () {
+      // The key's first input, through the model, which begins the projection's backfill.
+      const first = yield* Effect.forkChild((yield* Counter).send(new Count({ id: "k0" })));
+      yield* until(() => t.handled.length === 1, 120);
+      yield* Fiber.join(first);
+      expect(t.handled).toEqual(["Counter/k0#1"]);
+      // 90 more at a second each: one drain needs longer than a lease lasts.
+      t.store.millisPerBatch = 1_000;
+      for (let n = 1; n <= 90; n++) yield* t.receive(counted(`k${n}`, 1));
+      yield* until(() => t.handled.length >= 91, 240);
+      // Each input once: no drain started beside the one still running.
+      expect(t.handled).toHaveLength(91);
+      expect(new Set(t.handled).size).toBe(91);
+    }).pipe(Effect.scoped, Effect.provide(t.layer(0, 1)));
+  });
 
   it.live(
     "after an eviction, redelivered inputs are dropped and the log resumes in order",

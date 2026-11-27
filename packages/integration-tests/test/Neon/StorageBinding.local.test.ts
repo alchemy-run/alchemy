@@ -2,7 +2,7 @@ import { bucketStorageClient } from "@alchemy.run/neon/Bucket";
 import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as SDK from "@distilled.cloud/neon";
+import * as SDK from "@distilled.cloud/neon/unstable/neon";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import StorageFunction from "./fixtures/StorageFunction.ts";

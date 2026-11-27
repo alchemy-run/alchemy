@@ -9,8 +9,9 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import type { ClusterNetwork, ClusterShape } from "../../Cluster.ts";
+import type { ClusterShape } from "../../Cluster.ts";
 import { type PoolNodes, SECRET_ENV, splitNodeEnvironment } from "../../internal/PoolHost.ts";
+import { Network } from "../Network.ts";
 
 /**
  * Keep each value in a Secrets Manager secret of the pool's own, named
@@ -60,7 +61,7 @@ export const secretNodeEnvironment = Effect.fn(function* (id: string, nodes: Poo
 /** The cluster has no VPC for nodes to join. */
 const ownNetwork = { kind: "own" } as const;
 
-export type PoolNetwork = Extract<ClusterNetwork, { kind: "aws" }> | typeof ownNetwork;
+export type PoolNetwork = Network | typeof ownNetwork;
 
 /**
  * Nodes join the control plane's VPC when it has one, and a VPC of the
@@ -85,10 +86,5 @@ export const resolvePoolNetwork = Effect.fn(function* (
     description: "Rivet nodes",
     egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
   });
-  return {
-    kind: "aws" as const,
-    vpcId: vpc.vpcId,
-    subnetIds: vpc.publicSubnetIds,
-    securityGroupId: group.groupId,
-  };
+  return Network(vpc, group);
 });

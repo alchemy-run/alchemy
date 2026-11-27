@@ -701,16 +701,7 @@ const observeProjection =
   (name: string, key: string, batch: ReadonlyArray<Accepted>) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) => {
     const tags = { "domain.kind": "projection", "domain.consumer": name };
-    const links = batch.flatMap(({ delivery }) =>
-      delivery.envelope.trace
-        ? [{ span: Telemetry.spanOf(delivery.envelope.trace), attributes: {} }]
-        : [],
-    );
-    const correlations = [
-      ...new Set(
-        batch.map(({ delivery }) => delivery.envelope.correlationId ?? delivery.envelope.commandId),
-      ),
-    ];
+    const { links, correlations } = Telemetry.batch(batch.map(({ delivery }) => delivery.envelope));
     return effect.pipe(
       Effect.onExit((exit) =>
         Effect.gen(function* () {
@@ -734,6 +725,7 @@ const observeProjection =
           "domain.key": key,
           "domain.batch": batch.length,
           ...(correlations.length === 1 ? { "domain.correlation_id": correlations[0] } : {}),
+          "domain.correlation_ids": correlations,
         },
       }),
     );

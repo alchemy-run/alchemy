@@ -83,7 +83,9 @@ import {
 import type { RuntimeAlias } from "./RuntimeAlias.ts";
 import {
   deleteSecretEnv,
+  parameterArn,
   SECRET_ENV,
+  secretEnvParameterName,
   secretEnvStatement,
   splitSecretEnv,
   syncSecretEnv,
@@ -1906,7 +1908,14 @@ export const FunctionProvider = () =>
         if (Object.values(env).some(Redacted.isRedacted)) {
           const { accountId, region } = yield* AWSEnvironment.current;
           policyStatements.push(
-            secretEnvStatement(partitionOf(region), region, accountId, functionName),
+            secretEnvStatement(
+              parameterArn(
+                partitionOf(region),
+                region,
+                accountId,
+                secretEnvParameterName(functionName),
+              ),
+            ),
           );
         }
         policyStatements.push(
@@ -1969,7 +1978,11 @@ export const FunctionProvider = () =>
         env: Record<string, unknown>,
       ) {
         const { plain, secret } = splitSecretEnv(env);
-        const ref = yield* syncSecretEnv(functionName, secret);
+        const ref = yield* syncSecretEnv(
+          secretEnvParameterName(functionName),
+          secret,
+          `Secret environment of the Lambda function ${functionName}`,
+        );
         return ref === undefined ? plain : { ...plain, [SECRET_ENV]: ref };
       });
 
@@ -3923,7 +3936,7 @@ export const FunctionProvider = () =>
           yield* Lambda.deleteFunction({
             FunctionName: output.functionName,
           }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
-          yield* deleteSecretEnv(output.functionName);
+          yield* deleteSecretEnv(secretEnvParameterName(output.functionName));
 
           if (output.code.image?.ownsRepository) {
             // Lambda must release its image before the owned repository is

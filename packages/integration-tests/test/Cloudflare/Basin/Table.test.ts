@@ -6,7 +6,6 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as basin from "@distilled.cloud/cloudflare/basin_catalog";
 import * as Iceberg from "@distilled.cloud/iceberg";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -85,10 +84,7 @@ const iceberg =
   <A, E, R>(eff: Effect.Effect<A, E, R>) =>
     eff.pipe(
       Effect.provide(
-        Layer.mergeAll(
-          Iceberg.IcebergProtocol,
-          Iceberg.fromCatalogConfig({ uri: catalog.catalogUri, warehouse: catalog.name, token }),
-        ),
+        Iceberg.fromCatalogConfig({ uri: catalog.catalogUri, warehouse: catalog.name, token }),
       ),
     );
 

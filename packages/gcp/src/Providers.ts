@@ -1003,26 +1003,6 @@ import {
   RepositoryProvider as DataformRepositoryProvider,
 } from "./Dataform/Repository.ts";
 import { Team, TeamProvider } from "./Dataform/Team.ts";
-import {
-  AnnotationSpecSet as DatalabelingAnnotationSpecSet,
-  AnnotationSpecSetProvider as DatalabelingAnnotationSpecSetProvider,
-} from "./DataLabeling/AnnotationSpecSet.ts";
-import {
-  Dataset as DatalabelingDataset,
-  DatasetProvider as DatalabelingDatasetProvider,
-} from "./DataLabeling/Dataset.ts";
-import {
-  DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage,
-  DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageProvider,
-} from "./DataLabeling/DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage.ts";
-import {
-  EvaluationJob as DatalabelingEvaluationJob,
-  EvaluationJobProvider as DatalabelingEvaluationJobProvider,
-} from "./DataLabeling/EvaluationJob.ts";
-import {
-  Instruction as DatalabelingInstruction,
-  InstructionProvider as DatalabelingInstructionProvider,
-} from "./DataLabeling/Instruction.ts";
 import { Process, ProcessProvider } from "./DataLineage/Process.ts";
 import { ProcessesRun, ProcessesRunProvider } from "./DataLineage/ProcessesRun.ts";
 import {
@@ -1699,8 +1679,6 @@ import {
   Instance as MemcacheInstance,
   InstanceProvider as MemcacheInstanceProvider,
 } from "./Memcache/Instance.ts";
-import { MerchantReview, MerchantReviewProvider } from "./MerchantApiReviews/MerchantReview.ts";
-import { ProductReview, ProductReviewProvider } from "./MerchantApiReviews/ProductReview.ts";
 import {
   Federation as MetastoreFederation,
   FederationProvider as MetastoreFederationProvider,
@@ -3316,8 +3294,6 @@ const makeProviders = () =>
       Object.assign(
         merged,
         (yield* Provider.collection([
-          MerchantReview,
-          ProductReview,
           ContentwarehouseDocumentSchema,
           ContentwarehouseDocument,
           ContentwarehouseRuleSet,
@@ -3384,11 +3360,6 @@ const makeProviders = () =>
           SasportalCustomersNode,
           SasportalNodesDevice,
           SasportalNodesNode,
-          DatalabelingAnnotationSpecSet,
-          DatalabelingDataset,
-          DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage,
-          DatalabelingEvaluationJob,
-          DatalabelingInstruction,
           Process,
           ProcessesRun,
           ProcessesRunsLineageEvent,
@@ -4392,13 +4363,6 @@ const makeProviders = () =>
             SasportalNodesNodeProvider(),
           ),
           Layer.mergeAll(
-            DatalabelingAnnotationSpecSetProvider(),
-            DatalabelingDatasetProvider(),
-            DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageProvider(),
-            DatalabelingEvaluationJobProvider(),
-            DatalabelingInstructionProvider(),
-          ),
-          Layer.mergeAll(
             ProcessProvider(),
             ProcessesRunProvider(),
             ProcessesRunsLineageEventProvider(),
@@ -4472,8 +4436,6 @@ const makeProviders = () =>
                 ApisConfigProvider(),
               ),
               Layer.mergeAll(
-                MerchantReviewProvider(),
-                ProductReviewProvider(),
                 ContentwarehouseDocumentSchemaProvider(),
                 ContentwarehouseDocumentProvider(),
                 ContentwarehouseRuleSetProvider(),

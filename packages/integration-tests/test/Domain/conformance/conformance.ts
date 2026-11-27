@@ -90,6 +90,9 @@ export const liveFrame = (
     Effect.provide(Socket.layerWebSocketConstructorGlobal),
   );
 
+/** Inputs in the backlog case, each a second's work for one projection key. */
+const BACKLOG_INPUTS = 150;
+
 /** How long a refused read may take: well under a read's wait for `atLeast`. */
 const AT_ONCE = "5 seconds";
 
@@ -535,6 +538,32 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     }),
     options,
   );
+
+  // A backlog of BACKLOG_INPUTS seconds: longer than a host keeps background
+  // work alive with nothing else arriving. Minutes long, so not with --fast.
+  if (!process.env.FAST) {
+    test(
+      "a projection's backlog drains to the end with nothing else arriving",
+      Effect.gen(function* () {
+        const run = fresh("backlog");
+        const counters = Array.from({ length: BACKLOG_INPUTS }, (_, n) => `${run}.${n}`);
+        yield* Effect.forEach(counters, (counter) => call(`/increment/${counter}`), {
+          concurrency: 10,
+          discard: true,
+        });
+        // Nothing else is sent: the key must finish on its own.
+        const handled = yield* call<ReadonlyArray<string>>(`/drained/${run}`).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (handled) => new Set(handled).size === BACKLOG_INPUTS,
+            times: 48,
+          }),
+        );
+        expect(new Set(handled).size).toBe(BACKLOG_INPUTS);
+      }),
+      { ...options, timeout: 360_000 },
+    );
+  }
 
   test(
     "a policy starts a saga, and its step commits once when it runs again",

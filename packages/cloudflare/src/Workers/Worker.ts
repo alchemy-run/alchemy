@@ -42,6 +42,7 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
+import type { RetiringClass } from "./DurableObjectRetirement.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
@@ -1268,6 +1269,22 @@ export interface ViteOptions {
    */
   rootDir?: string;
   /**
+   * Vite [mode](https://vite.dev/guide/env-and-mode#modes), as passed to
+   * `vite build --mode`. It selects which `.env.[mode]` files load and
+   * sets `import.meta.env.MODE`. Changing it rebuilds the Worker, or
+   * restarts the dev server in `alchemy dev`.
+   *
+   * Edits to a gitignored `.env.[mode]` file don't trigger a rebuild on
+   * their own. Add the file to `memo.include` if they should.
+   *
+   * @default "production" on deploy, "development" in `alchemy dev`
+   * @example
+   * ```typescript
+   * vite: { mode: "staging" }
+   * ```
+   */
+  mode?: string;
+  /**
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file in `cwd` is hashed, plus the nearest
    * lockfile. Provide explicit globs to narrow the scope.
@@ -1523,6 +1540,8 @@ export type Worker<Bindings = any> = Resource<
       hash: string | undefined;
     }[];
     crons?: string[];
+    /** Durable Object classes kept only while their objects move out: see `DurableObjectRetirement`. */
+    retiringClasses?: RetiringClass[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
     /**
      * Dev-only channel (like `hyperdrives`): binding name → opt-out of local

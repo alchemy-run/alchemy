@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -283,7 +284,7 @@ const toAttrs = (
     location: parsed.location || region,
     serviceClass: map.serviceClass,
     serviceClassUri: map.serviceClassUri,
-    token: map.token,
+    token: revealOptional(map.token),
     producerPscConfigs: (map.producerPscConfigs ?? []).map(toProducer),
     consumerPscConfigs: (map.consumerPscConfigs ?? []).map((config) =>
       toConsumer(config, parsed.project || project),

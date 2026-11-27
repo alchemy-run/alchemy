@@ -176,8 +176,8 @@ catalogs:
       specifier: 0.5.0
       version: 0.5.0
     '@alchemy.run/sigil':
-      specifier: 0.1.0-alpha.4
-      version: 0.1.0-alpha.4
+      specifier: 0.1.0-alpha.5
+      version: 0.1.0-alpha.5
     '@astrojs/check':
       specifier: 0.9.10
       version: 0.9.10
@@ -9265,7 +9265,7 @@ importers:
         version: link:../node-utils
       '@alchemy.run/sigil':
         specifier: 'catalog:'
-        version: 0.1.0-alpha.4(@types/react@19.3.0)(react-devtools-core@7.0.1)
+        version: 0.1.0-alpha.5(@types/react@19.3.0)(react-devtools-core@7.0.1)
       capnweb:
         specifier: 'catalog:'
         version: 0.12.0
@@ -12466,6 +12466,22 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
+  submodules/distilled/packages/bitbucket:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
   submodules/distilled/packages/boat-dev:
     dependencies:
       '@distilled.cloud/core':
@@ -13183,6 +13199,22 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
+  submodules/distilled/packages/jira:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
   submodules/distilled/packages/kubernetes:
     dependencies:
       '@distilled.cloud/core':
@@ -13295,6 +13327,25 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
+  submodules/distilled/packages/microsoft-graph:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
+
   submodules/distilled/packages/modal:
     dependencies:
       '@distilled.cloud/core':
@@ -13326,6 +13377,25 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
+
+  submodules/distilled/packages/mollie:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
 
   submodules/distilled/packages/mongodb-atlas:
     dependencies:
@@ -13914,6 +13984,25 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
+  submodules/distilled/packages/sproutboat:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
+
   submodules/distilled/packages/squarespace:
     dependencies:
       '@distilled.cloud/core':
@@ -14188,6 +14277,22 @@ importers:
       yaml:
         specifier: 'catalog:'
         version: 2.9.1
+
+  submodules/distilled/packages/unifi:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
 
   submodules/distilled/packages/unkey:
     dependencies:
@@ -14557,8 +14662,8 @@ packages:
   '@alchemy.run/node-utils@2.0.0-beta.74':
     resolution: {integrity: sha512-UH7mbmF0qZWL0b5xURFaRbKR2qNXdvxEjIq86FdqSKacnH0lsHSgGzNKFbDSKFAY1u6Kq3unHFmgRk7UAD/YTQ==}
 
-  '@alchemy.run/sigil@0.1.0-alpha.4':
-    resolution: {integrity: sha512-d6Uo16C2P6Wk7TNoYt4qzjjNGyjsrJLjq8bBotl86Nmcp/U6+R34/n4CZomqFERF2wMinut2DBqWNeUQPTBtFQ==}
+  '@alchemy.run/sigil@0.1.0-alpha.5':
+    resolution: {integrity: sha512-cd8fLeGVMfSK+8aptKcfRJ8Wop30FotAMU5EYi2wED5j5r3Paqni1DiJxivenSDRbhw+O4XIn5QAlA0Eyi1roQ==}
     engines: {node: '>=22'}
     peerDependencies:
       '@types/react': '>=19.2.0'
@@ -32114,7 +32219,7 @@ snapshots:
 
   '@alchemy.run/node-utils@2.0.0-beta.74': {}
 
-  '@alchemy.run/sigil@0.1.0-alpha.4(@types/react@19.3.0)(react-devtools-core@7.0.1)':
+  '@alchemy.run/sigil@0.1.0-alpha.5(@types/react@19.3.0)(react-devtools-core@7.0.1)':
     optionalDependencies:
       '@types/react': 19.3.0
       react-devtools-core: 7.0.1
