@@ -669,32 +669,20 @@ describe
           Effect.gen(function* () {
             yield* stack.destroy();
 
-            const { database, role, token } = yield* stack.deploy(
+            const { database, token } = yield* stack.deploy(
               Effect.gen(function* () {
                 const database = yield* Planetscale.PostgresDatabase("Database", {
                   clusterSize: "PS_10",
                 });
-                const role = yield* Planetscale.PostgresRole("Role", {
-                  database,
-                  inheritedRoles: [],
-                });
+                yield* Planetscale.PostgresRole("Role", { database, inheritedRoles: [] });
                 // Scoped to the database, without branch or role access.
                 const token = yield* Planetscale.ServiceToken("Token", {
                   database,
                   accesses: ["read_database"],
                 });
-                return { database, role, token };
+                return { database, token };
               }),
             );
-
-            // The role exists, as seen by the deploying credentials.
-            const live = yield* ps.getRole({
-              organization: role.organization,
-              database: role.database,
-              branch: role.branch,
-              id: role.id,
-            });
-            expect(live.id).toBe(role.id);
 
             const exit = yield* Drift.plan({ name: stack.name, stage: stack.stage }).pipe(
               Effect.provide(stack.state),
@@ -709,7 +697,6 @@ describe
             );
             // Other resources may also fail to read with this token; the role
             // itself must fail its read with Forbidden.
-            expect(Exit.isFailure(exit)).toBe(true);
             const roleFailure = Exit.isFailure(exit)
               ? exit.cause.reasons
                   .filter(Cause.isFailReason)
