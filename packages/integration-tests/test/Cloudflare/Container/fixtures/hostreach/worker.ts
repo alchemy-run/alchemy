@@ -26,7 +26,10 @@ export default class HostReachContainerWorker extends Cloudflare.Worker<HostReac
           return HttpServerResponse.text(yield* object.getProbe());
         }
         if (url.pathname === "/start-env-probe") {
-          return HttpServerResponse.text(yield* startEnvObjects.getByName("default").getProbe());
+          const port = Number(url.searchParams.get("port"));
+          return HttpServerResponse.text(
+            yield* startEnvObjects.getByName(`port-${port}`).getProbe(port),
+          );
         }
         return HttpServerResponse.text("ok");
       }).pipe(

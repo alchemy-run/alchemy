@@ -1,4 +1,5 @@
 import * as NodeHttp from "node:http";
+import type { AddressInfo } from "node:net";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -8,7 +9,6 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import {
   HOST_PROBE_PORT,
-  HOST_START_PROBE_PORT,
   NEON_URL,
   PLANETSCALE_MYSQL_URL,
   PLANETSCALE_PG_URL,
@@ -138,10 +138,12 @@ describe(
       Effect.gen(function* () {
         const { url } = yield* stack;
         const client = yield* HttpClient.HttpClient;
-        yield* hostServerOn(HOST_START_PROBE_PORT);
+        // Any free port: it reaches the container only through `start({ env })`.
+        const server = yield* hostServerOn(0);
+        const port = (server.address() as AddressInfo).port;
 
         const probe = JSON.parse(
-          yield* client.get(new URL("/start-env-probe", url)).pipe(
+          yield* client.get(new URL(`/start-env-probe?port=${port}`, url)).pipe(
             Effect.flatMap((r) =>
               r.status !== 200 ? Effect.fail(new Error(`not ready: ${r.status}`)) : r.text,
             ),
