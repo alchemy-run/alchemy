@@ -4,6 +4,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -305,18 +306,26 @@ for (const [transport, layer] of [
       Effect.gen(function* () {
         const api = yield* seed;
         for (const key of ["c-1", "c-0"]) {
-          // A version neither key has reached: a refused read waits a fixed time, then is refused.
+          // A version neither key has reached: a read with `atLeast` waits a fixed time, then is refused.
           const atLeast = { stream: `Counter/${key}`, version: 9 };
-          const started = yield* Clock.currentTimeMillis;
+          const padded = <A, E>(refused: Effect.Effect<A, E>) =>
+            Effect.flip(refused).pipe(
+              Effect.timed,
+              Effect.map(([took, refusal]) => {
+                // Never the consistency timeout's 10 seconds, nor at once.
+                expect(Duration.toMillis(took)).toBeGreaterThanOrEqual(1_000);
+                return refusal;
+              }),
+            );
           const refusals = yield* Effect.all(
             [
-              api.HiddenTotals.get(key, { atLeast }).pipe(Effect.flip),
-              api.HiddenTotals.snapshot(key, { atLeast }).pipe(Effect.flip),
-              api.HiddenTotals.list(key, { atLeast }).pipe(Effect.flip),
+              padded(api.HiddenTotals.get(key, { atLeast })),
+              padded(api.HiddenTotals.snapshot(key, { atLeast })),
+              padded(api.HiddenTotals.list(key, { atLeast })),
               api.HiddenTotals.events(key).pipe(Stream.runHead, Effect.flip),
               api.HiddenTotals.events(key, { after: 9 }).pipe(Stream.runHead, Effect.flip),
               api.HiddenTotals.watch(key).pipe(Stream.runHead, Effect.flip),
-              api.HiddenBumps.peek(key, { atLeast }).pipe(Effect.flip),
+              padded(api.HiddenBumps.peek(key, { atLeast })),
               api.HiddenBumps.list(key).pipe(Effect.flip),
               api.HiddenBumps.events(key).pipe(Stream.runHead, Effect.flip),
               api.HiddenBumps.events(key, { after: 9 }).pipe(Stream.runHead, Effect.flip),
@@ -325,8 +334,6 @@ for (const [transport, layer] of [
             { concurrency: "unbounded" },
           ).pipe(Effect.timeout("3 seconds"));
           expect(refusals.map((refusal) => refusal._tag)).toEqual(Array(11).fill("Hidden"));
-          // Never the consistency timeout's 10 seconds, nor at once.
-          expect((yield* Clock.currentTimeMillis) - started).toBeGreaterThanOrEqual(1_000);
         }
       }).pipe(Effect.scoped, Effect.provide(layer)),
     );

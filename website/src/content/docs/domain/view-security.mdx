@@ -258,7 +258,11 @@ The Layer's construction runs once and may resolve services, such as a permissio
 
 ## Read your own write
 
-A read with `atLeast` is judged on the state it finds, and again on the state after the write it waits for. So a customer whom a command just made the account's owner reads the account at once. When `validate` refuses the state the read finds, the read waits at most a second for the write. If `validate` still refuses, the refusal comes when that second has passed, so the time a read takes tells nothing about a key the caller may not read.
+A read with `atLeast` is judged on the state it finds, and again on the state after the write it waits for. `AccountSummary` holds the account's `customerId` in its own state, and its `validate` judges that field. So a customer whom a command just made the account's owner reads `AccountSummary` with that command's receipt at once.
+
+When `validate` refuses the state the read finds, the read waits at most a second for the write. If `validate` still refuses, the refusal comes when that second has passed, so the time a read takes tells nothing about a key the caller may not read.
+
+The read waits only for the view it reads. A `validate` that looks up access in another view, such as a membership view, sees that view as it is now: the caller is refused after a second until that view has the write. Keep the fact that grants access in the state of the view being read, or read again once the other view has it.
 
 ## Filter only what's allowed
 
