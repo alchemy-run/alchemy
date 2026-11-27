@@ -80,6 +80,8 @@ export const Postgres = Effect.fn(function* <E = never, R = never>(config: Postg
     listen: (channel: string) => Effect.flatMap(connected, (real) => real.listen(channel)),
     notify: (channel: string, payload: string) =>
       Effect.flatMap(connected, (real) => real.notify(channel, payload)),
+    queryTextValues: (sql: string, params?: ReadonlyArray<unknown>) =>
+      Effect.flatMap(connected, (real) => real.queryTextValues(sql, params)),
     poolStats: Effect.flatMap(Effect.orDie(connected), (real) => real.poolStats),
   }) satisfies PgClient.PgClient as PgClient.PgClient & Sql.SqlClient;
 });

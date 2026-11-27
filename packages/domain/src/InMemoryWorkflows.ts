@@ -118,9 +118,10 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
           if (result._tag === "Suspended") return Effect.void;
           execution.result = result;
           if (Exit.isFailure(result.exit)) {
-            const reasons = result.exit.cause.reasons;
-            const defect = reasons.find((reason) => reason._tag === "Die");
-            if (defect?._tag === "Die" && !reasons.some((reason) => reason._tag === "Fail")) {
+            // A defect wins over a failure, as in `Workflows.statusOf`: a run
+            // whose compensation died keeps its failure in the cause too.
+            const defect = result.exit.cause.reasons.find((reason) => reason._tag === "Die");
+            if (defect?._tag === "Die") {
               host.died(execution.workflow._tag, executionId, defect.defect);
             }
           }
