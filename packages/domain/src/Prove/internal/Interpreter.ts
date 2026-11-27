@@ -271,11 +271,20 @@ interface Kept {
   readonly entries: Array<readonly [V, V]>;
 }
 const kept = new WeakMap<object, Kept>();
-/** `new Uint8Array([1, 2])`: bytes the code writes, as the language holds them. */
+/**
+ * `new Uint8Array([1, 2])`: bytes the code writes, as the language holds them.
+ * `new Uint8Array(buffer)` views the bytes of a buffer the library made.
+ */
 const BYTES: V = {
   _tag: "Native",
   name: "Uint8Array",
   call: ([given], at) => {
+    if (given?._tag === "Host" && given.name === "ArrayBuffer")
+      return Effect.succeed({
+        _tag: "Host",
+        value: new Uint8Array(given.value as ArrayBuffer),
+        name: "bytes",
+      });
     const real = given ? Known.real(given) : { value: 0 };
     return real && (typeof real.value === "number" || Array.isArray(real.value))
       ? Effect.sync((): V => ({

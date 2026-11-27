@@ -2817,6 +2817,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const run = yield* FiberMap.makeRuntime(); return yield* Fiber.join(run(2, Effect.succeed(a))); }))`,
       `Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); const run = yield* FiberHandle.runtime(handle)(); const first = run(Effect.as(Effect.sleep(5), a)); const second = run(Effect.as(Effect.sleep(2), b)); return [yield* Fiber.join(second), Option.isSome(yield* FiberHandle.get(handle))]; }))`,
       `Effect.scoped(Effect.gen(function* () { const run = yield* FiberHandle.makeRuntime(); return yield* Fiber.join(run(Effect.succeed(a * 2))); }))`,
+      `Effect.scoped(Effect.gen(function* () { const run = yield* FiberSet.makeRuntime(); return yield* Effect.result(Fiber.join(run(even(a)))); }))`,
+      `Effect.gen(function* () { const fiber = yield* Effect.scoped(Effect.gen(function* () { const run = yield* FiberSet.makeRuntime(); return run(Effect.as(Effect.sleep(10), a)); })); return [Exit.hasInterrupts(yield* Fiber.await(fiber)), b]; })`,
+      `Effect.scoped(Effect.gen(function* () { const run = yield* FiberMap.makeRuntime(); const fiber = run("one", Effect.as(Effect.sleep(5), a), { onlyIfMissing: true }); const kept = run("one", Effect.succeed(b), { onlyIfMissing: true }); return [yield* Fiber.join(fiber), Exit.hasInterrupts(yield* Fiber.await(kept))]; }))`,
+      `Effect.gen(function* () { const fiber = yield* Effect.scoped(Effect.gen(function* () { const run = yield* FiberHandle.makeRuntime(); return run(Effect.as(Effect.sleep(10), a + b)); })); return Exit.hasInterrupts(yield* Fiber.await(fiber)); })`,
       `Effect.scoped(Effect.gen(function* () { const set = yield* FiberSet.make(); yield* FiberSet.run(set, Effect.andThen(Effect.sleep(1), even(a))); yield* FiberSet.run(set, Effect.sleep(9)); const failed = yield* Effect.result(Effect.timeoutOption(FiberSet.join(set), 5)); yield* FiberSet.clear(set); return [failed, yield* FiberSet.size(set)]; }))`,
       `Effect.gen(function* () { const seen = yield* Ref.make([]); yield* Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); yield* FiberHandle.run(handle, Effect.onInterrupt(Effect.sleep(20), () => log(seen, "first stopped"))); yield* Effect.sleep(1); yield* FiberHandle.run(handle)(Effect.andThen(Effect.sleep(2), log(seen, "second done"))); yield* FiberHandle.awaitEmpty(handle); yield* FiberHandle.run(handle, Effect.onInterrupt(Effect.sleep(20), () => log(seen, "third stopped"))); yield* Effect.sleep(1); yield* FiberHandle.clear(handle); })); return yield* Ref.get(seen); })`,
       `Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); yield* FiberHandle.run(handle, Effect.andThen(Effect.sleep(1), even(a))); return yield* Effect.result(Effect.timeoutOption(FiberHandle.join(handle), 5)); }))`,
@@ -2843,6 +2847,14 @@ const rest: ReadonlyArray<Group> = [
       `Effect.zipWith(Effect.as(Effect.sleep(2), a), Effect.as(Effect.sleep(1), b), (x, y) => x - y, { concurrent: true })`,
     ],
     unread: [
+      [
+        `Effect.map(FiberSet.makeRuntime(), (run) => Fiber.join(run(Effect.succeed(a))))`,
+        /calls FiberSet.makeRuntime outside Effect.scoped/,
+      ],
+      [
+        `Effect.map(FiberHandle.makeRuntime(), (run) => Fiber.join(run(Effect.succeed(a))))`,
+        /calls FiberHandle.makeRuntime outside Effect.scoped/,
+      ],
       // Two that end at the same moment.
       [
         `Effect.race(Effect.as(Effect.sleep(10), a), Effect.as(Effect.sleep(10), b))`,
@@ -3011,6 +3023,9 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const made = yield* Effect.scoped(Effect.gen(function* () { const files = yield* ScopedCache.make({ capacity: 2, lookup: (name) => Effect.acquireRelease(Effect.as(log(seen, "open " + name), name.length + a), () => log(seen, "close " + name)) }); const first = [yield* ScopedCache.get(files, "tea"), yield* ScopedCache.get(files, "tea"), yield* ScopedCache.has(files, "tea"), yield* ScopedCache.has(files, "milk")]; yield* ScopedCache.set(files, "milk", b); yield* ScopedCache.invalidate(files, "tea"); return [first, yield* ScopedCache.get(files, "milk"), yield* ScopedCache.size(files)]; })); return [made, yield* Ref.get(seen)]; })`,
       `Effect.gen(function* () { const made = yield* Ref.make(0); const got = yield* Effect.scoped(Effect.gen(function* () { const pool = yield* Pool.makeWithTTL({ acquire: Ref.updateAndGet(made, (n) => n + 1), min: 1, max: 2, timeToLive: "1 minute" }); return yield* Effect.scoped(Pool.get(pool)); })); return [got, yield* Ref.get(made)]; })`,
       `Effect.gen(function* () { const seen = []; const made = yield* Ref.make(0); const got = yield* Effect.scoped(Effect.gen(function* () { const pool = yield* Pool.makeWithStrategy({ acquire: Ref.updateAndGet(made, (n) => n + a), min: 1, max: 2, strategy: { run: () => Effect.void, onAcquire: (item) => Effect.sync(() => { seen.push(item.refCount); }), reclaim: () => Effect.succeed(undefined) } }); const one = yield* Pool.get(pool); const two = yield* Pool.get(pool); return [one, two]; })); return [got, seen, yield* Ref.get(made)]; })`,
+      `Effect.gen(function* () { const made = yield* Ref.make(0); const released = yield* Ref.make([]); const got = yield* Effect.scoped(Effect.gen(function* () { const pool = yield* Pool.makeWithStrategy({ acquire: Effect.acquireRelease(Ref.updateAndGet(made, (n) => n + a), (n) => log(released, n)), min: 1, max: 1, strategy: { run: () => Effect.void, onAcquire: () => Effect.void, reclaim: () => Effect.succeed(undefined) } }); const first = yield* Effect.scoped(Pool.get(pool)); const second = yield* Effect.scoped(Pool.get(pool)); return [first, second, yield* Ref.get(released)]; })); return [got, yield* Ref.get(released), yield* Ref.get(made)]; })`,
+      `Effect.scoped(Effect.gen(function* () { const pool = yield* Pool.makeWithStrategy({ acquire: even(a), min: 0, max: 1, strategy: { run: () => Effect.void, onAcquire: () => Effect.void, reclaim: () => Effect.succeed(undefined) } }); return yield* Effect.result(Effect.scoped(Pool.get(pool))); }))`,
+      `Effect.gen(function* () { const asked = []; const got = yield* Effect.scoped(Effect.gen(function* () { const pool = yield* Pool.makeWithStrategy({ acquire: Effect.succeed(a), min: 1, max: 2, strategy: { run: (pool) => Effect.void, onAcquire: () => Effect.void, reclaim: (pool) => Effect.sync(() => { asked.push(b); return undefined; }) } }); const one = yield* Effect.scoped(Pool.get(pool)); return [one, yield* Effect.scoped(Pool.get(pool))]; })); return [got, asked.length > 0]; })`,
       `Effect.gen(function* () { const held = yield* TxChunk.make(Chunk.make(a, b)); yield* TxChunk.append(held, 1); yield* TxChunk.prepend(held, 2); yield* TxChunk.appendAll(held, Chunk.make(3, 4)); yield* TxChunk.prependAll(held, Chunk.make(5)); const all = Chunk.toReadonlyArray(yield* TxChunk.get(held)); yield* TxChunk.drop(held, 1); yield* TxChunk.take(held, 5); yield* TxChunk.slice(held, 1, 4); const cut = Chunk.toReadonlyArray(yield* TxChunk.get(held)); return [all, cut, yield* TxChunk.size(held), yield* TxChunk.isEmpty(held), yield* TxChunk.isNonEmpty(held)]; })`,
       `Effect.gen(function* () { const held = yield* TxChunk.fromIterable([a, b, 1]); const other = yield* TxChunk.empty(); yield* TxChunk.set(other, Chunk.make(9)); yield* TxChunk.concat(held, other); yield* TxChunk.map(held, (n) => n * 2); yield* TxChunk.filter(held, (n) => n > a); yield* TxChunk.update(held, (chunk) => Chunk.append(chunk, a)); const size = yield* TxChunk.modify(held, (chunk) => [Chunk.size(chunk), Chunk.drop(chunk, 1)]); return [size, Chunk.toReadonlyArray(yield* TxChunk.get(held)), yield* pipe(held, TxChunk.append(b), Effect.andThen(TxChunk.size(held))), yield* Effect.tx(Effect.gen(function* () { yield* TxChunk.append(held, 7); return yield* TxChunk.size(held); }))]; })`,
       // Requests asked for together are answered together, in one call of the resolver.
@@ -3030,6 +3045,8 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const seen = yield* Ref.make([]); const Double = Request.tagged("Double"); const cache = yield* RequestResolver.asCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)), { capacity: 4 }); const first = yield* Cache.get(cache, Double({ n: 1 })); const again = yield* Cache.get(cache, Double({ n: 1 })); return [first, again, (yield* Ref.get(seen)).length]; })`,
       `Effect.gen(function* () { const batches = yield* Ref.make([]); const Double = Request.tagged("Double"); const doubled = RequestResolver.makeWith({ batchKey: (entry) => (entry.request.n > 2 ? "big" : "small"), delay: Effect.yieldNow, collectWhile: (requests) => requests.size < 3, runAll: (entries, key) => Effect.andThen(log(batches, [key, entries.length]), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n * 2 + a), { discard: true })) }); const made = yield* Effect.all([1, 2, 3].map((n) => Effect.request(Double({ n }), doubled)), { concurrency: 3 }); return [made, (yield* Ref.get(batches)).length]; })`,
       `Effect.gen(function* () { const seen = []; const Double = Request.tagged("Double"); const entry = Request.makeEntry({ request: Double({ n: 2 }), context: Context.empty(), uninterruptible: false, completeUnsafe: (exit) => { seen.push(Exit.isSuccess(exit) ? exit.value : "failed"); } }); yield* Request.succeed(entry, entry.request.n * a); yield* Request.fail(entry, "no"); return [seen, entry.uninterruptible]; })`,
+      `Effect.gen(function* () { const seen = []; const Double = Request.tagged("Double"); const entry = Request.makeEntry({ request: Double({ n: 3 }), context: Context.empty(), uninterruptible: true, completeUnsafe: (exit) => { seen.push(Exit.isFailure(exit) ? [Cause.hasFails(exit.cause), Cause.hasDies(exit.cause)] : exit.value); } }); yield* Request.fail(entry, new Odd({ n: a })); yield* Request.failCause(entry, Cause.die(b)); yield* Request.complete(entry, Exit.succeed(b)); return [seen, entry.uninterruptible, entry.request.n]; })`,
+      `Effect.gen(function* () { const seen = []; const Double = Request.tagged("Double"); const entry = Request.makeEntry({ request: Double({ n: 2 }), context: Context.empty(), uninterruptible: false, completeUnsafe: (exit) => { seen.push(Exit.isSuccess(exit) ? exit.value : "failed"); } }); yield* Request.completeEffect(entry, even(a)); return seen; })`,
     ],
     unread: [
       [
@@ -3265,6 +3282,12 @@ const rest: ReadonlyArray<Group> = [
       `Channel.runCollect(Channel.fromIteratorArray(() => (function* () { yield a; yield b; yield 3; })(), 2))`,
       `Channel.runDrain(Channel.fromIteratorArray(() => (function* () { yield a; return b; })()))`,
       `Effect.gen(function* () { const seen = []; function* counted() { seen.push(1); yield a; seen.push(2); yield b; seen.push(3); } const first = yield* Channel.runHead(Channel.fromIterator(() => counted())); return [Option.getOrUndefined(first), seen.length]; })`,
+      `Effect.map(Effect.exit(Channel.runCollect(Channel.fromIterator(() => (function* () { yield a; throw new Error("broken"); })()))), Exit.hasDies)`,
+      `Effect.gen(function* () { const seen = []; function* guarded() { try { yield a; yield b; } finally { seen.push("closed"); } } const first = yield* Channel.runHead(Channel.fromIterator(() => guarded())); return [Option.getOrUndefined(first), seen]; })`,
+      `Channel.runCollect(Channel.fromIteratorArray(() => (function* () { yield a; yield b; yield 3; yield 4; yield 5; })(), 2))`,
+      `Effect.map(Effect.exit(Channel.runCollect(Channel.fromIteratorArray(() => (function* () { yield a; if (b > 0) throw new Error("broken"); yield b; })(), 4))), (exit) => [Exit.hasDies(exit), Exit.isSuccess(exit) ? exit.value : []])`,
+      `Effect.map(Channel.fromIterable([["a", "b"], ["c"]]).pipe(Channel.pipeTo(Channel.encodeText()), Channel.pipeTo(Channel.decodeText()), Channel.runCollect), (all) => [all, a])`,
+      `Effect.map(Channel.mkUint8Array(Channel.fromIterable([])), (all) => [all.length, a])`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* Channel.toPubSubTake(Channel.fromEffect(Effect.as(Effect.sleep(2), [a, b])), { capacity: 4 }); const sub = yield* PubSub.subscribe(hub); const first = yield* PubSub.take(sub); const second = yield* PubSub.take(sub); return [first, Exit.isExit(second) && Exit.isSuccess(second)]; }))`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const fiber = yield* Effect.forkChild(Channel.runCollect(Channel.fromPubSubTake(hub))); yield* Effect.sleep(1); yield* PubSub.publish(hub, [a, b]); yield* PubSub.publish(hub, [b]); yield* PubSub.publish(hub, Exit.succeed(undefined)); return yield* Fiber.join(fiber); }))`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const fiber = yield* Effect.forkChild(Effect.exit(Channel.runCollect(Channel.fromPubSubTake(hub)))); yield* Effect.sleep(1); yield* PubSub.publish(hub, [a]); yield* PubSub.publish(hub, Exit.fail("no")); const ended = yield* Fiber.join(fiber); return Exit.isFailure(ended); }))`,
@@ -3661,6 +3684,14 @@ const rest: ReadonlyArray<Group> = [
     ],
     unread: [
       [
+        `Effect.succeed(Context.addUnsafe(Context.empty(), "test/Other", { percent: a }))`,
+        /calls Context.addUnsafe with a key of no service the code has read/,
+      ],
+      [
+        `Effect.succeed(Context.makeUnsafe(new Map([["test/Other", { percent: a }]])))`,
+        /calls Context.makeUnsafe with a key of no service the code has read/,
+      ],
+      [
         `Effect.gen(function* () { const rate = yield* Rate; return rate.percent + a; })`,
         /yields .*a service that nothing around it provides/,
       ],
@@ -3860,6 +3891,10 @@ const rest: ReadonlyArray<Group> = [
       `Stream.make("ab", a > 1 ? "c" : "d").pipe(Stream.encodeText, Stream.decodeText(), Stream.runCollect)`,
       `Effect.map(Stream.mkUint8Array(Stream.make(new Uint8Array([1, 2]), new Uint8Array([a > 1 ? 3 : 4]))), (all) => [...all])`,
       `Effect.map(Stream.mkArrayBuffer(Stream.make(new Uint8Array([1, 2]), new Uint8Array([3]))), (buffer) => buffer.byteLength)`,
+      `Effect.map(Stream.mkArrayBuffer(Stream.make(new Uint8Array([a > 1 ? 7 : 8]), new Uint8Array([]))), (buffer) => [...new Uint8Array(buffer)])`,
+      `Effect.map(Stream.runCollect(Stream.limitBytes(Stream.make(new Uint8Array([1, 2]), new Uint8Array([3, 4])), 4, () => Stream.fail("too big"))), (all) => [all.length, a])`,
+      `Stream.runCollect(Stream.decodeText(Stream.make(new Uint8Array([195]), new Uint8Array([a > 1 ? 169 : 168]))))`,
+      `Effect.map(Stream.runCollect(Stream.encodeText(Stream.make("", a > 1 ? "€" : "$"))), (all) => all.map((each) => each.length))`,
       `Effect.map(Stream.runCollect(Stream.limitBytes(Stream.make(new Uint8Array([1, 2]), new Uint8Array([3, 4])), a > 1 ? 3 : 10, () => Stream.make(new Uint8Array([9])))), (all) => all.map((each) => [...each]))`,
       `Effect.map(Stream.make(new Uint8Array([1, 2]), new Uint8Array([3, 4])).pipe(Stream.limitBytes(2, () => Stream.fail("too big")), Stream.runCollect, Effect.flip), (error) => [error])`,
       `Stream.make(a, b, 3, 4).pipe(Stream.groupByKey((n) => (n % 2 === 0 ? 0 : 1)), Stream.mapEffect(([key, group]) => Effect.map(Stream.runCollect(group), (all) => [key, all])), Stream.runCollect, Effect.map((all) => [...all].sort(([x], [y]) => x - y)))`,
@@ -3895,6 +3930,9 @@ const rest: ReadonlyArray<Group> = [
       `Stream.runCollect(Stream.fromIteratorSucceed((function* () { yield a; yield b; yield 3; })()))`,
       `Effect.gen(function* () { function* counting() { let n = a; while (true) yield n++; } return yield* Stream.runCollect(Stream.take(Stream.fromIteratorSucceed(counting(), 1), 3)); })`,
       `Effect.gen(function* () { const seen = []; function* counted() { seen.push(1); yield a; seen.push(2); yield b; } return yield* Stream.runCollect(Stream.mapEffect(Stream.fromIteratorSucceed(counted(), 1), (n) => Effect.sync(() => [n, seen.length]))); })`,
+      `Effect.map(Effect.exit(Stream.runCollect(Stream.fromIteratorSucceed((function* () { yield a; throw new Error("broken"); })()))), Exit.hasDies)`,
+      `Effect.gen(function* () { const seen = []; function* guarded() { try { yield a; yield b; yield 3; } finally { seen.push("closed"); } } const got = yield* Stream.runCollect(Stream.take(Stream.fromIteratorSucceed(guarded(), 1), 1)); return [got, seen]; })`,
+      `Stream.runCollect(Stream.fromIteratorSucceed((function* () {})()))`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* pipe(paced(2, a), Stream.concat(Stream.fail("no")), Stream.toPubSubTake({ capacity: "unbounded" })); return yield* Effect.flip(Stream.runCollect(Stream.fromPubSubTake(hub))); }))`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* Stream.toPubSubTake(paced(2, a, b), { capacity: 4 }); const sub = yield* PubSub.subscribe(hub); const first = yield* PubSub.take(sub); const second = yield* PubSub.take(sub); const third = yield* PubSub.take(sub); return [first, second, Exit.isExit(third) && Exit.isSuccess(third)]; }))`,
     ],
@@ -4076,6 +4114,11 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const step = yield* Schedule.toStep(Schedule.cron("*/5 * * * *", "UTC")); const [first] = yield* step(1000, b); const [second] = yield* step(600000, b); return [Duration.toMillis(first), Duration.toMillis(second), a]; })`,
       `Effect.gen(function* () { const step = yield* Schedule.toStepWithSleep(Schedule.spaced("5 millis")); const before = yield* Clock.currentTimeMillis; const out = yield* step(a); const after = yield* Clock.currentTimeMillis; return [out, after - before]; })`,
       `Effect.gen(function* () { const step = yield* Schedule.toStepWithMetadata(Schedule.recurs(3)); yield* step(a); const meta = yield* step(b); return [meta.output, meta.attempt, meta.input, Duration.toMillis(meta.duration)]; })`,
+      `Effect.gen(function* () { const step = yield* Schedule.toStepWithSleep(Schedule.recurs(1)); const first = yield* step(a); const second = yield* Pull.catchDone(step(b), (out) => Effect.succeed(["done", out])); return [first, second]; })`,
+      `Effect.gen(function* () { const step = yield* Schedule.toStepWithMetadata(Schedule.spaced("3 millis")); const first = yield* step(a); const second = yield* step(b); return [first.attempt, second.attempt, second.elapsed - first.elapsed, second.input]; })`,
+      `Effect.gen(function* () { const step = yield* Schedule.toStep(Schedule.exponential("10 millis")); const one = yield* step(0, a); const two = yield* step(10, a); return [Duration.toMillis(one[1]), Duration.toMillis(two[1]), b]; })`,
+      `Effect.gen(function* () { const schedule = Schedule.fromStep(Effect.succeed((now, input) => (input > 2 ? Effect.fail(new Odd({ n: input })) : Effect.succeed([input, Duration.millis(1)])))); const runs = yield* Ref.make(a); return yield* Effect.flip(Effect.repeat(Ref.updateAndGet(runs, (n) => n + 1), schedule)); })`,
+      `Effect.gen(function* () { const seen = []; const schedule = Schedule.fromStepWithMetadata(Effect.succeed((meta) => { seen.push([meta.attempt, meta.input]); return meta.attempt > 1 ? Cause.done(b) : Effect.succeed([meta.attempt, Duration.millis(1)]); })); const out = yield* Effect.retry(Effect.fail(new Odd({ n: a })), schedule).pipe(Effect.flip); return [out.n, seen]; })`,
       `Effect.gen(function* () { const runs = yield* Ref.make(0); let count = 0; const schedule = Schedule.fromStep(Effect.sync(() => (now, input) => (count >= 2 ? Cause.done(count + a) : Effect.succeed([count++, Duration.millis(1)])))); const out = yield* Effect.repeat(Ref.update(runs, (n) => n + 1), schedule); return [out, yield* Ref.get(runs)]; })`,
       `Effect.gen(function* () { const runs = yield* Ref.make(0); const schedule = Schedule.fromStepWithMetadata(Effect.succeed((meta) => (meta.attempt > 2 ? Cause.done(meta.attempt * a) : Effect.succeed([meta.attempt, Duration.millis(2)])))); const out = yield* Effect.repeat(Ref.update(runs, (n) => n + 1), schedule); return [out, yield* Ref.get(runs)]; })`,
       `Effect.gen(function* () { const queue = yield* Queue.unbounded(); yield* Queue.offerAll(queue, [a, b]); Queue.flushUnsafe(queue); return yield* Queue.size(queue); })`,
@@ -4090,6 +4133,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const ref = yield* TxRef.make(Chunk.make(a, b)); const held = TxChunk.makeUnsafe(ref); yield* TxChunk.append(held, 3); const seen = yield* TxRef.get(ref); yield* TxRef.set(ref, Chunk.make(9)); return [Chunk.toReadonlyArray(seen), Chunk.toReadonlyArray(yield* TxChunk.get(held)), TxChunk.isTxChunk(held)]; })`,
     ],
     unread: [
+      [
+        `Effect.gen(function* () { const step = yield* Schedule.toStep(Schedule.recurs(2)); return yield* step(a, b); })`,
+        /steps a schedule at a time the prover cannot see/,
+      ],
       [
         `Effect.repeat(Effect.succeed(a), Schedule.cron("0 0 * * *"))`,
         /calls Schedule.cron without a time zone: it is read in the machine's own/,
@@ -4187,6 +4234,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const console = yield* Console.Console; console.log("x", a); return a + b; })`,
       `Effect.gen(function* () { const seen = []; yield* Effect.repeat(Effect.map(Schedule.CurrentMetadata, (meta) => { seen.push([meta.attempt, meta.input]); }), Schedule.recurs(2)); return [seen, a]; })`,
       `Effect.gen(function* () { const seen = []; const out = yield* Effect.scoped(Effect.gen(function* () { const scope = yield* Scope.Scope; yield* Scope.addFinalizer(scope, Effect.sync(() => { seen.push(a); })); return seen.length; })); return [out, seen]; })`,
+      `Effect.gen(function* () { const seen = []; yield* Effect.scoped(Effect.gen(function* () { const scope = yield* Scope.Scope; yield* Scope.addFinalizer(scope, Effect.sync(() => { seen.push(a); })); yield* Scope.addFinalizer(scope, Effect.sync(() => { seen.push(b); })); })); return seen; })`,
+      `Effect.gen(function* () { const clock = yield* Clock.Clock; const before = clock.currentTimeMillisUnsafe(); yield* clock.sleep(Duration.millis(5)); return [clock.currentTimeMillisUnsafe() - before, a]; })`,
+      `Effect.gen(function* () { const seen = []; yield* Effect.repeat(Effect.map(Schedule.CurrentMetadata, (meta) => { seen.push([meta.attempt, meta.elapsed]); }), Schedule.spaced("2 millis").pipe(Schedule.upTo({ times: 2 }))); return [seen, b]; })`,
+      `Effect.gen(function* () { const console = yield* Console.Console; console.error("y", a); console.warn(b); return a; })`,
       `Effect.scoped(Effect.gen(function* () { yield* Console.assert(true, "fine"); yield* Console.count("n"); yield* Console.countReset("n"); yield* Console.dir({ n: 1 }); yield* Console.dirxml("x"); yield* Console.group({ label: "g" }); yield* Console.table([1]); yield* Console.time("t"); yield* Console.timeLog("t"); yield* Console.clear; yield* Console.trace("here"); return a; }))`,
       `Effect.succeed(b).pipe(Console.withGroup({ label: "g" }), Console.withTime("t"), Effect.map((n) => n + a))`,
       `Effect.gen(function* () { const ref = yield* Ref.make(a); yield* Ref.updateSome(ref, (n) => (n > 0 ? Option.some(n * 2) : Option.none())); const got = yield* Ref.updateSomeAndGet(ref, (n) => Option.some(n + 1)); const before = yield* Ref.getAndUpdateSome(ref, () => Option.none()); return [got, before, yield* Ref.get(ref)]; })`,

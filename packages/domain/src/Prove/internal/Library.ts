@@ -312,6 +312,8 @@ export const make = (host: Host) => {
       currentTimeNanos: nanos,
       currentTimeMillisUnsafe: now(millis, "clock.currentTimeMillisUnsafe"),
       currentTimeNanosUnsafe: now(nanos, "clock.currentTimeNanosUnsafe"),
+      // A sleep on the clock is a sleep on the handler's timeline, as Effect.sleep is.
+      sleep: native("clock.sleep", (args, at) => models["effect/Effect:sleep"]!(args, at)),
     });
   };
   /** `yield* Clock.Clock`: the clock a handler is given. */

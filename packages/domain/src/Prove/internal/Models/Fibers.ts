@@ -205,12 +205,13 @@ export const make = (
             ? Result.isSuccess(output)
               ? Brands.success(outputOf(output.success))
               : Brands.failure(outputOf(output.failure))
-            : isValue(output)
-              ? output
-              : Value.undef;
+            : valueOf(output);
 
   const isValue = (value: unknown): value is V =>
     typeof value === "object" && value !== null && "_tag" in value && !Effect.isEffect(value);
+  /** What the library hands a schedule: a retry's input is the failure, which the code sees as its error. */
+  const valueOf = (input: unknown): V =>
+    input instanceof Value.Rejected ? input.rejection : isValue(input) ? input : Value.undef;
 
   // ---- An effect of the code that the library runs.
 
@@ -333,7 +334,7 @@ export const make = (
 
   /** What a schedule's step is told of the turn it is on, as the code reads it. */
   const metadataOf = (meta: Schedule.InputMetadata<unknown>): Record<string, V> => ({
-    input: isValue(meta.input) ? meta.input : Value.undef,
+    input: valueOf(meta.input),
     attempt: Value.num(meta.attempt),
     start: Value.num(meta.start),
     now: Value.num(meta.now),
@@ -5774,7 +5775,7 @@ export const make = (
     ),
     "effect/Schedule:fromStep": fromStep(
       "Schedule.fromStep",
-      (fn, site) => (now, input) => host.call(fn, [Value.num(now), input as V], site),
+      (fn, site) => (now, input) => host.call(fn, [Value.num(now), valueOf(input)], site),
     ),
     "effect/Schedule:fromStepWithMetadata": fromStep(
       "Schedule.fromStepWithMetadata",
