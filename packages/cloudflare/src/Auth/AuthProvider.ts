@@ -14,6 +14,7 @@ import { deviceOAuth } from "alchemy/Auth/BrowserOAuth";
 import { CredentialsStore, displayRedacted } from "alchemy/Auth/Credentials";
 import { getEnvRedacted, getEnvRequired, mapPromptCancellation } from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
+import { refreshAndSave } from "alchemy/Auth/Refresh";
 import {
   storedSecret,
   storedValueText,
@@ -437,29 +438,28 @@ export const CloudflareAuth = AuthProviderLayer<
               const fresh =
                 creds.expires > now + 10_000
                   ? creds
-                  : yield* client.refresh(creds).pipe(
-                      Effect.mapError((e) =>
-                        NeedsReauth.make({
-                          provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
-                          profile: profileName,
-                          message: `Cloudflare OAuth refresh failed. ${reauth}`,
-                          cause: e,
-                        }),
+                  : yield* refreshAndSave(
+                      client.refresh(creds).pipe(
+                        Effect.mapError((e) =>
+                          NeedsReauth.make({
+                            provider: CLOUDFLARE_AUTH_PROVIDER_NAME,
+                            profile: profileName,
+                            message: `Cloudflare OAuth refresh failed. ${reauth}`,
+                            cause: e,
+                          }),
+                        ),
                       ),
+                      (fresh) =>
+                        updateConfig?.({
+                          method: "oauth",
+                          accountId,
+                          clientId: fresh.clientId,
+                          access: Redacted.value(fresh.access),
+                          refresh: Redacted.value(fresh.refresh),
+                          expires: fresh.expires,
+                          scopes: fresh.scopes,
+                        }) ?? Effect.void,
                     );
-              if (fresh !== creds) {
-                yield* (
-                  updateConfig?.({
-                    method: "oauth",
-                    accountId,
-                    clientId: fresh.clientId,
-                    access: Redacted.value(fresh.access),
-                    refresh: Redacted.value(fresh.refresh),
-                    expires: fresh.expires,
-                    scopes: fresh.scopes,
-                  }) ?? Effect.void
-                );
-              }
               return {
                 type: "oauth" as const,
                 accessToken: fresh.access,
@@ -612,26 +612,27 @@ export const CloudflareAuth = AuthProviderLayer<
                           return yield* Interaction.info(
                             "Cloudflare: refreshing OAuth credentials...",
                           ).pipe(
-                            Effect.andThen(OAuthClient.refresh(currentCredentials)),
-                            Effect.flatMap((credentials) => {
-                              const config = {
-                                ...current,
-                                clientId: credentials.clientId,
-                                access: Redacted.value(credentials.access),
-                                refresh: Redacted.value(credentials.refresh),
-                                expires: credentials.expires,
-                                scopes: credentials.scopes,
-                              };
-                              // Saved here, under the lock, when the caller can
-                              // take it; otherwise handed back for the caller to save.
-                              const unsaved: Effect.Effect<typeof config | undefined, AuthError> =
-                                updateConfig === undefined
-                                  ? Effect.succeed(config)
-                                  : Effect.as(updateConfig(config), undefined);
-                              return unsaved.pipe(
-                                Effect.map((config) => ({ type: "refreshed" as const, config })),
-                              );
-                            }),
+                            Effect.andThen(
+                              refreshAndSave(
+                                OAuthClient.refresh(currentCredentials).pipe(
+                                  Effect.map((credentials) => ({
+                                    ...current,
+                                    clientId: credentials.clientId,
+                                    access: Redacted.value(credentials.access),
+                                    refresh: Redacted.value(credentials.refresh),
+                                    expires: credentials.expires,
+                                    scopes: credentials.scopes,
+                                  })),
+                                ),
+                                (config) => updateConfig?.(config) ?? Effect.void,
+                              ),
+                            ),
+                            // Saved above, under the lock, when the caller can take
+                            // it; otherwise handed back for the caller to save.
+                            Effect.map((config) => ({
+                              type: "refreshed" as const,
+                              config: updateConfig === undefined ? config : undefined,
+                            })),
                             Effect.tap(() =>
                               Interaction.success("Cloudflare: OAuth credentials refreshed."),
                             ),

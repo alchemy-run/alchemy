@@ -32,6 +32,9 @@ export class OAuthError extends Data.TaggedError("OAuthError")<{
   }
 }
 
+/** How long a token refresh may take before it fails. */
+const REFRESH_TIMEOUT = Duration.seconds(30);
+
 /** A request to the authorization server could not be sent or answered. */
 export class OAuthNetworkError extends Data.TaggedError("OAuthNetworkError")<{
   endpoint: string;
@@ -305,7 +308,12 @@ export interface OAuthClient {
     OAuthRequestError | DeviceAuthorizationDenied | DeviceAuthorizationExpired,
     never
   >;
-  /** Refresh expired OAuth credentials with the stored refresh token. */
+  /**
+   * Refresh expired OAuth credentials with the stored refresh token. Most
+   * servers rotate the refresh token, so the old one is spent once the request
+   * is sent: save the result with `refreshAndSave` from `alchemy/Auth/Refresh`.
+   * Fails with `OAuthNetworkError` when the server doesn't answer in time.
+   */
   readonly refresh: (
     credentials: OAuthCredentials,
   ) => Effect.Effect<OAuthCredentials, OAuthRequestError, never>;
@@ -361,13 +369,26 @@ const TokenErrorResponse = Schema.Struct({
   error_description: Schema.optional(Schema.String),
 });
 
+/**
+ * Token-endpoint request parameters. Sensitive values (`refresh_token`,
+ * `client_secret`, `code`, `code_verifier`) are passed as {@link Redacted} so
+ * they stay redacted in tracing spans and logs while still being sent
+ * unwrapped on the wire.
+ */
+type OAuthParams = Record<string, string | Redacted.Redacted<string>>;
+
 export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
   const provideHttp = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
     effect.pipe(Effect.provide(FetchHttpClient.layer));
-  const clientAuthParams = (): Record<string, string> =>
-    spec.auth.kind === "clientSecret"
-      ? { client_secret: Redacted.value(spec.auth.clientSecret) }
-      : {};
+  // Secrets stay wrapped in `Redacted` all the way into the URL/body params.
+  // `UrlParams` sends a Redacted value unwrapped on the wire but keeps it
+  // redacted in inspection, errors, and — crucially — tracing spans. With the
+  // `query` transport the token-endpoint URL is recorded as an `http.client`
+  // span's `url.full`/`url.query` attributes and exported by the CLI's OTLP
+  // tracer; a plain-string `refresh_token`/`client_secret`/`code` there would
+  // ship the live credential to the telemetry collector.
+  const clientAuthParams = (): OAuthParams =>
+    spec.auth.kind === "clientSecret" ? { client_secret: spec.auth.clientSecret } : {};
 
   /**
    * POST form params to an authorization-server endpoint and decode the 2xx
@@ -376,7 +397,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
    */
   const postForm = Effect.fn(function* <A>(
     endpoint: string,
-    params: Record<string, string>,
+    params: OAuthParams,
     success: Schema.ConstraintDecoder<A, never>,
     transport: "body" | "query" = "body",
   ) {
@@ -411,10 +432,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     );
   });
 
-  const tokenRequest = Effect.fn(function* (
-    params: Record<string, string>,
-    previous?: OAuthCredentials,
-  ) {
+  const tokenRequest = Effect.fn(function* (params: OAuthParams, previous?: OAuthCredentials) {
     const endpoint = spec.endpoints.token;
     const json = yield* postForm(endpoint, params, TokenResponse, spec.tokenTransport);
     const refresh =
@@ -485,11 +503,13 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     const { redirectUri } = yield* browserSpec;
     return yield* tokenRequest({
       grant_type: "authorization_code",
-      code,
+      code: Redacted.make(code),
       client_id: spec.clientId,
       redirect_uri: redirectUri,
       ...clientAuthParams(),
-      ...(authorization?.verifier === undefined ? {} : { code_verifier: authorization.verifier }),
+      ...(authorization?.verifier === undefined
+        ? {}
+        : { code_verifier: Redacted.make(authorization.verifier) }),
     });
   });
 
@@ -588,11 +608,24 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     return tokenRequest(
       {
         grant_type: "refresh_token",
-        refresh_token: Redacted.value(credentials.refresh),
+        refresh_token: credentials.refresh,
         client_id: spec.clientId,
         ...clientAuthParams(),
       },
       credentials,
+    ).pipe(
+      // Callers save the rotated token through refreshAndSave, which waits on
+      // this request, so it must end on its own.
+      Effect.timeoutOrElse({
+        duration: REFRESH_TIMEOUT,
+        orElse: () =>
+          Effect.fail(
+            new OAuthNetworkError({
+              endpoint: spec.endpoints.token,
+              cause: new Error(`no response within ${Duration.format(REFRESH_TIMEOUT)}`),
+            }),
+          ),
+      }),
     );
   });
 
@@ -603,7 +636,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     const request = HttpClientRequest.post(endpoint).pipe(
       HttpClientRequest.setHeader("Accept", "application/json"),
       HttpClientRequest.bodyUrlParams({
-        token: Redacted.value(credentials.refresh),
+        token: credentials.refresh,
         token_type_hint: "refresh_token",
         client_id: spec.clientId,
         ...clientAuthParams(),

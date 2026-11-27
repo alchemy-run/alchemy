@@ -7,16 +7,17 @@ import {
   init,
   type Message,
   type Model,
+  type Sessions,
   subscriptions,
   update,
 } from "../web/src/Board.ts";
 
-type Client = (typeof WebApi)["Client"]["Identifier"];
+type Client = (typeof WebApi)["Client"]["Identifier"] | Sessions;
 
 /**
  * Run the web page without a browser: its own `init`, `update`, Commands and
- * Subscriptions, against whatever board the `WebApi` client reaches. Only
- * the view is left out. It stops when the scope closes.
+ * Subscriptions, against whatever board the `WebApi` client reaches and
+ * whatever sessions `Sessions` reads. Only the view is left out. It stops when the scope closes.
  */
 export const open = Effect.fn(function* (flags: Flags) {
   const started = init(flags);

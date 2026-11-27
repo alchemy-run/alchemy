@@ -14,6 +14,7 @@ import { targetId } from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
 import type * as Rejection from "./Rejection.ts";
 import * as Telemetry from "./Telemetry.ts";
+import { memo, type Thunk } from "./Thunk.ts";
 
 /** The hidden payload field that carries a run's cause. */
 const CAUSE = "__cause";
@@ -276,21 +277,11 @@ export const make = <
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<K, I, R, Rejects>,
+  definition: Thunk<Definition<K, I, R, Rejects>>,
   annotations: Annotations = {},
 ): SagaClass<Name, K, I, R, Rejects> => {
-  const rejects = definition.rejects ?? [];
-  const workflow = Workflow.make(name, {
-    // The run's cause rides along, so every replay links back to it and keeps its flow.
-    payload: {
-      key: definition.key,
-      ...definition.input,
-      [CAUSE]: Schema.optional(RunCause),
-    } as unknown as PayloadFields<K, I>,
-    idempotencyKey: (payload) => (payload as { readonly key: string }).key,
-    success: (definition.result ? Schema.Struct(definition.result) : Schema.Void) as Schema.Top,
-    error: (rejects.length > 0 ? Schema.Union(rejects) : Schema.Never) as Schema.Top,
-  });
+  const given = memo(definition);
+  const workflowOf = memo(() => makeWorkflow(name, given()));
   const Tag = Context.Service<SagaKey<Name>, Client<unknown, unknown, unknown, unknown>>()(
     `alchemy/Domain/Saga/${name}`,
   );
@@ -301,11 +292,18 @@ export const make = <
     static readonly kind = "Saga" as const;
     static readonly annotations: Annotations = annotations;
     static readonly sagaName: Name = name;
-    static readonly definition = definition;
-    static readonly workflow = workflow;
+    static get definition() {
+      return given();
+    }
+    static get workflow() {
+      return workflowOf();
+    }
     static readonly Implementation = Implementation;
-    static readonly withCompensation = workflow.withCompensation;
+    static get withCompensation() {
+      return workflowOf().withCompensation;
+    }
     static toLayer<E, Req>(build: Effect.Effect<Handler<any, any, any, any>, E, Req>) {
+      const workflow = workflowOf();
       const register = Layer.unwrap(
         // Built as a term of its own: a plan lists what the saga binds.
         Effect.map(build.pipe(framed("Saga", name, { hosted: false })), (handle) =>
@@ -324,6 +322,31 @@ export const make = <
       return Layer.merge(register, Layer.succeed(Implementation, true as const));
     }
   } as unknown as SagaClass<Name, K, I, R, Rejects>;
+};
+
+/** The workflow a saga runs as, made from its definition. */
+const makeWorkflow = <
+  const Name extends string,
+  K extends KeySchema,
+  const I extends Fields,
+  const R extends Fields | undefined,
+  const Rejects extends ReadonlyArray<Rejection.Any>,
+>(
+  name: Name,
+  definition: Definition<K, I, R, Rejects>,
+) => {
+  const rejects = definition.rejects ?? [];
+  return Workflow.make(name, {
+    // The run's cause rides along, so every replay links back to it and keeps its flow.
+    payload: {
+      key: definition.key,
+      ...definition.input,
+      [CAUSE]: Schema.optional(RunCause),
+    } as unknown as PayloadFields<K, I>,
+    idempotencyKey: (payload) => (payload as { readonly key: string }).key,
+    success: (definition.result ? Schema.Struct(definition.result) : Schema.Void) as Schema.Top,
+    error: (rejects.length > 0 ? Schema.Union(rejects) : Schema.Never) as Schema.Top,
+  });
 };
 
 /** What a saga's implementation runs for each run: its key and input. */

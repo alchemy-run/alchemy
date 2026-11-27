@@ -70,7 +70,7 @@ test("a new issue is on screen before the board answers", () =>
       expect(threadOf(model).status).toBe("working");
     }),
     // The agent has it: from here the board's own status is what shows.
-    message(Message.ReceivedItem({ issueId: mine, entry: user(1, started(mine)), cursor: 1 })),
+    message(Message.ReceivedItems({ issueId: mine, entries: [user(1, started(mine))], cursor: 1 })),
     model((model) => {
       expect(model.pending).toEqual([]);
     }),
@@ -127,7 +127,11 @@ test("a reply is on screen at once, and gives way to the board's copy", () =>
       expect(threadOf(model).status).toBe("working");
     }),
     message(
-      Message.ReceivedItem({ issueId: first, entry: user(3, replied("Any update?")), cursor: 1 }),
+      Message.ReceivedItems({
+        issueId: first,
+        entries: [user(3, replied("Any update?"))],
+        cursor: 1,
+      }),
     ),
     // The agent has it. From here the board's own status is what shows.
     model((model) => {
@@ -168,11 +172,15 @@ test("opening an issue shows what the page knows of it at once", () =>
         Option.some("First"),
       );
     }),
-    message(Message.ReceivedItem({ issueId: first, entry: user(2, replied("hello")), cursor: 1 })),
+    message(
+      Message.ReceivedItems({ issueId: first, entries: [user(2, replied("hello"))], cursor: 1 }),
+    ),
     message(Message.ClickedIssue({ issueId: second })),
     shown,
     // An entry of the first issue that was on its way is filed under the first.
-    message(Message.ReceivedItem({ issueId: first, entry: user(4, replied("late")), cursor: 2 })),
+    message(
+      Message.ReceivedItems({ issueId: first, entries: [user(4, replied("late"))], cursor: 2 }),
+    ),
     model((model) => {
       expect(threadOf(model).items).toEqual([]);
     }),

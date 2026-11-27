@@ -1,44 +1,66 @@
 # Connecting a Domain model
 
+## Declare the process
+
+A process is a member of no model. Declare it by name, in a file of its own beside the tools. It works with a model, or several, through what its prose mentions.
+
+```typescript
+// src/Assistant.process.ts
+import * as AI from "@alchemy.run/ai";
+import { CurrentActor } from "./CurrentActor.ts";
+
+export class Assistant extends AI.Process<Assistant>()("Assistant", { as: [CurrentActor] }) {}
+```
+
+`as` on the declaration says what a session must be started as. Leave it out when nothing the prose mentions is behind a middleware.
+
+More: [Declare the process](https://alchemy.run/ai/domain#declare-the-process).
+
 ## Mention commands and views through the model
 
-A model's commands, aggregates and views are members of its class.
+A model's commands, aggregates and views are members of its class. The prose is a Layer, beside the name in the process's file:
 
 ```typescript
 // src/Assistant.process.ts
 import * as AI from "@alchemy.run/ai";
 import { Bank } from "./Bank/Bank.model.ts";
+import { CurrentActor } from "./CurrentActor.ts";
 
-export class Assistant extends AI.Process<Assistant>()("Assistant", {
+export class Assistant extends AI.Process<Assistant>()("Assistant", { as: [CurrentActor] }) {}
+
+export const AssistantLive = Assistant.toLayer({
   description: "Help one customer with their account.",
 })`
-  Take a deposit with ${Bank.DepositMoney}. Pay money out with ${Bank.WithdrawMoney}.
-  Read the balance with ${Bank.AccountSummary}.
-` {}
+  Take a deposit with ${() => Bank.DepositMoney}. Pay money out with ${() => Bank.WithdrawMoney}.
+  Read the balance with ${() => Bank.AccountSummary}.
+`;
 ```
 
-Each is a tool (`Bank_DepositMoney_send`, `Bank_AccountSummary_get`). The process requires the hosted model: provide `Bank.layer(...)` where it runs. Nothing unmentioned is reachable. `Bank.Account` is every command the aggregate takes; prefer single commands.
+Each is a tool (`Bank_DepositMoney_send`, `Bank_AccountSummary_get`). `AssistantLive` requires the bank: provide it the bank's Layer where the process is hosted (see [running.md](running.md)). Nothing unmentioned is reachable. `Bank.Account` is every command the aggregate takes; prefer single commands.
 
 More: [Mention a command or a view](https://alchemy.run/ai/domain#mention-a-command-or-a-view).
+
+## Break the cycle with thunks
+
+The prose imports the model, the model imports its policy, and the policy imports the process: a cycle. Whichever file loads first would read another's class before it exists. A thunk is read when the declaration is first used, once every file has loaded:
+
+- each mention in the prose: `${() => Bank.DepositMoney}`;
+- the model's members: `Domain.Model("Bank", () => ({ ... }))`.
+
+A declaration's type is the same with a thunk. Use one only to break a cycle: props given directly are checked as the file loads.
+
+More: [Break the cycle with thunks](https://alchemy.run/ai/domain#break-the-cycle-with-thunks), [Break an import cycle](https://alchemy.run/domain/model#break-an-import-cycle).
 
 ## Say who a session acts as
 
 A middleware that provides request context (who is calling) is answered by `as`. The types require it.
 
 ```typescript
-// in the Durable Object that runs the session
-chat: Effect.fn(function* (customer: Actor, text: string) {
-  yield* assistant.start(customer.customerId, { as: CurrentActor.context(customer) });
-  const reply = yield* assistant.get(customer.customerId).prompt(text);
-  return reply.text;
-}, Effect.orDie),
-```
-
-```typescript
 // in the Worker: authenticate the person as for any other route
 const customer = actorOf(request.headers);
 if (customer === undefined) return HttpServerResponse.text("sign in", { status: 401 });
-const answer = yield* assistants.getByName(customer.customerId).chat(customer, yield* request.text);
+yield* assistant.start(customer.customerId, { as: CurrentActor.context(customer) });
+const reply = yield* assistant.get(customer.customerId).prompt(yield* request.text);
 ```
 
 `as` is stored beside the session and never shown to the model. The model's own rules (`decide`, `validate`) then apply to the session as to that person.
@@ -60,11 +82,15 @@ More: [Answer a middleware that checks something](https://alchemy.run/ai/domain#
 
 ## Prove what a session can't break
 
-State rules on the aggregate and verify them. A proved rule holds for every state and command, whoever sends it.
+State rules on the aggregate and verify them. A proved rule holds for every state and command, whoever sends it. `AI.scripted` plays the process in the story; one that does nothing is enough, since the prover sends a session's commands itself.
 
 ```typescript
 // test/Board.verify.test.ts
-const story = Story.make(Board, { layer: IssueWorkLive, stub: [Triager] });
+const TriageIdle = AI.scripted(Triage, Effect.succeed(() => Effect.succeed("")));
+const story = Story.make(Board, {
+  layer: IssueWorkLive,
+  host: (board) => AI.layerInMemory(TriageIdle.pipe(Layer.provide(board))),
+});
 
 it.effect(
   "no command, from a person or a session, breaks the board's rules",
@@ -80,98 +106,47 @@ it.effect(
 
 More: [Prove what a session can't break](https://alchemy.run/ai/domain#prove-what-a-session-cant-break), [Verifying models](https://alchemy.run/domain/verifying-models).
 
-## Let the model ask for work
+## Let a policy hand it work
 
-The model declares what it asks for as an external system. A policy calls it; it never names a process and never waits.
-
-```typescript
-// src/Board/Triager.external.ts
-export class Triager extends Domain.ExternalSystem("Triager", {
-  start: { args: { issue: IssueId } },
-  tell: { args: { issue: IssueId, text: Schema.String, id: Schema.String } },
-}) {}
-```
+A policy decides when there is work, and holds the process's client: its Layer requires the process, and so does the model's. It never waits: `send` returns once the message is stored. Use the id of what the session works on as its key, and a `requestId`, since a policy can run twice for one event.
 
 ```typescript
 // src/Board/IssueWork.policy.ts
 export const IssueWorkLive = IssueWork.toLayer(
   Effect.gen(function* () {
-    const triager = yield* Triager;
+    const triage = yield* Triage;
     return Effect.fn(function* ({ source, event }) {
+      const session = triage.get(source.id);
       yield* Match.valueTags(event, {
-        IssueReported: () => triager.start({ issue: source.id }),
-        IssueCommented: ({ body, commentId }) =>
-          triager.tell({ issue: source.id, text: body, id: commentId }),
-      });
+        IssueReported: () =>
+          session.send(`The issue is ${source.id}.`, { requestId: "start" }),
+        IssueCommented: ({ body, commentId }) => session.send(body, { requestId: commentId }),
+      }).pipe(Effect.orDie);
     });
   }),
 );
 ```
 
-More: [Let a policy ask for the work](https://alchemy.run/ai/domain#let-a-policy-ask-for-the-work).
+A saga holds the client the same way, and may `prompt` inside an activity when a step needs the answer. Do not put a `Domain.ExternalSystem` between a model and its own process.
 
-## Wire the model and the sessions to each other
+More: [Let a policy hand it work](https://alchemy.run/ai/domain#let-a-policy-hand-it-work).
 
-The session's object hosts the model (so the session can send commands), and the model's policy calls the session's object. Host the model as a function of a handle on the objects. A session's methods require `RuntimeContext`; so do a policy's handler and an external system's operations, so nothing has to pass it along.
+## A session reports with commands
+
+A model never reads a session. What it knows of the work is what the session sends: `Triage` reports by sending `LabelIssue`, an event the board's views show and its policies can react to. When the model should know more (a session gave up, what it found), declare a command for it and mention it in the prose. Never list a process in a view's `from`, and never copy a transcript into a model: read a session's status and transcript from the session (see [running.md](running.md) and [front-end.md](front-end.md)).
+
+More: [A session reports with commands](https://alchemy.run/ai/domain#a-session-reports-with-commands).
+
+## Keep entry points thin
+
+A webhook, a queue or a form turns what happened into a command and stops. It never starts a session: the model's policy does.
 
 ```typescript
-// src/Agents.ts
-interface Agent {
-  readonly start: (issue: IssueId) => Effect.Effect<void, never, RuntimeContext>;
-  readonly tell: (
-    issue: IssueId,
-    text: string,
-    id: string,
-  ) => Effect.Effect<void, never, RuntimeContext>;
-}
-interface Agents {
-  readonly getByName: (issue: string) => Agent;
-}
-
-const boardOver = <R>(agents: Effect.Effect<Agents, never, R>) =>
-  Board.layer(IssueWorkLive).pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        DomainCloudflare.layerDurableObjects(),
-        Triager.toLayer(
-          Effect.map(agents, (agents) => ({
-            start: ({ issue }) => agents.getByName(issue).start(issue),
-            tell: ({ issue, text, id }) => agents.getByName(issue).tell(issue, text, id),
-          })),
-        ),
-      ),
-    ),
-  );
-
-/** Inside an object, the objects are its own namespace. */
-const own = Effect.map(
-  Cloudflare.DurableObjectScope,
-  (self) => self as Cloudflare.DurableObject<Agent>,
+// src/GitHubIssues.ts
+yield* issues.send(
+  new ReportIssue({ issueId, title: payload.issue.title, body: payload.issue.body ?? "" }),
+  { commandId: event.id },
 );
-
-const Live = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), boardOver(own)).pipe(
-  Layer.provide(SmartLlama),
-);
-
-export default class IssueAgents extends Cloudflare.DurableObject<IssueAgents>()(
-  "IssueAgents",
-  Effect.gen(function* () {
-    const triage = yield* Triage;
-
-    return Effect.succeed({
-      start: (issue) =>
-        triage
-          .get(issue)
-          .send(`The issue is ${issue}.`, { requestId: "start" })
-          .pipe(Effect.orDie),
-      tell: (issue, text, id) =>
-        triage.get(issue).send(text, { requestId: id }).pipe(Effect.orDie),
-    } satisfies Agent);
-  }).pipe(Effect.provide(Live)),
-) {}
-
-/** The model as the Worker hosts it. */
-export const BoardLive = boardOver(IssueAgents);
 ```
 
-More: [The model and the session need each other](https://alchemy.run/ai/domain#the-model-and-the-session-need-each-other).
+More: [The outside world comes in as commands](https://alchemy.run/ai/domain#the-outside-world-comes-in-as-commands).

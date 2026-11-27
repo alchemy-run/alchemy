@@ -9,6 +9,7 @@ import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type * as Key from "./Key.ts";
 import type * as DomainStream from "./Stream.ts";
+import { memo, type Thunk } from "./Thunk.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -321,9 +322,10 @@ export const make = <
   const Writes extends ReadonlyArray<DomainStream.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<From, Key, On, Writes>,
+  definition: Thunk<Definition<From, Key, On, Writes>>,
   annotations: Annotations = {},
 ): ProjectionClass<Name, From, Key, On, Writes> => {
+  const given = memo(definition);
   type I = Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>;
   type W = Rewritten<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>;
   const Tag = Context.Service<ProjectionKey<Name>, Implementation<I, W>>()(
@@ -336,7 +338,9 @@ export const make = <
     static readonly kind = "Projection" as const;
     static readonly annotations: Annotations = annotations;
     static readonly projectionName: Name = name;
-    static readonly definition = definition;
+    static get definition() {
+      return given();
+    }
     static readonly Progress = Progress;
     static caughtUp(
       receipt: Parameters<Progress["caughtUp"]>[0],

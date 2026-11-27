@@ -12,6 +12,7 @@ import { browserOAuth } from "alchemy/Auth/BrowserOAuth";
 import { displayRedacted } from "alchemy/Auth/Credentials";
 import { getEnv, getEnvRedacted, mapPromptCancellation } from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
+import { refreshAndSave } from "alchemy/Auth/Refresh";
 import {
   collectFieldValues,
   storedSecret,
@@ -318,8 +319,9 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
         ),
         Match.when({ method: "oauth" }, (oauth) =>
           Effect.gen(function* () {
-            const fresh = yield* freshGrant(profileName, oauth);
-            if (fresh !== oauth) yield* updateConfig?.(fresh) ?? Effect.void;
+            const fresh = yield* refreshAndSave(freshGrant(profileName, oauth), (fresh) =>
+              fresh === oauth ? Effect.void : (updateConfig?.(fresh) ?? Effect.void),
+            );
             return {
               apiKey: undefined,
               accessToken: Redacted.make(fresh.access),
@@ -349,10 +351,13 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
             Effect.gen(function* () {
               const current = yield* reload ?? Effect.succeed(oauth);
               if (current.method !== "oauth") return current;
-              const refreshed = withGrant(current, yield* refreshGrant(grantOf(current)));
-              if (updateConfig === undefined) return refreshed;
-              yield* updateConfig(refreshed);
-              return undefined;
+              const refreshed = yield* refreshAndSave(
+                refreshGrant(grantOf(current)).pipe(
+                  Effect.map((grant) => withGrant(current, grant)),
+                ),
+                (refreshed) => updateConfig?.(refreshed) ?? Effect.void,
+              );
+              return updateConfig === undefined ? refreshed : undefined;
             }),
           ).pipe(
             Effect.catchTag("E2BLoginError", () =>

@@ -42,51 +42,47 @@ export class Add extends AI.Tool<Add>()("add", {
 export const AddLive = Add.make(({ a, b }) => ({ sum: a + b }));
 ```
 
-Describe the work as a process. Mentioning the tool gives it to the process:
+Describe the work as a process: a name, and a Layer with its prose. Mentioning the tool gives it to the process:
 
 ```typescript title="src/Accountant.process.ts"
 import * as AI from "@alchemy.run/ai";
 import { Add } from "./Add.tool.ts";
 
-export class Accountant extends AI.Process<Accountant>()("Accountant", {
+export class Accountant extends AI.Process<Accountant>()("Accountant", {}) {}
+
+export const AccountantLive = Accountant.toLayer({
   description: "Add up the numbers it is given.",
 })`
   Add the numbers you are given with ${Add}. Reply with only the total.
-` {}
+`;
 ```
 
-Yield it in a Durable Object, and provide the Layers: the tool, the model, and the harness, here Pi:
+Host it. The Layers say what a session runs on, here Pi, and where: each session in a Durable Object of its own.
 
 ```typescript title="src/Books.ts"
 import * as AI from "@alchemy.run/ai";
-import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
-import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Accountant } from "./Accountant.process.ts";
-import { Fast, FastLive } from "./models.ts";
+import { AccountantLive } from "./Accountant.process.ts";
 import { AddLive } from "./Add.tool.ts";
+import { Fast, FastLive } from "./models.ts";
 
-const Live = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast), AddLive).pipe(
+const Agents = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast), AddLive).pipe(
   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLive)),
 );
 
-export default class Books extends Cloudflare.DurableObject<Books>()(
-  "Books",
-  Effect.gen(function* () {
-    const accountant = yield* Accountant;
+export const AccountantSessions = AICloudflare.layerDurableObjects(
+  AccountantLive.pipe(Layer.provide(Agents)),
+);
+```
 
-    return Effect.gen(function* () {
-      return {
-        ask: Effect.fn(function* (session: string, text: string) {
-          const reply = yield* accountant.get(session).prompt(text);
-          return reply.text;
-        }),
-      };
-    });
-  }).pipe(Effect.provide(Live)),
-) {}
+A Worker given `AccountantSessions`, or a policy of a [Domain model](/domain), holds a session by its key:
+
+```typescript
+const accountant = yield* Accountant;
+const reply = yield* accountant.get("q3").prompt("12, 30 and 7");
 ```
 
 Swap `Pi.HarnessLive` and its storage for OpenCode's, and the same process runs there.

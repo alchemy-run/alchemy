@@ -1,18 +1,80 @@
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
-import BoardAgents, { BoardLive } from "./Agents.ts";
-import { BoardApi, CommentOnIssue, Issue, IssueDetail, ReportIssue } from "./Board.ts";
+import { Fast, FastLlama } from "../Processes.ts";
+import {
+  Board,
+  CommentOnIssue,
+  Issue,
+  IssueDetail,
+  IssueWorkLive,
+  Labeler,
+  ReportIssue,
+} from "./Board.ts";
 import { IssueId } from "./Issue.id.ts";
+import { Triage } from "./Triage.ts";
+import { TriageLive } from "./TriageProse.ts";
+
+/** What a Triage session runs with: Pi, in its object's own storage, and a model. */
+const Agents = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast)).pipe(
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLlama)),
+);
+
+/** What `withdraw` is given to reset a session's object: see {@link Resettable}. */
+const RESET = "reset-this-object";
+
+/** The board on Durable Objects. Its policy holds Triage, so it still needs one. */
+const BoardLive = Board.layer(IssueWorkLive).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
+
+/**
+ * Lets a test reset a session's object, as an eviction in the middle of its
+ * work does. Nothing outside an object can reset it, so the process is
+ * wrapped where it is built, inside the object: withdrawing {@link RESET}
+ * aborts it.
+ */
+const Resettable = Layer.effect(
+  Triage,
+  Effect.gen(function* () {
+    const triage = yield* Triage;
+    const state = yield* Effect.serviceOption(Cloudflare.DurableObjectState);
+    return {
+      ...triage,
+      get: (key: string) => {
+        const session = triage.get(key);
+        return {
+          ...session,
+          withdraw: (id: string) =>
+            id === RESET && Option.isSome(state)
+              ? state.value.abort("reset by a test")
+              : session.withdraw(id),
+        };
+      },
+    };
+  }),
+).pipe(Layer.provide(TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive)))));
+
+/** Each Triage session in a Durable Object of this Worker, with the board its prose mentions. */
+const TriageSessions = AICloudflare.layerDurableObjects(Resettable);
+
+const Live = BoardLive.pipe(Layer.provideMerge(TriageSessions));
 
 /**
  * Stands in for a webhook: `POST /report/<issue>` and `POST /comment/<issue>`
- * become commands on the board, `POST /issue/<issue>` reads it, and
- * `POST /session/<issue>` reads the transcript of the issue's session.
+ * become commands on the board, `POST /issue/<issue>` reads it,
+ * `POST /session/<issue>` reads where the issue's session stands and its transcript, and
+ * `POST /ask/<issue>` sends its session a message and waits for the answer.
  */
 export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
   "BoardWorker",
@@ -20,16 +82,11 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
   Effect.gen(function* () {
     const issues = yield* Issue;
     const details = yield* IssueDetail;
-    const agents = yield* BoardAgents;
-    const api = yield* BoardApi;
+    const triage = yield* Triage;
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        // What a front end uses: commands, and live reads over WebSockets.
-        if (new URL(request.url, "http://board").pathname.startsWith("/api")) {
-          return yield* api.fetch;
-        }
         const [, action, id] = new URL(request.url, "http://board").pathname.split("/");
         const issueId = IssueId.make(id ?? "");
         const body = (yield* request.json) as {
@@ -60,19 +117,32 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
             ),
           ),
           Match.when("issue", () => Effect.map(details.get(Issue.ref(issueId)), Option.getOrNull)),
-          // What the issue's session was told and did, as its harness stores it.
+          // Ask a session and wait for its answer, from outside its object.
+          Match.when("ask", () =>
+            Effect.gen(function* () {
+              yield* triage.start(issueId, { as: Labeler.context({ name: "asker" }) });
+              const reply = yield* triage.get(issueId).prompt(body.body ?? "");
+              return { answer: reply.text };
+            }),
+          ),
           // The object is reset, so the call itself fails.
           Match.when("crash", () =>
-            agents
-              .getByName(issueId)
-              .crash()
+            triage
+              .get(issueId)
+              .withdraw(RESET)
               .pipe(
                 Effect.catchCause(() => Effect.void),
                 Effect.as({ ok: true as const }),
               ),
           ),
+          // Where the issue's session stands, and what it was told and did, read from outside its object.
           Match.when("session", () =>
-            Effect.map(agents.getByName(issueId).transcript(issueId), (messages) => ({ messages })),
+            Effect.gen(function* () {
+              const session = triage.get(issueId);
+              const { status, queued } = yield* session.status;
+              const page = yield* session.history({ take: 200 });
+              return { status, queued, items: page.items };
+            }),
           ),
           Match.orElse(() => Effect.succeed(undefined)),
         );
@@ -86,5 +156,5 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
         ),
       ),
     };
-  }).pipe(Effect.provide(BoardLive)),
+  }).pipe(Effect.provide(Live)),
 ) {}

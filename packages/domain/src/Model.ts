@@ -67,6 +67,7 @@ import * as Rewrite from "./Rewrite.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
+import { isThunk, memo, type Thunk, withLateMembers } from "./Thunk.ts";
 import * as Vault from "./Vault.ts";
 import * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
@@ -552,6 +553,21 @@ type HandledBy<
  * }) {}
  * ```
  *
+ * ### Breaking an import cycle
+ * Give the members as a thunk when a member's file imports the model: a
+ * policy that holds an AI process whose prose mentions the model's
+ * commands. The thunk is read the first time the model is used, when both
+ * files have loaded. The model's type is the same; given directly, its
+ * members are checked as the file loads, so use a thunk only for a cycle.
+ *
+ * **Example:** A model whose policy holds a process that mentions it
+ * ```typescript
+ * export class Bank extends Domain.Model("Bank", () => ({
+ *   aggregates: [Account],
+ *   policies: [Assist],
+ * })) {}
+ * ```
+ *
  * ### Annotating models
  * The last argument is its annotations: data for what is built on the
  * model, read back as `X.annotations`. Add your own keys by augmenting
@@ -586,7 +602,7 @@ export const make = <
   const C extends ReadonlyArray<Compaction.Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, P, J, S, G, Q, D, C>,
+  members: Thunk<Members<A, V, P, J, S, G, Q, D, C>>,
   annotations: Annotations = {},
 ): ModelClass<
   Name,
@@ -595,63 +611,99 @@ export const make = <
   ServableBy<A, V, S, Q, D>
 > &
   Mentions<ProvidedBy<A, V, J, S, G, D>, A, V, D> => {
-  const decisions = (members.decisions ?? []) as ReadonlyArray<Decision.Any>;
-  const definitions: Kernel.Definitions = {
-    aggregates: members.aggregates,
-    decisions,
-    views: members.views ?? [],
-    policies: members.policies ?? [],
-    projections: members.projections ?? [],
-    streams: members.streams ?? [],
-    queries: members.queries ?? [],
-    rewrites: members.rewrites ?? [],
-    compactions: members.compactions ?? [],
-  };
-  const model = class {
-    static readonly kind = "Model" as const;
-    static readonly annotations: Annotations = annotations;
-    static readonly modelName: Name = name;
-    static readonly definitions: Kernel.Definitions = definitions;
-    static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
-    static readonly invariants = (members.invariants ?? {}) as {
-      readonly [name: string]: (model: never) => boolean;
+  /** Everything the model is made of, read from its members once. */
+  const read = memo(() => {
+    const given = membersOf();
+    const decisions = (given.decisions ?? []) as ReadonlyArray<Decision.Any>;
+    const definitions: Kernel.Definitions = {
+      aggregates: given.aggregates,
+      decisions,
+      views: given.views ?? [],
+      policies: given.policies ?? [],
+      projections: given.projections ?? [],
+      streams: given.streams ?? [],
+      queries: given.queries ?? [],
+      rewrites: given.rewrites ?? [],
+      compactions: given.compactions ?? [],
     };
-    static readonly eventually = (members.eventually ?? {}) as {
-      readonly [name: string]: (model: never) => boolean;
-    };
-    static readonly sometimes = (members.sometimes ?? {}) as {
-      readonly [name: string]: (model: never) => boolean;
-    };
-    static readonly relations = members.relations ?? {};
-    static readonly aggregates = definitions.aggregates;
-    static readonly decisions = decisions;
-    static readonly commands = [
+    const commands = [
       ...new Set([
-        ...definitions.aggregates.flatMap((aggregate) => aggregate.definition.commands),
+        ...given.aggregates.flatMap((aggregate) => aggregate.definition.commands),
         ...decisions.map((decision) => decision.command),
       ]),
     ];
-    static readonly views = definitions.views;
-    static readonly streams = definitions.streams;
-    static readonly queries: ReadonlyArray<Query.Any> = members.queries ?? [];
+    return { given, decisions, definitions, commands };
+  });
+  const membersOf = memo(members);
+  const inner = class {
+    static readonly kind = "Model" as const;
+    static readonly annotations: Annotations = annotations;
+    static readonly modelName: Name = name;
+    static get definitions(): Kernel.Definitions {
+      return read().definitions;
+    }
+    static get sagas(): ReadonlyArray<Saga.Any> {
+      return read().given.sagas ?? [];
+    }
+    static get invariants() {
+      return (read().given.invariants ?? {}) as {
+        readonly [name: string]: (model: never) => boolean;
+      };
+    }
+    static get eventually() {
+      return (read().given.eventually ?? {}) as {
+        readonly [name: string]: (model: never) => boolean;
+      };
+    }
+    static get sometimes() {
+      return (read().given.sometimes ?? {}) as {
+        readonly [name: string]: (model: never) => boolean;
+      };
+    }
+    static get relations() {
+      return read().given.relations ?? {};
+    }
+    static get aggregates() {
+      return read().given.aggregates;
+    }
+    static get decisions() {
+      return read().decisions;
+    }
+    static get commands() {
+      return read().commands;
+    }
+    static get views() {
+      return read().definitions.views;
+    }
+    static get streams() {
+      return read().definitions.streams;
+    }
+    static get queries(): ReadonlyArray<Query.Any> {
+      return read().given.queries ?? [];
+    }
     static layer<E, R>(
       handlers: Layer.Layer<HandledBy<P, J, G, Q, V, S, C>, E, R>,
       options?: LayerOptions,
     ) {
+      const { given, definitions } = read();
       return Layer.effectContext(
         build(
           name,
           definitions,
           handlers,
-          members.sagas ?? [],
-          members.queries ?? [],
+          given.sagas ?? [],
+          given.queries ?? [],
           Telemetry.resolve(options?.telemetry),
           options?.legacyData ?? true,
           options?.lazy ?? [],
         ),
       );
     }
-  } as unknown as ModelClass<
+  };
+  // Members given as a thunk are only known once read: so are the mentions.
+  const model = (isThunk(members)
+    ? withLateMembers(inner, () => mention())
+    : inner) as unknown as ModelClass<
     Name,
     ProvidedBy<A, V, J, S, G, D>,
     HandledBy<P, J, G, Q, V, S, C>,
@@ -659,37 +711,42 @@ export const make = <
   > &
     Mentions<ProvidedBy<A, V, J, S, G, D>, A, V, D>;
   // What a process mentions: each command, each aggregate (every command it
-  // takes) and each view, by name, on the model that hosts it.
-  const mentioned: ReadonlyArray<readonly [string, Mention.Entries]> = [
-    ...model.commands.map((command) => [command.tag, { commands: [command.tag] }] as const),
-    ...definitions.aggregates.map(
-      (aggregate) =>
-        [
-          aggregate.aggregateName,
-          { commands: aggregate.definition.commands.map((command) => command.tag) },
-        ] as const,
-    ),
-    ...definitions.views.map((view) => [view.viewName, { views: [view.viewName] }] as const),
-  ];
-  // A command, an aggregate or a view may share a name: one member gives them all.
-  const merged = new Map<string, Mention.Entries>();
-  for (const [member, entries] of mentioned) {
-    const before = merged.get(member);
-    merged.set(member, {
-      commands: [...(before?.commands ?? []), ...(entries.commands ?? [])],
-      views: [...(before?.views ?? []), ...(entries.views ?? [])],
-    });
-  }
-  for (const [member, entries] of merged) {
-    if (member in model) {
-      throw new DefinitionError({ reason: new ReservedMember({ model: name, member }) });
+  // takes) and each view, by name.
+  const mention = memo(() => {
+    const { given, commands } = read();
+    const mentioned: ReadonlyArray<readonly [string, Mention.Entries]> = [
+      ...commands.map((command) => [command.tag, { commands: [command.tag] }] as const),
+      ...given.aggregates.map(
+        (aggregate) =>
+          [
+            aggregate.aggregateName,
+            { commands: aggregate.definition.commands.map((command) => command.tag) },
+          ] as const,
+      ),
+      ...(given.views ?? []).map((view) => [view.viewName, { views: [view.viewName] }] as const),
+    ];
+    // A command, an aggregate or a view may share a name: one member gives them all.
+    const merged = new Map<string, Mention.Entries>();
+    for (const [member, entries] of mentioned) {
+      const before = merged.get(member);
+      merged.set(member, {
+        commands: [...(before?.commands ?? []), ...(entries.commands ?? [])],
+        views: [...(before?.views ?? []), ...(entries.views ?? [])],
+      });
     }
-    let mention: Mention.Mention<unknown, unknown> | undefined;
-    Object.defineProperty(model, member, {
-      enumerable: true,
-      get: () => (mention ??= Mention.of(model as unknown as Any, entries)),
-    });
-  }
+    for (const [member, entries] of merged) {
+      if (Reflect.has(inner, member)) {
+        throw new DefinitionError({ reason: new ReservedMember({ model: name, member }) });
+      }
+      let made: Mention.Mention<unknown, unknown> | undefined;
+      Object.defineProperty(inner, member, {
+        enumerable: true,
+        get: () => (made ??= Mention.of(model as unknown as Any, entries)),
+      });
+    }
+  });
+  // Members given directly are read now, so a mistake is reported when the module loads.
+  if (!isThunk(members)) mention();
   return model;
 };
 
@@ -1137,7 +1194,7 @@ const build = <A, E, R>(
       caughtUp.set(stream.streamName, caughtUpOf(stream));
     }
 
-    return Context.add(hosts, Internals, {
+    const hosted = Context.add(hosts, Internals, {
       kernel,
       aggregates: aggregateStores,
       views: viewStores,
@@ -1159,6 +1216,7 @@ const build = <A, E, R>(
         })),
       ),
     });
+    return hosted as typeof hosts;
   });
 
 /**
