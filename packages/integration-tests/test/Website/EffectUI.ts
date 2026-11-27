@@ -6,6 +6,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Cloudflare/Utils/Fixture.ts";
+import { expectDirectStatus, expectUrlContains } from "../Cloudflare/Utils/Http.ts";
 
 /**
  * The rendering modes of `effect-ui-fixture`:
@@ -194,4 +195,22 @@ export const verifyEffectUIRendering = (
       // No server: a page that wasn't prerendered is not found.
       expect((yield* request(`${base}/counter/42`)).status).toBe(404);
     }
+  });
+
+/**
+ * The hybrid fixture under `alchemy dev`: `HtmlServerVite` renders every
+ * page in the project's Vite dev server, prerendered ones included, so each
+ * page shows the query's count.
+ */
+export const verifyEffectUIDev = (url: string) =>
+  Effect.gen(function* () {
+    const base = url.replace(/\/+$/, "");
+    yield* expectUrlContains(`${base}/about?count=7`, 'id="count">7<', {
+      timeout: "120 seconds",
+      label: "dev render of a prerendered page",
+    });
+    yield* expectUrlContains(`${base}/counter/42?count=3`, 'id="count">3<', {
+      label: "dev render of a deep link",
+    });
+    yield* expectDirectStatus(`${base}/not-a-page`, 404, { label: "dev not found" });
   });
