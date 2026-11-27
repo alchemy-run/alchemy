@@ -20,7 +20,11 @@ POSTGRES_PASSWORD=change-me bun run --filter docker-postgres-example deploy
 bun run --filter docker-postgres-example destroy
 ```
 
-If `POSTGRES_PASSWORD` is omitted, the example generates and stores a redacted password with `Alchemy.makeRandom`.
+On the first deploy, `Alchemy.makeRandom` adopts `POSTGRES_PASSWORD` if it
+is set; otherwise it generates a random password. The result is saved in
+Alchemy state. Later deploys keep that same password even if the environment
+variable is removed, so the persistent PostgreSQL volume does not receive
+a different credential. Protect the local state files and their backups.
 
 The stack publishes PostgreSQL on `localhost:15432`:
 

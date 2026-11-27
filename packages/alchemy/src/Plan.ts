@@ -945,6 +945,7 @@ const makePlan = <A>(
                 instanceId: oldState.instanceId,
                 news: props,
                 output: oldState.attr,
+                previousStatus: oldState.status,
                 oldBindings,
                 newBindings,
               })
@@ -2010,6 +2011,7 @@ const makePlan = <A>(
                 olds: oldProps,
                 instanceId: oldState.instanceId,
                 output: oldState.attr,
+                previousStatus: oldState.status,
                 news,
                 oldBindings,
                 newBindings,

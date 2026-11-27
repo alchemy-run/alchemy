@@ -107,15 +107,20 @@ export const makeLocalState = () =>
     // test reading shared `.alchemy/state`) never observes a truncated,
     // mid-write file — which would otherwise surface as `JSON.parse("")` →
     // "Unexpected end of JSON input".
-    const writeAtomic = (file: string, contents: string) => writeFileAtomic(fs, file, contents);
+    const writeAtomic = (file: string, contents: string) =>
+      writeFileAtomic(fs, file, contents, 0o600);
 
-    // Parse a state file, tolerating an empty read. A zero-length file can
-    // linger from a write that was interrupted before this atomic-write change
-    // (or any non-atomic external writer); treat it as "absent" rather than
-    // throwing a JSON parse error that would abort the whole operation.
+    // A genuinely missing file is absent, but a zero-length persisted file
+    // may have held a secret. Never treat damaged state as a new resource.
+    // The codec handles the new StateEncryption format and malformed JSON.
     const parseState = <T>(scope: SealingScope, file: string, contents: string) =>
       contents.trim().length === 0
-        ? Effect.undefined
+        ? Effect.fail(
+            new StateStoreError({
+              message:
+                "Stored state is empty or malformed. Refusing to treat an existing record as absent; restore it from a trusted backup.",
+            }),
+          )
         : codec.decode<T>(scope, contents, `state file '${file}'`);
 
     const created = new Set<string>();
@@ -123,9 +128,23 @@ export const makeLocalState = () =>
     const ensure = (dir: string) =>
       created.has(dir)
         ? Effect.void
-        : fs
-            .makeDirectory(dir, { recursive: true })
-            .pipe(Effect.tap(() => Effect.sync(() => created.add(dir))));
+        : Effect.gen(function* () {
+            const privateStateDirectory = dir === stateDir || dir.startsWith(stateDir + path.sep);
+            // The format record lives in the shared .alchemy directory.
+            // Restrict only the state tree, never its shared parent.
+            yield* fs.makeDirectory(dir, {
+              recursive: true,
+              ...(privateStateDirectory ? { mode: 0o700 } : {}),
+            });
+            if (privateStateDirectory) {
+              for (const ancestor of [stateDir, path.dirname(dir), dir]) {
+                if (ancestor !== path.dirname(stateDir)) {
+                  yield* fs.chmod(ancestor, 0o700);
+                }
+              }
+            }
+            created.add(dir);
+          });
 
     // The store's format record: checked before reading, written before the
     // first write, so a directory this version never wrote to stays as it is.

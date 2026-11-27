@@ -25,7 +25,11 @@ export const writeFileAtomic = (
 ): Effect.Effect<void, PlatformError> =>
   Effect.flatMap(Random.next, (random) => {
     const tmp = `${filePath}.${process.pid}.${random.toString(36).slice(2)}.tmp`;
-    return fs.writeFileString(tmp, contents).pipe(
+    // Create with the requested mode, not the process default: a chmod after
+    // writing would leave plaintext credentials readable in the temp file
+    // between open and chmod on hosts with a permissive umask.
+    // "wx" also refuses a pre-existing temporary path (including symlinks).
+    return fs.writeFileString(tmp, contents, { mode, flag: "wx" }).pipe(
       Effect.flatMap(() => (mode === undefined ? Effect.void : fs.chmod(tmp, mode))),
       Effect.flatMap(() => fs.rename(tmp, filePath)),
       Effect.tapError(() => fs.remove(tmp).pipe(Effect.ignore)),
