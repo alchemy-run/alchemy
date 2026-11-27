@@ -2091,6 +2091,7 @@ export default defineConfig({
               label: "Frontends",
               items: [
                 { label: "Integrate with foldkit", link: "/domain/foldkit" },
+                { label: "Integrate with Effect UI", link: "/domain/effect-ui" },
                 { label: "Optimistic updates", link: "/domain/optimistic-updates" },
                 { label: "Offline and local first", link: "/domain/local-first" },
               ],

@@ -1,0 +1,90 @@
+---
+title: Integrate with Effect UI
+description: Derive Effect UI Command and Query services from an Api, and follow Views and Streams with Subscriptions.
+---
+
+:::caution[Experimental]
+`@alchemy.run/domain/EffectUI` is experimental, and its API can change in any release. `@effect/ui` is not on npm yet. Until it is, install it from a pkg.pr.new snapshot: the workspace pins `https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f`.
+:::
+
+[Effect UI](https://github.com/Effect-TS/ui) is the successor of Foldkit. A component changes its Model through Messages, runs side effects as Commands, loads data through Queries, and follows live data with Subscriptions. The optional `@alchemy.run/domain/EffectUI` adapter connects these parts to a Domain Api. It follows the [Foldkit adapter](/domain/foldkit): the failures, ids, and read rules are the same.
+
+Install `@effect/ui` in the web package. Domain's root entry does not import it.
+
+## Derive the services
+
+```typescript
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
+
+export const Bank = DomainEffectUI.make(CustomerApi);
+```
+
+`Bank` has one `Command.Service` per Api command, one `Query.Service` per Api query, and a read namespace with `watch` and `events` for each View and Stream. `Bank.layer` implements every Command and Query service from the Api client. The name `layer` is reserved: `make` does not compile for an Api with an entry named `layer`.
+
+## Send a command
+
+Each Command takes `{ input, commandId }`. It succeeds with `{ commandId, reply, receipt, commits }`, and fails with `Rejected`, `Denied`, or `Unknown`, each with its `commandId`. Map both channels where the component issues the Command:
+
+```typescript
+import { Command } from "@effect/ui";
+
+ClickedDeposit: ($) => {
+  const { commandId, commandIds } = DomainEffectUI.next($.model.commandIds);
+  return $.evolve({ commandIds }).run(
+    Bank.DepositMoney.make({ input: { accountId, amount: 1_000 }, commandId }).pipe(
+      Command.match({
+        onSuccess: ({ receipt }) => Message.SucceededDeposit({ version: receipt.version }),
+        onFailure: (failure) => Message.FailedDeposit({ reason: failure._tag }),
+      }),
+    ),
+  );
+},
+```
+
+Keep `DomainEffectUI.CommandIds` in the Model, and give each page load a fresh `session`. A Command defect produces `Unknown`. Retry `Unknown` with the same `commandId`, because the write can have committed. Interruption ends the Command without a failure.
+
+## Ask a query
+
+A query is a `Query.Service`, so the Effect UI cache shares and refreshes its result. Its args are `{ input, atLeast?, after?, take? }`. Declare it in a component's `queries`:
+
+```typescript
+queries: {
+  ledger: { query: Bank.AccountLedger, args: ({ props }) => ({ input: { account: props.accountId }, take: 20 }) },
+},
+```
+
+A query fails with `Rejected`, `Denied`, `TimedOut` (only for a query with `waitsFor`), or `Unknown`. `make(api, { staleTime })` sets how long a result stays fresh. The default is 0: the cache shows a stored result at once and fetches again.
+
+## Follow a View's state
+
+```typescript
+subscriptions: ({ props }) => [
+  Bank.AccountSummary.watch(props.accountId, {
+    onSnapshot: ({ state, cursor }) => Message.ReceivedSummary({ state, cursor }),
+    onFailure: (error) => Message.FailedWatchSummary({ reason: error._tag }),
+    onDefect: () => Message.FailedWatchSummary({ reason: "Read defect" }),
+  }),
+],
+```
+
+The adapter converts absent state to `Option.none()`. A new key restarts the watch. Read defects call `onDefect`, typed read failures call `onFailure`, and interruption ends the Subscription without a Message.
+
+`events(key, { after, restartKey, onEntry, onCaughtUp, onFailure, onDefect })` follows an event feed after the cursor `after`. The feed reads `after` when it starts, so a new cursor does not restart it. Change `restartKey` to restart it, for example after a failure. The feed drops repeated entries and allows gaps.
+
+## Provide the client and headers
+
+Provide `Bank.layer`, the Api client, and optionally `DomainEffectUI.CommandHeaders` where the app mounts:
+
+```typescript
+const Connection = CustomerApi.layerClient.pipe(
+  Layer.provide(Domain.protocolWebSocket(`${location.origin}/api`)),
+  Layer.provide(Socket.layerWebSocketConstructorGlobal),
+);
+const Main = BrowserHost.mount(App, {}, document.getElementById("app")!).pipe(
+  Layer.provide(Bank.layer),
+  Layer.provideMerge(Connection),
+);
+```
+
+`CommandHeaders.get` receives the command tag or query name, and runs on each call. Never put credentials in Command args or Messages. The rules for cookies and protocols are in [Integrate with Foldkit](/domain/foldkit#provide-the-client-and-headers).

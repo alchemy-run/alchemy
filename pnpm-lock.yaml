@@ -247,6 +247,9 @@ catalogs:
     '@effect/tsgo':
       specifier: ^0.73.2
       version: 0.73.2
+    '@effect/ui':
+      specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f
+      version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f
     '@effect/vitest':
       specifier: ^4.1.4
       version: 4.1.4
@@ -10016,6 +10019,9 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)
+      '@effect/ui':
+        specifier: 'catalog:'
+        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f(effect@4.1.4)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -11268,9 +11274,6 @@ importers:
       '@alchemy.run/hetzner':
         specifier: workspace:*
         version: link:../hetzner
-      '@alchemy.run/infisical':
-        specifier: workspace:*
-        version: link:../infisical
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
@@ -11334,9 +11337,6 @@ importers:
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
-      '@distilled.cloud/axiom':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/axiom
       '@distilled.cloud/boat-dev':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/boat-dev
@@ -11373,9 +11373,6 @@ importers:
       '@distilled.cloud/iceberg':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/iceberg
-      '@distilled.cloud/infisical':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/infisical
       '@distilled.cloud/modal':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/modal
@@ -11422,8 +11419,8 @@ importers:
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)
       '@effect/ui':
-        specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab
-        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab(effect@4.1.4)
+        specifier: 'catalog:'
+        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f(effect@4.1.4)
       '@electric-sql/pglite':
         specifier: 'catalog:'
         version: 0.3.15
@@ -16425,8 +16422,8 @@ packages:
     resolution: {integrity: sha512-eM5ayjlp0fD2l+aL+4O/y9d1LwF1m5in5EdNkOYwLFcXI3kcee8CWP4wr2xTc4L/+KJmS/uaYUGWdOj4G46BDA==}
     hasBin: true
 
-  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab':
-    resolution: {integrity: sha512-b0RsW02XDOdvCfglyl3oGB1wfFpiLc/ANQa+zmKe8qS0z7Z1rTdxsa3fVZfTAlgkdxsyc0jtijYOHC1Mgh5JFQ==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab}
+  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f':
+    resolution: {integrity: sha512-jiCKwNyfV/aKT5cfDL/8rFYwi4KXSuf/qCBtQz6ttwOw1aES81hk74noMKlDslAJ0ndQvd3Yv3EE+xWlkijH8A==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f}
     version: 0.0.0
     peerDependencies:
       effect: 4.1.4
@@ -34935,7 +34932,7 @@ snapshots:
       '@effect/tsgo-win32-arm64': 0.73.2
       '@effect/tsgo-win32-x64': 0.73.2
 
-  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab(effect@4.1.4)':
+  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@859a30f(effect@4.1.4)':
     dependencies:
       effect: 4.1.4
 

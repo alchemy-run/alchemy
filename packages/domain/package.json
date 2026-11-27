@@ -98,6 +98,7 @@
     "@alchemy.run/rivet": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/sql-pg": "catalog:",
+    "@effect/ui": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "alchemy": "workspace:*",
@@ -113,6 +114,7 @@
     "@alchemy.run/rivet": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/sql-pg": "catalog:",
+    "@effect/ui": "*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "foldkit": "catalog:"
@@ -137,6 +139,9 @@
       "optional": true
     },
     "@effect/sql-pg": {
+      "optional": true
+    },
+    "@effect/ui": {
       "optional": true
     },
     "foldkit": {

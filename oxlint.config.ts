@@ -250,5 +250,10 @@ export default defineConfig({
       ],
       rules: { "effecttsgo/experimental-api-usage": "off" },
     },
+    {
+      // Effect UI marks its whole API experimental; the adapter has no stable API to use instead.
+      files: ["packages/domain/src/EffectUI.ts"],
+      rules: { "effecttsgo/experimental-api-usage": "off" },
+    },
   ],
 } satisfies OxlintConfig);

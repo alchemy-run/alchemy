@@ -186,3 +186,28 @@ More: [Integrate with Foldkit: Test and host the app](https://alchemy.run/domain
 Test `update` and the Commands with Foldkit stories (`foldkit/story`) in `packages/web/test`. They need no server.
 
 More: [Integrate with Foldkit: Test and host the app](https://alchemy.run/domain/foldkit#test-and-host-the-app).
+
+## Effect UI (experimental)
+
+`@alchemy.run/domain/EffectUI` is the same adapter for [Effect UI](https://github.com/Effect-TS/ui), the successor of Foldkit. It is experimental. `@effect/ui` is not on npm yet: install it from a pkg.pr.new snapshot.
+
+```ts
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
+import { Command } from "@effect/ui";
+
+const Bank = DomainEffectUI.make(CustomerApi);
+
+const { commandId, commandIds } = DomainEffectUI.next($.model.commandIds);
+$.evolve({ commandIds }).run(
+  Bank.DepositMoney.make({ input: { accountId, amount: 1_000 }, commandId }).pipe(
+    Command.match({
+      onSuccess: ({ receipt }) => Message.SucceededDeposit({ version: receipt.version }),
+      onFailure: (failure) => Message.FailedDeposit({ reason: failure._tag }),
+    }),
+  ),
+);
+```
+
+Each Api command is a `Command.Service` and each Api query a `Query.Service` (declare it in a component's `queries`). Each View and Stream has `watch(key, options)` and `events(key, { after, restartKey, ... })`, which return Subscriptions. Provide `Bank.layer` and the Api client where the app mounts. The failures (`Rejected`, `Denied`, `Unknown`) and the rules for ids and reads are the same as for Foldkit.
+
+More: [Integrate with Effect UI](https://alchemy.run/domain/effect-ui).
