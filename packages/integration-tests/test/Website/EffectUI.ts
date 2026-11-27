@@ -48,9 +48,10 @@ const overlay = (
 /**
  * A private clone of the Effect UI fixture for one rendering mode: the
  * hybrid app, with the mode's checked-in overlay
- * (`effect-ui-fixture/modes/<mode>`) copied over it.
+ * (`effect-ui-fixture/modes/<mode>`) copied over it, then `overlay` (a
+ * directory of a suite's own files) if given.
  */
-export const effectUIFixture = (mode: EffectUIMode) =>
+export const effectUIFixture = (mode: EffectUIMode, options: { readonly overlay?: string } = {}) =>
   Effect.gen(function* () {
     const root = yield* cloneFixture(fixtureDir, {
       prefix: `effect-ui-${mode}-`,
@@ -58,6 +59,7 @@ export const effectUIFixture = (mode: EffectUIMode) =>
       entries: ["index.html", "package.json", "vite.config.ts", "public", "src"],
     });
     yield* overlay(pathe.join(fixtureDir, "modes", mode), root);
+    if (options.overlay !== undefined) yield* overlay(options.overlay, root);
     return root;
   });
 

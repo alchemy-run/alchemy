@@ -4,12 +4,14 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as pathe from "pathe";
 import {
   effectUIFixture,
   effectUIMemo,
   effectUIModes,
   verifyEffectUIRendering,
 } from "../../Website/EffectUI.ts";
+import { expectUrlContains } from "../Utils/Http.ts";
 import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -58,5 +60,42 @@ describe.concurrent(
         { timeout: 180_000 },
       );
     }
+
+    // Server code reads the Worker's bindings from `cloudflare:workers`,
+    // imported per request since the build prerenders in Node.
+    test.provider(
+      "EffectUI: server code reads Worker bindings",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* effectUIFixture("hybrid", {
+            overlay: pathe.resolve(import.meta.dirname, "effect-ui-env"),
+          });
+          const site = yield* stack.deploy(
+            Cloudflare.Website.EffectUI("FixEffectUIEnv", {
+              rootDir,
+              workersDev: true,
+              compatibility: { date: "2026-11-01", flags: ["nodejs_compat"] },
+              memo: effectUIMemo,
+              env: { GREETING: "hello from the Worker" },
+            }),
+          );
+
+          yield* expectWorkerExists(site.workerName, accountId);
+          yield* expectUrlContains(`${site.url!}/__greeting`, "hello from the Worker", {
+            timeout: "30 seconds",
+            label: "effect-ui binding",
+          });
+          // Pages still render and prerender alongside it.
+          yield* verifyEffectUIRendering(site.url!, "hybrid");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { timeout: 180_000 },
+    );
   },
 );
