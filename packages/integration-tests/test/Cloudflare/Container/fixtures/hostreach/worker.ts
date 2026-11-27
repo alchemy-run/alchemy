@@ -2,7 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { HostReachContainerObject } from "./object.ts";
+import { HostReachContainerObject, StartEnvContainerObject } from "./object.ts";
 
 export default class HostReachContainerWorker extends Cloudflare.Worker<HostReachContainerWorker>()(
   "HostReachContainerWorker",
@@ -11,6 +11,7 @@ export default class HostReachContainerWorker extends Cloudflare.Worker<HostReac
   },
   Effect.gen(function* () {
     const objects = yield* HostReachContainerObject;
+    const startEnvObjects = yield* StartEnvContainerObject;
 
     return {
       fetch: Effect.gen(function* () {
@@ -23,6 +24,9 @@ export default class HostReachContainerWorker extends Cloudflare.Worker<HostReac
         }
         if (url.pathname === "/probe") {
           return HttpServerResponse.text(yield* object.getProbe());
+        }
+        if (url.pathname === "/start-env-probe") {
+          return HttpServerResponse.text(yield* startEnvObjects.getByName("default").getProbe());
         }
         return HttpServerResponse.text("ok");
       }).pipe(
