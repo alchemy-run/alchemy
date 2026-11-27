@@ -1,5 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
@@ -8,11 +9,9 @@ import {
   type DispatchNamespaceClient,
   DispatchNamespaceError,
   Get,
-  dispatchOutboundOf,
   type GetOptions,
 } from "./Get.ts";
-import { maybeDispatchShim } from "./internal/DispatchShim.ts";
-import { outboundBindingName, resolveOutbound, toWireOutbound } from "./internal/outbound.ts";
+import { dispatchNamespaceBinding, resolveOutboundWorker } from "./internal/outbound.ts";
 
 /**
  * Implementation of the {@link Get} binding that uses a native
@@ -23,47 +22,28 @@ export const GetBinding = Layer.effect(
   Effect.gen(function* () {
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
-    // Deploy-time ambient context, captured at layer init so the dev shim
-    // registration below can run inside the callable, as `QueueBinding` does.
-    // Only used under the `__ALCHEMY_RUNTIME__` guard.
-    const context = yield* Effect.context<never>();
 
-    return Effect.fn(function* (namespace: DispatchNamespaceResource, options?: GetOptions<any>) {
-      const declared = dispatchOutboundOf(options);
-      const outbound = declared ? yield* resolveOutbound(declared) : undefined;
-      // A binding with an outbound Worker is named after its target, so it
-      // stays apart from a plain binding, or another outbound one, on the
-      // same namespace.
-      const bindingName = outbound ? outboundBindingName(namespace, outbound) : namespace.LogicalId;
+    return Effect.fn(function* (namespace: DispatchNamespaceResource, options?: GetOptions) {
+      const outbound = yield* resolveOutboundWorker(options);
+      // A binding with an outbound Worker is named after it, apart from a
+      // plain binding on the same namespace. A `Worker.ref(...)` has no
+      // `LogicalId`, so its id comes from the ref.
+      const name = outbound
+        ? `${namespace.LogicalId}_${Output.isRefExpr(outbound) ? outbound.resourceId : outbound.LogicalId}`
+        : namespace.LogicalId;
 
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        // A local Worker in a dev run dispatches with an outbound Worker
-        // through a deployed shim (see `internal/DispatchShim.ts`).
-        const shim = outbound
-          ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- deploy-time only; remaining requirements are ambient where the Worker is evaluated
-            yield* maybeDispatchShim(namespace, outbound, host).pipe(
-              Effect.provideContext(context),
-            ) as Effect.Effect<Effect.Success<ReturnType<typeof maybeDispatchShim>>>
-          : undefined;
-        yield* host.bind`${outbound ? bindingName : namespace}`({
-          bindings: [
-            {
-              type: "dispatch_namespace",
-              name: bindingName,
-              namespace: namespace.name,
-              ...(outbound ? { outbound: toWireOutbound(outbound) } : {}),
-              ...(shim ? { shim } : {}),
-            },
-          ],
+        yield* host.bind`${outbound ? name : namespace}`({
+          bindings: [dispatchNamespaceBinding(name, namespace, outbound, options)],
         });
       }
 
       const raw = Effect.sync(
         // Lazy — the WorkerEnvironment binding is not populated until runtime.
-        () => (env as Record<string, DispatchNamespace>)[bindingName]!,
+        () => (env as Record<string, DispatchNamespace>)[name]!,
       );
 
-      const self: DispatchNamespaceClient<any> = {
+      const self: DispatchNamespaceClient = {
         raw,
         get: (name, args, options) =>
           raw.pipe(

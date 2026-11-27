@@ -29,13 +29,12 @@ export const resolveBuildEnv = (
       // `Worker.URL` (bare tag or called). The bare tag is Effect-shaped,
       // so check before `Effect.isEffect`.
       if (isSelfUrl(value)) return [key, selfUrl];
-      // A `WorkerLoader`, a `Cloudflare.Container` declaration,
-      // `Cloudflare.R2.S3Credentials` and a dispatch binding
-      // (`Cloudflare.WorkersForPlatforms.Get`) are Effect-shaped bindings, not
-      // env values: yielding a Container would resolve the started-instance
-      // tag, which only exists inside a Durable Object (#997), S3Credentials
-      // needs the host's `WorkerEnvironment` (#2219), and a dispatch binding
-      // needs its runtime client.
+      // A `WorkerLoader`, a `Cloudflare.Container` declaration and
+      // `Cloudflare.R2.S3Credentials` are Effect-shaped bindings, not env
+      // values: yielding a Container would resolve the started-instance tag,
+      // which only exists inside a Durable Object (#997), and S3Credentials
+      // needs the host's `WorkerEnvironment` (#2219).
+      // A dispatch binding (`WorkersForPlatforms.Get`) is one too.
       if (
         isWorkerLoader(value) ||
         isContainerDecl(value) ||

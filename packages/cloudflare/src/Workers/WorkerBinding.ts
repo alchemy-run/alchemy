@@ -31,7 +31,7 @@ import type { StreamBinding } from "../Stream/StreamBinding.ts";
 import type { Index as VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { VpcService } from "../VpcService/VpcService.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import type { AnyDispatchBinding } from "../WorkersForPlatforms/Get.ts";
+import type { DispatchBinding } from "../WorkersForPlatforms/Get.ts";
 import type { WorkflowLike, WorkflowLookup } from "../Workflows/Workflow.ts";
 import type { AIBinding } from "./AIBinding.ts";
 import type { Assets } from "./Assets.ts";
@@ -150,25 +150,6 @@ export type QueueWorkerBinding = Extract<DistilledWorkerBinding, { type: "queue"
 };
 
 /**
- * The `dispatch_namespace` metadata binding extended with the alchemy-only
- * `shim` (stripped before upload). Cloudflare's preview refuses a dispatch
- * binding with an outbound Worker, so a local Worker in `alchemy dev`
- * dispatches through a deployed shim Worker that holds the real binding (see
- * `WorkersForPlatforms/internal/DispatchShim.ts`).
- */
-export type DispatchNamespaceWorkerBinding = Extract<
-  DistilledWorkerBinding,
-  { type: "dispatch_namespace" }
-> & {
-  shim?: {
-    /** The shim Worker's workers.dev URL. */
-    url: string | undefined;
-    /** The token the shim requires, sent in `x-alchemy-dispatch-token`. */
-    token: Redacted.Redacted<string> | string;
-  };
-};
-
-/**
  * The `k2` metadata binding: produce-only access to a K2 stream, by stream
  * id (`Cloudflare.K2.WriteStreamBinding`, or a `K2.Stream` in `env`).
  */
@@ -198,12 +179,8 @@ export type WireWorkerBinding = Exclude<
 export type WorkerBinding =
   | Exclude<
       DistilledWorkerBinding,
-      | { type: "dispatch_namespace" }
-      | { type: "durable_object_namespace" }
-      | { type: "queue" }
-      | { type: "service" }
+      { type: "durable_object_namespace" } | { type: "queue" } | { type: "service" }
     >
-  | DispatchNamespaceWorkerBinding
   | DurableObjectNamespaceWorkerBinding
   | QueueWorkerBinding
   | ServiceWorkerBinding
@@ -278,7 +255,7 @@ export type WorkerBindingResource =
   // A Worker-only binding lifted by `.pipe(Alchemy.remote())`.
   | AnyBindingEffect
   | DispatchNamespace
-  | AnyDispatchBinding
+  | DispatchBinding
   | DurableObjectLike<any>
   | WorkflowLike<any>
   | WorkflowLookup<any>

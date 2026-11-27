@@ -1,16 +1,11 @@
-/// <reference types="@cloudflare/workers-types" />
-
-import type { OutboundParams } from "./shared.ts";
-
 /**
- * Outbound Worker for {@link OutboundDispatch}. Every `fetch()` a dispatched
- * user Worker makes arrives here instead of the internet, with the
- * dispatcher's per-call `outbound` values on `env`. It answers with the URL
- * the user Worker asked for and the `tenant` it was given, so the test can
- * tell an intercepted request from one that reached the origin.
+ * Outbound Worker: every `fetch()` a dispatched user Worker makes arrives
+ * here instead of the internet, with the dispatcher's `outbound` values on
+ * `env`. It answers with the URL the user Worker asked for and the `tenant`
+ * it was given, and `VIA`, its own binding, says which outbound Worker it is.
  */
 export default {
-  fetch(request: Request, env: OutboundParams): Response {
-    return Response.json({ seen: request.url, tenant: env.tenant });
+  fetch(request: Request, env: { tenant: string; VIA: string }): Response {
+    return Response.json({ seen: request.url, tenant: env.tenant, via: env.VIA });
   },
 };
