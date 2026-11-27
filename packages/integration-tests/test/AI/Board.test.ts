@@ -1,18 +1,13 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
-import * as Read from "@alchemy.run/domain/Read";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
-import * as Socket from "effect/socket/Socket";
-import * as Stream from "effect/Stream";
-import { BoardApi } from "./fixtures/board/Board.ts";
 import BoardWorker from "./fixtures/board/BoardWorker.ts";
 import { IssueId } from "./fixtures/board/Issue.id.ts";
 
@@ -106,87 +101,82 @@ test(
 );
 
 test(
-  "a front end follows the session through the board's Api alone",
+  "a Worker asks a session and waits for its answer",
   Effect.gen(function* () {
-    const { url } = yield* stack;
+    // The Worker holds a client: the session runs in an object of its own.
+    const asked = (yield* call("ask/greeting", {
+      body: "Do not label anything. Reply with the single word ready.",
+    })) as unknown as { readonly answer: string };
+    expect(asked.answer.toLowerCase()).toContain("ready");
+  }),
+  { tags, timeout: 180_000 },
+);
+
+/** Where an issue's session stands and its transcript, read from outside its object. */
+const session = (issue: string) =>
+  call(`session/${issue}`) as unknown as Effect.Effect<
+    {
+      readonly status: "idle" | "working";
+      readonly queued: ReadonlyArray<unknown>;
+      readonly items: ReadonlyArray<{
+        readonly seq: number;
+        readonly item: { readonly type: string; readonly text?: string };
+      }>;
+    },
+    never,
+    HttpClient.HttpClient
+  >;
+
+test(
+  "a caller outside a session's object reads where it stands and its transcript",
+  Effect.gen(function* () {
     const issue = IssueId.make("slow-search");
-    yield* call(`issue/${issue}`);
-    const api = yield* BoardApi.clientWebSocket(`${url}/api`);
+    // A session nobody sent anything is idle, with nothing stored.
+    expect(yield* session(issue)).toEqual({ status: "idle", queued: [], items: [] });
 
-    // Following first: the transcript is empty, and every item arrives as it is recorded.
-    const following = yield* api.Transcript.events(issue).pipe(
-      Stream.filter(Read.isEvent),
-      Stream.takeUntil(
-        ({ event }) => event.item.type === "assistant" && event.item.toolCalls.length === 0,
-      ),
-      Stream.runCollect,
-      Effect.forkChild,
-    );
-    yield* api.ReportIssue(
-      { issueId: issue, title: "Search takes ten seconds to answer" },
-      { commandId: `report:${issue}` },
-    );
-    const items = Array.from(yield* Fiber.join(following)).map(({ event }) => ({
-      seq: event.seq,
-      item: event.item,
-    }));
-
-    expect(items[0]?.item).toEqual({ type: "user", text: `The issue is ${issue}.` });
-    expect(JSON.stringify(items)).toContain("LabelIssue");
-    // The board holds what the harness holds, item for item.
-    const { messages } = (yield* call(`session/${issue}`)) as unknown as { messages: string };
-    expect(items).toEqual(JSON.parse(messages));
-
-    // Its status is a view, and settles on idle.
-    const status = yield* api.SessionStatus.get(issue).pipe(
+    yield* call(`report/${issue}`, { title: "Search takes ten seconds to answer" });
+    const settled = yield* session(issue).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
-        until: (status) => status?.status === "idle",
-        times: 30,
+        until: (read) => read.status === "idle" && read.items.length > 1,
+        times: 60,
       }),
     );
-    expect(status).toEqual({ status: "idle", queued: [] });
-  }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
+    expect(settled.status).toBe("idle");
+    expect(settled.items[0]?.item).toEqual({ type: "user", text: `The issue is ${issue}.` });
+    // Numbered in order, with the command the session sent among them.
+    const seqs = settled.items.map((entry) => entry.seq);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    expect(JSON.stringify(settled.items)).toContain("LabelIssue");
+  }),
   { tags, timeout: 240_000 },
 );
 
 test(
-  "the board has the whole transcript though the session's object is reset mid-turn",
+  "a session carries on though its object is reset in the middle of a turn",
   Effect.gen(function* () {
-    const { url } = yield* stack;
     const issue = IssueId.make("lost-upload");
-    const api = yield* BoardApi.clientWebSocket(`${url}/api`);
     yield* call(`report/${issue}`, { title: "My upload disappears after I refresh" });
-    // Reset it once the board shows it at work: what was recording in memory is gone.
-    yield* api.SessionStatus.get(issue).pipe(
+    // Reset it once it is at work: everything the object held in memory is gone.
+    yield* session(issue).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("200 millis"),
-        until: (status) => status?.status === "working",
+        until: (read) => read.status === "working",
         times: 150,
       }),
     );
     yield* call(`crash/${issue}`);
     yield* labeled(issue, "bug");
 
-    const recorded = yield* Effect.gen(function* () {
-      const status = yield* api.SessionStatus.get(issue);
-      const { entries } = yield* api.Transcript.list(issue);
-      const { messages } = (yield* call(`session/${issue}`)) as unknown as { messages: string };
-      return {
-        status: status?.status,
-        board: JSON.stringify(entries.map(({ event }) => ({ seq: event.seq, item: event.item }))),
-        harness: messages,
-      };
-    }).pipe(
+    const settled = yield* session(issue).pipe(
       Effect.repeat({
         schedule: Schedule.spaced("2 seconds"),
-        until: (seen) => seen.status === "idle" && seen.board === seen.harness,
+        until: (read) => read.status === "idle",
         times: 30,
       }),
     );
-    expect(recorded.status).toBe("idle");
-    expect(recorded.board).toBe(recorded.harness);
-    expect(recorded.board).toContain("LabelIssue");
-  }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
+    expect(settled.status).toBe("idle");
+    expect(JSON.stringify(settled.items)).toContain("LabelIssue");
+  }),
   { tags, timeout: 240_000 },
 );

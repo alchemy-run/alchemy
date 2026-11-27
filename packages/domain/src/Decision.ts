@@ -6,6 +6,7 @@ import type * as Aggregate from "./Aggregate.ts";
 import type { InstanceOf, SendOptions } from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
 import type * as Command from "./Command.ts";
+import { memo, type Thunk } from "./Thunk.ts";
 
 const RecordedOn = Symbol.for("alchemy/Domain/Decision/RecordedOn");
 
@@ -392,16 +393,21 @@ export interface DecisionClass<
  */
 export const make = <C extends Command.Any, const R extends Reads, K extends KeysOf<R>>(
   command: C,
-  definition: Definition<C, R, K>,
+  definition: Thunk<Definition<C, R, K>>,
   annotations: Annotations = {},
 ): DecisionClass<C, R> => {
+  const given = memo(definition);
   const Tag = Context.Service<Key<C["tag"]>, Client<C>>()(`alchemy/Domain/Decision/${command.tag}`);
   return class extends Tag {
     static readonly kind = "Decision" as const;
     static readonly annotations: Annotations = annotations;
     static readonly decisionName: C["tag"] = command.tag;
     static readonly command: C = command;
-    static readonly reads: R = definition.reads;
-    static readonly definition = definition as unknown as AnyDefinition;
+    static get reads(): R {
+      return given().reads;
+    }
+    static get definition(): AnyDefinition {
+      return given() as unknown as AnyDefinition;
+    }
   } as unknown as DecisionClass<C, R>;
 };

@@ -71,11 +71,10 @@ A process declared by name alone keeps its `toLayer` in the same file, as `Triag
 
 ## Plain names for the rest
 
-Model names share one file, `Models.ts`, with the Layers behind them: they are a line each, and `.model.ts` already means a [Domain model](/domain/project-layout). The Durable Object that runs sessions, the Worker and the sandbox Layer keep plain names: `Agents.ts`, `Worker.ts`, `Sandbox.ts`.
+Model names share one file, `Models.ts`, with the Layers behind them: they are a line each, and `.model.ts` already means a [Domain model](/domain/project-layout). The Worker and the sandbox Layer keep plain names: `Worker.ts`, `Sandbox.ts`.
 
 ```text
 src/
-  Agents.ts
   Answering.process.ts
   Models.ts
   PostAnswer.tool.ts
@@ -87,37 +86,32 @@ src/
 
 ## With a Domain model
 
-A Domain model's files follow [its own layout](/domain/project-layout), in a folder or a package of their own. Processes and tools sit outside it: the model never imports one.
+A Domain model's files follow [its own layout](/domain/project-layout), in a folder or a package of their own. A process is not one of them: it can work with several models, so it sits beside the tools, its name and its prose in one `.process.ts`. When the prose mentions a model whose policy holds the process, the mentions and the model's members are [thunks](/ai/domain#break-the-cycle-with-thunks).
 
 ```text
 src/
   Board/
     Board.model.ts
     Issue.aggregate.ts
-    IssueWork.policy.ts
+    IssueWork.policy.ts         hands each issue to its Triage session
     LabelIssue.command.ts
-    Triager.external.ts
-  Agents.ts
+  Answering.process.ts
   PostAnswer.tool.ts
-  Triage.process.ts
+  Triage.process.ts             the name, and what a session is told
+  Worker.ts                     the Layers: harness, model, sandbox, hosts
 ```
 
 ## With a front end
 
-A page reads sessions through the model, so what records a session sits with the model's files. The page is in `web/`, and imports only the model's Api, ids and value Schemas.
+A page reads the board through the model's Api, and a session through a route the Worker serves from the session itself. The page is in `web/`, and imports only the model's Api, ids and value Schemas, and the Schema of that route.
 
 ```text
 src/
   Board/
     WebApi.api.ts               what a page may send and read
-    IssueSession.aggregate.ts   what was recorded of an issue's session
-    RecordActivity.command.ts
-    SessionStatus.view.ts
-    Transcript.stream.ts
-    Transcripts.projection.ts
-    IssueList.view.ts
-  Agents.ts                     runs the session, and records it
-  Worker.ts
+    IssueList.view.ts           every issue, for the page's list
+  SessionRead.ts                what the page reads of a session: its status and new items
+  Worker.ts                     serves the Api at /api and a session at /sessions/<key>
 web/
   src/
     Board.ts                    Model, Message, update, Commands, Subscriptions

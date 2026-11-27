@@ -416,6 +416,12 @@ export interface ProviderService<
     output: Res["Attributes"] | undefined;
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
+    /**
+     * Whether the resource is declared with `RemovalPolicy.protect()`. A
+     * provider can refuse an update that would destroy data the resource
+     * holds (e.g. a Worker deleting a Durable Object class).
+     */
+    protected?: boolean;
   }): Effect.Effect<Res["Attributes"], ProviderError, ReconcileReq>;
   /** Idempotent; fail with {@link DeleteInProgress} when the cloud cannot finish the delete yet. */
   delete(input: {

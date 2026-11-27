@@ -153,7 +153,8 @@ export interface ServerProps {
    * or a bare shell snippet (a `#!/bin/bash` shebang is added for you).
    * Alchemy combines it with its own bootstrap script (which preinstalls
    * Node 26 for `Hetzner.Service`) into a multipart cloud-init document, so
-   * both run — the bootstrap first. A document that already starts with a
+   * both run — the bootstrap first (with `bootstrap: false`, it is sent
+   * alone). A document that already starts with a
    * `Content-Type:` / `MIME-Version:` header is passed through untouched,
    * taking over the whole payload including the bootstrap.
    *
@@ -163,6 +164,23 @@ export interface ServerProps {
    * the Server.
    */
   userData?: string;
+  /**
+   * Set up the Server for `Hetzner.Ssh` / `Hetzner.Service`: preinstall
+   * Node 26 on first boot and inject an Alchemy-managed deploy SSH key for
+   * root.
+   *
+   * Set to `false` for a plain Server you provision with your own tooling.
+   * Only your `userData` and `sshKeys` are sent, and the Server has no
+   * `privateKey`: `Hetzner.Ssh` needs one passed as its `privateKey`
+   * option, and `Hetzner.Service` can't deploy to it.
+   * Without `sshKeys` either, Hetzner sets a root password and emails it
+   * to the project owner.
+   *
+   * Applied at create, so changing this replaces the Server.
+   *
+   * @default true
+   */
+  bootstrap?: boolean;
   /**
    * Attach a public IPv4. Applied only at create time.
    *
@@ -247,7 +265,7 @@ export type Server = Resource<
      * Alchemy-managed deploy SSH private key (PKCS8 PEM). Injected at
      * create via a companion SSH key so `Hetzner.Ssh` / `Hetzner.Service`
      * can reach the box. Persisted in state; not present on adopted
-     * foreign servers.
+     * foreign servers or with `bootstrap: false`.
      */
     privateKey?: Redacted.Redacted<string>;
     /** Numeric id of the Alchemy-managed deploy SSH key. */
@@ -349,6 +367,20 @@ export interface ServerLookup {
  * `userData` is merged with Alchemy's own bootstrap script into a
  * multipart cloud-init document, so both run. It is applied on first boot
  * only — changing it replaces the Server.
+ *
+ * ### Plain server without the bootstrap
+ * **Example:** Skip the bootstrap script and deploy key
+ * ```typescript
+ * const key = yield* Hetzner.SshKey("me", {
+ *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… user@host",
+ * });
+ * const server = yield* Hetzner.Server("plain", {
+ *   serverType: "cpx12",
+ *   image: "ubuntu-24.04",
+ *   sshKeys: [key],
+ *   bootstrap: false,
+ * });
+ * ```
  *
  * ### Looking up an existing server
  * `Server.lookup` references a server Alchemy doesn't manage (created in
@@ -557,23 +589,37 @@ const mimeMultipart = (parts: ReadonlyArray<UserDataPart>) =>
 
 /**
  * Compose the cloud-init document sent at create: Alchemy's bootstrap
- * script plus the caller's `userData`, if any.
+ * script plus the caller's `userData`, if any. Without the bootstrap, the
+ * caller's `userData` alone, or `undefined` when there is none.
  */
-export const composeUserData = (userData: string | undefined): string => {
-  if (userData === undefined) return ALCHEMY_BOOTSTRAP;
-  const doc = userData.replace(/^\uFEFF/, "").replace(/^[\s\n]+/, "");
-  if (doc === "") return ALCHEMY_BOOTSTRAP;
+export function composeUserData(userData: string | undefined): string;
+export function composeUserData(
+  userData: string | undefined,
+  bootstrap: boolean,
+): string | undefined;
+export function composeUserData(
+  userData: string | undefined,
+  bootstrap = true,
+): string | undefined {
+  const doc = userData?.replace(/^\uFEFF/, "").replace(/^[\s\n]+/, "") ?? "";
+  if (doc === "") return bootstrap ? ALCHEMY_BOOTSTRAP : undefined;
   // An explicit MIME document is passed through verbatim — the caller owns
   // the whole payload, bootstrap included.
   if (/^(content-type|mime-version):/i.test(doc)) return userData;
+  if (!bootstrap) return classifyUserData(doc).body;
   return mimeMultipart([
     { contentType: "text/x-shellscript", body: ALCHEMY_BOOTSTRAP },
     classifyUserData(doc),
   ]);
-};
+}
 
-const buildUserData = Effect.fn(function* (input: { name: string; userData: string | undefined }) {
-  const doc = yield* Effect.sync(() => composeUserData(input.userData));
+const buildUserData = Effect.fn(function* (input: {
+  name: string;
+  userData: string | undefined;
+  bootstrap: boolean;
+}) {
+  const doc = yield* Effect.sync(() => composeUserData(input.userData, input.bootstrap));
+  if (doc === undefined) return undefined;
   const bytes = yield* Effect.sync(() => Buffer.byteLength(doc, "utf8"));
   if (bytes > MAX_USER_DATA_BYTES) {
     return yield* new ServerUserDataTooLarge({
@@ -922,6 +968,9 @@ export const ServerProvider = () =>
         if (news.userData !== olds?.userData) {
           return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
+        if (olds !== undefined && (news.bootstrap ?? true) !== (olds.bootstrap ?? true)) {
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
+        }
         const location = news.location ?? DEFAULT_LOCATION;
         if (!sameRef(location, output.location, output.locationId)) {
           return { action: "replace", deleteFirst: keepsName(news, output) } as const;
@@ -984,7 +1033,8 @@ export const ServerProvider = () =>
       const placementGroupId = numericId(news.placementGroup, ["id"]);
       const startAfterCreate = news.startAfterCreate ?? true;
       const desiredProtection = news.deleteProtection ?? false;
-      const userData = yield* buildUserData({ name, userData: news.userData });
+      const bootstrap = news.bootstrap ?? true;
+      const userData = yield* buildUserData({ name, userData: news.userData, bootstrap });
 
       // Observe by id then desired name only. Do not fall back to
       // ownership labels — a create-first replacement still has the old
@@ -998,7 +1048,7 @@ export const ServerProvider = () =>
         name,
         labels: desiredLabels,
         output,
-        creating: current === undefined,
+        creating: bootstrap && current === undefined,
       });
       const sshKeyIds = [
         ...userSshKeyIds,

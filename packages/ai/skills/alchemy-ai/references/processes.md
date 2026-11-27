@@ -36,8 +36,12 @@ yield* session.interrupt; // stop the turn; the transcript stays
 
 // Status first (idle or working, what is queued), then every item, then live.
 yield* session.events({ after: lastSeq }).pipe(Stream.runForEach(forward));
+// Or ask, from anywhere: where it stands, and a page of what it stored.
+const { status, queued } = yield* session.status;
 const page = yield* session.history({ take: 50, order: "desc" });
 ```
+
+A hosted session (one Durable Object each) keeps `events()` in its object: from outside, use `status` and `history({ after })`.
 
 Say what one session works on in its first message, under a fixed `requestId` so code that runs twice says it once:
 
@@ -47,7 +51,7 @@ yield* triage.get(issue).send(`The issue is ${issue}.`, { requestId: "start" });
 
 `start(key, { model })` makes a session on a model before its first message. A process that acts as someone must be started (`start(key, { as })`): until then `send` and `prompt` fail with `NotStarted`.
 
-More: [Talk to a session](https://alchemy.run/ai/processes#talk-to-a-session), [A process has no inputs](https://alchemy.run/ai/processes#a-process-has-no-inputs), [Start a session on a model](https://alchemy.run/ai/processes#start-a-session-on-a-model), [Steer, withdraw and interrupt](https://alchemy.run/ai/processes#steer-withdraw-and-interrupt), [Watch a session](https://alchemy.run/ai/processes#watch-a-session).
+More: [Talk to a session](https://alchemy.run/ai/processes#talk-to-a-session), [A process has no inputs](https://alchemy.run/ai/processes#a-process-has-no-inputs), [Start a session on a model](https://alchemy.run/ai/processes#start-a-session-on-a-model), [Steer, withdraw and interrupt](https://alchemy.run/ai/processes#steer-withdraw-and-interrupt), [Watch a session](https://alchemy.run/ai/processes#watch-a-session), [Ask where a session stands](https://alchemy.run/ai/processes#ask-where-a-session-stands).
 
 ## Follow a process (a skill)
 
