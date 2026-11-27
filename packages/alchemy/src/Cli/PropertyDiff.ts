@@ -116,6 +116,7 @@ export const formatDriftPropertyYaml = (
 };
 
 const REDACTED = "(redacted)";
+const HIDDEN = "(hidden)";
 const KNOWN_AFTER_APPLY = "(known after apply)";
 const COMPUTED = "(computed)";
 const UNDEFINED = "(undefined)";
@@ -160,6 +161,61 @@ export const toYamlDisplayValue = (
   }
 };
 
+/** Whether desired props are, or hold, a secret or a value that may resolve to one. */
+const mayHoldSecret = (desired: unknown, ancestors = new WeakSet<object>()): boolean => {
+  if (Redacted.isRedacted(desired) || Output.isExpr(desired) || Effect.isEffect(desired)) {
+    return true;
+  }
+  if (typeof desired === "function") return true;
+  if (!isPlainData(desired) || ancestors.has(desired)) return false;
+  ancestors.add(desired);
+  try {
+    return Object.values(desired).some((value) => mayHoldSecret(value, ancestors));
+  } finally {
+    ancestors.delete(desired);
+  }
+};
+
+/**
+ * The previous props with each value the desired props now keep secret, or
+ * may, replaced by `(hidden)`, so a value becoming a secret never prints its
+ * legacy plaintext (#2816). Entries match by key and index; where the shapes
+ * differ nothing matches, so the whole previous value is hidden.
+ */
+const hidePrevious = (
+  previous: unknown,
+  desired: unknown,
+  ancestors = new WeakSet<object>(),
+): unknown => {
+  if (Redacted.isRedacted(previous)) return previous;
+  const sameShape =
+    isPlainData(previous) &&
+    isPlainData(desired) &&
+    Array.isArray(previous) === Array.isArray(desired);
+  if (!sameShape && mayHoldSecret(desired)) return HIDDEN;
+  if (!isPlainData(previous)) return previous;
+  // Copy all plain data, matched or not: a reference back to an ancestor that
+  // was masked must not reach the renderer as the original, unmasked object.
+  if (ancestors.has(previous)) return CIRCULAR;
+  ancestors.add(previous);
+  try {
+    const at = (key: string | number) =>
+      sameShape && Object.hasOwn(desired, key)
+        ? (desired as Record<string | number, unknown>)[key]
+        : undefined;
+    return Array.isArray(previous)
+      ? previous.map((value, index) => hidePrevious(value, at(index), ancestors))
+      : Object.fromEntries(
+          Object.entries(previous).map(([key, value]) => [
+            key,
+            hidePrevious(value, at(key), ancestors),
+          ]),
+        );
+  } finally {
+    ancestors.delete(previous);
+  }
+};
+
 /** Format a value as stable, unadorned YAML lines for terminal renderers. */
 export const formatYamlLines = (value: unknown): string[] => {
   const yaml = stringify(toYamlDisplayValue(value), {
@@ -197,7 +253,11 @@ export const formatDeclaredPropertyYaml = (
     kind: "change",
     lines: [
       "properties:",
-      ...unifiedDriftLines(toYamlDisplayValue(oldProps ?? {}), toYamlDisplayValue(desired), 2),
+      ...unifiedDriftLines(
+        toYamlDisplayValue(hidePrevious(oldProps ?? {}, desired)),
+        toYamlDisplayValue(desired),
+        2,
+      ),
     ],
   };
 };

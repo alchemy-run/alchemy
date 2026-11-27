@@ -181,6 +181,13 @@ export interface PostgresRoleAttributes {
  *   ttl: 3600,
  * });
  * ```
+ *
+ * ### Drift permissions <!-- api-prose -->
+ * `alchemy drift` reads each role directly. A `403 Forbidden` fails the
+ * check rather than reporting the role as missing. PlanetScale can also
+ * return `404 NotFound` for a database outside a token's grants, which
+ * reads as missing; re-grant database-scoped tokens after recreating a
+ * database.
  */
 export type PostgresRole = Resource<
   "Planetscale.PostgresRole",
@@ -253,10 +260,7 @@ export const PostgresRoleProvider = () =>
               branch: token.branch.name,
             }),
           ),
-          Effect.catchTags({
-            Forbidden: () => Effect.undefined,
-            NotFound: () => Effect.undefined,
-          }),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
     }),
 
@@ -427,6 +431,8 @@ export const PostgresRoleProvider = () =>
                             ),
                         ),
                       ),
+                      // Enumeration skips branches this token can't read, so
+                      // one restricted branch doesn't hide the others.
                       Effect.catchTags({
                         NotFound: () => Effect.succeed([] as PostgresRoleAttributes[]),
                         Forbidden: () => Effect.succeed([] as PostgresRoleAttributes[]),
