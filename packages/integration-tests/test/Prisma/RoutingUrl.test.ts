@@ -21,7 +21,6 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import { getProject } from "@distilled.cloud/prisma/management";
 import {
   createServiceUrl,
-  deleteDomainOwnership,
   deleteUrl,
   getUrl,
   getWorkspaceDomainOwnerships,
@@ -1817,18 +1816,12 @@ const ownershipsFor = (projectId: string, domain: string) =>
     return { workspaceId, ownerships: data.filter((row) => row.domain === domain) };
   });
 
-/** Delete the domain ownerships Prisma created for this test's hostnames. */
-const deleteOwnerships = (workspaceId: string, domains: ReadonlyArray<string>) =>
+/** Without `createDomainOwnership`, Prisma creates no domain ownership for the test's hostnames. */
+const expectNoOwnerships = (workspaceId: string, domains: ReadonlyArray<string>) =>
   Effect.forEach(domains, (domain) =>
     getWorkspaceDomainOwnerships({ workspaceId, domain }).pipe(
-      Effect.flatMap(({ data }) =>
-        Effect.forEach(
-          data.filter((row) => row.domain === domain),
-          (row) =>
-            deleteDomainOwnership({ domainOwnershipId: row.id }).pipe(
-              Effect.catchTag("NotFound", () => Effect.void),
-            ),
-        ),
+      Effect.tap(({ data }) =>
+        Effect.sync(() => expect(data.filter((row) => row.domain === domain)).toEqual([])),
       ),
     ),
   );
@@ -1877,7 +1870,7 @@ live.test.provider(
       yield* stack.destroy();
       yield* expectUrlGone(first.url.routingUrlId);
       yield* expectProjectGone(first.project.projectId);
-      yield* deleteOwnerships(workspaceId, [hostname]);
+      yield* expectNoOwnerships(workspaceId, [hostname]);
     }),
   { tags: liveTags, timeout: 300_000 },
 );
@@ -1908,7 +1901,7 @@ live.test.provider(
       const { workspaceId } = yield* ownershipsFor(first.project.projectId, after);
       yield* stack.destroy();
       yield* expectUrlGone(first.url.routingUrlId);
-      yield* deleteOwnerships(workspaceId, [before, after]);
+      yield* expectNoOwnerships(workspaceId, [before, after]);
     }),
   { tags: liveTags, timeout: 300_000 },
 );
@@ -1960,7 +1953,7 @@ live.test.provider(
 
       yield* deleteUrl({ id: otherStage.id });
       yield* stack.destroy();
-      yield* deleteOwnerships(workspaceId, [hostname, otherHostname]);
+      yield* expectNoOwnerships(workspaceId, [hostname, otherHostname]);
     }),
   { tags: liveTags, timeout: 300_000 },
 );
@@ -2038,7 +2031,7 @@ live.test.provider(
 
       yield* stack.destroy();
       yield* expectUrlGone(url.routingUrlId);
-      yield* deleteOwnerships(workspaceId, [hostname, second]);
+      yield* expectNoOwnerships(workspaceId, [hostname, second]);
     }),
   { tags: liveTags, timeout: 300_000 },
 );

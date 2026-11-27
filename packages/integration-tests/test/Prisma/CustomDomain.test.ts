@@ -131,7 +131,7 @@ test.provider(
       resetCloud();
       yield* stack.destroy();
     }),
-  { tags: ["local", "provider:prisma", "provider:prisma:customdomain"] },
+  { tags: ["unit", "provider:prisma", "provider:prisma:customdomain"] },
 );
 
 test.provider(
@@ -156,11 +156,11 @@ test.provider(
       yield* stack.destroy();
       expect(routesOf(fake.captured)).toContain(`DELETE /v1/domains/${raced.id}`);
     }),
-  { tags: ["local", "provider:prisma", "provider:prisma:customdomain"] },
+  { tags: ["unit", "provider:prisma", "provider:prisma:customdomain"] },
 );
 
 const CREATE = "POST /v1/services/service-1/domains";
-const tags = ["local", "provider:prisma", "provider:prisma:customdomain"];
+const tags = ["unit", "provider:prisma", "provider:prisma:customdomain"];
 
 test.provider(
   "refuses a custom domain registered before the deploy, without --adopt, and sends no create",
@@ -278,5 +278,5 @@ lostReply.test.provider(
       created = false;
       yield* stack.destroy();
     }),
-  { tags: ["local", "provider:prisma", "provider:prisma:customdomain"] },
+  { tags: ["unit", "provider:prisma", "provider:prisma:customdomain"] },
 );
