@@ -152,7 +152,7 @@ export const TurnKeyProvider = () =>
         // the create-only key. Names are not unique on Cloudflare's side,
         // so there is no AlreadyExists race to tolerate.
         const created = yield* calls.createTurn({ accountId, name });
-        return toAttributes(created, accountId, Redacted.make(created.key ?? ""));
+        return toAttributes(created, accountId, Redacted.make(created.secret));
       }
 
       // Sync — the only mutable aspect is `name`; diff observed cloud

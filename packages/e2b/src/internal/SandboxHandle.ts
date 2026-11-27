@@ -59,6 +59,18 @@ const redact = (token: string | Redacted.Redacted<string> | null | undefined) =>
       ? token
       : Redacted.make(token);
 
+/** Read a file and collect its streamed body; an empty response is an empty file. */
+const readBytes = (path: string) =>
+  envd
+    .readFile({ path })
+    .pipe(
+      Effect.flatMap((response) =>
+        response.body === undefined
+          ? Effect.succeed(new Uint8Array())
+          : Stream.mkUint8Array(response.body),
+      ),
+    );
+
 /**
  * `allowOut` lists the only destinations a sandbox may reach: E2B allows
  * everything else unless `denyOut` blocks it, so an `allowOut` without a
@@ -326,18 +338,10 @@ const makeOperations = (
         }),
     },
     files: {
-      read: (path) => inSandbox(envd.readFile({ path })),
+      read: (path) => inSandbox(readBytes(path)),
       readText: (path) =>
-        inSandbox(envd.readFile({ path })).pipe(
-          Effect.map((bytes) => new TextDecoder().decode(bytes)),
-        ),
-      write: (path, data) =>
-        inSandbox(
-          envd.writeFiles({
-            path,
-            file: new Blob([typeof data === "string" ? data : new Uint8Array(data)]),
-          }),
-        ).pipe(Effect.asVoid),
+        inSandbox(readBytes(path)).pipe(Effect.map((bytes) => new TextDecoder().decode(bytes))),
+      write: (path, data) => inSandbox(envd.writeFiles({ path, body: data })).pipe(Effect.asVoid),
       list: (path, options) =>
         inSandbox(filesystem.listDir({ path, depth: options?.depth ?? 1 })).pipe(
           Effect.map((res) => res.entries ?? []),

@@ -1,4 +1,5 @@
 import type * as chatbot from "@distilled.cloud/aws/chatbot";
+import type { ProviderError } from "@distilled.cloud/aws/Credentials";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
@@ -25,7 +26,10 @@ export interface GetAccountPreferences extends Binding.Service<
   () => Effect.Effect<
     (
       request?: chatbot.GetAccountPreferencesRequest,
-    ) => Effect.Effect<chatbot.GetAccountPreferencesResult, chatbot.GetAccountPreferencesError>
+    ) => Effect.Effect<
+      chatbot.GetAccountPreferencesResult,
+      chatbot.GetAccountPreferencesError | ProviderError
+    >
   >
 > {}
 

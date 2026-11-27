@@ -392,7 +392,7 @@ const listLegacyPipelineSummaries = (accountId: string) => {
       const response = yield* pipelines.listPipelines({
         accountId,
         page: String(page),
-        perPage: String(perPage),
+        perPage,
       });
       const results = (response.results ?? []).map((p): LegacyPipelineSummary => ({
         id: p.id,

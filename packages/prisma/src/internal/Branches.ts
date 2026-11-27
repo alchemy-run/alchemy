@@ -1,7 +1,7 @@
 import {
   type GetProjectBranchesResponse,
   getProjectBranches,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { PrismaPaginationError } from "./Pagination.ts";

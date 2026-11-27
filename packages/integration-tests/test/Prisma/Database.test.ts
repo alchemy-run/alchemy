@@ -2,13 +2,8 @@ import * as Prisma from "@alchemy.run/prisma";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { Credentials, Retry } from "@distilled.cloud/prisma";
-import {
-  getBranch,
-  getDatabase,
-  getProject,
-  getProjectBranches,
-  updateDatabase,
-} from "@distilled.cloud/prisma/management";
+import { getDatabase, getProject, updateDatabase } from "@distilled.cloud/prisma/management";
+import { getBranch, getProjectBranches } from "@distilled.cloud/prisma/unstable/management";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";

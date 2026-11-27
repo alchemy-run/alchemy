@@ -1,6 +1,6 @@
 import type * as tags from "@distilled.cloud/e2b/tags";
 import type * as templates from "@distilled.cloud/e2b/templates";
-import type * as unstable from "@distilled.cloud/e2b/unstable";
+import type * as unstable from "@distilled.cloud/e2b/unstable/unstable";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";

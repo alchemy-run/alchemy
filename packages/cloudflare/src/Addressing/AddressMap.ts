@@ -274,7 +274,7 @@ export const AddressMapProvider = () =>
             ? addressing.putAddressMapZone({
                 accountId: acct,
                 addressMapId,
-                zoneId: m.identifier,
+                memberZoneId: m.identifier,
               })
             : addressing.putAddressMapAccount({
                 accountId: acct,
@@ -292,7 +292,7 @@ export const AddressMapProvider = () =>
             ? addressing.deleteAddressMapZone({
                 accountId: acct,
                 addressMapId,
-                zoneId: m.identifier,
+                memberZoneId: m.identifier,
               })
             : addressing.deleteAddressMapAccount({
                 accountId: acct,

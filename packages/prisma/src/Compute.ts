@@ -15,7 +15,7 @@ import {
   createServiceDeployment,
   createServiceRollback,
   createEnvironmentVariable,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";

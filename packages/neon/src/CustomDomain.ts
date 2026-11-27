@@ -1,4 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
+import * as NeonUnstable from "@distilled.cloud/neon/unstable/neon";
 import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -66,12 +67,14 @@ const observe = Effect.fn(function* (
   scope: { project_id: string; branch_id: string },
   hostname: string,
 ) {
-  const domains = yield* Neon.listProjectBranchCustomDomains.items(scope).pipe(Stream.runCollect);
+  const domains = yield* NeonUnstable.listProjectBranchCustomDomains
+    .items(scope)
+    .pipe(Stream.runCollect);
   return domains.find((domain) => domain.domain === hostname);
 });
 const attrs = (
   fn: { projectId: string; branchId: string; slug: string; url: string },
-  domain: Neon.CustomDomain,
+  domain: NeonUnstable.CustomDomain,
 ): CustomDomainAttributes => ({
   projectId: fn.projectId,
   branchId: fn.branchId,
@@ -94,7 +97,7 @@ export const CustomDomainProvider = () =>
         for (const branch of yield* Neon.listProjectBranches
           .items({ project_id: project.id })
           .pipe(Stream.runCollect)) {
-          for (const domain of yield* Neon.listProjectBranchCustomDomains
+          for (const domain of yield* NeonUnstable.listProjectBranchCustomDomains
             .items({ project_id: project.id, branch_id: branch.id })
             .pipe(Stream.runCollect)) {
             result.push(
@@ -136,7 +139,7 @@ export const CustomDomainProvider = () =>
       const hostname = normalize(news.hostname);
       let domain = yield* observe(scope, hostname);
       if (!domain) {
-        yield* Neon.registerProjectBranchCustomDomain({
+        yield* NeonUnstable.registerProjectBranchCustomDomain({
           ...scope,
           domain: hostname,
           entity_type: "function",
@@ -154,7 +157,7 @@ export const CustomDomainProvider = () =>
       if (!domain) return;
       if (domain.entity_id !== output.slug || domain.entity_type !== "function")
         return yield* new FunctionDomainConflict({ hostname: output.hostname });
-      yield* Neon.deleteProjectBranchCustomDomain({
+      yield* NeonUnstable.deleteProjectBranchCustomDomain({
         ...scope,
         domain: output.hostname,
       }).pipe(Effect.catchTag("NotFound", () => Effect.void));

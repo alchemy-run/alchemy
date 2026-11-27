@@ -4258,6 +4258,13 @@ export const LiveWorkerProvider = () =>
               scriptName: name,
               observability: {
                 ...observed,
+                agents: observed?.agents
+                  ? {
+                      enabled: observed.agents.enabled ?? undefined,
+                      headSamplingRate: observed.agents.headSamplingRate ?? undefined,
+                      persist: observed.agents.persist ?? undefined,
+                    }
+                  : undefined,
                 headSamplingRate: observed?.headSamplingRate ?? undefined,
                 redactQueryString: observed?.redactQueryString ?? undefined,
                 logs: observed?.logs
