@@ -195,21 +195,28 @@ More: [Integrate with Foldkit: Test and host the app](https://alchemy.run/domain
 import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
 import { Command } from "@effect/ui";
 
-const Bank = DomainEffectUI.make(CustomerApi);
+const Bank = DomainEffectUI.make(CustomerApi, {
+  commands: { WithdrawMoney: { consistency: "strong" } }, // adds TimedOut { commandId, receipt }
+  queries: { AccountLedger: { take: 20, key: (entry) => entry.id } }, // a paged query: Query.InfiniteService
+});
 
-const { commandId, commandIds } = DomainEffectUI.next($.model.commandIds);
-$.evolve({ commandIds }).run(
-  Bank.DepositMoney.make({ input: { accountId, amount: 1_000 }, commandId }).pipe(
+$.run(
+  // No commandId: the Command makes one. Retry Unknown with `commandId: failure.commandId`.
+  Bank.DepositMoney.make({ input: { accountId, amount: 1_000 } }).pipe(
     Command.match({
       onSuccess: ({ receipt }) => Message.SucceededDeposit({ version: receipt.version }),
-      onFailure: (failure) => Message.FailedDeposit({ reason: failure._tag }),
+      onFailure: (failure) => Message.FailedDeposit({ failure }),
     }),
   ),
 );
 ```
 
-Each Api command is a `Command.Service` and each Api query a `Query.Service` (declare it in a component's `queries`). Each View and Stream has `watch(key, options)` and `events(key, { after, restartKey, ... })`, which return Subscriptions. Provide `Bank.layer` and the Api client where the app mounts, and `CommandHeaders` under `Bank.layer` (`Bank.layer.pipe(Layer.provide(Headers))`), so every query fetch sends them. The failures (`Rejected`, `Denied`, `Unknown`) and the rules for ids and reads are the same as for Foldkit.
+- Each Api command is a `Command.Service` with args `{ input, commandId?, headers? }`. Never keep ids in the Model: hydration and history restore would send them again. `headers` is a `Redacted` record for a per-call secret (an MFA code).
+- Each Api query is a `Query.Service` with args `{ input }` (declare it in a component's `queries`); a paged one is a `Query.InfiniteService`. A query with `waitsFor` sends this client's receipts as `atLeast`, outside the cache key.
+- By default a command invalidates the queries whose `waitsFor` reads its events. `commands.<Tag>.invalidates`, `optimistic` and `writes` take `(args, queries)` (`writes`: `(success, args, queries)`).
+- Each View and Stream has `watch(key, { restartKey?, ... })` and `events(key, { after, restartKey, ... })`, which return Subscriptions. Change `restartKey` after a new sign-in: a live read ends with the middleware error when the session ends. Each View has `SnapshotSchema` and `decodeSnapshot` to seed the first paint from the server's Model.
+- Provide `Bank.layer` and the Api client where the app mounts, and `CommandHeaders` under `Bank.layer` (`Bank.layer.pipe(Layer.provide(Headers))`), so every query fetch sends them. On the server, `CommandHeaders.get` can read `HttpServerRequest` (`Effect.serviceOption`): `layerHttp` renders each request with its own cache.
 
-In a component test, build the adapter and the client inside the tree: `HtmlPlay.make(Panel.pipe(Component.provide(Bank.layer.pipe(Layer.provideMerge(Client)))), {})`, with only `TestHost.layer()` outside. `TestHost.settle` waits only for the tree's fibers.
+In a component test, build the adapter and the client inside the tree: `HtmlPlay.make(Panel.pipe(Component.provide(Bank.layer.pipe(Layer.provideMerge(Client)))), {})`, with only `TestHost.layer()` outside. `TestHost.settle` waits only for the tree's fibers. Provide `NewCommandId` under `Bank.layer` to pin ids.
 
-More: [Integrate with Effect UI](https://alchemy.run/domain/effect-ui), [Integrate with Effect UI: Test a component with the model](https://alchemy.run/domain/effect-ui#test-a-component-with-the-model).
+More: [Integrate with Effect UI](https://alchemy.run/domain/effect-ui), [Integrate with Effect UI: Update the query cache](https://alchemy.run/domain/effect-ui#update-the-query-cache), [Integrate with Effect UI: Render signed-in pages on the server](https://alchemy.run/domain/effect-ui#render-signed-in-pages-on-the-server).
