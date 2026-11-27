@@ -426,15 +426,13 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertInstanceGroupManagerResizeRequests({
+            name: resizeRequestName,
+            description,
+            resizeBy: news.resizeBy,
+            requestedRunDuration: news.requestedRunDuration,
             project: env.project,
             zone,
             instanceGroupManager,
-            body: {
-              name: resizeRequestName,
-              description,
-              resizeBy: news.resizeBy,
-              requestedRunDuration: news.requestedRunDuration,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>

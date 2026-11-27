@@ -318,9 +318,9 @@ export const CollectionsDataStoresServingConfigProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsDataStoresServingConfigs({
+            ...body,
             parent: news.dataStore,
             servingConfigId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -353,6 +353,7 @@ export const CollectionsDataStoresServingConfigProvider = () =>
         modelChanged
       ) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresServingConfigs({
+          ...body,
           name: resource,
           updateMask: [
             displayNameChanged ? "display_name" : undefined,
@@ -366,7 +367,6 @@ export const CollectionsDataStoresServingConfigProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: { ...body, name: resource },
         });
       }
 

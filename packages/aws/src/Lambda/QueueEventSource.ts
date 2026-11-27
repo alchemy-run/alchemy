@@ -56,6 +56,7 @@ export const QueueEventSource = Layer.effect(
               eventSourceArn: queue.queueArn,
               batchSize: props.batchSize,
               maximumBatchingWindow: props.maximumBatchingWindow,
+              provisionedPollerConfig: props.provisionedPollerConfig,
               enabled: true,
             });
           }),

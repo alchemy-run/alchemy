@@ -1,0 +1,104 @@
+---
+title: AI
+description: Model agentic processes in code with @alchemy.run/ai. A process is prose that mentions the tools, models, other processes and business domain it works on, and runs on any agent harness.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+`@alchemy.run/ai` models agentic processes in code. A **process** is prose that describes a piece of work, and everything it mentions is a real reference: a tool, an LLM, another process, a command of your [Domain model](/domain).
+
+Processes, tools, your business rules and your infrastructure are one declarative program that the compiler checks and Alchemy deploys. The **harness** that runs a process, [Pi](/pi) or [OpenCode](/opencode), is one Layer.
+
+**New to this?** Start with [What is Alchemy AI?](/ai/what-is-alchemy-ai).
+
+## A quick example
+
+Name a model. Which LLM answers is the Layer behind the name:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Model(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
+```
+
+Declare a tool: what it takes, what it returns, and a handler:
+
+```typescript title="src/Add.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export class Add extends AI.Tool<Add>()("add", {
+  description: "Add two integers.",
+  parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+  success: Schema.Struct({ sum: Schema.Number }),
+}) {}
+
+export const AddLive = Add.make(({ a, b }) => ({ sum: a + b }));
+```
+
+Describe the work as a process. Mentioning the tool gives it to the process:
+
+```typescript title="src/Accountant.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Add } from "./Add.tool.ts";
+
+export class Accountant extends AI.Process<Accountant>()("Accountant", {
+  description: "Add up the numbers it is given.",
+})`
+  Add the numbers you are given with ${Add}. Reply with only the total.
+` {}
+```
+
+Yield it in a Durable Object, and provide the Layers: the tool, the model, and the harness, here Pi:
+
+```typescript title="src/Books.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Accountant } from "./Accountant.process.ts";
+import { Fast, FastLive } from "./models.ts";
+import { AddLive } from "./Add.tool.ts";
+
+const Live = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast), AddLive).pipe(
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLive)),
+);
+
+export default class Books extends Cloudflare.DurableObject<Books>()(
+  "Books",
+  Effect.gen(function* () {
+    const accountant = yield* Accountant;
+
+    return Effect.gen(function* () {
+      return {
+        ask: Effect.fn(function* (session: string, text: string) {
+          const reply = yield* accountant.get(session).prompt(text);
+          return reply.text;
+        }),
+      };
+    });
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+Swap `Pi.HarnessLive` and its storage for OpenCode's, and the same process runs there.
+
+## Where to start
+
+**Want to build?** Install the package and follow the [tutorial](/ai/tutorial/part-1): an issue board whose policies start processes, on any harness.
+
+<PackageManagers add="@alchemy.run/ai" />
+
+**Looking for something specific?** Every section of these docs is listed below.
+
+## The docs
+
+<HubMap />

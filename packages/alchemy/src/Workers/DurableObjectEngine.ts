@@ -11,7 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { Workflow, WorkflowEngine } from "effect/workflow";
-import { makeCallback } from "../Callback.ts";
+import { type Callbacks, makeCallback } from "../Callback.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import {
   CurrentActivity,
@@ -19,10 +19,11 @@ import {
   decodeResult,
   encodeExit,
   encodeResult,
+  intoStoredResult,
   makeCurrentActivity,
   payloadCodec,
 } from "../WorkflowEncoding.ts";
-import { StorageName } from "../Workflows.ts";
+import { OnResult, StorageName, statusOf } from "../Workflows.ts";
 import type { DurableObjectStorage } from "./Workerd/DurableObjectStorage.ts";
 
 /** What a provider supplies to host the engine's Durable Objects. */
@@ -57,6 +58,10 @@ type StateService = {
  * run happens in one durable callback per execution, so runs never overlap,
  * and a run that fails or is cut short is retried.
  *
+ * A `Workflows.OnResult` in the context the engine builds in is called from
+ * the execution's object each time it stores a result, scheduled in the same
+ * transaction as the result and retried until it succeeds.
+ *
  * Providers supply how to declare a Durable Object class on their Worker and
  * the tag of their per-instance state.
  *
@@ -71,6 +76,7 @@ export const makeDurableObjectEngine = <Host, State>(
       // Workflows register while their Layers build, inside the Worker's init
       // phase; declaring a Durable Object class needs that context.
       const init = yield* Effect.context<Host>();
+      const onResult = Option.getOrUndefined(yield* Effect.serviceOption(OnResult));
       const namespaces = new Map<string, Namespace>();
 
       const namespaceOf = (workflowName: string) =>
@@ -94,6 +100,7 @@ export const makeDurableObjectEngine = <Host, State>(
                   workflow: workflow as AnyWorkflow,
                   execute,
                   engine: () => engine,
+                  onResult,
                 }),
               )
               .pipe(Effect.provide(init));
@@ -262,6 +269,7 @@ interface Registration {
   readonly workflow: AnyWorkflow;
   readonly execute: Execute;
   readonly engine: () => WorkflowEngine.WorkflowEngine["Service"];
+  readonly onResult: OnResult["Service"] | undefined;
 }
 
 interface ParentRef {
@@ -335,6 +343,9 @@ interface ExecutionRow {
 /** The single job id every wake-up schedules, so pending wake-ups collapse into one run. */
 const RUN = "run";
 
+/** The job that tells `Workflows.OnResult` the execution stored its result. */
+const STORED = "stored";
+
 /** One workflow execution: its journal, and the runs that replay it. */
 const executionObject = <State>(
   stateTag: Context.Key<State, StateService>,
@@ -376,7 +387,7 @@ const executionObject = <State>(
       // Every wake-up (a start, a completed deferred, a fired clock, an
       // interrupt) records what changed and schedules this one job. Jobs run
       // one at a time and are retried until a run succeeds.
-      const runs = yield* makeCallback(RUN, () => run, { retry: { delay: "5 seconds" } });
+      const runs = yield* makeCallback(RUN, () => run);
       const wake = (progress?: number) =>
         runs
           .schedule(RUN, { after: 0, payload: {}, progress })
@@ -398,13 +409,10 @@ const executionObject = <State>(
           }),
         );
 
-      const clocks = yield* makeCallback(
-        "clock",
-        (job: { readonly deferred: string }) =>
-          Effect.gen(function* () {
-            yield* complete(job.deferred, yield* encodeExit(Exit.void));
-          }),
-        { retry: { delay: "5 seconds" } },
+      const clocks = yield* makeCallback("clock", (job: { readonly deferred: string }) =>
+        Effect.gen(function* () {
+          yield* complete(job.deferred, yield* encodeExit(Exit.void));
+        }),
       );
       // Replays reach the same sleep again: a clock that's done or already
       // pending is left alone.
@@ -423,6 +431,36 @@ const executionObject = <State>(
                 payload: { deferred: deferredName },
                 progress: yield* advance,
               })
+              .pipe(Effect.orDie);
+          }),
+        );
+
+      // Scheduled in the transaction that stores the result, so the hook is
+      // told even if the instance resets between the two, and retried until
+      // it succeeds.
+      const stored = yield* makeCallback(STORED, () =>
+        Effect.gen(function* () {
+          const row = yield* readExecution;
+          if (registration.onResult === undefined || !row?.result) return;
+          const { exit } = yield* decodeResult(registration.workflow, row.result);
+          yield* registration.onResult({
+            workflow: registration.workflow._tag,
+            executionId: row.execution_id,
+            status: statusOf(exit),
+          });
+        }).pipe(Effect.provide(context)),
+      );
+      /** Store the result, unless one is stored already, and tell the hook. */
+      const storeResult = (result: string) =>
+        transaction(
+          Effect.gen(function* () {
+            const updated = yield* query(
+              "UPDATE workflow_execution SET result = ? WHERE result IS NULL RETURNING id",
+              result,
+            );
+            if (updated.length === 0 || registration.onResult === undefined) return;
+            yield* stored
+              .schedule(STORED, { after: 0, payload: {}, progress: yield* advance })
               .pipe(Effect.orDie);
           }),
         );
@@ -447,7 +485,7 @@ const executionObject = <State>(
             instance.suspended = false;
             return Effect.withFiber((fiber) => fiber.pipe(Fiber.interrupt, Effect.interruptible));
           }),
-          Workflow.intoResult,
+          intoStoredResult,
           Effect.provide(
             Layer.mergeAll(
               Layer.succeed(WorkflowEngine.WorkflowInstance, instance),
@@ -464,10 +502,7 @@ const executionObject = <State>(
         );
         // Suspended: a clock or a completed deferred wakes it again.
         if (result._tag === "Suspended") return;
-        yield* query(
-          "UPDATE workflow_execution SET result = ?",
-          yield* encodeResult(workflow, result.exit),
-        );
+        yield* storeResult(yield* encodeResult(workflow, result.exit));
         if (row.parent !== null) yield* resumeParent(registration, JSON.parse(row.parent));
       });
 
@@ -529,10 +564,8 @@ const executionObject = <State>(
           reportDefects(
             Effect.gen(function* () {
               yield* runs.cancel(RUN).pipe(Effect.orDie, Effect.provide(context));
-              yield* query(
-                "UPDATE workflow_execution SET interrupted = 1, result = ? WHERE result IS NULL",
-                yield* encodeResult(registration.workflow, Exit.interrupt()),
-              );
+              yield* query("UPDATE workflow_execution SET interrupted = 1 WHERE result IS NULL");
+              yield* storeResult(yield* encodeResult(registration.workflow, Exit.interrupt()));
             }),
           ),
       };
@@ -591,8 +624,22 @@ export interface Namespace {
 }
 
 /** The two-stage implementation of an execution object. */
+/**
+ * Provide an engine object's instances with a host's `Callbacks`
+ * implementation. Every host's `declare` does this with its own.
+ */
+export const provideCallbacks = <State, R>(
+  impl: ObjectImpl<State>,
+  callbacks: Layer.Layer<Callbacks, never, R>,
+) =>
+  Effect.map(impl, (instance) => instance.pipe(Effect.provide(callbacks))) as Effect.Effect<
+    Effect.Effect<Record<string, unknown>, never, State | RuntimeContext | Scope.Scope | R>,
+    never,
+    State
+  >;
+
 export type ObjectImpl<State> = Effect.Effect<
-  Effect.Effect<Record<string, unknown>, never, State | RuntimeContext | Scope.Scope>,
+  Effect.Effect<Record<string, unknown>, never, State | RuntimeContext | Callbacks | Scope.Scope>,
   never,
   State
 >;

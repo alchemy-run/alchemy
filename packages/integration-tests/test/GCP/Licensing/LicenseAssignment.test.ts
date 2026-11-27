@@ -44,11 +44,7 @@ test.provider.skipIf(runLifecycle)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        licensing.insertLicenseAssignments({
-          productId,
-          skuId,
-          body: { userId: missingUserId },
-        }),
+        licensing.insertLicenseAssignments({ userId: missingUserId, productId, skuId }),
       );
       expect(error._tag).toEqual("InsufficientAuthenticationScopes");
 

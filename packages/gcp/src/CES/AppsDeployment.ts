@@ -278,14 +278,12 @@ export const AppsDeploymentProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           ces.createProjectsLocationsAppsDeployments({
+            displayName,
+            channelProfile,
+            appVersion,
+            experimentConfig: news.experimentConfig,
             parent: app,
             deploymentId,
-            body: {
-              displayName,
-              channelProfile,
-              appVersion,
-              experimentConfig: news.experimentConfig,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -304,6 +302,10 @@ export const AppsDeploymentProvider = () =>
       if (displayChanged || channelChanged || versionChanged || experimentChanged) {
         current = yield* retryTransient(
           ces.patchProjectsLocationsAppsDeployments({
+            displayName,
+            channelProfile,
+            appVersion,
+            experimentConfig: news.experimentConfig,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "display_name" : undefined,
@@ -311,12 +313,6 @@ export const AppsDeploymentProvider = () =>
               versionChanged ? "app_version" : undefined,
               experimentChanged ? "experiment_config" : undefined,
             ),
-            body: {
-              displayName,
-              channelProfile,
-              appVersion,
-              experimentConfig: news.experimentConfig,
-            },
           }),
         );
       }

@@ -315,16 +315,14 @@ export const AttributeProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsAttributes({
+            displayName: news.displayName,
+            description,
+            dataType: news.dataType,
+            scope: news.scope,
+            cardinality,
+            allowedValues,
             parent,
             attributeId,
-            body: {
-              displayName: news.displayName,
-              description,
-              dataType: news.dataType,
-              scope: news.scope,
-              cardinality,
-              allowedValues,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -343,6 +341,10 @@ export const AttributeProvider = () =>
 
       if (displayChanged || descriptionChanged || allowedChanged || cardinalityChanged) {
         current = yield* apihub.patchProjectsLocationsAttributes({
+          displayName: news.displayName,
+          description,
+          allowedValues,
+          cardinality,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -350,13 +352,6 @@ export const AttributeProvider = () =>
             allowedChanged ? "allowed_values" : undefined,
             cardinalityChanged ? "cardinality" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName: news.displayName,
-            description,
-            allowedValues,
-            cardinality,
-          },
         });
       }
 

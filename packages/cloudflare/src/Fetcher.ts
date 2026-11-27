@@ -1,4 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
+import { fromWorkerdSocket, type TcpSocket } from "alchemy/Workers/Workerd/Socket";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
@@ -11,7 +12,8 @@ import { HttpServerError, InternalError } from "effect/http/HttpServerError";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Schedule from "effect/Schedule";
-import * as Socket from "effect/socket/Socket";
+
+export type { TcpSocket } from "alchemy/Workers/Workerd/Socket";
 
 export type SocketAddress = cf.SocketAddress;
 
@@ -48,7 +50,7 @@ export interface Fetcher {
     request: HttpServerRequest.HttpServerRequest,
   ): Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError>;
 
-  connect(address: SocketAddress | string, options?: SocketOptions): Socket.Socket;
+  connect(address: SocketAddress | string, options?: SocketOptions): TcpSocket;
 }
 
 export const toCloudflareFetcher = Effect.fn(function* (fetcher: Fetcher) {
@@ -245,21 +247,9 @@ export const toHttpClient = (fetcher: {
     ),
   );
 
-export const fromCloudflareSocket = (cfSocket: globalThis.Socket | cf.Socket): Socket.Socket =>
-  // `fromTransformStream` snapshots fiber context, then waits to acquire
-  // the streams until a consumer opens the reader. `runSync` is only that
-  // snapshot — connection still happens on first `socket.reader`.
-  Effect.tryPromise({
-    try: () =>
-      Promise.resolve(cfSocket.opened).then(
-        () =>
-          ({
-            readable: cfSocket.readable,
-            writable: cfSocket.writable,
-          }) as Socket.InputTransformStream,
-      ),
-    catch: (cause) =>
-      Socket.SocketError.make({
-        reason: Socket.SocketOpenError.make({ kind: "Unknown", cause }),
-      }),
-  }).pipe(Socket.fromTransformStream, Effect.runSync);
+/**
+ * Wrap a workerd `Socket` as an Effect socket that keeps the native one on
+ * `raw`. See {@link TcpSocket}.
+ */
+export const fromCloudflareSocket = (cfSocket: globalThis.Socket | cf.Socket): TcpSocket =>
+  fromWorkerdSocket(cfSocket as cf.Socket);

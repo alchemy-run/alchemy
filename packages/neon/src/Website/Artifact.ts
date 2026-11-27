@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { gunzipSync } from "node:zlib";
+import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -249,6 +250,15 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
     const relative = path.relative(directory, file);
     return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
   };
+  // Alchemy's runtime directory, under any name `ALCHEMY_DIR` gives it, and
+  // its real path when it is reached through a symlink.
+  const dotAlchemy = path.resolve(yield* dotAlchemyDirectory);
+  const runtimeDirs = [
+    dotAlchemy,
+    ...((yield* fs.exists(dotAlchemy)) ? [yield* fs.realPath(dotAlchemy)] : []),
+  ];
+  const isSensitive = (file: string) =>
+    excluded(file) || runtimeDirs.some((dir) => within(dir, file));
   if (!entry && !props.static)
     return yield* fail("A Fetch entrypoint or static options are required.");
   if (props.layout !== "next" && root === dist)
@@ -286,13 +296,13 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
       return yield* fail("Website exceeds the 50,000-entry safety limit.");
     const relative = path.relative(root, source).replaceAll("\\", "/");
     if (
-      excluded(source) ||
+      isSensitive(source) ||
       sourceOnly(source) ||
       (props.layout === "next" && nextExcluded(relative))
     )
       return;
     const real = yield* fs.realPath(source);
-    if (excluded(real)) return yield* fail("An output symlink targets a sensitive file.");
+    if (isSensitive(real)) return yield* fail("An output symlink targets a sensitive file.");
     if (!within(boundary ?? real, real))
       return yield* fail("An output symlink escapes its selected directory.");
     const stat = yield* fs.stat(real);
@@ -342,7 +352,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
       return yield* fail("Invalid Next.js dependency manifest.");
     for (const file of parsed.files) {
       const source = path.resolve(path.dirname(manifest), file);
-      if (excluded(source)) return yield* fail("A Next.js trace selects a sensitive file.");
+      if (isSensitive(source)) return yield* fail("A Next.js trace selects a sensitive file.");
       if (sourceOnly(source)) continue;
       files.add(source);
     }
@@ -364,6 +374,7 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
           base: traceBase,
           root,
           next: props.layout === "next",
+          runtimeDirs,
         }).pipe(
           Effect.timeout("60 seconds"),
           Effect.mapError(
@@ -423,9 +434,9 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
     const real = yield* fs.realPath(file);
     if (!within(workspace, file) || !within(workspace, real))
       return yield* fail("A traced dependency escapes the application workspace.");
-    if (excluded(file) || excluded(real)) {
+    if (isSensitive(file) || isSensitive(real)) {
       const sensitive = path
-        .relative(workspace, excluded(file) ? file : real)
+        .relative(workspace, isSensitive(file) ? file : real)
         .replaceAll("\\", "/")
         .replace(/[^a-zA-Z0-9_./@+-]/g, "_");
       return yield* fail(`A traced dependency selects a sensitive file: ${sensitive}`);
@@ -597,7 +608,7 @@ export const WebsiteArtifactProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news }) {
           const name = yield* createPhysicalName({ id, maxLength: 80 });
-          const directory = path.join(initialCwd, ".alchemy", "neon-websites", name);
+          const directory = path.resolve(yield* dotAlchemyDirectory, "neon-websites", name);
           const { archive, hash } = yield* packageWebsiteInChild(news).pipe(Effect.scoped);
           yield* fs.makeDirectory(directory, { recursive: true });
           const artifactPath = path.join(directory, `${hash}.zip`);

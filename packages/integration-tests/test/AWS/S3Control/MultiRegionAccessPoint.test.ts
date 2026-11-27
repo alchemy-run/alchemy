@@ -1,4 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
+import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { MultiRegionAccessPoint } from "@alchemy.run/aws/S3Control";
 import { expect } from "@alchemy.run/test";
@@ -60,8 +61,9 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(deployed.mrap.multiRegionAccessPointName).toBeDefined();
       expect(deployed.mrap.status).toBe("READY");
       expect(deployed.mrap.alias).toBeDefined();
+      const { accountId } = yield* AWSEnvironment.current;
       expect(deployed.mrap.multiRegionAccessPointArn).toBe(
-        `arn:aws:s3::${ACCOUNT_ID}:accesspoint/${deployed.mrap.alias}`,
+        `arn:aws:s3::${accountId}:accesspoint/${deployed.mrap.alias}`,
       );
 
       // out-of-band verification via distilled

@@ -26,6 +26,9 @@ import StreamingFunctionLive, { StreamingFunction } from "./streaming-handler.ts
 
 const asyncHandlerPath = fileURLToPath(new URL("./async-handler.ts", import.meta.url));
 const namedHandlerPath = fileURLToPath(new URL("./named-handler.ts", import.meta.url));
+const nodeVersionHandlerPath = fileURLToPath(
+  new URL("./fixtures/node-version-handler.ts", import.meta.url),
+);
 const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 const externalPackageHandlerPath = fileURLToPath(
   new URL("./external-package-handler.ts", import.meta.url),
@@ -197,6 +200,50 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
     timeout: 120_000,
+  },
+);
+
+test.provider(
+  "runs on nodejs26.x and switches runtime in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (runtime: "nodejs24.x" | "nodejs26.x") =>
+        stack.deploy(
+          AWS.Lambda.Function("NodeVersionFn", {
+            main: nodeVersionHandlerPath,
+            functionUrl: false,
+            runtime,
+          }),
+        );
+      const nodeVersion = Effect.fn(function* (functionName: string) {
+        const response = yield* Lambda.invoke({ FunctionName: functionName, Payload: "{}" });
+        expect(response.FunctionError).toBeUndefined();
+        const payload = response.Payload
+          ? yield* response.Payload.pipe(Stream.decodeText(), Stream.mkString)
+          : "";
+        return (JSON.parse(payload) as { version: string }).version;
+      });
+
+      const node26 = yield* deploy("nodejs26.x");
+      const created = yield* Lambda.getFunctionConfiguration({ FunctionName: node26.functionName });
+      expect(created.Runtime).toBe("nodejs26.x");
+      expect(yield* nodeVersion(node26.functionName)).toMatch(/^v26\./);
+
+      const node24 = yield* deploy("nodejs24.x");
+      expect(node24.functionName).toBe(node26.functionName);
+      const updated = yield* Lambda.getFunctionConfiguration({ FunctionName: node24.functionName });
+      expect(updated.Runtime).toBe("nodejs24.x");
+      expect(yield* nodeVersion(node24.functionName)).toMatch(/^v24\./);
+
+      yield* stack.destroy();
+      yield* assertFunctionDeleted(node24.functionName);
+      yield* assertRoleDeleted(node24.roleName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"],
+    timeout: 180_000,
   },
 );
 

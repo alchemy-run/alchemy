@@ -16,6 +16,7 @@ import {
   mergeContainerCreateEnv,
   rewriteLoopbackHosts,
   toPullRef,
+  withCreatePlatform,
 } from "../Docker.ts";
 
 const PINNED =
@@ -432,6 +433,19 @@ const makeFailingStub = (verb: string, stderr: string, exitCode = 1) =>
     }),
   );
 
+describe("withCreatePlatform", () => {
+  it("pins a create request to the platform", () => {
+    expect(withCreatePlatform("/v1.47/containers/create?name=app", "linux/amd64")).toBe(
+      "/v1.47/containers/create?name=app&platform=linux%2Famd64",
+    );
+  });
+  it("leaves the request alone without a platform", () => {
+    expect(withCreatePlatform("/containers/create?name=app", undefined)).toBe(
+      "/containers/create?name=app",
+    );
+  });
+});
+
 describe("buildFailureHint", () => {
   it("names the buildx plugin when docker only names the flag", () => {
     expect(buildFailureHint("unknown flag: --load")).toContain("buildx");
@@ -471,6 +485,7 @@ layer(
       if (result._tag !== "Failure") return;
       const error = result.failure as {
         subtag: string;
+        message: string;
         hint?: string;
         detail?: { exitCode: number; stderr: string };
       };
@@ -478,6 +493,9 @@ layer(
       // The docker output the user needs is carried, not discarded.
       expect(error.detail?.exitCode).toBe(1);
       expect(error.detail?.stderr).toContain("unknown flag: --load");
+      // The message names the cause, so a log or test report shows it.
+      expect(error.message).toContain("(exit 1)");
+      expect(error.message).toContain("unknown flag: --load");
       expect(error.hint).toContain("buildx");
     }),
   );

@@ -232,7 +232,7 @@ export type Message = typeof Message.Type;
 +  execute: ({ customerId }) =>
 +    Effect.gen(function* () {
 +      const bank = yield* BankApi.Client;
-+      yield* bank.RegisterCustomer(customerId, { name: customerId });
++      yield* bank.RegisterCustomer({ customerId, name: customerId });
 +      return Message.Succeeded();
 +    }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
 +});
@@ -243,7 +243,7 @@ export type Message = typeof Message.Type;
 +  execute: ({ accountId, amount }) =>
 +    Effect.gen(function* () {
 +      const bank = yield* BankApi.Client;
-+      yield* bank.DepositMoney(accountId, { amount });
++      yield* bank.DepositMoney({ accountId, amount });
 +      return Message.Succeeded();
 +    }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
 +});
@@ -262,7 +262,7 @@ import * as Schema from "effect/Schema";
 import { defineMessageUnion } from "foldkit/message";
 import { AccountId } from "../Account.id.ts";
       // ...
-      yield* bank.DepositMoney(accountId, { amount });
+      yield* bank.DepositMoney({ accountId, amount });
       return Message.Succeeded();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
 });

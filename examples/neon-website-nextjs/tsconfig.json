@@ -29,5 +29,8 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules"],
-  "references": [{ "path": "../../packages/alchemy" }]
+  "references": [
+    { "path": "../../packages/alchemy" },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
+  ]
 }

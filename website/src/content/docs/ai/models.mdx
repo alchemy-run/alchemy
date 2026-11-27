@@ -1,0 +1,120 @@
+---
+title: Models
+description: Name a model once with AI.Model and back it with any Effect AI LanguageModel Layer, so a harness changes LLM by changing one Layer.
+---
+
+A harness runs each conversation on a model. `AI.Model` gives a model a name, and an Effect AI `LanguageModel` Layer says which LLM answers under that name. Conversations store the name, so the LLM behind it can change without touching them.
+
+## Declare a model
+
+A model is a class with a name:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+export class Smart extends AI.Model<Smart>()("smart", { contextWindow: 200_000, images: true }) {}
+```
+
+The options tell the harness what the model can take: `contextWindow` (128,000 tokens unless you say otherwise), `maxTokens` for one answer (8,192) and whether it accepts `images` (no).
+
+## Back it with an LLM
+
+`Fast.layer` takes an Effect AI `LanguageModel` Layer, from any provider. For the models Cloudflare hosts (the `@cf/...` ids), `AICloudflare.Model` does it in one call, with no provider key:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Model(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  parameters: { temperature: 0, maxTokens: 1024 },
+});
+```
+
+The model's key never leaves your runtime. Pi and OpenCode both run in your Durable Object, and each model request they make is answered by this Layer.
+
+## Route through AI Gateway
+
+An AI Gateway logs, caches and rate-limits requests on their way to a model. Pass one as `gateway`:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+export const Gateway = Cloudflare.AI.Gateway("Gateway", { collectLogs: true });
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Model(Fast, {
+  gateway: Gateway,
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
+```
+
+See [AI Gateway](/cloudflare/ai/ai-gateway).
+
+## Use another provider
+
+`Fast.layer` takes any `LanguageModel` Layer, so a provider without a ready-made Layer is a few lines. This is `AICloudflare.Model` written out:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const ai = yield* Cloudflare.Workers.AI();
+    return Fast.layer(ai.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }));
+  }),
+).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
+```
+
+The Effect runs where the harness is yielded, so the binding it declares is part of the deploy. See [Effect AI on Cloudflare](/cloudflare/ai/effect-ai), [Bedrock](/aws/ai/bedrock) and [Vertex AI](/gcp/ai/vertex-ai).
+
+## Set the default model
+
+Every [process](/ai/processes) runs on `AI.DefaultModel` unless told otherwise. Give it one of your models, where the process's Layers are provided:
+
+```typescript title="src/Layers.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Layer from "effect/Layer";
+import { FastLive, Smart, SmartLive } from "./models.ts";
+
+export const ModelsLive = AI.DefaultModel(Smart).pipe(
+  Layer.provideMerge(Layer.mergeAll(SmartLive, FastLive)),
+);
+```
+
+## Mention a model in a process
+
+A process that mentions a model may be run on it, and may start other sessions on it:
+
+```typescript title="src/Engineer.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Fast } from "./models.ts";
+import { Research } from "./Research.process.ts";
+
+export class Engineer extends AI.Process<Engineer>()("Engineer", {
+  description: "Make one change to the project.",
+})`
+  Start a ${Research} on ${Fast} for each thing you need to know, then make the change.
+` {}
+```
+
+Each mentioned model's Layer is a requirement of the process. See [Mention a model](/ai/process-graphs#mention-a-model).
+
+## List models on a harness
+
+A harness used without processes lists every model its conversations may run on. The first is the default:
+
+```typescript
+const harness = yield* Pi.Harness({ models: [Fast, Smart] });
+```

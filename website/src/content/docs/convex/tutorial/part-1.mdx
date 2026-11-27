@@ -1,0 +1,180 @@
+---
+title: "Part 1: Your First Stack"
+description: Declare a Convex table, a query and a mutation with Effect, create a project and a deployment, and push your functions.
+sidebar:
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+Build a message board: Convex stores the messages, and a Cloudflare Worker reads and writes them.
+
+The finished code is in [`examples/cloudflare-convex-worker`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-convex-worker).
+
+## Prerequisites
+
+Finish [Convex setup](/convex/setup) and [Cloudflare setup](/cloudflare/setup). Convex's free plan is enough.
+
+## Install Convex
+
+<PackageManagers add="convex" />
+
+`Convex.Functions` pushes with your project's own `convex` CLI.
+
+## Declare a table
+
+```typescript title="src/messages.ts"
+import * as Convex from "@alchemy.run/convex/Server";
+import * as Schema from "effect/Schema";
+
+export const Messages = Convex.Table("messages", Schema.Struct({ body: Schema.String }));
+```
+
+A table is an Effect Schema for its documents. Code that Convex bundles imports `@alchemy.run/convex/Server`.
+
+## Put it in the schema
+
+```typescript title="convex/schema.ts"
+import * as Convex from "@alchemy.run/convex/Server";
+import { Messages } from "../src/messages.ts";
+
+export default Convex.schema(Messages);
+```
+
+Convex pushes this schema with your functions, and checks every write against it.
+
+## Declare a query
+
+```diff lang="typescript"
+// src/messages.ts
+import * as Convex from "@alchemy.run/convex/Server";
+import * as Schema from "effect/Schema";
+
+export const Messages = Convex.Table("messages", Schema.Struct({ body: Schema.String }));
++
++export class ListMessages extends Convex.Query<ListMessages>()("messages:list", {
++  args: Schema.Struct({}),
++  returns: Schema.Array(Messages.Document),
++}) {}
+```
+
+A declaration holds the function's path and schemas, and no code. The Worker in part 2 imports it to call the query.
+
+## Declare a mutation
+
+```diff lang="typescript"
+// src/messages.ts
+export class ListMessages extends Convex.Query<ListMessages>()("messages:list", {
+  args: Schema.Struct({}),
+  returns: Schema.Array(Messages.Document),
+}) {}
++
++export class AddMessage extends Convex.Mutation<AddMessage>()("messages:add", {
++  args: Schema.Struct({ body: Schema.String }),
++  returns: Messages.Id,
++}) {}
+```
+
+A mutation writes, in one transaction. This one returns the new message's ID.
+
+## Implement the query
+
+```typescript title="src/messages.live.ts"
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { ListMessages, Messages } from "./messages.ts";
+
+export const ListMessagesLive = Layer.succeed(
+  ListMessages,
+  Effect.fn(function* () {
+    return yield* Messages.query().collect;
+  }),
+);
+```
+
+A Layer implements a declaration. `Messages.query()` reads the table in the transaction the query runs in.
+
+## Implement the mutation
+
+```diff lang="typescript"
+// src/messages.live.ts
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+-import { ListMessages, Messages } from "./messages.ts";
++import { AddMessage, ListMessages, Messages } from "./messages.ts";
+
+export const ListMessagesLive = Layer.succeed(
+  ListMessages,
+  Effect.fn(function* () {
+    return yield* Messages.query().collect;
+  }),
+);
++
++export const AddMessageLive = Layer.succeed(
++  AddMessage,
++  Effect.fn(function* ({ body }) {
++    return yield* Messages.insert({ body });
++  }),
++);
++
++export const MessagesLive = Layer.mergeAll(ListMessagesLive, AddMessageLive);
+```
+
+`insert` only type-checks in a mutation: a query can't write.
+
+## Serve the functions
+
+```typescript title="convex/messages.ts"
+import * as Convex from "@alchemy.run/convex/Server";
+import { MessagesLive } from "../src/messages.live.ts";
+import { AddMessage, ListMessages } from "../src/messages.ts";
+
+export const list = Convex.serve(ListMessages, MessagesLive);
+export const add = Convex.serve(AddMessage, MessagesLive);
+```
+
+Each export registers one function. Its path is the file and the export name, so `messages:list` is `list` in `convex/messages.ts`.
+
+## Declare a project and a deployment
+
+```typescript title="src/Backend.ts"
+import * as Convex from "@alchemy.run/convex";
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
+import * as Effect from "effect/Effect";
+
+export const Project = Convex.Project("Project").pipe(RemovalPolicy.destroy());
+
+export const Backend = Effect.gen(function* () {
+  const project = yield* Project;
+  return yield* Convex.Deployment("Backend", { project, type: "preview" });
+});
+```
+
+A project stays when you run `alchemy destroy` unless you pipe it through `RemovalPolicy.destroy()`.
+
+## Push your functions
+
+```typescript title="alchemy.run.ts"
+import * as Convex from "@alchemy.run/convex";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import { Backend } from "./src/Backend.ts";
+
+export default Alchemy.Stack(
+  "CloudflareConvexWorkerExample",
+  { providers: Convex.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const deployment = yield* Backend;
+    yield* Convex.Functions("Functions", { deployment, rootDir: "." });
+    return { url: deployment.url };
+  }),
+);
+```
+
+`rootDir` is the folder with `convex/` and a `package.json` that lists `convex`.
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+`url` is your deployment's address.

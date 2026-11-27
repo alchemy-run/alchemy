@@ -2,6 +2,8 @@ import * as Domain from "@alchemy.run/domain";
 import { mainAccountId } from "@bank/domain/Account/Account.id";
 import { agent, customer } from "@bank/domain/Actor";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import { Address } from "@bank/domain/Customer/Address";
+import { ContactDetails } from "@bank/domain/Customer/ContactDetails.aggregate";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { CustomerDashboard } from "@bank/domain/Customer/CustomerDashboard.view";
 import { Username } from "@bank/domain/Customer/Username";
@@ -24,8 +26,13 @@ import { SessionKeyTest, signedInAs } from "./session.ts";
 
 // The whole bank in one process: the same Layers the Worker uses, on the in-memory platform.
 const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments, MemoryLedgerStore);
+// The Vault the Worker uses, with its keys in memory.
+const Sealing = Domain.VaultLive.pipe(
+  Layer.provide(Layer.merge(Domain.MemoryKeyStore, Domain.NoKeyWrap)),
+);
 const BankInMemory = Bank.layer(BankHandlers).pipe(
   Layer.provide(Layer.mergeAll(Ports, Domain.InMemory)),
+  Layer.provideMerge(Sealing),
 );
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(BankInMemory),
@@ -47,11 +54,12 @@ it.live("register, then the live dashboard shows the main account", () =>
       const sam = yield* asCustomer("c-1");
       const accountId = yield* register(sam, "c-1", "sam");
       expect(accountId).toBe(mainAccountId(CustomerId.make("c-1")));
-      const deposited = yield* sam.DepositMoney(accountId, { amount: 250 });
+      const deposited = yield* sam.DepositMoney({ accountId, amount: 250 });
       expect(deposited).toEqual({
         reply: { balance: 250 },
         stream: `Account/${accountId}`,
         version: 2,
+        commits: [{ stream: `Account/${accountId}`, version: 2 }],
       });
       const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
         Stream.map(({ state }) => state),
@@ -69,15 +77,15 @@ it.live("withdrawing needs MFA, and only the owner may withdraw", () =>
       const sam = yield* asCustomer("c-1");
       const alex = yield* asCustomer("c-2");
       const accountId = yield* register(sam, "c-1", "sam");
-      yield* sam.DepositMoney(accountId, { amount: 100 });
+      yield* sam.DepositMoney({ accountId, amount: 100 });
 
-      const noMfa = yield* sam.WithdrawMoney(accountId, { amount: 10 }).pipe(Effect.flip);
+      const noMfa = yield* sam.WithdrawMoney({ accountId, amount: 10 }).pipe(Effect.flip);
       expect(noMfa._tag).toBe("MfaRequired");
 
-      const withdrawn = yield* sam.WithdrawMoney(accountId, { amount: 10 }, mfa);
+      const withdrawn = yield* sam.WithdrawMoney({ accountId, amount: 10 }, mfa);
       expect(withdrawn.reply).toEqual({ balance: 90 });
 
-      const stolen = yield* alex.WithdrawMoney(accountId, { amount: 10 }, mfa).pipe(Effect.flip);
+      const stolen = yield* alex.WithdrawMoney({ accountId, amount: 10 }, mfa).pipe(Effect.flip);
       expect(stolen._tag).toBe("NotOwner");
     }),
   ),
@@ -90,7 +98,7 @@ it.live("a view is a security boundary: owners and agents read it, others are re
       const alex = yield* asCustomer("c-2");
       const support = yield* asAgent("support-7");
       const accountId = yield* register(sam, "c-1", "sam");
-      const receipt = yield* sam.DepositMoney(accountId, { amount: 40 });
+      const receipt = yield* sam.DepositMoney({ accountId, amount: 40 });
       const atLeast = { stream: receipt.stream, version: receipt.version };
 
       expect(yield* sam.AccountSummary.get(accountId, { atLeast })).toMatchObject({ balance: 40 });
@@ -116,8 +124,8 @@ it.live(
         const alex = yield* asCustomer("c-2");
         const support = yield* asAgent("support-7");
         const accountId = yield* register(sam, "c-1", "sam");
-        yield* sam.DepositMoney(accountId, { amount: 100 });
-        const receipt = yield* sam.WithdrawMoney(accountId, { amount: 30 }, mfa);
+        yield* sam.DepositMoney({ accountId, amount: 100 });
+        const receipt = yield* sam.WithdrawMoney({ accountId, amount: 30 }, mfa);
 
         // The Ledger projection batches its writes; `atLeast` waits until it has this one.
         const first = yield* sam.AccountLedger(
@@ -147,7 +155,7 @@ it.live("a customer follows their account's events through its summary; others a
       const sam = yield* asCustomer("c-1");
       const alex = yield* asCustomer("c-2");
       const accountId = yield* register(sam, "c-1", "sam");
-      yield* sam.DepositMoney(accountId, { amount: 70 });
+      yield* sam.DepositMoney({ accountId, amount: 70 });
 
       const events = yield* sam.AccountSummary.events(accountId).pipe(
         Stream.filter(Domain.Read.isEvent),
@@ -161,12 +169,44 @@ it.live("a customer follows their account's events through its summary; others a
   ),
 );
 
+it.live("a customer's address is stored sealed, and opened only for them", () =>
+  inBank(
+    Effect.gen(function* () {
+      const sam = yield* asCustomer("c-1");
+      const alex = yield* asCustomer("c-2");
+      const customerId = CustomerId.make("c-1");
+      yield* sam.SetAddress({ customerId, address: Address.plain(customerId, "1 Main St") });
+
+      // What the model stored is ciphertext under the customer's key.
+      const stored = yield* (yield* ContactDetails).get(customerId);
+      expect(stored.address?.subject).toBe("c-1");
+      expect(stored.address?.box).not.toContain("1 Main St");
+      expect(yield* sam.CustomerAddress({ customerId })).toEqual({ address: "1 Main St" });
+      expect((yield* alex.CustomerAddress({ customerId }).pipe(Effect.flip))._tag).toBe(
+        "Forbidden",
+      );
+
+      // An address sealed under someone else's key is refused.
+      const error = yield* sam
+        .SetAddress({ customerId, address: Address.plain("c-2", "2 Side St") })
+        .pipe(Effect.flip);
+      expect(error._tag).toBe("NotYourAddress");
+
+      // Shredding the key leaves the event where it is, unreadable.
+      yield* (yield* Domain.Vault).shred(customerId);
+      expect(yield* sam.CustomerAddress({ customerId })).toEqual({ address: null });
+      expect((yield* (yield* ContactDetails).get(customerId)).address).toEqual(stored.address);
+    }),
+  ),
+);
+
 it.live("a customer can only register themselves", () =>
   inBank(
     Effect.gen(function* () {
       const sam = yield* asCustomer("c-1");
       const error = yield* sam
-        .RegisterCustomer(CustomerId.make("c-2"), {
+        .RegisterCustomer({
+          customerId: CustomerId.make("c-2"),
           name: "not sam",
           username: Username.make("not-sam"),
         })
@@ -183,7 +223,11 @@ it.live("a request without a session is unauthorized", () =>
         Effect.provide(sessionClient("nobody")),
       );
       const error = yield* anonymous
-        .RegisterCustomer(CustomerId.make("c-1"), { name: "x", username: Username.make("x") })
+        .RegisterCustomer({
+          customerId: CustomerId.make("c-1"),
+          name: "x",
+          username: Username.make("x"),
+        })
         .pipe(Effect.flip);
       expect(error._tag).toBe("Unauthorized");
     }),
@@ -197,7 +241,8 @@ it.live("a session the bank didn't sign is unauthorized", () =>
         CustomerApi.clientInProcess.pipe(
           Effect.provide(sessionClient(token)),
           Effect.flatMap((client) =>
-            client.RegisterCustomer(CustomerId.make("c-1"), {
+            client.RegisterCustomer({
+              customerId: CustomerId.make("c-1"),
               name: "x",
               username: Username.make("x"),
             }),
@@ -226,7 +271,7 @@ it.live(
         const alex = yield* asCustomer("c-2");
         const from = yield* register(sam, "c-1", "sam");
         const to = yield* register(alex, "c-2", "alex");
-        yield* sam.DepositMoney(from, { amount: 100 });
+        yield* sam.DepositMoney({ accountId: from, amount: 100 });
 
         const outcome = yield* transfer(sam, { transferId: "t-1", from, to, amount: 40 });
         expect(outcome.status).toBe("completed");
@@ -259,7 +304,7 @@ it.live("a watch ends with NotOwner when support reassigns the account", () =>
         Effect.forkChild,
       );
       yield* Effect.sleep("50 millis");
-      yield* support.ChangeOwner(accountId, { customerId: CustomerId.make("c-2") });
+      yield* support.ChangeOwner({ accountId, customerId: CustomerId.make("c-2") });
 
       const [first, second] = yield* Fiber.join(updates);
       expect(first).toMatchObject({ _tag: "Success", success: { state: { balance: 0 } } });

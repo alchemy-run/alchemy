@@ -1,0 +1,181 @@
+---
+title: Queries, mutations and actions
+description: Declare Convex queries, mutations and actions with Effect Schema, implement them as Layers, schedule work after a mutation commits, and bind other clouds from an action.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+Code reaches a Convex deployment's data only through its functions, and each kind may do different things. A **query** reads, and a client subscribed to it gets a new result whenever what it read changes. A **mutation** reads and writes in one transaction: if it fails, Convex keeps none of its writes, and if it conflicts with another mutation, Convex runs it again. An **action** may call the outside world, and reaches the data by running queries and mutations, each its own transaction.
+
+A mutation can't call out, because Convex may run it twice. It **schedules** an action instead, and the schedule commits with its writes.
+
+<Tree
+  nodes={[
+    { id: "deployment", label: "prod", type: "deployment", icon: "brand:convex", areas: ["messages list", "messages add", ". notify"], phoneAreas: ["list", "messages", "add", "notify"], colGap: 4 },
+    { id: "list", label: "messages:list", type: "query", parent: "deployment", icon: "square-function" },
+    { id: "add", label: "messages:add", type: "mutation", parent: "deployment", tone: "accent", icon: "square-function" },
+    { id: "notify", label: "messages:notify", type: "action", parent: "deployment", icon: "square-function" },
+    { id: "messages", label: "messages", type: "table", parent: "deployment", icon: "database" },
+    { id: "outbox", label: "Outbox", type: "SQS Queue", icon: "inbox" },
+  ]}
+  areas={["deployment outbox"]}
+  phoneAreas={["deployment", "outbox"]}
+  colGap={3.5}
+  links={[
+    { from: "list", to: "messages", label: "reads" },
+    { from: "add", to: "messages", label: "writes" },
+    { from: "add", to: "notify", label: "schedules", dashed: true },
+    { from: "notify", to: "outbox", label: "sends" },
+  ]}
+  caption="The query only reads. The mutation writes messages and schedules notify in the same transaction. Only the action reaches outside Convex, here an SQS Queue."
+/>
+
+In Alchemy, each function is a **declaration** and a **Layer**. The declaration holds the path and the schemas, so a browser, Worker or Lambda can import it to call the function. The Layer holds the code, and runs inside Convex.
+
+## Declare a function
+
+A declaration names its path, arguments and result. The path is the file in `convex/` and the export that serves it:
+
+```typescript title="src/messages.ts"
+import * as Convex from "@alchemy.run/convex/Server";
+import * as Schema from "effect/Schema";
+
+export const Messages = Convex.Table("messages", Schema.Struct({ channel: Schema.String, body: Schema.String }));
+
+export class ListMessages extends Convex.Query<ListMessages>()("messages:list", {
+  args: Schema.Struct({ channel: Schema.String }),
+  returns: Schema.Array(Messages.Document),
+}) {}
+```
+
+`Convex.Mutation` and `Convex.Action` declare the other kinds the same way. Leave out `returns` for a function that returns nothing.
+
+## Implement it with a Layer
+
+The handler reads the table through the transaction it runs in:
+
+```typescript title="src/messages.live.ts"
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { ListMessages, Messages } from "./messages.ts";
+
+export const ListMessagesLive = Layer.succeed(
+  ListMessages,
+  Effect.fn(function* ({ channel }) {
+    return yield* Messages.query((q) =>
+      q.withIndex("by_channel", (r) => r.eq("channel", channel)),
+    ).collect;
+  }),
+);
+```
+
+A handler may only use what its kind allows. A query that inserts or schedules doesn't type-check.
+
+## Construct it once
+
+`Layer.effect` gives the handler a constructor. It runs once per Convex isolate, before the first call, and `Config` there reads the deployment's environment variables:
+
+```typescript
+export const AddMessageLive = Layer.effect(
+  AddMessage,
+  Effect.gen(function* () {
+    const prefix = yield* Config.String("MESSAGE_PREFIX");
+    return Effect.fn(function* ({ channel, body }) {
+      return yield* Messages.insert({ channel, body: `${prefix}${body}` });
+    });
+  }),
+);
+```
+
+## Serve it
+
+Each export in `convex/` registers one function, so `messages:list` is the `list` export of `convex/messages.ts`:
+
+```typescript title="convex/messages.ts"
+import * as Convex from "@alchemy.run/convex/Server";
+import { MessagesLive } from "../src/messages.live.ts";
+import { AddMessage, ListMessages } from "../src/messages.ts";
+
+export const list = Convex.serve(ListMessages, MessagesLive);
+export const add = Convex.serve(AddMessage, MessagesLive);
+```
+
+Convex checks the arguments' encoded shape before the handler runs, and the handler decodes them with the declaration's schema. [Push the folder](/convex/functions/functions) with `Convex.Functions`.
+
+## Fail with a typed error
+
+Declare the failure with `error`. The caller gets the decoded value back:
+
+```typescript
+export class EmptyChannel extends Schema.TaggedError<EmptyChannel>()("EmptyChannel", {}) {}
+
+export class AddMessage extends Convex.Mutation<AddMessage>()("messages:add", {
+  args: Schema.Struct({ channel: Schema.String, body: Schema.String }),
+  returns: Messages.Id,
+  error: EmptyChannel,
+}) {}
+```
+
+A mutation that fails, with its declared error or any other, writes nothing.
+
+## Schedule work after a mutation commits
+
+```typescript
+const id = yield* Messages.insert({ channel, body });
+yield* Convex.schedule(Notify, { id });
+```
+
+Convex runs `Notify` once the mutation commits, and never if it fails. Pass `{ after: "1 hour" }` or `{ at: date }` to run it later. Declare `internal: true` on a function only other functions may call:
+
+```typescript
+export class Notify extends Convex.Action<Notify>()("messages:notify", {
+  args: Schema.Struct({ id: Messages.Id }),
+  internal: true,
+}) {}
+```
+
+## Call functions from an action
+
+```typescript
+const messages = yield* Convex.run(ListMessages, { channel });
+yield* Convex.run(AddMessage, { channel, body: `${messages.length} messages` });
+```
+
+Each `run` is its own transaction, so a later one can fail after an earlier one committed.
+
+## Bind another cloud from an action
+
+An action's constructor takes Alchemy bindings, as a Worker's does:
+
+```typescript title="src/outbox.live.ts"
+import * as AWS from "@alchemy.run/aws";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Outbox, Publish } from "./outbox.ts";
+
+export const OutboxLive = Layer.effect(
+  Publish,
+  Effect.gen(function* () {
+    const send = yield* AWS.SQS.SendMessage(Outbox);
+    return Effect.fn(function* ({ body }) {
+      yield* send({ MessageBody: body }).pipe(Effect.orDie);
+    });
+  }),
+).pipe(Layer.provide(AWS.SQS.SendMessageHttp));
+```
+
+Pass the Layer to `Convex.Functions` as `functions`. Alchemy runs the constructors at deploy, creates what each binding needs, and sets the variables it reads on the deployment:
+
+```typescript
+yield* Convex.Functions("Functions", { deployment, rootDir: ".", functions: OutboxLive });
+```
+
+An AWS binding gets an IAM user that may only assume a role allowed to send to `Outbox`. A `Config` the constructor reads at deploy becomes a variable of the same name on the deployment. A file whose actions import a cloud SDK starts with `"use node";`, so Convex runs it on Node.js.
+
+## Read the caller's identity
+
+```typescript
+const user = yield* Convex.identity;
+```
+
+It is `Option.none()` for an anonymous call, and otherwise the claims from the caller's verified JWT.

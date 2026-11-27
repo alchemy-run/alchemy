@@ -341,15 +341,13 @@ export const SubscriptionProvider = () =>
       if (current === undefined) {
         const created = yield* we
           .createSubscriptions({
-            body: {
-              targetResource: news.targetResource,
-              eventTypes,
-              notificationEndpoint: { pubsubTopic: topicName },
-              payloadOptions: news.payloadOptions,
-              driveOptions: news.driveOptions,
-              expireTime: news.expireTime,
-              ttl: news.ttl,
-            },
+            targetResource: news.targetResource,
+            eventTypes,
+            notificationEndpoint: { pubsubTopic: topicName },
+            payloadOptions: news.payloadOptions,
+            driveOptions: news.driveOptions,
+            expireTime: news.expireTime,
+            ttl: news.ttl,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -388,13 +386,11 @@ export const SubscriptionProvider = () =>
       );
       if (mask.length > 0) {
         const patched = yield* we.patchSubscriptions({
+          eventTypes,
+          expireTime: news.expireTime,
+          ttl: news.ttl,
           name,
           updateMask: mask,
-          body: {
-            eventTypes,
-            expireTime: news.expireTime,
-            ttl: news.ttl,
-          },
         });
         yield* waitForOperation(patched);
         current = (yield* getSubscription(name)) ?? current;

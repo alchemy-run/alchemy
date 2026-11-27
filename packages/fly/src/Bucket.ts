@@ -2,8 +2,6 @@ import { fromCredentials, type Credentials } from "@distilled.cloud/aws/Credenti
 import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
-import type { AddOnsResponseEdgesItemNode } from "@distilled.cloud/fly-io/addons";
-import * as addons from "@distilled.cloud/fly-io/addons";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -21,6 +19,7 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { resolveOrgSlug } from "./Environment.ts";
 import { TigrisCredentialsMissing } from "./Errors.ts";
+import * as AddOns from "./internal/AddOns.ts";
 import { createFlyAppName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -380,20 +379,7 @@ const keepSecret = (
 const envString = (env: Record<string, unknown>, key: BucketSecretName): string | undefined =>
   asString(env[key]);
 
-type ObservedAddOn = Pick<
-  AddOnsResponseEdgesItemNode,
-  | "id"
-  | "name"
-  | "status"
-  | "errorMessage"
-  | "environment"
-  | "options"
-  | "metadata"
-  | "ssoLink"
-  | "createdAt"
-> & {
-  organization?: { slug?: string | null; rawSlug?: string } | null;
-};
+type ObservedAddOn = AddOns.AddOnRow;
 
 const unwrapSecret = (value: Redacted.Redacted<string> | string): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
@@ -431,10 +417,7 @@ const toAttrs = (
   const env = asRecord(addOn.environment);
   const name = addOn.name ?? fallback?.name ?? previous?.name ?? "";
   const orgSlug =
-    asString(addOn.organization?.slug) ??
-    asString(addOn.organization?.rawSlug) ??
-    fallback?.orgSlug ??
-    previous?.orgSlug;
+    asString(addOn.orgSlug) ?? asString(addOn.orgRawSlug) ?? fallback?.orgSlug ?? previous?.orgSlug;
   return {
     addOnId: addOn.id,
     name,
@@ -473,24 +456,7 @@ const hasAlchemyMetadata = (metadata: unknown): boolean => {
 const isOwnedAddOn = (addOn: ObservedAddOn): boolean =>
   matchesAlchemyPhysicalName(addOn.name ?? undefined) || hasAlchemyMetadata(addOn.metadata);
 
-export const listTigrisAddOns = Effect.fn(function* () {
-  const rows: AddOnsResponseEdgesItemNode[] = [];
-  let after: string | undefined;
-  for (let i = 0; i < 8; i++) {
-    const page = yield* addons.addOns({
-      type: TIGRIS,
-      first: 50,
-      after,
-    });
-    for (const edge of page.edges ?? []) {
-      if (edge?.node != null) rows.push(edge.node);
-    }
-    if (!page.pageInfo.hasNextPage) break;
-    after = page.pageInfo.endCursor ?? undefined;
-    if (after === undefined || after.length === 0) break;
-  }
-  return rows;
-});
+export const listTigrisAddOns = () => AddOns.listAddOns(TIGRIS);
 
 const findById = (addOnId: string) =>
   listTigrisAddOns().pipe(Effect.map((addOns) => addOns.find((addOn) => addOn.id === addOnId)));
@@ -508,31 +474,25 @@ const pendingStatus = (status: string | undefined) =>
 
 const waitUntilReady = (name: string, addOnId: string) =>
   findById(addOnId).pipe(
-    Effect.flatMap(
-      (
-        addOn,
-      ): Effect.Effect<AddOnsResponseEdgesItemNode, BucketPending | BucketProvisionFailed> => {
-        if (addOn === undefined) {
-          return Effect.fail(new BucketPending({ resourceName: name, status: "missing" }));
-        }
-        const status = addOn.status ?? undefined;
-        if (failedStatus(status)) {
-          return Effect.fail(
-            new BucketProvisionFailed({
-              resourceName: name,
-              status,
-              errorMessage: addOn.errorMessage ?? undefined,
-            }),
-          );
-        }
-        if (pendingStatus(status)) {
-          return Effect.fail(
-            new BucketPending({ resourceName: name, status: status ?? "creating" }),
-          );
-        }
-        return Effect.succeed(addOn);
-      },
-    ),
+    Effect.flatMap((addOn): Effect.Effect<ObservedAddOn, BucketPending | BucketProvisionFailed> => {
+      if (addOn === undefined) {
+        return Effect.fail(new BucketPending({ resourceName: name, status: "missing" }));
+      }
+      const status = addOn.status ?? undefined;
+      if (failedStatus(status)) {
+        return Effect.fail(
+          new BucketProvisionFailed({
+            resourceName: name,
+            status,
+            errorMessage: addOn.errorMessage ?? undefined,
+          }),
+        );
+      }
+      if (pendingStatus(status)) {
+        return Effect.fail(new BucketPending({ resourceName: name, status: status ?? "creating" }));
+      }
+      return Effect.succeed(addOn);
+    }),
     Effect.retry({
       while: (e) => e._tag === "Fly.BucketPending",
       times: 8,
@@ -588,14 +548,10 @@ const tigrisHasBucket = (keys: TigrisKeys, bucketName: string) =>
   );
 
 const requestDelete = (addOnId: string, name: string) =>
-  addons
-    .deleteAddOn({
-      input: addOnId.length > 0 ? { addOnId } : { name, provider: TIGRIS },
-    })
-    .pipe(
-      Effect.as("deleted" as const),
-      Effect.catchTag("TigrisBucketNotFound", () => Effect.succeed("missing" as const)),
-    );
+  AddOns.deleteAddOn(addOnId.length > 0 ? { addOnId } : { name, provider: TIGRIS }).pipe(
+    Effect.as("deleted" as const),
+    Effect.catchTag("TigrisBucketNotFound", () => Effect.succeed("missing" as const)),
+  );
 
 interface DeleteTarget {
   addOnId: string;
@@ -681,15 +637,16 @@ const helperBucket = Effect.fn(function* (orgSlug: string) {
   }
   yield* ensureTos(orgSlug, org.id);
   const name = `alchemy-fix-${yield* randomBase32(16)}`;
-  const created = yield* addons.createAddOn({
-    input: {
-      type: TIGRIS,
-      name,
-      organizationId: org.id,
-      options: desiredOptions({}),
-    },
+  const created = yield* AddOns.createAddOn({
+    type: TIGRIS,
+    name,
+    organizationId: org.id,
+    options: desiredOptions({}),
   });
-  return toAttrs(created.addOn, undefined, { name, orgSlug });
+  if (created === undefined) {
+    return yield* new BucketNotCreated({ resourceName: name });
+  }
+  return toAttrs(created, undefined, { name, orgSlug });
 });
 
 /**
@@ -749,24 +706,16 @@ const waitUntilGone = Effect.fn(function* (attrs: Bucket["Attributes"]) {
   yield* repairStaleRecord(target, attrs.orgSlug ?? (yield* resolveOrgSlug()));
 });
 
-const resolveOrganization = (orgSlug: string) =>
-  addons
-    .organization({ slug: orgSlug })
-    .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
+const resolveOrganization = (orgSlug: string) => AddOns.getOrganization(orgSlug);
 
 const ensureTos = (orgSlug: string, organizationId: string) =>
   Effect.gen(function* () {
-    const agreed = yield* addons.agreedToProviderTos({
-      slug: orgSlug,
-      providerName: TIGRIS,
-    });
+    const agreed = yield* AddOns.agreedToProviderTos(orgSlug, TIGRIS);
     if (agreed === true) return;
     const tos = yield* Effect.result(
-      addons.createExtensionTosAgreement({
-        input: {
-          addOnProviderName: TIGRIS,
-          organizationId,
-        },
+      AddOns.createExtensionTosAgreement({
+        addOnProviderName: TIGRIS,
+        organizationId,
       }),
     );
     if (Result.isFailure(tos)) return;
@@ -814,9 +763,11 @@ export const BucketProvider = () =>
     lookup: Effect.fn(function* ({ name }) {
       const found = yield* findByName(name);
       if (found === undefined) return undefined;
-      const detail = yield* addons
-        .addOn({ id: found.id, name: found.name ?? name, provider: TIGRIS })
-        .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
+      const detail = yield* AddOns.getAddOn({
+        id: found.id,
+        name: found.name ?? name,
+        provider: TIGRIS,
+      });
       return toAttrs(detail ?? found, undefined, { name });
     }),
 
@@ -863,21 +814,21 @@ export const BucketProvider = () =>
       if (current === undefined) {
         yield* ensureTos(orgSlug, org.id);
         const created = yield* Effect.result(
-          addons.createAddOn({
-            input: {
-              type: TIGRIS,
-              name,
-              organizationId: org.id,
-              options: desiredOptions(props),
-            },
+          AddOns.createAddOn({
+            type: TIGRIS,
+            name,
+            organizationId: org.id,
+            options: desiredOptions(props),
           }),
         );
-        if (Result.isSuccess(created)) {
-          current = created.success.addOn;
+        if (Result.isSuccess(created) && created.success !== undefined) {
+          current = created.success;
         } else {
           current = yield* findByName(name);
           if (current === undefined) {
-            return yield* created.failure;
+            return yield* Result.isFailure(created)
+              ? created.failure
+              : new BucketNotCreated({ resourceName: name });
           }
         }
         const createdSecrets = current;
@@ -915,18 +866,16 @@ export const BucketProvider = () =>
           ...desired,
         };
         const updated = yield* Effect.result(
-          addons.updateAddOn({
-            input: {
-              addOnId: current.id,
-              options: optionsChanged ? nextOptions : undefined,
-              metadata: metaChanged ? nextMeta : undefined,
-            },
+          AddOns.updateAddOn({
+            addOnId: current.id,
+            options: optionsChanged ? nextOptions : undefined,
+            metadata: metaChanged ? nextMeta : undefined,
           }),
         );
         if (Result.isSuccess(updated)) {
           current = {
             ...current,
-            ...updated.success.addOn,
+            ...updated.success,
           };
         } else {
           current = (yield* findById(current.id)) ?? current;
@@ -1057,13 +1006,11 @@ const findAttachedBucket = (input: { id?: string; name: string }) =>
         status: "missing",
       });
     }
-    const detail = yield* addons
-      .addOn({
-        id: listed.id,
-        name: listed.name ?? input.name,
-        provider: TIGRIS,
-      })
-      .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
+    const detail = yield* AddOns.getAddOn({
+      id: listed.id,
+      name: listed.name ?? input.name,
+      provider: TIGRIS,
+    });
     return detail ?? listed;
   });
 

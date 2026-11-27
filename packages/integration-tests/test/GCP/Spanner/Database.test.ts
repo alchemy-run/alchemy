@@ -8,6 +8,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -103,13 +104,13 @@ test.provider(
       expect(ddl.statements?.some((statement) => statement.includes("Users"))).toEqual(true);
 
       const session = yield* spanner.createProjectsInstancesDatabasesSessions({
+        session: {},
         database: created.database.name,
-        body: { session: {} },
       });
       const result = yield* spanner
         .executeSqlProjectsInstancesDatabasesSessions({
+          sql: "SELECT 1 AS n",
           session: session.name ?? "",
-          body: { sql: "SELECT 1 AS n" },
         })
         .pipe(
           Effect.ensuring(
@@ -154,6 +155,30 @@ test.provider(
       });
       expect(refetched.enableDropProtection).toEqual(true);
 
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "AppDb",
+        tag: "GCP.Spanner.DatabaseDropProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const instance = yield* GCP.Spanner.Instance("App", {
+            instanceId: created.instance.instanceId,
+            config: "regional-us-central1",
+            processingUnits: 100,
+            displayName: "alchemy-db-spnr",
+            defaultBackupScheduleType: "NONE",
+          });
+          const database = yield* GCP.Spanner.Database("AppDb", {
+            instance: instance.instanceId,
+            databaseId: created.database.databaseId,
+            extraStatements: ["CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY (UserId)"],
+            enableDropProtection: false,
+          });
+          return { instance, database };
+        }),
+      );
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.database.name);
@@ -165,13 +190,10 @@ test.provider(
 /** Rows of one query, read out-of-band through a fresh session. */
 const querySpanner = (database: string, sql: string) =>
   Effect.acquireUseRelease(
-    spanner.createProjectsInstancesDatabasesSessions({ database, body: { session: {} } }),
+    spanner.createProjectsInstancesDatabasesSessions({ session: {}, database }),
     (session) =>
       spanner
-        .executeSqlProjectsInstancesDatabasesSessions({
-          session: session.name ?? "",
-          body: { sql },
-        })
+        .executeSqlProjectsInstancesDatabasesSessions({ sql, session: session.name ?? "" })
         .pipe(Effect.map((result) => (result.rows ?? []) as unknown[][])),
     (session) =>
       spanner

@@ -238,13 +238,11 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProvider
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels({
+            label,
+            labeledResource: news.labeledResource,
+            qaAnswerLabel: news.qaAnswerLabel,
             parent: news.parent,
             feedbackLabelId,
-            body: {
-              label,
-              labeledResource: news.labeledResource,
-              qaAnswerLabel: news.qaAnswerLabel,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -265,18 +263,15 @@ export const AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProvider
         current =
           yield* cci.patchProjectsLocationsAuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabels(
             {
+              label,
+              labeledResource: news.labeledResource,
+              qaAnswerLabel: news.qaAnswerLabel,
               name: currentName,
               updateMask: updateMaskOf(
                 labelChanged ? "label" : undefined,
                 resourceChanged ? "labeled_resource" : undefined,
                 qaChanged ? "qa_answer_label" : undefined,
               ),
-              body: {
-                name: currentName,
-                label,
-                labeledResource: news.labeledResource,
-                qaAnswerLabel: news.qaAnswerLabel,
-              },
             },
           );
       }

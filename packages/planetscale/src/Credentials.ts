@@ -1,4 +1,3 @@
-import { ConfigError } from "@distilled.cloud/core/errors";
 import {
   type Config as PlanetscaleClientConfig,
   Credentials,
@@ -67,7 +66,9 @@ export const fromAuthProvider = () =>
       // never expire) so a long `alchemy dev` session re-resolves — and
       // thereby refreshes — the token instead of keeping the first, by then
       // dead, resolution forever.
-      return yield* lazyCredentials<PlanetscaleResolvedCredentials, ConfigError>()(
+      // `Credentials` has no error channel: a failed resolution dies, and the
+      // engine reports it as `CredentialsRequired`.
+      return yield* lazyCredentials<PlanetscaleResolvedCredentials>()(
         PLANETSCALE_AUTH_PROVIDER_NAME,
         (creds): PlanetscaleClientConfig =>
           creds.type === "oauth"
@@ -87,6 +88,6 @@ export const fromAuthProvider = () =>
         {
           expiresAt: (creds) => (creds.type === "oauth" ? creds.expires : undefined),
         },
-      );
+      ).pipe(Effect.map(Effect.orDie));
     }),
   );

@@ -579,11 +579,7 @@ export const ReservationProvider = () =>
 
       if (current === undefined) {
         const inserted = yield* compute
-          .insertReservations({
-            project: env.project,
-            zone,
-            body: desired,
-          })
+          .insertReservations({ ...desired, project: env.project, zone })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitZoneOperation(env.project, zone, inserted, {
@@ -622,6 +618,10 @@ export const ReservationProvider = () =>
 
       if (descriptionChanged || shareChanged || emergentChanged) {
         const patched = yield* compute.updateReservations({
+          name: reservationName,
+          description: desired.description,
+          shareSettings: desired.shareSettings,
+          enableEmergentMaintenance: desired.enableEmergentMaintenance,
           project: env.project,
           zone,
           reservation: reservationName,
@@ -632,13 +632,6 @@ export const ReservationProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          // `reservations.update` rejects a body without `name`.
-          body: {
-            name: reservationName,
-            description: desired.description,
-            shareSettings: desired.shareSettings,
-            enableEmergentMaintenance: desired.enableEmergentMaintenance,
-          },
         });
         yield* waitZoneOperation(env.project, zone, patched);
         current =
@@ -661,10 +654,10 @@ export const ReservationProvider = () =>
         desiredCount !== observedCount
       ) {
         const resized = yield* compute.resizeReservations({
+          specificSkuCount: desiredCount,
           project: env.project,
           zone,
           reservation: reservationName,
-          body: { specificSkuCount: desiredCount },
         });
         yield* waitZoneOperation(env.project, zone, resized);
         current = yield* waitReservationReady(env.project, zone, reservationName);

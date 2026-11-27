@@ -84,16 +84,14 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         appengine.createProjectsLocationsApplicationsAuthorizedCertificates({
+          displayName: "Alchemy Appengine Probe",
+          certificateRawData: {
+            publicCertificate: CERT_A,
+            privateKey: KEY_A,
+          },
           projectsId: project,
           locationsId: location,
           applicationsId: project,
-          body: {
-            displayName: "Alchemy Appengine Probe",
-            certificateRawData: {
-              publicCertificate: CERT_A,
-              privateKey: KEY_A,
-            },
-          },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

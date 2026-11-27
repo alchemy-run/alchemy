@@ -78,7 +78,9 @@ export const benchWorker = (version: string, added?: BenchView) =>
     const total = added?.kind === "total" ? yield* added.view : undefined;
     // Idempotent: a retried seed request doesn't deposit twice.
     const deposit = (account: string, amount: number) =>
-      accounts.send(account, new Deposit({ amount }), { commandId: `seed-${account}-${amount}` });
+      accounts.send(new Deposit({ id: account, amount }), {
+        commandId: `seed-${account}-${amount}`,
+      });
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;

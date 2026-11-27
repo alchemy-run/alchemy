@@ -51,12 +51,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         beyondcorp.createProjectsLocationsSecurityGatewaysApplications({
+          displayName: "probe",
+          endpointMatchers: [{ hostname: "example.com", ports: [443] }],
           parent: `projects/${project}/locations/global/securityGateways/alchemy-missing-sg`,
           applicationId: "alch-probe-app",
-          body: {
-            displayName: "probe",
-            endpointMatchers: [{ hostname: "example.com", ports: [443] }],
-          },
         }),
       );
       expect(error._tag).toEqual("NotFound");

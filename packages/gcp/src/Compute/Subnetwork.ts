@@ -564,29 +564,23 @@ export const SubnetworkProvider = () =>
         if (news.ipv6AccessType !== undefined) {
           body.ipv6AccessType = news.ipv6AccessType;
         }
-        yield* compute
-          .insertSubnetworks({
-            project: env.project,
-            region,
-            body,
-          })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitRegionOperation(env.project, region, operation, {
-                ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }),
-            ),
-            Effect.catchTag("Conflict", () => Effect.void),
-          );
+        yield* compute.insertSubnetworks({ ...body, project: env.project, region }).pipe(
+          Effect.flatMap((operation) =>
+            waitRegionOperation(env.project, region, operation, {
+              ignore: ["RESOURCE_ALREADY_EXISTS"],
+            }),
+          ),
+          Effect.catchTag("Conflict", () => Effect.void),
+        );
         current = yield* requireSubnetwork(env.project, region, subnetworkName);
       }
 
       if ((current.privateIpGoogleAccess === true) !== privateIpGoogleAccess) {
         const updated = yield* compute.setPrivateIpGoogleAccessSubnetworks({
+          privateIpGoogleAccess,
           project: env.project,
           region,
           subnetwork: subnetworkName,
-          body: { privateIpGoogleAccess },
         });
         yield* waitRegionOperation(env.project, region, updated);
         current = yield* requireSubnetwork(env.project, region, subnetworkName);
@@ -635,10 +629,10 @@ export const SubnetworkProvider = () =>
       if (Object.keys(patchBody).length > 0) {
         patchBody.fingerprint = current.fingerprint;
         const patched = yield* compute.patchSubnetworks({
+          ...patchBody,
           project: env.project,
           region,
           subnetwork: subnetworkName,
-          body: patchBody,
         });
         yield* waitRegionOperation(env.project, region, patched);
         current = yield* requireSubnetwork(env.project, region, subnetworkName);

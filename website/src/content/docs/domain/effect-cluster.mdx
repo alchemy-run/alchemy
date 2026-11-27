@@ -103,6 +103,7 @@ Every object of the model is an entity id of the `Bank` entity, named after what
 | Your model | On Effect Cluster |
 | --- | --- |
 | An aggregate instance, like account `a-1` | The entity id `Bank.AccountAggregate/a-1` |
+| A decision, like a transfer from `a-1` to `a-2` | No entity id of its own: the entity id of the first instance it reads runs it |
 | A view key, like the summary of `a-1` | The entity id `Bank.AccountSummaryView/a-1` |
 | A policy | One entity id per policy and key |
 | A projection key | One entity id per projection and key, with the key's input log |
@@ -115,7 +116,33 @@ Each entity id keeps its state in one table of the cluster's database, `alchemy_
 
 Commands to one aggregate instance run one at a time. Its events, new state and reply commit together in one Postgres transaction, or not at all.
 
+A [decision](/domain/decision) records on every instance it reads, or on none. The first instance it reads runs the commit across them, and finishes it from its own storage if anything stops midway. See [How it commits](/domain/decision#how-it-commits).
+
 Every event reaches the views, projections and policies that consume it, at least once and in order for each source, even if a runner restarts in between. Scheduled commands are persisted messages, delivered when they're due on whichever runner then owns the instance.
+
+## Keep dedupe rows for a while
+
+Some rows exist only to drop repeats: the receipt of each accepted command and committed decision, the mark that a policy ran a delivery, a cancelled scheduled command, and Effect Cluster's processed messages to the model's entity. Every runner deletes them once they are older than `retention`, each hour:
+
+```typescript
+DomainCluster.layerEntities({
+  name: "Bank",
+  main: import.meta.url,
+  handler: "BankLive",
+  pool: Default,
+  retention: {
+    receipts: "30 days", // a command or decision sent again after this is decided again
+    deliveries: "7 days", // a delivery that arrives again after this runs again
+    cancelled: "7 days", // after this, `unschedule` answers `NotScheduled`
+    messages: "7 days",
+    interval: "1 hour",
+  },
+});
+```
+
+These are the defaults. `"forever"` keeps a kind of row. Events, state and the views' entries are never deleted.
+
+On `ClusterCloudflare.DurableObjectPool`, each instance keeps its rows in its own Durable Object and deletes a few past their window every time it commits, as on [Cloudflare](/domain/cloudflare#keep-dedupe-rows-for-a-while). `messages` and `interval` apply only to pools with a cluster database.
 
 ## Watch without polling
 

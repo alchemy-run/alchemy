@@ -6,11 +6,10 @@
  */
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { safeHttpEffect } from "alchemy/Http";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Self } from "alchemy/Self";
 import { StackContext } from "alchemy/StackContext";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
@@ -84,18 +83,7 @@ export const makeEffectMain = (entrypoint: unknown) => {
     NodeServices.layer,
     FetchHttpClient.layer,
     SecureRandom.layerWebCrypto,
-    Layer.effect(
-      ConfigProvider.ConfigProvider,
-      Effect.sync(() =>
-        reifyBoundConfigProvider(
-          ConfigProvider.orElse(
-            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-            ConfigProvider.fromEnv(),
-          ),
-          process.env,
-        ),
-      ),
-    ),
+    RuntimeConfigProviderLive,
     Layer.effect(
       StackContext,
       Effect.sync(() => ({

@@ -1,3 +1,4 @@
+import type { ContainerRuntimeSettings } from "@alchemy.run/docker/ContainerRuntime";
 import {
   ClusterAdapter,
   ClusterNotFoundError,
@@ -25,6 +26,7 @@ import * as Redacted from "effect/Redacted";
 import { makeImageSource, type ImageSourceLike } from "../ECR/ImageSource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { dnsSuffixOf } from "../Partition.ts";
 /**
  * The `aws-eks` {@link ClusterAdapter}: everything platform-specific about
  * running `Kubernetes.*` workloads on Amazon EKS.
@@ -140,7 +142,7 @@ const mintEksToken = Effect.fn(function* (clusterName: string, region: string) {
 
   const presigned = yield* SigV4.sign({
     method: "GET",
-    url: `https://sts.${region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15&X-Amz-Expires=60`,
+    url: `https://sts.${region}.${dnsSuffixOf(region)}/?Action=GetCallerIdentity&Version=2011-06-15&X-Amz-Expires=60`,
     headers: { "x-k8s-aws-id": clusterName },
     accessKeyId: Redacted.value(credentials.accessKeyId),
     secretAccessKey: credentials.secretAccessKey,
@@ -240,11 +242,10 @@ import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -308,12 +309,7 @@ const program = tag.pipe(
       Layer.provideMerge(Region.fromEnv()),
       Layer.provideMerge(BunHttpServer()),
       Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
+      Layer.provideMerge(RuntimeConfigProviderLive),
     )
   ),
   Effect.scoped
@@ -339,11 +335,10 @@ export const makeEksJobBootstrap =
 import { BunServices } from "@effect/platform-bun";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -399,12 +394,7 @@ const program = tag.pipe(
       Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),
       Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
+      Layer.provideMerge(RuntimeConfigProviderLive),
     )
   ),
   Effect.scoped
@@ -595,6 +585,7 @@ export const EksKubernetesAdapter = () =>
             port: options.port,
             isExternal: options.isExternal,
             bootstrap: options.bootstrap,
+            runtime: options.runtime,
             session: options.session,
           })
           .pipe(Effect.provideContext(context));
@@ -615,6 +606,7 @@ export const EksKubernetesAdapter = () =>
         port?: number | undefined;
         isExternal?: boolean | undefined;
         bootstrap: (importPath: string) => string;
+        runtime?: ContainerRuntimeSettings;
       }) {
         return yield* imageSource
           .hash({
@@ -623,6 +615,7 @@ export const EksKubernetesAdapter = () =>
             port: options.port,
             isExternal: options.isExternal,
             bootstrap: options.bootstrap,
+            runtime: options.runtime,
           })
           .pipe(Effect.provideContext(context));
       });
@@ -676,6 +669,7 @@ export const EksKubernetesAdapter = () =>
           hash: registryHash,
           delete: registryDelete,
         },
+        runtimeBootstrap: "@alchemy.run/aws/Bootstrap/Eks",
         bootstrap: {
           server: makeEksServerBootstrap,
           job: makeEksJobBootstrap,

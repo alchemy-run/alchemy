@@ -581,29 +581,27 @@ export const InterconnectAttachmentProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertInterconnectAttachments({
+            name: interconnectAttachmentName,
+            router,
+            type,
+            interconnect: news.interconnect
+              ? interconnectUrl(env.project, news.interconnect)
+              : undefined,
+            edgeAvailabilityDomain: news.edgeAvailabilityDomain,
+            description: news.description,
+            adminEnabled,
+            bandwidth: news.bandwidth,
+            mtu: news.mtu,
+            stackType,
+            encryption,
+            vlanTag8021q: news.vlanTag8021q,
+            ipsecInternalAddresses: news.ipsecInternalAddresses,
+            partnerMetadata: news.partnerMetadata,
+            l2Forwarding: news.l2Forwarding,
+            subnetLength: news.subnetLength,
+            candidateSubnets: news.candidateSubnets,
             project: env.project,
             region,
-            body: {
-              name: interconnectAttachmentName,
-              router,
-              type,
-              interconnect: news.interconnect
-                ? interconnectUrl(env.project, news.interconnect)
-                : undefined,
-              edgeAvailabilityDomain: news.edgeAvailabilityDomain,
-              description: news.description,
-              adminEnabled,
-              bandwidth: news.bandwidth,
-              mtu: news.mtu,
-              stackType,
-              encryption,
-              vlanTag8021q: news.vlanTag8021q,
-              ipsecInternalAddresses: news.ipsecInternalAddresses,
-              partnerMetadata: news.partnerMetadata,
-              l2Forwarding: news.l2Forwarding,
-              subnetLength: news.subnetLength,
-              candidateSubnets: news.candidateSubnets,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -633,17 +631,15 @@ export const InterconnectAttachmentProvider = () =>
           region,
           interconnectAttachmentName,
           compute.patchInterconnectAttachments({
+            description: news.description,
+            adminEnabled,
+            bandwidth: news.bandwidth,
+            mtu: news.mtu,
+            stackType,
+            partnerMetadata: news.partnerMetadata,
             project: env.project,
             region,
             interconnectAttachment: interconnectAttachmentName,
-            body: {
-              description: news.description,
-              adminEnabled,
-              bandwidth: news.bandwidth,
-              mtu: news.mtu,
-              stackType,
-              partnerMetadata: news.partnerMetadata,
-            },
           }),
         );
         current = (yield* getByName(env.project, region, interconnectAttachmentName)) ?? current;
@@ -666,13 +662,11 @@ export const InterconnectAttachmentProvider = () =>
             region,
             interconnectAttachmentName,
             compute.setLabelsInterconnectAttachments({
+              labels: desiredLabels,
+              labelFingerprint: latest.labelFingerprint,
               project: env.project,
               region,
               resource: interconnectAttachmentName,
-              body: {
-                labels: desiredLabels,
-                labelFingerprint: latest.labelFingerprint,
-              },
             }),
           );
         }).pipe(
