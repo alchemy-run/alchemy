@@ -1,6 +1,11 @@
 /**
- * The hero's provider reel: one model, declared and proved once, served from
- * seven providers. The bank is the model the rest of the page uses.
+ * The hero's provider reel: one program, declared and proved once, served
+ * from seven providers. It holds all three parts: the infrastructure, an AI
+ * process, and the model's rules. The bank is the model the rest of the
+ * page uses.
+ *
+ * The aggregate comes last: its lines are short, which leaves the card's
+ * bottom-right corner free for the terminal that sits over it.
  *
  * Props are plain objects: a prop accepts the resource's Effect directly
  * (`cluster: Cluster`), so nothing has to be yielded first.
@@ -16,6 +21,13 @@ export const HOST_TEMPLATE = `export default ⟨0⟩(
     return { fetch: bank.fetch };
   }).pipe(Effect.provide(⟨2⟩)),
 );
+
+export class Fraud extends AI.Process<Fraud>()("Fraud", {
+  description: "Review one risky withdrawal.",
+})\`
+  Read the account with \${Bank.AccountSummary}.
+  If it looks stolen, send \${Bank.FreezeAccount}.
+\` {}
 
 export class Account extends Domain.Aggregate("Account", {
   decide: {
@@ -115,9 +127,9 @@ export const hostSource = (values: readonly string[]) =>
   HOST_TEMPLATE.replace(/⟨(\d)⟩/g, (_, i: string) => values[+i]!);
 
 /**
- * The same program for narrow screens: the props sit one per line and the
- * aggregate's handlers are folded to their names, so no line passes ~42
- * columns. Slot ⟨1⟩ holds the host's extra props on a line of their own.
+ * The same program for narrow screens: the props sit one per line, the
+ * prose wraps, and the aggregate's handlers are folded to their names, so
+ * no line passes ~42 columns. Slot ⟨1⟩ holds the host's extra props on a line of their own.
  */
 export const HOST_TEMPLATE_COMPACT = `export default ⟨0⟩(
   "Api",
@@ -130,6 +142,15 @@ export const HOST_TEMPLATE_COMPACT = `export default ⟨0⟩(
     return { fetch: bank.fetch };
   }).pipe(Effect.provide(⟨2⟩)),
 );
+
+export class Fraud extends
+  AI.Process<Fraud>()("Fraud", {
+    description: "Review a withdrawal.",
+  })\`
+    Read \${Bank.AccountSummary}. If it
+    looks stolen, send
+    \${Bank.FreezeAccount}.
+  \` {}
 
 export class Account extends
   Domain.Aggregate("Account", {

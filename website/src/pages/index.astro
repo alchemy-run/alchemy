@@ -590,7 +590,7 @@ const PROVIDERS = [
       <p class="v2-lede" data-copy>
         A <a href="/domain/story">story</a> is a test written in the model's own terms: given this history, when this command, then these events. It reads like the requirement it came from, so the person who asked for the behavior can check it. It runs the real model in memory in milliseconds, policies and sagas included, and fails if anything happens that it doesn't account for. Write the story first, and let your agent change the model until it passes.
       </p>
-      <div class="v2-split">
+      <div class="v2-split v2-split--first-on-phones">
         <CodeBlock filename="test/Account.test.ts" code={STORY_RULE_SRC} compact />
         <CodeBlock filename="test/Fraud.test.ts" code={STORY_CHAIN_SRC} compact />
       </div>
@@ -1345,6 +1345,10 @@ const PROVIDERS = [
   @media (max-width: 900px) {
     .v2-split {
       grid-template-columns: 1fr;
+    }
+    /* Stacked, a second snippet of the same kind is a long scroll for little: keep the first. */
+    .v2-split--first-on-phones > :global(:nth-child(n + 2)) {
+      display: none;
     }
   }
 
