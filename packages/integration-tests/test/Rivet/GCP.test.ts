@@ -4,18 +4,26 @@ import * as IAM from "@alchemy.run/gcp/IAM";
 import * as SecretManager from "@alchemy.run/gcp/SecretManager";
 import * as Rivet from "@alchemy.run/rivet";
 import * as RivetGCP from "@alchemy.run/rivet/GCP";
+import { withConnection } from "@alchemy.run/rivet/internal/Connection";
+import * as RivetNode from "@alchemy.run/rivet/Node";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
+import * as Pools from "@distilled.cloud/rivet/pools";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
 import { CLASS_SECRET, ClassSecretConfig } from "./fixtures/class-secret.ts";
+import { Counter } from "./fixtures/counter-declaration.ts";
 import { secretMembers, workerPools } from "./fixtures/gcp-checks.ts";
 import { Cluster } from "./fixtures/gcp/cluster.ts";
 import { CounterLive } from "./fixtures/gcp/counter-live.ts";
 import Front from "./fixtures/gcp/front.ts";
+import { PrivateCluster, PrivateServices } from "./fixtures/gcp/private-cluster.ts";
+import { PrivateCounterLive } from "./fixtures/gcp/private-counter-live.ts";
 import { expectRustCounter, RustActors, rustTarget, type RustTarget } from "./fixtures/rust.ts";
 
 const testOptions = { providers: Layer.mergeAll(GCP.providers(), Rivet.providers()) };
@@ -149,6 +157,124 @@ describe.skipIf(!!process.env.FAST)(
         }),
       ),
       { timeout: 600_000, ...rustPool },
+    );
+  },
+);
+
+// A control plane with a private address on a GCP network, given to
+// Rivet.ControlPlane: a Cloud Run pool joins the network and its nodes
+// connect privately, and a pool that can't join connects to the public
+// endpoint.
+const privateStack = Core.scratchStack(testOptions, "RivetGcpPrivate", import.meta.url);
+let reached: {
+  endpoint: string;
+  nodeEndpoint: string;
+  token: Redacted.Redacted<string>;
+  namespace: string;
+};
+/** A worker pool's plain environment, by name. */
+const envOf = (
+  pool:
+    | { template?: { containers?: Array<{ env?: Array<{ name?: string; value?: string }> }> } }
+    | undefined,
+) =>
+  Object.fromEntries(
+    (pool?.template?.containers?.[0]?.env ?? []).map((entry) => [entry.name ?? "", entry.value]),
+  );
+
+describe.skipIf(!!process.env.FAST)(
+  "Rivet on GCP (a control plane with a private address)",
+  { tags: ["provider:rivet", "provider:gcp", "live"] },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        if (!process.env.NO_DESTROY) yield* privateStack.destroy();
+        reached = (yield* privateStack.deploy(
+          Effect.gen(function* () {
+            yield* Counter;
+            yield* Rivet.Services;
+            const cluster = yield* Rivet.Cluster;
+            return {
+              endpoint: cluster.endpoint,
+              nodeEndpoint: cluster.nodeEndpoint,
+              token: cluster.token,
+              namespace: cluster.namespace,
+            };
+          }).pipe(
+            Effect.provide(
+              Layer.mergeAll(PrivateCounterLive, PrivateServices).pipe(
+                Layer.provideMerge(PrivateCluster),
+              ),
+            ),
+          ),
+        )) as typeof reached;
+      }),
+      { timeout: 1_200_000 },
+    );
+
+    afterAll.skipIf(!!process.env.NO_DESTROY)(privateStack.destroy(), { timeout: 900_000 });
+
+    test(
+      "a Cloud Run pool joins the control plane's network, and its nodes connect to the private address",
+      Effect.gen(function* () {
+        const [pool] = yield* Core.withProviders(
+          workerPools(privateStack, /privatenodes$/),
+          testOptions,
+          privateStack.name,
+        );
+        expect(pool?.template?.vpcAccess?.networkInterfaces).toEqual([
+          { network: "default", subnetwork: "default" },
+        ]);
+        const env = envOf(pool);
+        expect(env.RIVET_ENDPOINT).toBe(reached.nodeEndpoint);
+        expect(reached.nodeEndpoint).not.toBe(reached.endpoint);
+        // The nodes connect only through the private address: a call reaches them.
+        const counters = yield* RivetNode.connect(Counter, {
+          endpoint: reached.endpoint,
+          token: reached.token,
+          namespace: reached.namespace,
+          pool: env.RIVET_POOL!,
+        });
+        // The counter's methods ask for the RuntimeContext of an Alchemy
+        // runtime, which a gateway call never reads.
+        const increment = counters.getByName("private").increment() as unknown as Effect.Effect<
+          number,
+          unknown
+        >;
+        const first = yield* increment.pipe(
+          Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 36 }),
+        );
+        expect(yield* increment).toBe(first + 1);
+      }),
+      { timeout: 300_000 },
+    );
+
+    test(
+      "a pool that can't join the control plane's network connects to its public endpoint",
+      Effect.gen(function* () {
+        const [pool] = yield* Core.withProviders(
+          workerPools(privateStack, /privateservicesnodes$/),
+          testOptions,
+          privateStack.name,
+        );
+        expect(pool?.template?.vpcAccess).toBeUndefined();
+        expect(envOf(pool).RIVET_ENDPOINT).toBe(reached.endpoint);
+        // Its node reaches the control plane and joins the services pool.
+        const nodes = yield* Pools.listPoolNodes({
+          namespace: reached.namespace,
+          pool: Rivet.SERVICES_POOL,
+        }).pipe(
+          Effect.map((page) => page.nodes),
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (nodes) => nodes.length > 0,
+            times: 36,
+          }),
+          withConnection({ endpoint: reached.endpoint, token: reached.token }),
+        );
+        expect(nodes.length).toBeGreaterThan(0);
+      }),
+      { timeout: 300_000 },
     );
   },
 );

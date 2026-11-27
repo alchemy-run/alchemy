@@ -1,5 +1,7 @@
 import * as zlib from "node:zlib";
+import { resolveContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
+import { programReadyCmd } from "@alchemy.run/e2b/internal/Program";
 import { tarGzip } from "@alchemy.run/e2b/internal/Tar";
 import { planTemplateBuild } from "@alchemy.run/e2b/internal/TemplateBuild";
 import { planSource } from "@alchemy.run/e2b/internal/TemplatePlan";
@@ -147,7 +149,7 @@ RUN apt-get install -y \$TOOL`,
   );
 
   test.effect(
-    "runs a main program with Bun from /app",
+    "runs a main program with Node.js from /app, and probes readiness with it",
     () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
@@ -155,8 +157,10 @@ RUN apt-get install -y \$TOOL`,
           { main: path.join(import.meta.dirname, "fixtures/async-program.mjs") },
           { port: 8080 },
         );
-        expect(lowered.fromImage).toBe("oven/bun:1");
-        expect(lowered.startCmd).toBe("bun /app/index.mjs");
+        expect(lowered.fromImage).toBe("node:26-slim");
+        expect(lowered.startCmd).toBe("node /app/index.mjs");
+        const runtime = yield* resolveContainerRuntime(undefined);
+        expect(programReadyCmd(8080, runtime.command)).toMatch(/^node -e /);
         expect(lowered.steps).toContainEqual(
           expect.objectContaining({ type: "COPY", args: ["__alchemy__/", "/app/", "", ""] }),
         );

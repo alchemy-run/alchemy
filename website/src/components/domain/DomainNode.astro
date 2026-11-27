@@ -41,6 +41,10 @@ const outline = (() => {
       return `M 4 0 H ${w - FOLD} L ${w} ${FOLD} V ${h - 4} Q ${w} ${h} ${w - 4} ${h} H 4 Q 0 ${h} 0 ${h - 4} V 4 Q 0 0 4 0 Z`;
     case "octagon":
       return `M ${CUT} 0 H ${w - CUT} L ${w} ${CUT} V ${h - CUT} L ${w - CUT} ${h} H ${CUT} L 0 ${h - CUT} V ${CUT} Z`;
+    case "sheet":
+      return `M 6 0 H ${w - 6} Q ${w} 0 ${w} 6 V ${h - 3} Q ${w * 0.75} ${h - 9} ${w / 2} ${h - 3} T 0 ${h - 3} V 6 Q 0 0 6 0 Z`;
+    case "hex":
+      return `M ${TIP} 0 H ${w - TIP} L ${w} ${h / 2} L ${w - TIP} ${h} H ${TIP} L 0 ${h / 2} Z`;
     default:
       return undefined;
   }

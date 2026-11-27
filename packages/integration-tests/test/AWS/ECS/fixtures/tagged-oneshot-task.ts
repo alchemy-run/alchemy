@@ -20,9 +20,6 @@ export class TaggedOneShotTask extends Task<TaggedOneShotTask>()("EcsTaggedOneSh
 export default TaggedOneShotTask.make(
   {
     main: import.meta.filename,
-    // Docker Hub's `oven/bun`; the public.ecr.aws default mirror rate-limits
-    // anonymous pulls during local builds (see fixtures/task.ts).
-    image: "oven/bun:1",
     cpu: 256,
     memory: 512,
     // Build/run on ARM64 so an image built on an Apple Silicon host matches

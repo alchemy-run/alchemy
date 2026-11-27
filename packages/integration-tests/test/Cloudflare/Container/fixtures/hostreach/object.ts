@@ -73,3 +73,41 @@ export class HostReachContainerObject extends Cloudflare.DurableObject<HostReach
     });
   }),
 ) {}
+
+/**
+ * A Durable Object-scheduled Container can't declare `env`: its per-instance
+ * settings, a loopback URL included, arrive at `start({ env })` (#3319).
+ */
+class StartEnvContainer extends Cloudflare.Container<StartEnvContainer>()("StartEnvContainer", {
+  schedulingPolicy: "durable_object",
+  context: `${import.meta.dirname}/context`,
+  observability: { logs: { enabled: true } },
+}) {}
+
+export class StartEnvContainerObject extends Cloudflare.DurableObject<StartEnvContainerObject>()(
+  "StartEnvContainerObject",
+  Effect.gen(function* () {
+    const container = yield* StartEnvContainer;
+
+    return Effect.gen(function* () {
+      const { fetch } = yield* container.getTcpPort(8080);
+
+      return {
+        /**
+         * Starts the container with a loopback URL to `port` that is never in
+         * a declared env, so the dev runtime learns it from the container's
+         * create request alone.
+         */
+        getProbe: (port: number) =>
+          Effect.gen(function* () {
+            yield* container.start({
+              enableInternet: true,
+              env: { TARGET_URL: `http://localhost:${port}/hello` },
+            });
+            const response = yield* fetch(HttpClientRequest.get("http://container/probe"));
+            return yield* response.text;
+          }),
+      };
+    });
+  }),
+) {}

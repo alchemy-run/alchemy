@@ -40,6 +40,8 @@ export interface Row {
   readonly compared: number;
   /** The paths inputs take that could not be run: a value the prover cannot build, or one a schema it does not read refuses. */
   readonly uncompared: number;
+  /** How many of those take the items of a hash set or map in an order the real one did not give. */
+  readonly unordered: number;
   readonly differs: ReadonlyArray<string>;
 }
 
@@ -117,6 +119,7 @@ export const rows = Effect.fn(function* (
     let paths = 0;
     let compared = 0;
     let uncompared = 0;
+    let unordered = 0;
     const differs: Array<string> = [];
     let prefix: ReadonlyArray<number> | undefined = [];
     while (prefix) {
@@ -165,7 +168,10 @@ export const rows = Effect.fn(function* (
               : { _tag: "Unchanged" },
         );
         if (agreement._tag !== "Skipped") compared++;
-        else if (agreement.taken) uncompared++;
+        else if (agreement.taken) {
+          uncompared++;
+          if (agreement.order) unordered++;
+        }
         if (agreement._tag === "Differs") {
           differs.push(agreement.reason);
           const misread: Verdict = { _tag: "Misread", reason: agreement.reason };
@@ -216,6 +222,7 @@ export const rows = Effect.fn(function* (
       unkept: [...unkept],
       compared,
       uncompared,
+      unordered,
       differs,
     });
   }
@@ -263,7 +270,7 @@ export const reader = (interpreter: Interpreter, impl: DecisionImpl, run: Value.
       if (text === other) return { index, slot: existing.slot };
       if (id._tag === "Str" && existing.slot.id._tag === "Str") continue;
       // Two names of one aggregate: the same instance, or two.
-      if (run.branch(`(= ${text} ${other})`)) return { index, slot: existing.slot };
+      if (yield* interpreter.branch(`(= ${text} ${other})`)) return { index, slot: existing.slot };
     }
     const at = read.length + 1;
     // Assume: the state the decision reads satisfies every invariant of its aggregate.
@@ -438,6 +445,7 @@ export const decisionRow = Effect.fn(function* (
     unkept: [...unkept],
     compared: 0,
     uncompared: 0,
+    unordered: 0,
     differs: [],
     own,
   };

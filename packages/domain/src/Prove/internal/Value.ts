@@ -30,6 +30,8 @@ export interface Module {
 
 export type Declaration =
   | { readonly _tag: "Const"; readonly init: Node | undefined }
+  /** A name a pattern binds: `const { a, b: [c] } = made` declares `a` and `c`. */
+  | { readonly _tag: "Pattern"; readonly pattern: Node; readonly init: Node }
   | { readonly _tag: "Function"; readonly node: Node }
   | { readonly _tag: "Class"; readonly node: Node };
 
@@ -133,6 +135,34 @@ export type V =
        * items, or no two keys, are equal.
        */
       readonly distinct?: "items" | "keys";
+      /**
+       * The list is what `split` gave of a string an input holds. Its first
+       * and last parts are known without counting the parts; looking at the
+       * rest gives it a number of parts, which the run chooses.
+       */
+      readonly split?: {
+        readonly self: V;
+        readonly separator: string;
+        readonly first: V;
+        /** `undefined` where the last part is not what follows the last separator. */
+        readonly last?: V;
+        readonly parts: (run: Run) => V;
+      };
+    }
+  /**
+   * A field of an input, before the code looks at it: whether an optional
+   * field is there, which member of a union it is. It is a field of an
+   * object, and what `??` or a function of `effect/Option` is given when it
+   * reads one, until that looks at it. Reading the field makes the choice,
+   * which the run takes each way; a field no code reads is never chosen, and
+   * one read only for a value or a default is one conditional value.
+   */
+  | {
+      readonly _tag: "Pending";
+      readonly name: string;
+      readonly ast: unknown;
+      /** Whether the field may be left out. */
+      readonly optional: boolean;
     }
   | {
       readonly _tag: "Fn";
@@ -153,6 +183,11 @@ export type V =
       readonly _tag: "Native";
       readonly name: string;
       readonly call: (args: ReadonlyArray<V>, site: Site) => Eval<V>;
+      /**
+       * What a function written both ways was given, before `pipe` gives it
+       * what it works on: `Option.getOrElse(() => 0)`.
+       */
+      readonly given?: ReadonlyArray<V>;
     }
   | { readonly _tag: "Optic"; readonly path: ReadonlyArray<OpticStep> }
   | {
@@ -198,6 +233,9 @@ export const undef: V = { _tag: "Undef" };
 export const term = (sort: Sort, text: string): V => ({ _tag: "Term", term: { sort, text } });
 export const obj = (fields: Readonly<Record<string, V>>, brand?: Brand): V =>
   brand ? { _tag: "Obj", fields, brand } : { _tag: "Obj", fields };
+
+/** What a run keeps for an optional field it chose to leave out. */
+export const absent: V = { _tag: "Undef" };
 
 const OPTION: Brand = { kind: "Option", cls: undefined };
 
@@ -250,6 +288,8 @@ export const keyOf = (v: V): string => {
       return `(time ${v.millis.text})`;
     case "List":
       return `(list ${JSON.stringify(v.name)})`;
+    case "Pending":
+      return `(pending ${JSON.stringify(v.name)})`;
     case "Arr":
       return `[${v.items.map(keyOf).join(",")}]`;
     case "Obj":
@@ -277,6 +317,20 @@ export const applied = (
   args,
   why,
   key: `(call #${identityOf(call)} ${args.map(keyOf).join(" ")})`,
+});
+
+/** A part of what an opaque function returned: the real function's result, read the same way. */
+export const derived = (
+  from: V & { readonly _tag: "Applied" },
+  what: string,
+  part: (value: unknown) => unknown,
+): V & { readonly _tag: "Applied" } => ({
+  _tag: "Applied",
+  name: from.name,
+  call: (...args) => part(from.call(...args)),
+  args: from.args,
+  why: from.why,
+  key: `(${what} ${from.key})`,
 });
 
 /** Whether a value is a `bigint`. */
@@ -366,8 +420,15 @@ export class Run {
   readonly applications = new Map<string, Application>();
   /** The request contexts the code read, by key: each is an input, made once. */
   readonly contexts = new Map<string, { readonly tag: unknown; readonly value: V }>();
-  /** The lists the code looked at, by name, with the items this path gave each. */
+  /**
+   * The lists the code looked at, by name, with the items this path gave
+   * each; under `?name`, the fields it looked at, with what this path chose
+   * for each; and under `??name`, the fields read only for a value or a
+   * default, with the input that says whether each is there.
+   */
   readonly lists = new Map<string, V>();
+  /** Each object an input holds with every field chosen, as this run settled it. */
+  readonly settled = new WeakMap<object, V>();
   /** The lists tried only up to a length, by name: longer ones were not looked at. */
   readonly bounds = new Map<string, number>();
   /** The constants that are a `bigint`: they have no largest value. */
@@ -387,7 +448,15 @@ export class Run {
    * Each result of an opaque function the code tested, by the call's key:
    * whether it is truthy is an input, which the real function decides.
    */
-  readonly tests = new Map<string, { readonly term: Term; readonly applied: V }>();
+  readonly tests = new Map<
+    string,
+    {
+      readonly term: Term;
+      readonly applied: V;
+      /** What the real result says of the term: `undefined` when it is not of the kind the code took it for. */
+      readonly read: (value: unknown) => number | bigint | string | boolean | undefined;
+    }
+  >();
   /**
    * The command being run, when a run has several: a prefix on the name of
    * each request context it reads, so every command reads its own.
@@ -446,13 +515,21 @@ export class Run {
     if (condition !== "true") this.conditions.push(condition);
   }
 
-  /** Take one side of a condition, and remember which. */
-  branch(condition: string): boolean {
+  /** The side of a condition this path is on, where it has taken one. */
+  sideOf(condition: string): boolean | undefined {
     if (condition === "true") return true;
     if (condition === "false") return false;
-    const known = this.decided.get(condition);
+    return this.decided.get(condition);
+  }
+
+  /**
+   * Take one side of a condition, and remember which. Where only one side
+   * can occur, `only` is that side: it is taken, and no path is made for the other.
+   */
+  branch(condition: string, only?: boolean): boolean {
+    const known = this.sideOf(condition);
     if (known !== undefined) return known;
-    const taken = this.choose(2) === 0;
+    const taken = only ?? this.choose(2) === 0;
     this.decided.set(condition, taken);
     this.conditions.push(taken ? condition : Smt.not(condition));
     return taken;
@@ -460,10 +537,26 @@ export class Run {
 
   /** Whether what an opaque function returned is truthy: an input, the same for the same call. */
   truthy(applied: V & { readonly _tag: "Applied" }): Term {
-    const known = this.tests.get(applied.key);
+    return this.observe(applied, "is truthy", "Bool", Boolean);
+  }
+
+  /**
+   * Something the code reads of what an opaque function returned: the text
+   * it is, how many items it has, whether it is a `Some`. It is an input,
+   * the same for the same call, and the real function says what it is on
+   * the arguments the solver picks.
+   */
+  observe(
+    applied: V & { readonly _tag: "Applied" },
+    what: string,
+    sort: Sort,
+    read: (value: unknown) => number | bigint | string | boolean | undefined,
+  ): Term {
+    const key = `${what} ${applied.key}`;
+    const known = this.tests.get(key);
     if (known) return known.term;
-    const term = this.constant(`${applied.name} call ${this.tests.size + 1} is truthy`, "Bool");
-    this.tests.set(applied.key, { term, applied });
+    const term = this.constant(`${applied.name} call ${this.tests.size + 1} ${what}`, sort);
+    this.tests.set(key, { term, applied, read });
     return term;
   }
 

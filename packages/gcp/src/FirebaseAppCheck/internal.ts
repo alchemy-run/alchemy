@@ -1,5 +1,5 @@
-import * as firebase from "@distilled.cloud/gcp/firebase_v1beta1";
 import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
+import * as firebase from "@distilled.cloud/gcp/unstable/firebase_v1beta1";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";

@@ -22,9 +22,6 @@ export default class EcsDevMainTask extends AWS.ECS.Task<EcsDevMainTask>()(
     port: 17357,
     networkMode: "bridge",
     requiresCompatibilities: ["EC2"],
-    // Docker Hub's `oven/bun` image (also the default); the public.ecr.aws
-    // mirrors rate-limit anonymous pulls during local builds.
-    image: "oven/bun:1",
     // Build for the host architecture — the emulator runs the container on
     // this machine, so a cross-arch image would need qemu emulation.
     runtimePlatform:

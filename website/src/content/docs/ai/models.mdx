@@ -79,16 +79,42 @@ export const FastLive = Layer.unwrap(
 
 The Effect runs where the harness is yielded, so the binding it declares is part of the deploy. See [Effect AI on Cloudflare](/cloudflare/ai/effect-ai), [Bedrock](/aws/ai/bedrock) and [Vertex AI](/gcp/ai/vertex-ai).
 
+## Set the default model
+
+Every [process](/ai/processes) runs on `AI.DefaultModel` unless told otherwise. Give it one of your models, where the process's Layers are provided:
+
+```typescript title="src/Layers.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Layer from "effect/Layer";
+import { FastLive, Smart, SmartLive } from "./models.ts";
+
+export const ModelsLive = AI.DefaultModel(Smart).pipe(
+  Layer.provideMerge(Layer.mergeAll(SmartLive, FastLive)),
+);
+```
+
+## Mention a model in a process
+
+A process that mentions a model may be run on it, and may start other sessions on it:
+
+```typescript title="src/Engineer.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Fast } from "./models.ts";
+import { Research } from "./Research.process.ts";
+
+export class Engineer extends AI.Process<Engineer>()("Engineer", {
+  description: "Make one change to the project.",
+})`
+  Start a ${Research} on ${Fast} for each thing you need to know, then make the change.
+` {}
+```
+
+Each mentioned model's Layer is a requirement of the process. See [Mention a model](/ai/process-graphs#mention-a-model).
+
 ## List models on a harness
 
-A harness lists every model its conversations may run on. The first is the default, and each one's Layer is a requirement of the harness:
+A harness used without processes lists every model its conversations may run on. The first is the default:
 
 ```typescript
 const harness = yield* Pi.Harness({ models: [Fast, Smart] });
-```
-
-A conversation or a prompt picks one by reference:
-
-```typescript
-yield* harness.configure("pr-142", { model: Smart });
 ```

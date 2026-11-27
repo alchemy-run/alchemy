@@ -260,13 +260,19 @@ const putKey = (input: {
   type: string | undefined;
   value: ReadonlyArray<number> | undefined;
 }) => {
-  if (input.value !== undefined) {
-    return machines.setSecretKey({
-      app_name: input.appName,
-      secret_name: input.secretName,
-      type: input.type,
-      value: [...input.value],
-    });
+  const bytes = input.value;
+  if (bytes !== undefined) {
+    // Fly takes the key material base64-encoded.
+    return Effect.sync(() => Buffer.from(bytes).toString("base64")).pipe(
+      Effect.flatMap((value) =>
+        machines.setSecretKey({
+          app_name: input.appName,
+          secret_name: input.secretName,
+          type: input.type,
+          value,
+        }),
+      ),
+    );
   }
   return machines.generateSecretKey({
     app_name: input.appName,

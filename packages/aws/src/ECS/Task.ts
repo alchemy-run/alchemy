@@ -34,7 +34,6 @@ import type { Credentials } from "../Credentials.ts";
 import {
   IMAGE_AGENT_DIR,
   imageAgentEntryPoint,
-  makeBunBootstrap,
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
@@ -667,8 +666,10 @@ const sandboxAgentMain = new URL(
 export const isImageSandbox = (
   props: TaskProps,
   bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>> | undefined,
-) =>
-  (props as { main?: string }).main === undefined &&
+) => (props as { main?: string }).main === undefined && isSandbox(bindings);
+
+/** Whether a binding runs the task's containers as sandboxes. */
+const isSandbox = (bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>> | undefined) =>
   (bindings ?? []).some(
     (binding: ResourceBinding<TaskBindingContract> & { action?: string }) =>
       binding.action !== "delete" && binding.data?.sandbox === true,
@@ -684,8 +685,8 @@ export const taskImageInput = (
     platform: taskImagePlatform(props.runtimePlatform),
     port: props.port,
     isExternal: props.isExternal,
-    bootstrap: makeBunBootstrap(source.handler ?? "default"),
     agent: isImageSandbox(props, bindings) ? { main: sandboxAgentMain } : undefined,
+    terminals: isSandbox(bindings),
   };
 };
 
