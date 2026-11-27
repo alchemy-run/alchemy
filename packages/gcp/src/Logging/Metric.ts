@@ -278,7 +278,7 @@ const lastSegment = (value: string) => {
 };
 
 const resourceName = (project: string, metricId: string) =>
-  `projects/${project}/metrics/${metricId}`;
+  `projects/${project}/metrics/${encodeURIComponent(metricId)}`;
 
 const metricIdOf = (metric: logging.LogMetric) => {
   const raw = metric.name ?? metric.resourceName ?? "";
