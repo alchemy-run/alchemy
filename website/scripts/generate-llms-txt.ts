@@ -1216,6 +1216,7 @@ const SECTIONS: Section[] = [
         "domain/view-security",
         "domain/unique-values",
         "domain/deadlines",
+        "domain/correcting-mistakes",
         "domain/erasing-personal-data",
         "domain/crypto-shredding",
         "domain/closing-the-books",

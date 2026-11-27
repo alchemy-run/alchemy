@@ -252,8 +252,50 @@ export interface Host<R = never> {
    * keeps it alive.
    */
   readonly background?: (effect: Effect.Effect<void>) => Effect.Effect<boolean>;
+  /**
+   * Where every object of a model lives, given once the model's objects are
+   * declared: a host that moves a model to another layout finds each object
+   * with it. Optional.
+   */
+  readonly layout?: (model: HostedModel, layout: ModelLayout) => Effect.Effect<void, never, R>;
   /** Models whose names collide on the same key fail to host: one per Worker, pool or class. */
   readonly claimKey: Effect.Effect<object, never, R>;
+}
+
+/**
+ * Where every object of a model lives, by the class names a host declares
+ * (`AccountAggregate`): the model's directory lists every aggregate and view,
+ * and every policy, projection, stream and saga run that has written, and each
+ * source's history names the consumer objects it reached.
+ */
+export interface ModelLayout {
+  /** The class of the model's directory nodes. */
+  readonly directory: string;
+  /**
+   * A directory entry's class, and whether it is a source (an aggregate or a
+   * view, whose history names consumers); `undefined` for one this code
+   * doesn't host.
+   */
+  readonly entry: (
+    ref: Backfill.SourceRef,
+  ) => { readonly name: string; readonly source: boolean } | undefined;
+  /** A consumer's classes: its keys', and its run's (root, relays and scanners). */
+  readonly consumer: (target: Delivery["target"]) => {
+    readonly keys: string;
+    readonly run: string;
+  };
+  /** The classes of the streams a projection writes, keyed like the projection. */
+  readonly streams: (projection: string) => ReadonlyArray<string>;
+  /** Every consumer run's class: its root records the run's history. */
+  readonly runs: () => ReadonlyArray<string>;
+  /** The object of a source instance's scanner, in a consumer's run class. */
+  readonly scanner: (ref: Backfill.SourceRef) => string;
+  /** List an object that isn't a source (a saga run) in the model's directory, before its first write. */
+  readonly register: (
+    source: "Workflow",
+    name: string,
+    id: string,
+  ) => Effect.Effect<void, never, ObjectState>;
 }
 
 const pad = (n: number) => n.toString().padStart(12, "0");
@@ -619,27 +661,43 @@ const acquireLease = (state: ObjectStateShape, lease: string) =>
   );
 
 /**
- * A durable, ordered work queue in the instance's storage. Rows are written
- * in the same transaction as the state change that produced them, processed
- * right after the commit (`kick`), and again by a durable callback if the
- * instance dies first. One drain runs at a time (a storage lease), rows are
- * processed in order, and a row is deleted only after its work succeeds.
- *
- * A `detached` queue never drains inside the call that staged its rows: its
- * callback runs them at once, as an event of its own. A drain's calls nest
- * inside the call it runs in, so an aggregate → policy → aggregate chain that
- * drained each hop inline would nest one level deeper per hop until the host
- * refuses the call (Cloudflare limits how deep a chain of calls may go).
+ * How long one run of a drain's callback works before it hands the rest on to
+ * a new run. Kept well inside a lease, so a lease never runs out under a live
+ * drain, and short, so a run cut off by a reset loses little.
  */
-const queue = Effect.fn(function* <Row>(
-  name: string,
-  process: (row: Row) => Effect.Effect<void>,
-  options: { readonly detached?: boolean } = {},
-) {
+const PASS_MS = 5_000;
+
+/**
+ * A durable, ordered work queue in the instance's storage. Rows are written
+ * in the same transaction as the state change that produced them, and
+ * processed by a durable callback scheduled in that transaction, which
+ * survives the instance dying. One drain runs at a time (a storage lease),
+ * rows are processed in order, and a row is deleted only after its work
+ * succeeds.
+ *
+ * A queue drains only from its callback, as an event of its own, never in
+ * the background of the call that staged its rows. A host may drop
+ * background work when the object receives no further events, and a drain's
+ * calls nest inside the call it runs in, so an aggregate → policy →
+ * aggregate chain that drained each hop inline would nest one level deeper
+ * per hop until the host refuses the call (Cloudflare limits how deep a
+ * chain of calls may go).
+ */
+const queue = Effect.fn(function* <Row>(name: string, process: (row: Row) => Effect.Effect<void>) {
   const state = yield* ObjectState;
   const prefix = `${name}:`;
   const lease = `${name}-lease`;
   const acquire = exclusively(acquireLease(state, lease));
+  // A callback ignores a schedule whose progress isn't past the pending
+  // one's, so each staging and each hand-on counts one past both the last
+  // and every row staged (schedules once carried the staged count).
+  const advance = Effect.gen(function* () {
+    const staged = (yield* state.storage.get<number>(`${name}-seq`)) ?? 0;
+    const progress =
+      Math.max((yield* state.storage.get<number>(`${name}-progress`)) ?? 0, staged) + 1;
+    yield* state.storage.put(`${name}-progress`, progress);
+    return progress;
+  });
   // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
   const drain: Effect.Effect<void> = Effect.gen(function* () {
     // Nothing staged: nothing to do, and no lease to take.
@@ -652,20 +710,33 @@ const queue = Effect.fn(function* <Row>(
       yield* callback.schedule("drain", { at: held, payload: {} }).pipe(Effect.orDie);
       return;
     }
-    yield* Effect.gen(function* () {
-      const rows = yield* state.storage.list<Row>({ prefix });
-      for (const [key, row] of rows) {
-        yield* process(row);
-        yield* state.storage.delete(key);
+    const started = yield* Clock.currentTimeMillis;
+    const more = yield* Effect.gen(function* () {
+      while (true) {
+        const rows = yield* state.storage.list<Row>({ prefix, limit: 128 });
+        if (rows.size === 0) return false;
+        for (const [key, row] of rows) {
+          if ((yield* Clock.currentTimeMillis) - started >= PASS_MS) return true;
+          yield* process(row);
+          yield* state.storage.delete(key);
+        }
       }
     }).pipe(Effect.ensuring(state.storage.delete(lease).pipe(Effect.ignore)));
-    // Rows staged while this drain ran.
-    const more = yield* state.storage.list({ prefix, limit: 1 });
-    if (more.size > 0) yield* drain;
+    // Out of time: a new run takes the rest. Progress, so it keeps its retry budget.
+    if (more) {
+      yield* callback
+        .schedule("drain", { after: 0, payload: {}, progress: yield* exclusively(advance) })
+        .pipe(Effect.orDie);
+    }
   }) as Effect.Effect<void>;
   const callback = yield* makeCallback(`domain:${name}`, () => drain);
   return {
-    /** Stage rows; call inside the storage transaction that commits their cause. */
+    /**
+     * Stage rows, and schedule their drain at once; call inside the storage
+     * transaction that commits their cause, so the drain is delivered even if
+     * this instance dies right after. Its rows are progress, so a callback
+     * staging them doesn't hand it its retry budget.
+     */
     stage: Effect.fn(function* (rows: ReadonlyArray<Row>) {
       if (rows.length === 0) return;
       const last = ((yield* state.storage.get<number>(`${name}-seq`)) ?? 0) + rows.length;
@@ -674,28 +745,8 @@ const queue = Effect.fn(function* <Row>(
         rows.map((row, index) => [`${prefix}${pad(last - rows.length + index + 1)}`, row]),
       );
       yield* state.storage.put(`${name}-seq`, last);
-      // The backstop: delivered even if this instance dies before `kick` runs.
-      // Its rows are progress, so a callback staging them doesn't hand it
-      // its retry budget. A detached queue's only drain.
-      yield* callback.schedule("drain", {
-        after: options.detached ? 0 : "10 seconds",
-        payload: {},
-        progress: last,
-      });
+      yield* callback.schedule("drain", { after: 0, payload: {}, progress: yield* advance });
     }),
-    /**
-     * Process staged rows now, in the background, keeping the instance alive
-     * until done. A detached queue leaves them to its callback.
-     */
-    kick: options.detached
-      ? Effect.void
-      : state.waitUntil(
-          drain.pipe(
-            Effect.catchCause((cause) =>
-              Effect.logError(`domain ${name} drain failed; its callback retries`, cause),
-            ),
-          ),
-        ),
     /** Process staged rows now, and wait (unless another drain holds the lease). */
     flush: drain,
   };
@@ -890,7 +941,7 @@ const TICK_MILLIS = 5_000;
 
 type Random = SecureRandom.SecureRandom["Service"];
 
-const backfillRuntime = Effect.fn(function* (
+export const backfillRuntime = Effect.fn(function* (
   random: Random,
   run: (id: string) => Effect.Effect<void, never, ObjectState | RuntimeContext>,
 ) {
@@ -1163,6 +1214,37 @@ const registerJob = (
   );
 
 /**
+ * A page of the consumer objects a source's stored rows reached, once each, and
+ * where the next page starts (`null` after the last). Rows are numbered without
+ * gaps, so a full page ends at `after + count`.
+ */
+const consumersPage = (
+  deliveries: Effect.Effect<ReadonlyArray<Delivery>>,
+  after: number,
+  count: number,
+  limit: number,
+) =>
+  Effect.map(deliveries, (all) => {
+    const seen = new Map<string, { readonly target: Delivery["target"]; readonly key: string }>();
+    for (const { target, key } of all)
+      seen.set(
+        `${target.kind}:${target.name}#${target.generation ?? 0}${target.inPlace ? "@" : ""}/${key}`,
+        { target, key },
+      );
+    return { consumers: [...seen.values()], next: count < limit ? null : after + count };
+  });
+
+/**
+ * The directory subtree an object that isn't a source lists itself under:
+ * policies, streams, projections and saga runs. Named like their classes
+ * (`NotifyPolicy`), so they never share a subtree with the sources a backfill
+ * reads. With every object of a model listed, a later layout change finds each
+ * one exactly, with no wait on the platform's own listing.
+ */
+export const registryName = (kind: "Policy" | "Stream" | "Projection" | "Workflow", name: string) =>
+  `${name}${kind}`;
+
+/**
  * What an instance holds for a decision until it commits or aborts: the whole
  * plan on the primary, its own part on any other. See `TwoPhase`.
  */
@@ -1375,10 +1457,7 @@ const aggregateObject = Effect.fn(function* (
     );
   const commitOnce = Effect.fn(function* (id: string, command: Json, meta: Aggregate.SendMeta) {
     const duplicate = yield* state.storage.get<StoredResult>(`receipt:${meta.commandId}`);
-    // A resend may follow an instance that died before delivering what the
-    // first commit staged: deliver it now rather than at the backstop.
-    if (duplicate)
-      return { sent: yield* resent(id, duplicate), kick: duplicate._tag === "Accepted" };
+    if (duplicate) return yield* resent(id, duplicate);
     const current = yield* storedMeta;
     if (current.held) return yield* new InstanceHeld();
     const result = yield* kit.handle({
@@ -1393,7 +1472,7 @@ const aggregateObject = Effect.fn(function* (
       trace: meta.trace,
       link: meta.link,
     });
-    if (result._tag === "Rejected") return { sent: result as SendResult, kick: false };
+    if (result._tag === "Rejected") return result as SendResult;
     const sent: SendResult = {
       _tag: "Accepted",
       receipt: {
@@ -1403,7 +1482,7 @@ const aggregateObject = Effect.fn(function* (
         reply: result.reply,
       },
     };
-    const kick = yield* state.storage.transaction(
+    const committed = yield* state.storage.transaction(
       Effect.gen(function* () {
         if (!(yield* stillAt(current.version))) return STALE;
         yield* state.storage.put<StoredResult>(
@@ -1411,11 +1490,11 @@ const aggregateObject = Effect.fn(function* (
           storedResult(result.version, result.events.length, result.reply),
         );
         yield* receiptKept(`receipt:${meta.commandId}`);
-        return yield* persist(id, current.version, result);
+        yield* persist(id, current.version, result);
       }),
     );
-    if (kick === STALE) return STALE;
-    return { sent, kick };
+    if (committed === STALE) return STALE;
+    return sent;
   });
   /** A stored result as `send` answers it: its events are read back from the log. */
   const resent = Effect.fn(function* (id: string, result: StoredResult) {
@@ -1449,16 +1528,16 @@ const aggregateObject = Effect.fn(function* (
     if (duplicate?._tag === "Accepted") {
       const again = yield* resent(id, duplicate);
       if (again._tag === "Accepted") {
-        const imported: ImportResult = { _tag: "Imported", receipt: again.receipt };
-        // As a resent command: deliver what the first import may have left staged.
-        return { imported, kick: true };
+        return { _tag: "Imported", receipt: again.receipt } satisfies ImportResult as ImportResult;
       }
     }
     const current = yield* storedMeta;
     if (current.held) return yield* new InstanceHeld();
     if (current.version !== meta.expectedVersion) {
-      const imported: ImportResult = { _tag: "UnexpectedVersion", version: current.version };
-      return { imported, kick: false };
+      return {
+        _tag: "UnexpectedVersion",
+        version: current.version,
+      } satisfies ImportResult as ImportResult;
     }
     const now = yield* Clock.currentTimeMillis;
     const latest =
@@ -1467,7 +1546,7 @@ const aggregateObject = Effect.fn(function* (
         : ((yield* state.storage.get<StoredEvent>(`event:${pad(current.version)}`))?.envelope.at ??
           0);
     const refused = outOfOrder(meta.at, events.length, latest, now);
-    if (refused) return { imported: refused as ImportResult, kick: false };
+    if (refused) return refused as ImportResult;
     const result = yield* kit.seed({
       id,
       state: current.state,
@@ -1483,7 +1562,7 @@ const aggregateObject = Effect.fn(function* (
       events: result.events.map((e) => e.event),
       reply: null,
     };
-    const kick = yield* state.storage.transaction(
+    const committed = yield* state.storage.transaction(
       Effect.gen(function* () {
         if (!(yield* stillAt(current.version))) return STALE;
         yield* state.storage.put<StoredResult>(
@@ -1491,17 +1570,15 @@ const aggregateObject = Effect.fn(function* (
           storedResult(receipt.version, receipt.events.length, null),
         );
         yield* receiptKept(`receipt:${meta.commandId}`);
-        return yield* persist(id, current.version, result);
+        yield* persist(id, current.version, result);
       }),
     );
-    if (kick === STALE) return STALE;
-    const imported: ImportResult = { _tag: "Imported", receipt };
-    return { imported, kick };
+    if (committed === STALE) return STALE;
+    return { _tag: "Imported", receipt } satisfies ImportResult as ImportResult;
   });
   /**
    * Store decided events, the state after them and their deliveries. Call
-   * inside the storage transaction that commits them; `true` when there are
-   * deliveries to send.
+   * inside the storage transaction that commits them.
    */
   const persist = Effect.fn(function* (id: string, from: number, result: SeedResult) {
     yield* putRows(
@@ -1522,7 +1599,6 @@ const aggregateObject = Effect.fn(function* (
     );
     yield* state.storage.put("routed", live.routed);
     yield* outbox.stage(live.send);
-    return live.send.length > 0;
   });
 
   // ------------------------------------------------ rewrites
@@ -1538,7 +1614,7 @@ const aggregateObject = Effect.fn(function* (
     state.storage.transaction(
       Effect.gen(function* () {
         const job = yield* rewriteJob;
-        if (job === undefined) return { more: false, kick: false };
+        if (job === undefined) return false;
         const rows = [
           ...(yield* state.storage.list<StoredEvent>({
             prefix: "event:",
@@ -1581,12 +1657,12 @@ const aggregateObject = Effect.fn(function* (
           );
           if (job.changed === 0 && recalled.length === 0) {
             yield* finish({ _tag: "Rewritten", changed: 0 }, []);
-            return { more: false, kick: false };
+            return false;
           }
           const invariant = deletes ? undefined : kit.broken(job.state);
           if (invariant !== undefined) {
             yield* finish({ _tag: "InvariantBroken", invariant }, []);
-            return { more: false, kick: false };
+            return false;
           }
           const last = (yield* state.storage.get<number>("rev-n")) ?? 0;
           const revisions = recalled.map((delivery, index) => ({
@@ -1603,7 +1679,7 @@ const aggregateObject = Effect.fn(function* (
             changed: 0,
             sent: revisions.map(({ target, key }) => ({ target, key })),
           });
-          return { more: true, kick: revisions.length > 0 };
+          return true;
         }
         if (rows.length === 0) {
           // Every event is as the rewrite leaves it: tell each key it reached, and let go.
@@ -1656,7 +1732,7 @@ const aggregateObject = Effect.fn(function* (
             revisedBy(done),
             deletes ? null : job.state,
           );
-          return { more: false, kick: done.length > 0 };
+          return false;
         }
         const { state: folded, changes } = yield* kit.rewrite({
           id: job.id,
@@ -1673,7 +1749,7 @@ const aggregateObject = Effect.fn(function* (
             state: folded,
             changed: job.changed + changes.length,
           });
-          return { more: true, kick: false };
+          return true;
         }
         const gone = changes.filter((change) => change.after === undefined);
         if (gone.length > 0) {
@@ -1705,7 +1781,7 @@ const aggregateObject = Effect.fn(function* (
           changed: job.changed + changes.length,
           sent: [...sent.values()],
         });
-        return { more: true, kick: revisions.length > 0 };
+        return true;
       }),
     ),
   ).pipe(Effect.orDie);
@@ -1713,9 +1789,7 @@ const aggregateObject = Effect.fn(function* (
   const driveRewrite: Effect.Effect<void, never, ObjectState | RuntimeContext> = Effect.gen(
     function* () {
       while (true) {
-        const { more, kick } = yield* rewriteStep;
-        if (kick) yield* outbox.kick;
-        if (!more) return;
+        if (!(yield* rewriteStep)) return;
       }
     },
   );
@@ -1826,7 +1900,7 @@ const aggregateObject = Effect.fn(function* (
         if (current.held) return yield* new InstanceHeld();
         const before = current.version;
         if (before === 0 || (yield* state.storage.get<number>("compacted")) === before) {
-          return { result: done(before, left), kick: false };
+          return done(before, left);
         }
         const rolled = yield* kit.rollup({
           id,
@@ -1836,7 +1910,7 @@ const aggregateObject = Effect.fn(function* (
           now: yield* Clock.currentTimeMillis,
         });
         const lossy: CompactResult = { _tag: "Lossy" };
-        if (rolled === undefined) return { result: lossy, kick: false };
+        if (rolled === undefined) return lossy;
         // Events a consumer still catching up has yet to read stay until the next one.
         const routed = yield* state.storage.get<Routed>("routed");
         const through = Math.min(
@@ -1844,24 +1918,23 @@ const aggregateObject = Effect.fn(function* (
           // No cursors: it predates catch-up, and every consumer is taken as caught up.
           ...kit.targets.map((target) => (routed === undefined ? before : (routed[target] ?? 0))),
         );
-        const kick = yield* state.storage.transaction(
+        yield* state.storage.transaction(
           Effect.gen(function* () {
             yield* state.storage.put("compacted", rolled.version);
             yield* state.storage.put<Compacting>("compacting", { id, name, through });
             const removed = (yield* state.storage.get<number>("removed")) ?? 0;
             yield* state.storage.put("removed", Math.max(removed, through));
-            return yield* persist(id, before, rolled);
+            yield* persist(id, before, rolled);
           }),
         );
         yield* compactionWaker
           .schedule("compact", { after: "10 seconds", payload: {} })
           .pipe(Effect.orDie);
-        return { result: done(rolled.version, left), kick };
+        return done(rolled.version, left);
       }),
     );
-    if (outcome.kick) yield* outbox.kick;
-    if (outcome.result._tag === "Lossy") return outcome.result;
-    return done(outcome.result.version, outcome.result.compacted + (yield* handOver));
+    if (outcome._tag === "Lossy") return outcome;
+    return done(outcome.version, outcome.compacted + (yield* handOver));
   });
   /** Compact, in the background, an instance that holds more events than a compaction's Layer allows. */
   const compactWhenDue = Effect.fn(function* (id: string, version: number) {
@@ -1915,7 +1988,7 @@ const aggregateObject = Effect.fn(function* (
   const applyIntentOnce = (id: string, txId: string) =>
     Effect.gen(function* () {
       const intent = yield* intentOf;
-      if (intent === undefined || intent.txId !== txId) return { applied: false, kick: false };
+      if (intent === undefined || intent.txId !== txId) return false;
       const current = yield* currentMeta;
       const result =
         intent.events.length === 0
@@ -1930,7 +2003,7 @@ const aggregateObject = Effect.fn(function* (
               correlationId: intent.correlationId,
               trace: intent.trace,
             });
-      const kick = yield* state.storage.transaction(
+      const committed = yield* state.storage.transaction(
         Effect.gen(function* () {
           // Another copy applied it first (see `stillAt`).
           if (
@@ -1953,12 +2026,12 @@ const aggregateObject = Effect.fn(function* (
               });
             }
           }
-          return result === undefined ? false : yield* persist(id, current.version, result);
+          if (result !== undefined) yield* persist(id, current.version, result);
         }),
       );
-      if (kick === STALE) return STALE;
+      if (committed === STALE) return STALE;
       yield* Effect.suspend(() => rest);
-      return { applied: true, kick };
+      return true;
     }).pipe(Effect.orDie);
   /** Drop the intent, as an instance told its attempt aborted. Callers run it `exclusively`. */
   const dropIntent = Effect.fn(function* (txId: string) {
@@ -2032,9 +2105,7 @@ const aggregateObject = Effect.fn(function* (
       ).pipe(provided),
     commit: (txId) =>
       Effect.gen(function* () {
-        const { applied, kick } = yield* exclusively(applyIntent(id, txId));
-        if (kick) yield* outbox.kick;
-        if (applied) return "Committed" as const;
+        if (yield* exclusively(applyIntent(id, txId))) return "Committed" as const;
         const recorded = yield* state.storage.get<Recorded>(outcomeKey(txId));
         return recorded?.outcome === "Committed" ? ("Committed" as const) : ("Gone" as const);
       }).pipe(provided),
@@ -2141,8 +2212,7 @@ const aggregateObject = Effect.fn(function* (
         yield* exclusively(dropIntent(intent.txId));
         return true;
       }
-      const { kick } = yield* exclusively(applyIntent(id, intent.txId));
-      if (kick) yield* outbox.kick;
+      yield* exclusively(applyIntent(id, intent.txId));
       return true;
     });
   /**
@@ -2190,8 +2260,7 @@ const aggregateObject = Effect.fn(function* (
     yield* waker.cancel("settle").pipe(Effect.ignore);
   });
   const send = Effect.fn(function* (id: string, command: Json, meta: Aggregate.SendMeta) {
-    const { sent, kick } = yield* whenFree(id, commit(id, command, meta));
-    if (kick) yield* outbox.kick;
+    const sent = yield* whenFree(id, commit(id, command, meta));
     if (sent._tag === "Accepted") yield* compactWhenDue(id, sent.receipt.version);
     return sent;
   });
@@ -2218,18 +2287,16 @@ const aggregateObject = Effect.fn(function* (
     }) =>
       Effect.gen(function* () {
         const key = `scheduled:${job.name ?? job.meta.commandId}`;
-        const kick = yield* whenFree(
+        yield* whenFree(
           job.id,
           Effect.gen(function* () {
             // A job scheduled before tokens existed has none, and runs.
             if (job.token !== undefined && (yield* state.storage.get<string>(key)) !== job.token)
-              return false;
-            const { kick } = yield* commit(job.id, job.command, job.meta);
+              return;
+            yield* commit(job.id, job.command, job.meta);
             yield* state.storage.delete(key);
-            return kick;
           }),
         );
-        if (kick) yield* outbox.kick;
         // A failure is a defect here: the job is redelivered.
       }).pipe(Effect.orDie),
   );
@@ -2262,6 +2329,9 @@ const aggregateObject = Effect.fn(function* (
         const at = "at" in due ? due.at : (yield* Clock.currentTimeMillis) + due.afterMillis;
         yield* state.storage.put(`armed:${name}`, { commandId: meta.commandId, at });
         yield* state.storage.put(`scheduled:${name}`, token);
+        // An instance that has only scheduled a command holds data too: it keeps its
+        // key and is listed in the directory, like one that has committed.
+        yield* listAfterCommit(runtime.jobs, id);
         yield* timers.schedule(name, {
           at,
           payload: { id, command, meta, token, name },
@@ -2290,11 +2360,7 @@ const aggregateObject = Effect.fn(function* (
         return "Cancelled" as const;
       }).pipe(exclusively, reportDefects),
     importEvents: (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
-      Effect.gen(function* () {
-        const { imported, kick } = yield* whenFree(id, importEvents(id, events, meta));
-        if (kick) yield* outbox.kick;
-        return imported;
-      }).pipe(reportDefects),
+      whenFree(id, importEvents(id, events, meta)).pipe(reportDefects),
     state: () => reportDefects(currentMeta),
     after: (after: number) => reportDefects(eventsAfter(after)),
     eventsAt: (seqs: ReadonlyArray<number>) => reportDefects(eventsAt(seqs)),
@@ -2362,15 +2428,24 @@ const aggregateObject = Effect.fn(function* (
       }).pipe(reportDefects),
     // The primary recorded the outcome before it told anyone, so it is taken at its word.
     txCommit: (id: string, txId: string) =>
-      Effect.gen(function* () {
-        const { kick } = yield* exclusively(applyIntent(id, txId));
-        if (kick) yield* outbox.kick;
-      }).pipe(reportDefects),
+      exclusively(applyIntent(id, txId)).pipe(Effect.asVoid, reportDefects),
     txAbort: (_id: string, txId: string) => dropIntent(txId).pipe(exclusively, reportDefects),
     // The backfill protocol, as a source.
     // Any code answers these: a run reads its log, and routes it with its own code.
     bfLog: (id: string, after: number, limit: number) =>
       reportDefects(sourceFor(id).log(after, limit)),
+    // A layout change: every consumer object this instance's history reached.
+    mgConsumers: (id: string, after: number, limit: number) =>
+      reportDefects(
+        Effect.flatMap(sourceFor(id).log(after, limit), (rows) =>
+          consumersPage(
+            kit.consumersOf(id, rows as ReadonlyArray<StoredEvent>),
+            after,
+            rows.length,
+            limit,
+          ),
+        ),
+      ),
     bfCursor: (id: string, target: string) => reportDefects(sourceFor(id).cursor(target)),
     bfRead: (id: string, target: string, key: string, after: number, limit: number) =>
       reportDefects(sourceFor(id).read(target, key, after, limit)),
@@ -2527,7 +2602,6 @@ const viewObject = Effect.fn(function* (
           }),
         ),
       );
-      if (live.send.length > 0) after.push(outbox.kick);
     }).pipe(kit.observe(key, arrived));
   /**
    * Take the revisions a source has sent for one rewrite: fold the key's
@@ -2649,7 +2723,6 @@ const viewObject = Effect.fn(function* (
     yield* outbox.stage([...stamped.deliveries, ...live.send]);
     yield* note(stamped.sent);
     after.push(broadcast(({ key, subscription }) => kit.push(key, subscription, snapshot, [])));
-    after.push(outbox.kick);
   });
   /**
    * Take revisions from a source: hold each until its source's `done`.
@@ -2810,6 +2883,18 @@ const viewObject = Effect.fn(function* (
     // first: a view or projection catching up never sees it still filling.
     bfLog: (key: string, after: number, limit: number) =>
       reportDefects(Effect.andThen(filled(key), sourceFor(key).log(after, limit))),
+    // A layout change: every consumer object this key's entries reached.
+    mgConsumers: (key: string, after: number, limit: number) =>
+      reportDefects(
+        Effect.flatMap(sourceFor(key).log(after, limit), (rows) =>
+          consumersPage(
+            kit.consumersOf(key, rows as ReadonlyArray<ViewEntry>),
+            after,
+            rows.length,
+            limit,
+          ),
+        ),
+      ),
     bfCursor: (key: string, target: string) =>
       reportDefects(Effect.andThen(filled(key), sourceFor(key).cursor(target))),
     bfRead: (key: string, target: string, reader: string, after: number, limit: number) =>
@@ -2866,32 +2951,33 @@ interface ViewRevisions {
   readonly recalls?: ReadonlyArray<Delivery>;
 }
 
-const policyObject = Effect.fn(function* (kit: PolicyKit, aging: Aging) {
+const policyObject = Effect.fn(function* (kit: PolicyKit, aging: Aging, net: Backfill.Network) {
   const state = yield* ObjectState;
-  // Detached: a delivery arrives inside the sender's drain, so draining it
-  // here would run the policy's commands one call deeper than the sender.
-  const inbox = yield* queue<Delivery>("inbox", kit.run, { detached: true });
+  const inbox = yield* queue<Delivery>("inbox", kit.run);
   return {
     receive: (delivery: Delivery) =>
       reportDefects(
         Effect.gen(function* () {
           // A rewrite's revision is the past changed: what a policy did has happened.
           if (delivery.revision !== undefined) return;
+          // Listed before its first write.
+          yield* ensureRegistered(net, {
+            source: registryName("Policy", kit.name),
+            id: delivery.key,
+          });
           const id = `${delivery.source}:${delivery.seq}`;
-          const accepted = yield* exclusively(
+          yield* exclusively(
             state.storage.transaction(
               Effect.gen(function* () {
                 // A mark past its window goes first: that delivery runs again.
                 yield* aging.prune(["deliveries"]);
-                if (yield* state.storage.get(`seen:${id}`)) return false;
+                if (yield* state.storage.get(`seen:${id}`)) return;
                 yield* state.storage.put(`seen:${id}`, true);
                 yield* aging.stamp("deliveries", `seen:${id}`);
                 yield* inbox.stage([delivery]);
-                return true;
               }),
             ),
           );
-          if (accepted) yield* inbox.kick;
         }),
       ),
   };
@@ -3012,7 +3098,7 @@ const projectionObject = Effect.fn(function* (
   const lease = "drain-lease";
   const acquire = exclusively(acquireLease(state, lease));
   // Re-run the drain later: when a short batch has waited long enough, or after a failure.
-  let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
+  let wake: (at: number, progress?: number) => Effect.Effect<void> = () => Effect.void;
   // Each input's backstop advances this cursor: once an input arrives, a
   // drain waiting for it from inside its own callback waits the batch
   // wait, not that callback's retry backoff.
@@ -3021,16 +3107,25 @@ const projectionObject = Effect.fn(function* (
     yield* state.storage.put("drain-progress", progress);
     return progress;
   });
+  /** Run the drain again at `at`, as progress: a new run keeps its retry budget. */
+  const handOn = (at: number) =>
+    exclusively(Effect.flatMap(advance, (progress) => wake(at, progress)));
+  // A run of the key's callback: handles batches for up to a pass, then hands
+  // the rest on to a new run. The key drains only here, never in the
+  // background of the call that took an input in, which a host may drop.
   // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
   const drain: Effect.Effect<void> = Effect.gen(function* () {
     const held = yield* acquire;
     // Held by another drain, or by one whose instance died: look again once it expires.
     if (held !== undefined) return yield* wake(held);
+    const started = yield* Clock.currentTimeMillis;
     const exit = yield* Effect.exit(
       Effect.gen(function* () {
         while (true) {
           const meta = yield* readMeta;
           if (meta.key === null || meta.processed >= meta.accepted) return;
+          const now = yield* Clock.currentTimeMillis;
+          if (now - started >= PASS_MS) return yield* handOn(now);
           const rows = yield* state.storage.list<Accepted>({
             prefix: "in:",
             start: `in:${pad(meta.processed + 1)}`,
@@ -3043,7 +3138,7 @@ const projectionObject = Effect.fn(function* (
             waitMillis > 0 &&
             (yield* Clock.currentTimeMillis) - run[0]!.at < waitMillis
           ) {
-            return yield* wake(run[0]!.at + waitMillis);
+            return yield* handOn(run[0]!.at + waitMillis);
           }
           yield* kit.run(meta.key, run);
           // Read and written in one transaction: another copy of the instance
@@ -3052,6 +3147,9 @@ const projectionObject = Effect.fn(function* (
             state.storage.transaction(
               Effect.gen(function* () {
                 const current = yield* upgrade(yield* readMeta);
+                // Still draining: the lease lasts from each batch, so it never
+                // runs out under a drain whose handler is slow.
+                yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
                 const handled: Record<string, number> = {};
                 for (const { delivery } of run) {
                   handled[delivery.source] = Math.max(handled[delivery.source] ?? 0, delivery.seq);
@@ -3101,9 +3199,11 @@ const projectionObject = Effect.fn(function* (
     }
   }) as Effect.Effect<void>;
   const callback = yield* makeCallback("domain:projection", () => drain);
-  wake = (at) =>
+  wake = (at, progress) => {
+    const options = { at, payload: {}, ...(progress === undefined ? {} : { progress }) };
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides RuntimeContext on every event
-    callback.schedule("drain", { at, payload: {} }).pipe(Effect.ignore) as Effect.Effect<void>;
+    return callback.schedule("drain", options).pipe(Effect.ignore) as Effect.Effect<void>;
+  };
   /**
    * Accept a delivery into the key's log, once. Callers hold the exclusive
    * section and its transaction; `true` when it was new.
@@ -3121,9 +3221,12 @@ const projectionObject = Effect.fn(function* (
       delivery,
       at: yield* Clock.currentTimeMillis,
     } satisfies Accepted);
-    // The backstop: handled even if this instance dies before the drain runs.
+    // The drain, once the batch has waited: never later than one already
+    // armed, so a steady stream of inputs can't keep putting it off.
+    const at = (yield* Clock.currentTimeMillis) + waitMillis;
+    const armed = yield* callback.getStatus("drain");
     yield* callback.schedule("drain", {
-      after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
+      at: armed !== undefined && armed.scheduledAt < at ? armed.scheduledAt : at,
       payload: {},
       progress: yield* advance,
     });
@@ -3288,9 +3391,11 @@ const projectionObject = Effect.fn(function* (
         runtime.provide(
           Effect.orDie(Effect.forEach(deliveries, (d) => intake(key, d), { discard: true })),
         ),
-      after: runtime.provide(state.waitUntil(drain.pipe(Effect.ignoreCause))),
+      after: runtime.provide(Effect.flatMap(Clock.currentTimeMillis, handOn)),
     }));
-  const keep = (key: string) => state.storage.put(ID_KEY, key);
+  // Listed before its first write.
+  const keep = (key: string) =>
+    ensureRegistered(net, { source: registryName("Projection", kit.name), id: key });
   return {
     receive: (key: string, delivery: Delivery) =>
       reportDefects(
@@ -3303,8 +3408,7 @@ const projectionObject = Effect.fn(function* (
           ) {
             return;
           }
-          const accepted = yield* exclusively(state.storage.transaction(intake(key, delivery)));
-          if (accepted) yield* state.waitUntil(drain.pipe(Effect.ignoreCause));
+          yield* exclusively(state.storage.transaction(intake(key, delivery)));
         }),
       ),
     checkpoints: (sources?: ReadonlyArray<string>) => reportDefects(checkpointsOf(sources)),
@@ -3331,7 +3435,7 @@ const projectionObject = Effect.fn(function* (
 /** Where a stream key indexes the entries it appended for one source event. */
 const fromPrefix = (source: string, seq: number) => `from:${source}|${pad(seq)}:`;
 
-const streamObject = Effect.fn(function* (kit: StreamKit) {
+const streamObject = Effect.fn(function* (kit: StreamKit, net: Backfill.Network) {
   const state = yield* ObjectState;
   const expiry = yield* makeExpiry;
   const readMeta = state.storage
@@ -3350,6 +3454,8 @@ const streamObject = Effect.fn(function* (kit: StreamKit) {
   return {
     append: (key: string, write: StreamWrite) =>
       Effect.gen(function* () {
+        // Listed before its first write.
+        yield* ensureRegistered(net, { source: registryName("Stream", kit.name), id: key });
         const before = yield* readMeta;
         const { meta, appends } = admitStreamWrite(before, write);
         if (!appends) {
@@ -3602,8 +3708,16 @@ export const makePlatform = <R>(
       // Everything of a model is its own: its objects, and its backfill's
       // directory and runs. Models that share a definition never share data.
       const hostFor = Effect.fn(function* (hosted: HostedModel) {
+        /** Every class this code declares for the model. */
+        const declared = new Set<string>();
         const object = (name: string, impl: ObjectImpl) =>
-          host.declare(hosted, name, bindState(impl));
+          Effect.andThen(
+            Effect.sync(() => declared.add(name)),
+            host.declare(hosted, name, bindState(impl)),
+          );
+        /** The stream classes each projection writes, and each projection's keys' class. */
+        const projectionStreams = new Map<string, ReadonlyArray<string>>();
+        const projectionClasses = new Map<string, string>();
         // Every consumer in the model this isolate runs, set once the model is built.
         let model: ReadonlyArray<string> = [];
         let planOf: PlanOf = () => undefined;
@@ -3769,6 +3883,45 @@ export const makePlatform = <R>(
               ),
           },
         };
+        if (host.layout !== undefined)
+          yield* inInit(
+            host.layout(hosted, {
+              directory: "DomainDirectory",
+              entry: (ref) => {
+                const aggregate = `${ref.source}Aggregate`;
+                if (declared.has(aggregate)) return { name: aggregate, source: true };
+                const view = consumerClass(
+                  "view",
+                  ref.source,
+                  ref.generation ?? viewGenerations.get(ref.source) ?? 0,
+                );
+                if (declared.has(view)) return { name: view, source: true };
+                // Listed objects that aren't sources: policies, streams, projections, saga runs.
+                const projection = /^(.*)Projection$/.exec(ref.source);
+                const other = projection ? projectionClasses.get(projection[1]!) : ref.source;
+                return other !== undefined && declared.has(other)
+                  ? { name: other, source: false }
+                  : undefined;
+              },
+              consumer: (target) => {
+                if (target.kind === "policy") {
+                  const policy = `${target.name}Policy`;
+                  return { keys: policy, run: policy };
+                }
+                const keys = consumerClass(
+                  target.kind,
+                  target.name,
+                  generationOfTarget(targetId(target)),
+                );
+                return { keys, run: runClass(keys) };
+              },
+              streams: (projection) => projectionStreams.get(projection) ?? [],
+              runs: () => [...declared].filter((name) => /(View|Projection)(V\d+)?Run$/.test(name)),
+              scanner: scannerName,
+              register: (_, name, id) =>
+                ensureRegistered(net, { source: registryName("Workflow", name), id }),
+            }),
+          );
         directory = yield* inInit(object("DomainDirectory", directoryObject(net, random)));
 
         // A deploy's backfill: the host starts each new consumer's run and waits.
@@ -4085,6 +4238,17 @@ export const makePlatform = <R>(
             inInit(
               Effect.gen(function* () {
                 const cls = consumerClass("projection", projection.projectionName, kit.generation);
+                projectionClasses.set(projection.projectionName, cls);
+                projectionStreams.set(
+                  projection.projectionName,
+                  (
+                    (
+                      projection.definition as {
+                        readonly writes?: ReadonlyArray<{ readonly streamName: string }>;
+                      }
+                    ).writes ?? []
+                  ).map((stream) => `${stream.streamName}Stream`),
+                );
                 const namespace = yield* object(
                   cls,
                   projectionObject(kit, net, consumerPlans, random),
@@ -4111,7 +4275,10 @@ export const makePlatform = <R>(
           stream: (stream, kit) =>
             inInit(
               Effect.gen(function* () {
-                const namespace = yield* object(`${stream.streamName}Stream`, streamObject(kit));
+                const namespace = yield* object(
+                  `${stream.streamName}Stream`,
+                  streamObject(kit, net),
+                );
                 const read = (key: string) =>
                   unwrapDefects<StreamMeta>(namespace.getByName(key).read());
                 const after = (key: string, cursor: number) =>
@@ -4181,7 +4348,7 @@ export const makePlatform = <R>(
               Effect.gen(function* () {
                 const namespace = yield* object(
                   `${policy.policyName}Policy`,
-                  policyObject(kit, aging),
+                  policyObject(kit, aging, net),
                 );
                 return {
                   receive: (delivery) =>

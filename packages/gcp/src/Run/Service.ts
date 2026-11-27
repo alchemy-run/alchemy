@@ -15,6 +15,7 @@ import { tagRecord } from "alchemy/Tags";
 import type { ExtraFile } from "alchemy/Util/extraFiles";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import {
@@ -23,6 +24,7 @@ import {
 } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
+  collectHostBindings,
   retryActAs,
   serviceAccountUniqueId,
   type AppliedIamGrant,
@@ -42,6 +44,16 @@ import {
   resolveHostIdentity,
 } from "../HostRuntime.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import {
+  deleteSecretEnv,
+  discardSecretEnv,
+  hasSecretEnv,
+  mergeSecretRefs,
+  pruneSecretEnv,
+  sealSecretEnv,
+  secretRefsOf,
+  servingRevisionRefs,
+} from "../internal/SecretEnv.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -69,8 +81,12 @@ const MAX_NAME_LENGTH = 49;
 export type EnvVar = {
   /** Environment variable name. */
   name?: string;
-  /** Literal value. Mutually exclusive with `valueSource`. */
-  value?: string;
+  /**
+   * Literal value. Mutually exclusive with `valueSource`. A `Redacted`
+   * value is kept out of the revision: it goes into a Secret Manager secret
+   * of the host's own, which the container reads through `secretKeyRef`.
+   */
+  value?: string | Redacted.Redacted<string>;
   /** Secret Manager source for the value. */
   valueSource?: {
     secretKeyRef?: {
@@ -361,6 +377,9 @@ export type ServiceProps = PlatformProps & {
   /**
    * Additional environment variables for the Effect-native container.
    * Merged after binding-injected `env`.
+   * A `Redacted` value (here, or bound by a capability) is kept out of the
+   * revision: it goes into a Secret Manager secret of the service's own,
+   * which the container reads through `secretKeyRef`.
    */
   env?: Record<string, any>;
   /**
@@ -437,6 +456,11 @@ export type Service = Resource<
     iamGrants: AppliedIamGrant[];
     /** Hash of the bundled `main` program and its bootstrap (Effect-native only). */
     codeHash: string | undefined;
+    /**
+     * Secret Manager secrets holding the service's `Redacted` env values,
+     * which its revision reads through `secretKeyRef`.
+     */
+    secretEnv?: string[];
   },
   GcpHostBinding,
   Providers,
@@ -835,6 +859,7 @@ const desiredTemplate = (news: ServiceProps): cloudrun.GoogleCloudRunV2RevisionT
   const [main = { image: DEFAULT_IMAGE }, ...rest] = containers;
   return {
     ...template,
+    // Until `sealSecretEnv` runs, an env value may still be `Redacted`.
     containers: [
       {
         ...main,
@@ -842,7 +867,7 @@ const desiredTemplate = (news: ServiceProps): cloudrun.GoogleCloudRunV2RevisionT
         livenessProbe: news.livenessProbe ?? main.livenessProbe,
       },
       ...rest,
-    ],
+    ] as cloudrun.GoogleCloudRunV2Container[],
   };
 };
 
@@ -1127,6 +1152,7 @@ const toAttrs = (
     iamGrants?: AppliedIamGrant[];
     codeHash?: string;
     serviceAccountUniqueId?: string;
+    secretEnv?: string[];
   } = {},
 ): Service["Attributes"] => {
   const name = service.name ?? "";
@@ -1161,6 +1187,7 @@ const toAttrs = (
     serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
+    secretEnv: extras.secretEnv ?? [],
   };
 };
 
@@ -1349,6 +1376,7 @@ const makeServiceProvider = () =>
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
         serviceAccountUniqueId: output?.serviceAccountUniqueId,
+        secretEnv: output?.secretEnv,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -1400,37 +1428,20 @@ const makeServiceProvider = () =>
         ...boundContainersOf(hostBindings),
         ...declaredContainers.flatMap((container) => container.sidecars),
       ]).filter((container) => !declaredNames.has(container.spec.name));
-      const identity = yield* resolveHostIdentity({
-        project: env.project,
-        hostType: HOST_TYPE,
-        resourceName: name,
-        userServiceAccount: template.serviceAccount,
-        effectNative: news.main !== undefined,
-        bindings: [
-          ...hostBindings,
-          ...[...declaredContainers, ...boundContainers].map((container) => ({
-            sid: `GCP.Run.Container(${container.spec.name})`,
-            data: { iam: container.iam },
-          })),
-        ],
-        output,
-      });
-      template.serviceAccount = identity.serviceAccount;
+      const bindingEnv = collectHostBindings(hostBindings).env;
       let codeHash: string | undefined;
       if (news.main !== undefined) {
         const images = yield* makeCloudRunImageSource("server");
         const port = news.port ?? 8080;
-        const image = yield* images
-          .resolve({
-            id,
-            source: sourceOf(news, news.main),
-            repositoryName: rfc1035(`${serviceId}-src`),
-            location,
-            port,
-            isExternal: news.isExternal,
-            session,
-          })
-          .pipe(Effect.onError(() => identity.cleanup));
+        const image = yield* images.resolve({
+          id,
+          source: sourceOf(news, news.main),
+          repositoryName: rfc1035(`${serviceId}-src`),
+          location,
+          port,
+          isExternal: news.isExternal,
+          session,
+        });
         codeHash = image.codeHash;
         const [container = {}, ...sidecars] = template.containers ?? [];
         template.containers = [
@@ -1438,12 +1449,12 @@ const makeServiceProvider = () =>
             ...container,
             image: image.imageUri,
             ports: container.ports ?? [{ containerPort: port }],
-            env: mergeContainerEnv(container.env, identity.env, yield* alchemyRuntimeEnv, news.env),
+            env: mergeContainerEnv(container.env, bindingEnv, yield* alchemyRuntimeEnv, news.env),
           },
           ...sidecars,
         ];
       } else {
-        const runtimeEnv = { ...identity.env, ...news.env };
+        const runtimeEnv = { ...bindingEnv, ...news.env };
         if (Object.keys(runtimeEnv).length > 0 && template.containers) {
           template.containers = template.containers.map((container, index) =>
             index === 0
@@ -1465,15 +1476,45 @@ const makeServiceProvider = () =>
         template.containers = [
           { ...main, dependsOn },
           ...rest,
-          ...boundContainers
+          // A sidecar's `Redacted` env is sealed with the rest below.
+          ...(boundContainers
             .filter((container) => !declared.has(container.spec.name))
-            .map((container) => container.spec),
+            .map((container) => container.spec) as cloudrun.GoogleCloudRunV2Container[]),
         ];
       }
 
       const mounted = mountCloudSqlInstances(template, hostBindings);
       template.volumes = mounted.volumes;
       template.containers = mounted.containers;
+
+      // `Redacted` env values go to Secret Manager before the service
+      // account is granted to read them, and both before the revision.
+      const secretHost = { project: env.project, hostType: HOST_TYPE, resourceName: name };
+      const secretEnv = yield* sealSecretEnv({
+        host: secretHost,
+        id,
+        containers: template.containers ?? [],
+        previous: output?.secretEnv,
+      });
+      template.containers = secretEnv.containers as cloudrun.GoogleCloudRunV2Container[];
+
+      const identity = yield* resolveHostIdentity({
+        project: env.project,
+        hostType: HOST_TYPE,
+        resourceName: name,
+        userServiceAccount: template.serviceAccount,
+        effectNative: news.main !== undefined,
+        bindings: [
+          ...hostBindings,
+          ...[...declaredContainers, ...boundContainers].map((container) => ({
+            sid: `GCP.Run.Container(${container.spec.name})`,
+            data: { iam: container.iam },
+          })),
+        ],
+        output,
+        grants: secretEnv.grants,
+      });
+      template.serviceAccount = identity.serviceAccount;
 
       let current = yield* getByName(name);
       if (current?.deleteTime !== undefined) {
@@ -1491,7 +1532,15 @@ const makeServiceProvider = () =>
           .pipe(
             retryActAs,
             Effect.catchTag("Conflict", () => Effect.undefined),
-            Effect.onError(() => identity.cleanup),
+            Effect.onError(() =>
+              identity.cleanup.pipe(
+                Effect.andThen(
+                  output === undefined
+                    ? discardSecretEnv(secretHost, secretEnv.secrets)
+                    : Effect.void,
+                ),
+              ),
+            ),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -1581,10 +1630,28 @@ const makeServiceProvider = () =>
         return yield* new ServiceNotResolved({ resourceName: name });
       }
 
+      // The rollout is done: drop the secret versions no serving revision
+      // reads any more.
+      if (hasSecretEnv(secretEnv.secrets, output?.secretEnv)) {
+        const serving = yield* servingRevisionRefs({
+          parent: name,
+          latestReadyRevision: current.latestReadyRevision,
+          revisions: (current.trafficStatuses ?? []).map((status) => status.revision),
+          get: (revision) => cloudrun.getProjectsLocationsServicesRevisions({ name: revision }),
+        });
+        yield* pruneSecretEnv({
+          host: secretHost,
+          secrets: secretEnv.secrets,
+          previous: output?.secretEnv,
+          inUse: mergeSecretRefs(serving, secretRefsOf(template.containers ?? [])),
+        });
+      }
+
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
         serviceAccountUniqueId: identity.uniqueId,
+        secretEnv: [...secretEnv.secrets].sort(),
       });
     }),
 
@@ -1603,6 +1670,10 @@ const makeServiceProvider = () =>
       yield* waitUntilGone(output.name);
       // Effect-native hosts build into a per-host repository on reconcile.
       yield* destroyHostImageRepository(id, output, rfc1035(`${output.serviceId}-src`));
+      yield* deleteSecretEnv(
+        { project: output.project, hostType: HOST_TYPE, resourceName: output.name },
+        output.secretEnv,
+      );
       yield* releaseHostIdentity(output);
     }),
   });

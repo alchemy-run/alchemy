@@ -1,4 +1,5 @@
 import type * as chatbot from "@distilled.cloud/aws/chatbot";
+import type { ProviderError } from "@distilled.cloud/aws/Credentials";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
@@ -27,7 +28,7 @@ export interface ListMicrosoftTeamsConfiguredTeams extends Binding.Service<
       request?: chatbot.ListMicrosoftTeamsConfiguredTeamsRequest,
     ) => Effect.Effect<
       chatbot.ListMicrosoftTeamsConfiguredTeamsResult,
-      chatbot.ListMicrosoftTeamsConfiguredTeamsError
+      chatbot.ListMicrosoftTeamsConfiguredTeamsError | ProviderError
     >
   >
 > {}

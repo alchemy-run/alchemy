@@ -72,6 +72,13 @@ export interface RepositoryProps {
   hasWiki?: boolean;
 
   /**
+   * Whether the Pull requests tab is enabled. `false` prevents anyone from
+   * opening a pull request.
+   * @default true
+   */
+  hasPullRequests?: boolean;
+
+  /**
    * Whether GitHub Discussions are enabled.
    * @default false
    */
@@ -567,6 +574,7 @@ export const RepositoryProvider = () =>
           has_issues: news.hasIssues,
           has_projects: news.hasProjects,
           has_wiki: news.hasWiki,
+          has_pull_requests: news.hasPullRequests,
           has_discussions: news.hasDiscussions,
           is_template: news.isTemplate,
           allow_squash_merge: news.allowSquashMerge,

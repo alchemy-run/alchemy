@@ -1,4 +1,4 @@
-import * as deploymentApi from "@distilled.cloud/convex/deployment";
+import * as deploymentApi from "@distilled.cloud/convex/unstable/deployment";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";

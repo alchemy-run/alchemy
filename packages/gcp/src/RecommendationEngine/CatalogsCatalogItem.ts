@@ -1,4 +1,4 @@
-import * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
+import * as recommendationengine from "@distilled.cloud/gcp/unstable/recommendationengine_v1beta1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";

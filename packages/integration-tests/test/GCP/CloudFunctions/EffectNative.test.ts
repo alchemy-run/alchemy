@@ -2,9 +2,9 @@ import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudfunctions from "@distilled.cloud/gcp/cloudfunctions_v2";
+import * as iam from "@distilled.cloud/gcp/iam_v1";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
-import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -118,6 +118,12 @@ test.provider.skipIf(!!process.env.FAST)(
         .pipe(
           Effect.as("found" as const),
           Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          // IAM reads a just-deleted account back for a few seconds.
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (status) => status === "gone",
+            times: 10,
+          }),
         );
       expect(saGone).toEqual("gone");
     }).pipe(logLevel),

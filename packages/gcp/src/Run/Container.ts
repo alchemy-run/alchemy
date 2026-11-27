@@ -77,7 +77,10 @@ export type ContainerProps = PlatformProps &
      */
     runtime?: ContainerRuntime;
     /**
-     * Environment variables. Merged after binding-injected `env`.
+     * Environment variables. Merged after binding-injected `env`. A
+     * `Redacted` value is kept out of the revision of the host that runs
+     * the container: it goes into a Secret Manager secret of that host's
+     * own, which the container reads through `secretKeyRef`.
      */
     env?: Record<string, any>;
     /** Bundler configuration for `main`, and the image build's layer `cache`. */

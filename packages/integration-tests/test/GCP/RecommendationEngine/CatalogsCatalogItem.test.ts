@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
+import * as recommendationengine from "@distilled.cloud/gcp/unstable/recommendationengine_v1beta1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { expectFound } from "../lookup.ts";

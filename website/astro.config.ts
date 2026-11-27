@@ -2099,6 +2099,7 @@ export default defineConfig({
               items: [
                 { label: "Unique values", link: "/domain/unique-values" },
                 { label: "Deadlines", link: "/domain/deadlines" },
+                { label: "Correcting mistakes", link: "/domain/correcting-mistakes" },
                 { label: "Erasing personal data", link: "/domain/erasing-personal-data" },
                 { label: "Crypto-shredding", link: "/domain/crypto-shredding" },
                 { label: "Closing the books", link: "/domain/closing-the-books" },

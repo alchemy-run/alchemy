@@ -6,6 +6,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as NeonApi from "@distilled.cloud/neon";
+import * as NeonApiUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -44,7 +45,7 @@ afterAll(
     const { api, native } = outputs.value;
     for (const resource of [api, native]) {
       expect(
-        yield* NeonApi.getProjectBranchFunction({
+        yield* NeonApiUnstable.getProjectBranchFunction({
           project_id: resource.projectId,
           branch_id: resource.branchId,
           slug: resource.slug,

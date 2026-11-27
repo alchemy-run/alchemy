@@ -1,4 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
+import * as NeonUnstable from "@distilled.cloud/neon/unstable/neon";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -10,7 +11,7 @@ import * as Redacted from "effect/Redacted";
 import { resolveBranchScope, type BranchScope, type ResolvedBranchScope } from "./BranchScope.ts";
 import type { Providers } from "./Providers.ts";
 
-export type CredentialScope = Neon.CredentialScope;
+export type CredentialScope = NeonUnstable.CredentialScope;
 
 export type CredentialProps = BranchScope & {
   /** Stable customer label. Omit to generate an ownership-qualified name. Explicit labels require delete-first replacement when scopes change. */
@@ -78,7 +79,7 @@ const findCredential = Effect.fn(function* (
   name: string,
   tokenId?: string,
 ) {
-  const { credentials } = yield* Neon.listCredentials(requestScope(scope));
+  const { credentials } = yield* NeonUnstable.listCredentials(requestScope(scope));
   const matches = credentials.filter(
     (credential) =>
       !credential.revoked_at &&
@@ -96,9 +97,9 @@ const findCredential = Effect.fn(function* (
 
 const hydrateCredential = Effect.fn(function* (
   scope: ResolvedBranchScope,
-  metadata: Neon.CredentialMeta,
+  metadata: NeonUnstable.CredentialMeta,
 ) {
-  const secret = yield* Neon.revealCredential({
+  const secret = yield* NeonUnstable.revealCredential({
     ...requestScope(scope),
     token_id: metadata.token_id,
   }).pipe(
@@ -167,7 +168,7 @@ export const CredentialProvider = () =>
       let metadata = yield* findCredential(scope, name, output?.tokenId);
       if (!metadata && output) metadata = yield* findCredential(scope, name);
       if (!metadata) {
-        const created = yield* Neon.createCredential({
+        const created = yield* NeonUnstable.createCredential({
           ...requestScope(scope),
           name,
           scopes: news.scopes,
@@ -196,7 +197,7 @@ export const CredentialProvider = () =>
       return yield* hydrateCredential(scope, metadata);
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* Neon.revokeCredential({
+      yield* NeonUnstable.revokeCredential({
         ...requestScope(output),
         token_id: output.tokenId,
       }).pipe(Effect.catchTag("NotFound", () => Effect.void));

@@ -11,7 +11,6 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import type * as Redacted from "effect/Redacted";
 import * as S from "effect/Schema";
@@ -487,14 +486,11 @@ const withCatalog =
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       Effect.provide(
-        Layer.mergeAll(
-          Iceberg.IcebergProtocol,
-          Iceberg.fromCatalogConfig({
-            uri: ref.catalogUri,
-            warehouse: ref.warehouse,
-            token,
-          }),
-        ),
+        Iceberg.fromCatalogConfig({
+          uri: ref.catalogUri,
+          warehouse: ref.warehouse,
+          token,
+        }),
       ),
     );
 

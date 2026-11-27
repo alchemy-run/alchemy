@@ -18,7 +18,9 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 const VALUE_A = Redacted.make("alchemy-railway-var-a");
 const VALUE_B = Redacted.make("alchemy-railway-var-b");
 
-const asVariableMap = (value: unknown): Record<string, string> => {
+const asVariableMap = (variables: unknown): Record<string, string> => {
+  // distilled marks the variables map sensitive, so it arrives as Redacted.
+  const value = Redacted.isRedacted(variables) ? Redacted.value(variables) : variables;
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }

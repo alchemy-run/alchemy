@@ -109,6 +109,19 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  *
+ * ### Build Modes
+ * Set `mode` to build with Vite's `--mode`, so the matching
+ * `.env.[mode]` file loads and `import.meta.env.MODE` is set. A stage can
+ * then build against its own endpoints.
+ *
+ * **Example:** One mode per stage
+ * ```typescript
+ * const stage = yield* Alchemy.Stage;
+ * const app = yield* Cloudflare.Website.Vite("Dashboard", {
+ *   mode: stage === "prod" ? "production" : "sandbox",
+ * });
+ * ```
+ *
  * ### Single-Page Applications
  * For SPAs (React, Vue, etc.), configure asset handling so unmatched
  * routes fall back to `index.html` and the client router takes over.
@@ -300,6 +313,7 @@ export const Vite: {
           vite: {
             main: props?.main,
             rootDir: props?.rootDir,
+            mode: props?.mode,
             memo: props?.memo,
             viteEnvironments: props?.viteEnvironments,
           },

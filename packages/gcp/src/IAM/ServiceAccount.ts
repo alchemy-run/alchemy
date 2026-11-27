@@ -1,4 +1,4 @@
-import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
+import * as iam from "@distilled.cloud/gcp/iam_v1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";

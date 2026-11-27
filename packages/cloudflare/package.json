@@ -750,6 +750,7 @@
       "./R2/internal/*": null,
       "./Workers/internal/*": null,
       "./WorkersForPlatforms/internal/*": null,
+      "./internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",

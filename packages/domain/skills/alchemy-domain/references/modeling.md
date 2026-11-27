@@ -74,6 +74,16 @@ Pick by what the record is. None of these is the default: an instance that stays
 
 More: [Closing the books](https://alchemy.run/domain/closing-the-books), [Compaction](https://alchemy.run/domain/compaction).
 
+**Correcting mistakes**
+
+- **Record the fact that reverses it.** A bug or a wrong command recorded events that shouldn't stand: a command per correction (`ReverseDeposit`) records an event naming what it reverses (`DepositReversed { depositSeq, amount, balanceAfter, reason }`). It never rejects. Views and projections follow it like any event.
+- **Each reaction undoes what it did.** A policy or saga that acted on the mistake lists the correcting event in its `on` and puts right its own effect (a correction email, a refund, a saga's compensations).
+- **Correct many instances** by sending one command each, with a command id derived from what it corrects (`reverse-${accountId}-${seq}`), so a rerun decides nothing twice. A run that must survive restarts is a saga.
+- **Not a rewrite.** A rewrite reaches state, views and projections, never what policies and sagas already did. Keep it for data the record must not hold.
+- **Not a storage restore.** A restored aggregate reuses sequence numbers its consumers have seen, and they drop its next events.
+
+More: [Correcting mistakes](https://alchemy.run/domain/correcting-mistakes).
+
 **Erasing personal data**
 
 - **Keep it out of the events.** Record an id, and keep what it identifies in a store of your own. Erasing is one delete there. Prefer this while the events are still being designed.

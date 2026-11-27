@@ -1,4 +1,4 @@
-import * as cnr from "@distilled.cloud/gcp/cloudnumberregistry_v1alpha";
+import * as cnr from "@distilled.cloud/gcp/unstable/cloudnumberregistry_v1alpha";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
