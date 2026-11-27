@@ -59,6 +59,23 @@ Each test that provides `BankInMemory` gets a fresh, empty bank.
 
 Stories run on their own in-memory model with a controlled clock and stubbed external systems, so you don't provide `Domain.InMemory` to them. See [Story](/domain/story).
 
+## Run it on the test clock
+
+The in-memory model reads time from the `Clock` of the fiber that runs it. Commands are stamped with it, scheduled commands are due against it, and `DateTime.now` inside `decide` reads it. Under `it.effect` that is the `TestClock`, so `TestClock.adjust` fires a scheduled command with no wall-clock wait. Under `it.live` it is the system clock.
+
+```typescript
+it.effect("a hold expires after an hour", () =>
+  Effect.gen(function* () {
+    const holds = yield* Hold;
+    yield* holds.schedule(new ExpireHold({ id: "h-1" }), { after: "1 hour", commandId: "expire" });
+    yield* TestClock.adjust("1 hour");
+    expect((yield* holds.get("h-1")).status).toBe("expired");
+  }).pipe(Effect.provide(HoldsInMemory)),
+);
+```
+
+To drive the model from a clock of your own, pass `now` to `make` from `@alchemy.run/domain/InMemory`.
+
 :::note
 Test more of an Api in [Testing an Api](/domain/testing-apis).
 :::
