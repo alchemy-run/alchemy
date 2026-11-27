@@ -14,6 +14,8 @@ export * from "./Connect.ts";
 export * from "./Connection.ts";
 export * from "./PostgresOrigin.ts";
 export * from "./CustomDomain.ts";
+export * from "./DomainOwnership.ts";
+export * from "./RoutingUrl.ts";
 export * from "./Database.ts";
 export * from "./EnvironmentVariable.ts";
 export * from "./Operations.ts";

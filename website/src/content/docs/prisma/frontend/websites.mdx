@@ -115,7 +115,7 @@ export default Alchemy.Stack(
 The result is `{ url, compute, project, domain }`. `site.url` is the
 Compute endpoint on deploy and the local dev-server address during
 `alchemy dev`; the three backing resources are undefined during native
-dev. `domain` is also undefined when no custom hostname is requested.
+dev. `domain` is the hostname's `Prisma.RoutingUrl`, undefined when no custom hostname is requested.
 `Alchemy.localState()` keeps state on this machine; keep that state
 available for subsequent deploys and teardown.
 
@@ -181,15 +181,15 @@ const site = yield* Prisma.Website.Astro("Web", {
 });
 ```
 
-`domain` creates a [`Prisma.CustomDomain`](/providers/prisma/customdomain)
-and changes `site.url` to `https://app.example.com`.
+`domain` saves the hostname as a [`Prisma.RoutingUrl`](/prisma/compute/apps#routing-urls) and changes `site.url` to `https://app.example.com` from the first deploy. A hostname serves only once a verified [domain ownership](/prisma/compute/apps#domain-ownership) covers it, so the site also declares a `Prisma.DomainOwnership` for its hostname, returned as `site.domainOwnership`. Destroying the site deletes both. A domain ownership belongs to the whole workspace, so deleting it stops every hostname that relies on it alone.
 
-Domain provisioning is asynchronous. `site.domain` is the created
-CustomDomain resource. Configure its `dnsRecords` with your DNS provider
-and inspect `status`, `foundryStatus`, and `failureReason` before
-sending production traffic.
+The deploy does not wait for the hostname to serve. `site.domain` is the RoutingUrl: its `status` is `pending` until Prisma finds the hostname's DNS records, and its `records` lists the `TXT` record that proves your workspace owns the hostname and the `CNAME` to the regional switchboard. Publish them with your DNS host; Prisma makes the RoutingUrl `active` once it finds them.
 
-To publish `dnsRecords` automatically, pass the DNS host as `dns`:
+:::note
+`site.domain` is the hostname's `Prisma.RoutingUrl`, not a `Prisma.CustomDomain`. Read `records` where you read `dnsRecords`, `status` (`active` once the hostname has gone live; it does not say whether it serves now), `state` (what the hostname is doing now, such as `waiting_for_dns`, `certificate_failed`, or `active` when it serves) and `firstUnmetCondition` where you read `foundryStatus` and `failureReason`, and `routingUrlId` where you read `customDomainId`.
+:::
+
+To publish both records in the same deploy, pass the DNS host as `dns`:
 
 ```typescript
 const site = yield* Prisma.Website.Astro("Web", {
@@ -197,11 +197,54 @@ const site = yield* Prisma.Website.Astro("Web", {
 });
 ```
 
-`AWS.Route53.Adapter()` and `Hetzner.DNS.Adapter()` work the same way. See
-[DNS Adapters](/infrastructure-as-code/dns-adapters). Changing an existing
-domain's hostname or app is rejected; add a second domain, verify DNS
-and TLS, cut traffic over, then remove the old one. See
-[Compute custom domains](/prisma/compute/apps#custom-domains).
+With `dns`, the domain ownership publishes the `TXT` and waits up to 3 minutes for it before Prisma saves the domain ownership, then the RoutingUrl publishes the `CNAME` and waits up to 3 minutes for it before Prisma first looks at the hostname. The waits run one after the other, about 7 minutes at most. Prisma orders a certificate for each new hostname, for each hostname change, and again when an order fails or is stuck, and a workspace may order 10 an hour; see [Certificates](/prisma/compute/apps#certificates).
+
+`AWS.Route53.Adapter()` and `Hetzner.DNS.Adapter()` work the same way. See [DNS Adapters](/infrastructure-as-code/dns-adapters) and [Routing URLs](/prisma/compute/apps#routing-urls) for what `dns` publishes and when.
+
+### Several sites under one domain
+
+When several sites share a domain, declare one domain ownership for it, and pass it to each site as `ownership`. No site owns it: destroying a site leaves it.
+
+```typescript
+const dns = Cloudflare.DNS.Adapter();
+const example = yield* Prisma.DomainOwnership("Example", { project, domain: "*.example.com", dns });
+yield* Prisma.Website.Vite("Web", { project, domain: { name: "www.example.com", dns, ownership: example } });
+yield* Prisma.Website.Vite("Docs", { project, domain: { name: "docs.example.com", dns, ownership: example } });
+```
+
+A site given `ownership` declares no domain ownership and publishes no `TXT`. `ownership` must be for the site's hostname, or for the wildcard one label above it; otherwise the deploy stops before the site's hostname is saved. A domain ownership that is not `verified` logs a warning that names its `TXT` record: one declared in the stack, including the site's own, warns once from its own deploy step, and each site that uses a looked-up one logs a warning for it. An `unverified` one makes no hostname serve until Prisma verifies it. An `expiring` one keeps a hostname it covers that already serves serving until Prisma lapses it after `expiresAt`, at the latest at its next daily lookup, and makes no new hostname serve; publishing its `TXT` makes Prisma verify it again. Both hold unless another verified domain ownership covers the hostname. A declared domain ownership that is not `verified` is read from Prisma again on every deploy, checks its `TXT` once, and asks Prisma to verify it only when the record is there, so the warning stops once Prisma verifies it. Until then `alchemy plan` lists it as an update.
+
+For a domain ownership made in the Console or by another stack, pass a lookup. It is read while the deploy is planned and never changed, and the deploy fails if it does not exist:
+
+```typescript
+const shared = Prisma.DomainOwnership.lookup({ project, domain: "*.example.com" });
+yield* Prisma.Website.Vite("Web", { project, domain: { name: "www.example.com", dns, ownership: shared } });
+```
+
+Cases to know:
+
+- A wildcard does not cover its apex, and Prisma names the `TXT` of `*.example.com` and of `example.com` the same. A site on `example.com` that declares its own domain ownership would publish, and on destroy delete, the `TXT` the wildcard relies on. Declare a domain ownership for the apex without `dns`, and pass it as `ownership`: the wildcard's `TXT` proves it.
+- A site whose hostname a wildcard already covers still declares a domain ownership for its exact hostname unless given `ownership`. That works, but the extra domain ownership and `TXT` are not needed; pass the wildcard instead.
+- Switching a serving site to `ownership` deletes the site's own domain ownership after the RoutingUrl is updated. If the one passed is not verified yet, the hostname stops serving until it is. Pass `ownership` once it is verified.
+- A site's own domain ownership cannot be looked up: the stack manages it, and the lookup is refused. To move it out of the site, deploy the site once with `.pipe(RemovalPolicy.retain())`, then declare a `Prisma.DomainOwnership` for the same domain with `.pipe(adopt(true))` and pass it as `ownership`. Without the retained deploy, the stack deletes the row after adopting it.
+- Every domain ownership route needs `workspaceManage` access to the workspace. A deployer with a token limited to one project, or without that access, cannot deploy a site with a domain.
+
+### Upgrading a site deployed with an earlier release
+
+A site deployed with an earlier release keeps serving through the upgrade: the RoutingUrl takes over the hostname Prisma recorded for the site's custom domain, and its `CNAME` stays published. Its workspace usually already has a domain ownership for the hostname. Prisma made one for each custom domain created before RoutingUrls, as `expiring`: it keeps the hostname serving until Prisma lapses it after its `expiresAt`, about 30 days after Prisma made it, at the latest at its next daily lookup, unless Prisma finds its `TXT` first. The earlier release published no `TXT`.
+
+Such a site refuses to deploy while the deploy is planned, before anything changes: the refusal names `Prisma.DomainOwnership`, or with `dns` `Prisma.DomainVerification`, and says to re-run with `--adopt`. Choose the fix by who should own the domain ownership:
+
+- **The site should own it**, the usual case for one site on its hostname: after reading `alchemy plan`, pipe `adopt(true)` onto the site's call for one deploy. With `dns`, the site then publishes the `TXT`, and Prisma verifies the domain ownership. Without `dns`, the adopted domain ownership stays `expiring`, and the deploy logs a warning: publish `site.domainOwnership.recordName` with the value `site.domainOwnership.recordValue` before its `expiresAt`, or add `dns`. The warning stops on the first deploy after Prisma verifies it. `site.domain.records` does not list that `TXT` while the hostname serves. The site owns it from then on and deletes it when destroyed. `adopt(true)` adopts every resource of the site, not only the domain ownership; for example, a RoutingUrl another stage on the same Branch uses with the same `logicalId` moves to this site's app. `--adopt` is wider still: it adopts everything in the deploy.
+- **It is managed elsewhere**, shared by several sites or by an Admin: pass `ownership: Prisma.DomainOwnership.lookup({ project, domain: "app.example.com" })`. The site then publishes no `TXT`, and destroying it leaves the domain ownership. If it is `expiring`, the deploy logs a warning, and Prisma lapses it after its `expiresAt`, which stops the hostname serving, unless whoever manages it publishes its `TXT`.
+
+Deploy the upgrade with the same `domain` first, and change the hostname in a later deploy. A deploy that upgrades and changes the hostname at once stops serving the old hostname without checking that the new one can serve.
+
+### Changing or removing the hostname
+
+Changing the hostname of a site that serves it replaces the site's domain ownership: the new one and its `TXT` are saved before the RoutingUrl, and the old ones are deleted after it. The change is refused until the new hostname can serve; with `dns` it usually passes in one deploy. See [Routing URLs](/prisma/compute/apps#routing-urls).
+
+Removing `dns` from a site removes its `TXT` and `CNAME`. To publish them with another tool instead, publish them there first: `_prisma-verification.<hostname>` with your workspace's value and the `CNAME` to the switchboard. Copy them from your DNS host, because `site.domain.records` is empty once the hostname is `active`.
 
 ## Where next
 

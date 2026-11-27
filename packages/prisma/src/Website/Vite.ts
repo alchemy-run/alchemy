@@ -40,10 +40,29 @@ export interface ViteProps extends FrameworkSiteProps {
  *
  * **Example:** Publish DNS in Cloudflare
  * ```typescript
- * // The custom domain's DNS-only CNAME is published in the Cloudflare
+ * // The hostname's TXT and DNS-only CNAME are published in the Cloudflare
  * // zone. Requires Cloudflare.providers() in the stack.
  * const site = yield* Prisma.Website.Vite("Web", {
  *   domain: { name: "www.example.com", dns: Cloudflare.DNS.Adapter() },
+ * });
+ * ```
+ *
+ * **Example:** Several sites under one domain ownership
+ * ```typescript
+ * const dns = Cloudflare.DNS.Adapter();
+ * const example = yield* Prisma.DomainOwnership("Example", {
+ *   project,
+ *   domain: "*.example.com",
+ *   dns,
+ * });
+ * yield* Prisma.Website.Vite("Web", {
+ *   project,
+ *   domain: { name: "www.example.com", dns, ownership: example },
+ * });
+ * yield* Prisma.Website.Vite("Docs", {
+ *   project,
+ *   rootDir: "./docs",
+ *   domain: { name: "docs.example.com", dns, ownership: example },
  * });
  * ```
  *

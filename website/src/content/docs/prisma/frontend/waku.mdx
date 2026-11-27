@@ -132,10 +132,7 @@ const site = yield* Prisma.Website.Waku("Web", {
 });
 ```
 
-`domain` creates `Prisma.CustomDomain` and makes `site.url` the HTTPS
-hostname.
-Configure returned DNS records yourself and verify status before cutover;
-see [Custom domains](/prisma/frontend/websites#custom-domains).
+`domain` saves the hostname as a `Prisma.RoutingUrl`, with a `Prisma.DomainOwnership` that proves your workspace owns it, and makes `site.url` the HTTPS hostname. The deploy does not wait for the hostname to serve: `site.domain.status` is `pending` until the records in `site.domain.records` are published. Pass `dns` to publish them in the same deploy. See [Custom domains](/prisma/frontend/websites#custom-domains).
 
 ## Where next
 

@@ -1,8 +1,12 @@
+import { resolve4, resolveNs, Resolver } from "node:dns/promises";
 import { expect } from "@alchemy.run/test";
 import type * as Test from "@alchemy.run/test/Alchemy";
 import { getProject } from "@distilled.cloud/prisma/management";
+import * as Retry from "@distilled.cloud/prisma/Retry";
+import { createUrlCheck, getUrl } from "@distilled.cloud/prisma/unstable/management";
 import { isActionState, State } from "alchemy/State/State";
 import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -84,3 +88,67 @@ export const markCreating = (stack: Test.ScratchStack, fqn: string) =>
     const { attr: _attr, ...creating } = stored;
     yield* state.set({ ...address, value: { ...creating, status: "creating" } as never });
   }).pipe(Effect.provide(stack.state));
+
+/** Reads the RoutingUrl every 15 seconds until it is `active`, at most 6 minutes. */
+export const pollUntilActive = (id: string) =>
+  getUrl({ id }).pipe(
+    Effect.map(({ data }) => data),
+    Effect.repeat({
+      schedule: Schedule.spaced("15 seconds"),
+      until: (data) => data.status === "active",
+      times: 24,
+    }),
+  );
+
+/**
+ * For a hostname whose records were published by hand: asks Prisma to check
+ * it once, only when the resource itself would (no custom domain, and Prisma
+ * has not seen a record), then only reads it. A check on a failed certificate
+ * orders a new one, and a workspace may order only 10 an hour.
+ */
+export const checkOnceThenPollUntilActive = (id: string) =>
+  getUrl({ id }).pipe(
+    Effect.flatMap(({ data }) =>
+      data.customDomain === null &&
+      (data.state === "not_verified" || data.state === "waiting_for_dns")
+        ? createUrlCheck({ id }).pipe(Retry.none, Effect.ignore)
+        : Effect.void,
+    ),
+    Effect.andThen(pollUntilActive(id)),
+  );
+
+class CnameNotPublished extends Data.TaggedError("CnameNotPublished")<{
+  readonly server: string;
+  readonly name: string;
+}> {}
+
+const trimDot = (value: string) => value.replace(/\.$/, "").toLowerCase();
+
+/** Wait until every authoritative nameserver of `zone` answers each CNAME. */
+export const waitForAuthoritativeCnames = (
+  zone: string,
+  records: ReadonlyArray<{ name: string; value: string }>,
+) =>
+  Effect.gen(function* () {
+    const nameServers = yield* Effect.tryPromise(() => resolveNs(zone)).pipe(Effect.orDie);
+    const servers = (yield* Effect.forEach(nameServers, (ns) =>
+      Effect.tryPromise(() => resolve4(ns)).pipe(Effect.orDie),
+    )).flat();
+    yield* Effect.forEach(servers, (server) =>
+      Effect.forEach(records, (record) =>
+        Effect.gen(function* () {
+          const resolver = yield* Effect.sync(() => {
+            const r = new Resolver();
+            r.setServers([server]);
+            return r;
+          });
+          const answers = yield* Effect.tryPromise(() => resolver.resolveCname(record.name)).pipe(
+            Effect.orElseSucceed(() => [] as string[]),
+          );
+          if (!answers.some((answer) => trimDot(answer) === trimDot(record.value))) {
+            return yield* Effect.fail(new CnameNotPublished({ server, name: record.name }));
+          }
+        }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 })),
+      ),
+    );
+  });

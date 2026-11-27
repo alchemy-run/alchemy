@@ -3,15 +3,16 @@ import type { MemoOptions } from "alchemy/Command/Memo";
 import * as DNS from "alchemy/DNS/Adapter";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
-import type { ResourceLike } from "alchemy/Resource";
 import type { WebsiteAssetsProps } from "alchemy/Website/assets";
 import { Server, type ServerDevProps } from "alchemy/Website/Server";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Compute, type ComputeProps } from "../Compute.ts";
-import { CustomDomain } from "../CustomDomain.ts";
+import type { DomainOwnership } from "../DomainOwnership.ts";
+import { websiteDomain } from "../internal/WebsiteDomain.ts";
 import { Project } from "../Project.ts";
 import type { Providers } from "../Providers.ts";
+import type { RoutingUrl } from "../RoutingUrl.ts";
 import type { PrismaRegionId } from "../Types.ts";
 import { WebsiteArtifact } from "./Artifact.ts";
 
@@ -40,7 +41,7 @@ export type WebsiteComputeOptions = Pick<
   | "urlReadinessTimeoutSeconds"
 >;
 
-/** Custom hostname of a Prisma website: the hostname, or `{ name, dns }`. */
+/** Custom hostname of a Prisma website: the hostname, or `{ name, dns, ownership }`. */
 export type WebsiteDomain =
   | string
   | {
@@ -48,28 +49,29 @@ export type WebsiteDomain =
       name: string;
       /**
        * DNS host that publishes the hostname's `CNAME` to the app's regional
-       * switchboard (`switchboard.{region}.prisma.build`) before the domain
-       * is registered — Prisma verifies it on registration (see
-       * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
-       * `Cloudflare.DNS.Adapter()`. Omitted: publish it yourself first.
+       * switchboard, and, unless `ownership` is passed, the `TXT` record of the
+       * domain ownership the site declares, e.g. `Cloudflare.DNS.Adapter()`
+       * (see [DNS Adapters](/infrastructure-as-code/dns-adapters)). Omitted:
+       * publish `domain.records` yourself. Removing it removes the records it
+       * published; to publish them with another tool, publish them there
+       * first, copied from your DNS host.
        */
       dns?: DNS.DnsConfig;
+      /**
+       * A domain ownership that covers `name` and is managed outside this
+       * site: one declared in this stack, or `Prisma.DomainOwnership.lookup`
+       * for one made in the Console or by another stack. The site then declares
+       * no domain ownership, and leaves this one when it is destroyed. It must
+       * be for `name` or for the wildcard one label above it, or the deploy
+       * stops before the site's hostname is saved. Omitted: the site declares a
+       * domain ownership for `name`, and destroying the site deletes it.
+       */
+      ownership?: DomainOwnership;
     };
 
 /** The hostname of a {@link WebsiteDomain}. */
 export const websiteDomainName = (domain: WebsiteDomain | undefined): string | undefined =>
   domain === undefined || typeof domain === "string" ? domain : domain.name;
-
-/**
- * The regional switchboard a custom hostname CNAMEs to, derived from the
- * app endpoint (`https://{app}.{region}.prisma.build` →
- * `switchboard.{region}.prisma.build`).
- */
-const switchboardTarget = (endpoint: string | undefined) => {
-  const host = (endpoint ?? "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-  const dot = host.indexOf(".");
-  return dot < 0 ? host : `switchboard${host.slice(dot)}`;
-};
 
 /** Shared contract for Prisma's framework website composites. */
 export interface FrameworkSiteProps {
@@ -86,14 +88,25 @@ export interface FrameworkSiteProps {
   /** Native framework development server options, including external-server mode. */
   dev?: ServerDevProps;
   /**
-   * Custom hostname attached using `Prisma.CustomDomain`.
-   *
-   * A string (or `{ name }`) leaves DNS to you: Prisma verifies the
-   * hostname's `CNAME` to `switchboard.{region}.prisma.build` when the
-   * domain is registered, so publish it first (`domain.dnsRecords` lists
-   * it). Set `dns` (e.g.
-   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to
-   * publish it through the DNS host before registration. See
+   * Custom hostname, saved as a `Prisma.RoutingUrl`, with a
+   * `Prisma.DomainOwnership` for it unless `ownership` is passed. The deploy
+   * does not wait for it to serve. Without `dns`, `domain.status` is
+   * `pending` and `domain.records` lists the `TXT` and `CNAME` to publish
+   * until Prisma finds them. With `dns` (e.g.
+   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`), they are
+   * published through the DNS host, and the deploy waits up to about 7
+   * minutes for them to reach the nameservers. A domain ownership that
+   * already exists for `name`, such as one Prisma made for a site deployed
+   * with an earlier release, refuses the deploy. If the site should own it,
+   * pipe `adopt(true)` onto the site for one deploy after reading the plan:
+   * it adopts every resource of the site, and with `dns` publishes the
+   * `TXT`. Without `dns`, an adopted row Prisma made stays `expiring`:
+   * publish `domainOwnership.recordName` with value
+   * `domainOwnership.recordValue` before its `expiresAt`, or add `dns`; the
+   * deploy warns until Prisma verifies it. If it is managed elsewhere, pass
+   * `ownership: Prisma.DomainOwnership.lookup({ project, domain })`; the site
+   * then publishes no `TXT`, and a row Prisma made is `expiring`: Prisma
+   * lapses it after its `expiresAt` unless its `TXT` is published. See
    * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
   domain?: WebsiteDomain;
@@ -117,8 +130,10 @@ export interface Website {
   compute: Compute | undefined;
   /** Project resource or existing project reference. Undefined during native development. */
   project: WebsiteProjectReference | undefined;
-  /** Custom-domain resource, including DNS records and certificate status. Undefined without domain or during native development. */
-  domain: CustomDomain | undefined;
+  /** The custom hostname's RoutingUrl, with its `status` and the `records` still to publish. Undefined without domain or during native development. */
+  domain: RoutingUrl | undefined;
+  /** The domain ownership that covers the custom hostname: the one the site declared, or the one passed as `domain.ownership`. Undefined without domain or during native development. */
+  domainOwnership: DomainOwnership | undefined;
 }
 
 /** Internal framework-to-Node-target wiring. */
@@ -179,32 +194,16 @@ export const deployWebsite = Effect.fn(function* (
       NODE_ENV: "production",
     },
   });
-  const domainName = websiteDomainName(props.domain);
-  // Prisma verifies the CNAME when the domain is registered, so the record
-  // must exist first: the CustomDomain's hostname depends on it.
-  const routing =
-    domainName && typeof props.domain === "object" && props.domain.dns
-      ? yield* (yield* DNS.resolve(props.domain.dns)).alias("DomainAlias", {
-          name: domainName,
-          target: {
-            hostname: Output.map(compute.appEndpointDomain, switchboardTarget),
-          },
-        })
-      : undefined;
-  const domain = domainName
-    ? yield* CustomDomain("Domain", {
-        app: compute,
-        hostname:
-          routing === undefined
-            ? domainName
-            : Output.map(Output.of(routing as ResourceLike), () => domainName),
-      })
-    : undefined;
+  const custom =
+    props.domain === undefined ? undefined : yield* websiteDomain(props.domain, compute, project);
   return {
-    url: domain ? Output.map(domain.hostname, (hostname) => `https://${hostname}`) : compute.url,
+    url: custom
+      ? Output.map(custom.url.hostname, (hostname) => `https://${hostname}`)
+      : compute.url,
     compute,
     project,
-    domain,
+    domain: custom?.url,
+    domainOwnership: custom?.ownership,
   };
 });
 
@@ -238,6 +237,7 @@ export const makeFrameworkSite = Effect.fn(function* (
       compute: undefined,
       project: undefined,
       domain: undefined,
+      domainOwnership: undefined,
     } satisfies Website;
   }
   const requiredPath = (value: string | undefined) =>
