@@ -93,29 +93,28 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
 });
 
 /**
- * Wait for a writable process stream to finish (or close before finishing).
- * A stream that was already ended must not be ended again, and a destroyed
- * stream must not keep a process with open provider handles alive forever.
+ * Wait for a writable process stream to finish, close, or fail. A stream
+ * that was already ended must not be ended again.
+ *
+ * This only waits for output to drain; it does not judge whether the reader
+ * received it. Bun reports neither EPIPE nor ENOSPC on process streams, so a
+ * closed or full reader cannot change the exit code consistently across
+ * runtimes.
  */
-const finishOutput = (stream: NodeJS.WriteStream, done: (flushed: boolean) => void): void => {
-  if (stream.writableFinished) return done(true);
-  if (stream.destroyed) return done(false);
-
-  const finish = (flushed: boolean) => {
-    stream.off("finish", onFinish);
-    stream.off("close", onClose);
-    stream.off("error", onError);
-    done(flushed);
-  };
-  const onFinish = () => finish(true);
-  const onClose = () => finish(stream.writableFinished);
-  const onError = () => finish(false);
-
-  stream.once("finish", onFinish);
-  stream.once("close", onClose);
-  stream.once("error", onError);
-  if (!stream.writableEnded) stream.end();
-};
+const finishOutput = (stream: NodeJS.WriteStream): Promise<void> =>
+  new Promise((resolve) => {
+    if (stream.writableFinished || stream.destroyed) return resolve();
+    const done = () => {
+      stream.off("finish", done);
+      stream.off("close", done);
+      stream.off("error", done);
+      resolve();
+    };
+    stream.once("finish", done);
+    stream.once("close", done);
+    stream.once("error", done);
+    if (!stream.writableEnded) stream.end();
+  });
 
 /**
  * ALWAYS exit once the main effect completes. The platform `runMain` default
@@ -123,37 +122,16 @@ const finishOutput = (stream: NodeJS.WriteStream, done: (flushed: boolean) => vo
  * `alchemy deploy`/`destroy` otherwise lingers for ~100 seconds after "Done"
  * while keep-alive sockets (Cloudflare API agents, provider sidecar handles)
  * pin the event loop until the remote side closes them. Effect finalizers
- * have completed by teardown time. Finish both output streams before forcing
- * exit, so piped JSON and error logs cannot be truncated.
+ * have completed by teardown time. Drain both output streams before forcing
+ * exit, so piped JSON and error logs are not truncated. A slow reader delays
+ * exit, as with any process blocked on a pipe, rather than losing output.
  */
 const exitingTeardown: Teardown = (exit, onExit) => {
   defaultTeardown(exit, (code) => {
     const finalCode = code !== 0 ? code : Number(process.exitCode ?? 0) || 0;
-    let stdoutFlushed: boolean | undefined;
-    let stderrFlushed: boolean | undefined;
-    let finished = false;
-
-    const complete = (timedOut = false) => {
-      if (finished || (!timedOut && (stdoutFlushed === undefined || stderrFlushed === undefined))) {
-        return;
-      }
-      finished = true;
-      clearTimeout(timeout);
-      const exitCode =
-        stdoutFlushed === true && stderrFlushed === true ? finalCode : finalCode || 1;
-      onExit(exitCode);
-      process.exit(exitCode);
-    };
-    // If a pipe is broken or a stream never finishes, do not hang on a
-    // provider keep-alive handle or falsely claim a successful command.
-    const timeout = setTimeout(() => complete(true), 30_000);
-    finishOutput(process.stdout, (flushed) => {
-      stdoutFlushed = flushed;
-      complete();
-    });
-    finishOutput(process.stderr, (flushed) => {
-      stderrFlushed = flushed;
-      complete();
+    void Promise.all([finishOutput(process.stdout), finishOutput(process.stderr)]).then(() => {
+      onExit(finalCode);
+      process.exit(finalCode);
     });
   });
 };

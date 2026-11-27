@@ -83,7 +83,7 @@ describe("runMain piped output", { tags: ["unit", "local"] }, () => {
         () =>
           Effect.gen(function* () {
             const { exitCode } = yield* runFixture(runtime, mode);
-            expect(exitCode).toBe(mode.startsWith("destroyed") ? 1 : 0);
+            expect(exitCode).toBe(0);
           }),
         { timeout: 15_000 },
       );
