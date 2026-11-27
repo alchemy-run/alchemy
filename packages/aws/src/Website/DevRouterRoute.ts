@@ -52,7 +52,10 @@ const toHostPatternRegex = (pattern: string) =>
  */
 export const registerDevRouterRoute = Effect.fn("AWS.Website.DevRouterRoute")(function* (
   domain: WebsiteRouterDomainProps,
-  /** The local dev server's URL (e.g. `http://localhost:5173`). */
+  /**
+   * The local dev server's own URL (e.g. `http://localhost:5173`), never its
+   * dev ingress origin: the emulated edge dials it over plain HTTP.
+   */
   devUrl: Input<string | undefined>,
 ) {
   const router = domain.router;
@@ -136,8 +139,9 @@ export const registerDevRouterRoute = Effect.fn("AWS.Website.DevRouterRoute")(fu
     purge: true,
   });
 
-  // The site's own `url` output stays the dev server's localhost address
-  // (the point of `alchemy dev` is the HMR server); the Router serves the
-  // same content at `router.url + domain.path`.
+  // The site's own `url` output stays the dev server's address (or its dev
+  // ingress origin; the point of `alchemy dev` is the HMR server), while
+  // `devUrl` is always the server's own listener, which the emulated edge
+  // dials. The Router serves the same content at `router.url + domain.path`.
   return kvNamespace;
 });
