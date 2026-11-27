@@ -36,6 +36,7 @@
     "./GCP": "./src/GCP/index.ts",
     "./Hetzner": "./src/Hetzner/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
+    "./Railway": "./src/Railway/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -89,6 +90,12 @@
         "worker": "./src/Kubernetes/index.ts",
         "default": "./lib/Kubernetes/index.js"
       },
+      "./Railway": {
+        "types": "./lib/Railway/index.d.ts",
+        "bun": "./src/Railway/index.ts",
+        "worker": "./src/Railway/index.ts",
+        "default": "./lib/Railway/index.js"
+      },
       "./AWS/internal/*": null,
       "./Cloudflare/internal/*": null,
       "./internal/*": null,
@@ -118,6 +125,7 @@
     "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/hetzner": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
+    "@alchemy.run/railway": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
@@ -129,6 +137,7 @@
     "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/hetzner": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
+    "@alchemy.run/railway": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
@@ -152,6 +161,9 @@
       "optional": true
     },
     "@alchemy.run/kubernetes": {
+      "optional": true
+    },
+    "@alchemy.run/railway": {
       "optional": true
     }
   }

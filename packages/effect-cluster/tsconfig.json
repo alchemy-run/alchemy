@@ -36,6 +36,9 @@
     },
     {
       "path": "../kubernetes/tsconfig.json"
+    },
+    {
+      "path": "../railway/tsconfig.json"
     }
   ]
 }
