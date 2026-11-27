@@ -234,7 +234,7 @@ const canonicalize = (
   if (Redacted.isRedacted(value)) {
     return {
       _tag: "Redacted",
-      value: Redacted.value(value),
+      value: canonicalize(Redacted.value(value), stripNullish, ancestors),
     };
   }
   // JSON-safe leaves compare by their serialized form (Duration/Date have

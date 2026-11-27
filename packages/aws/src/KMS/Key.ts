@@ -609,7 +609,11 @@ const readKeyRotation = Effect.fn(function* (keyId: string) {
 
 const readKeyPolicy = Effect.fn(function* (keyId: string) {
   return yield* kms.getKeyPolicy({ KeyId: keyId, PolicyName: "default" }).pipe(
-    Effect.map((response) => response.Policy),
+    // KMS returns the same document with its keys in varying order from one
+    // read to the next; store the canonical form so drift compares documents.
+    Effect.map((response) =>
+      response.Policy === undefined ? undefined : normalizePolicyDocument(response.Policy),
+    ),
     Effect.catchTags({
       KMSInvalidStateException: () => Effect.undefined,
       NotFoundException: () => Effect.undefined,

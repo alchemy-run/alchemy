@@ -4,6 +4,7 @@ import { Alias, Key } from "@alchemy.run/aws/KMS";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as KMS from "@distilled.cloud/aws/kms";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -19,7 +20,7 @@ describe("AWS.KMS.Key", { tags: ["provider:aws", "provider:aws:kms", "live"] }, 
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const { accountId } = yield* AWSEnvironment.current;
+        const { accountId, region } = yield* AWSEnvironment.current;
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
@@ -76,6 +77,23 @@ describe("AWS.KMS.Key", { tags: ["provider:aws", "provider:aws:kms", "live"] }, 
               Principal: { AWS: `arn:aws:iam::${accountId}:root` },
               Action: ["kms:*"],
               Resource: "*",
+            },
+            // Several condition operators and keys: GetKeyPolicy sometimes
+            // returns them in a different order from one read to the next
+            // (#3531).
+            {
+              Sid: "AllowViaS3",
+              Effect: "Allow",
+              Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+              Action: ["kms:Decrypt"],
+              Resource: "*",
+              Condition: {
+                StringEquals: {
+                  "kms:CallerAccount": accountId,
+                  "kms:ViaService": `s3.${region}.amazonaws.com`,
+                },
+                Bool: { "aws:SecureTransport": "true" },
+              },
             },
           ],
         };
@@ -149,6 +167,14 @@ describe("AWS.KMS.Key", { tags: ["provider:aws", "provider:aws:kms", "live"] }, 
           PolicyName: "default",
         });
         expect(noopPolicy.Policy).toContain("EnableRootPermissions");
+
+        // `read` stores the canonical policy, so drift sees an unchanged key
+        // however KMS orders the document on each read (#3531). The reorder
+        // shows on roughly one read in eight, hence several checks.
+        for (let i = 0; i < 12; i++) {
+          const drift = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+          expect(drift.resources.ManagedKey?.action).toBe("unchanged");
+        }
 
         yield* stack.destroy();
 
