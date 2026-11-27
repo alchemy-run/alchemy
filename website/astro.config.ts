@@ -2515,37 +2515,32 @@ export default defineConfig({
               items: [{ autogenerate: { directory: "ai/tutorial" } }],
             },
             {
-              label: "Processes",
+              label: "Concepts",
               items: [
-                { label: "Processes", link: "/ai/processes" },
-                { label: "Processes that use processes", link: "/ai/process-graphs" },
-                { label: "Processes and Domain models", link: "/ai/domain" },
-              ],
-            },
-            {
-              label: "Running them",
-              items: [
-                { label: "Choose a harness", link: "/ai/harnesses" },
-                { label: "Where sessions run", link: "/ai/hosting" },
-                { label: "Connect a front end", link: "/ai/front-end" },
-              ],
-            },
-            {
-              label: "Models & tools",
-              items: [
-                { label: "Models", link: "/ai/models" },
-                { label: "Tools", link: "/ai/tools" },
+                { label: "Process", link: "/ai/processes" },
+                { label: "Process graph", link: "/ai/process-graphs" },
+                { label: "Model", link: "/ai/models" },
+                { label: "Tool", link: "/ai/tools" },
                 { label: "Coding tools", link: "/ai/coding-tools" },
-                { label: "MCP servers", link: "/ai/mcp-servers" },
+                { label: "MCP server", link: "/ai/mcp-servers" },
                 { label: "Code mode", link: "/ai/code-mode" },
+                { label: "Harness", link: "/ai/harnesses" },
+                { label: "Sandbox", link: "/ai/sandboxes" },
               ],
             },
             {
-              label: "Sandboxes",
+              label: "Platforms",
               items: [
-                { label: "Sandboxes", link: "/ai/sandboxes" },
+                { label: "Where sessions run", link: "/ai/hosting" },
                 { label: "Sandbox platforms", link: "/ai/sandbox-platforms" },
-                { label: "Build your own", link: "/ai/custom-sandboxes" },
+                { label: "Build your own sandbox", link: "/ai/custom-sandboxes" },
+              ],
+            },
+            {
+              label: "Integrations",
+              items: [
+                { label: "Domain models", link: "/ai/domain" },
+                { label: "Front ends", link: "/ai/front-end" },
               ],
             },
           ],
