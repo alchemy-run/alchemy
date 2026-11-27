@@ -1,6 +1,8 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import type { Path } from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
@@ -36,12 +38,30 @@ export class ServerHost extends Context.Service<ServerHost, Pick<ProcessContext,
 ) {}
 
 /**
+ * Claims an inbound HTTP request before the program's own `fetch` handler
+ * sees it (a webhook delivery, a push subscription, ...). Return `undefined`
+ * to pass the request on to the next listener and finally to `fetch`.
+ */
+export type HttpListener = (
+  request: HttpServerRequest,
+) => Effect.Effect<HttpServerResponse.HttpServerResponse, never, any> | undefined;
+
+/**
  * Deploy-time / plan-time host context for platforms that bundle a long-lived
  * program. It collects background work registered via `run` and HTTP handlers
  * registered via `serve` into a single `exports.program` effect that the
  * generated container/instance entrypoint runs.
  */
 export interface HostRuntimeContext extends ProcessContext {
+  /**
+   * Register a listener that sees every request before the served handler,
+   * the counterpart of `host.listen` on a Cloudflare Worker. Listeners are
+   * read per request, so it does not matter whether they register before or
+   * after `serve`. A program that registers a listener but serves no `fetch`
+   * still boots the HTTP server. Hosts built by
+   * {@link createHostRuntimeContext} have it.
+   */
+  listen?: (listener: HttpListener) => Effect.Effect<void>;
   serve: <Req = never>(
     handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
     options?: { shape?: Record<string, unknown> },
@@ -68,6 +88,19 @@ export const createHostRuntimeContext =
   (id: string): HostRuntimeContext => {
     const runners: Effect.Effect<void, never, any>[] = [];
     const env: Record<string, any> = {};
+    const listeners: HttpListener[] = [];
+    let served = false;
+    // Listeners run first, per request; an unclaimed request reaches the
+    // handler unchanged, so a host with no listener serves as before.
+    const dispatch = (handler: HttpEffect<any>): HttpEffect<any> =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        for (const listener of listeners) {
+          const claimed = listener(request);
+          if (claimed !== undefined) return yield* claimed;
+        }
+        return yield* handler;
+      });
 
     return {
       Type: type,
@@ -90,37 +123,56 @@ export const createHostRuntimeContext =
         Effect.sync(() => {
           runners.push(effect);
         }),
+      listen: (listener: HttpListener) =>
+        Effect.sync(() => {
+          listeners.push(listener);
+        }),
       serve: ((handler) =>
         Effect.sync(() => {
+          served = true;
           // Register the HTTP handler as a runner. At container runtime the
           // ambient `HttpServer` (if provided) serves it; `Http.serve` is a
           // no-op when no server is bound, so this never crashes plan/deploy.
-          runners.push(Http.serve(handler as HttpEffect<any>));
+          runners.push((handler as HttpEffect<any>).pipe(dispatch, Http.serve));
         })) as HostRuntimeContext["serve"],
-      exports: Effect.sync(() => ({
-        program: Effect.serviceOption(ManagedHttpShutdown).pipe(
-          Effect.flatMap((managed) => {
-            let remaining = runners.length;
-            return Effect.all(
-              Option.isSome(managed)
-                ? runners.map((runner) =>
-                    runner.pipe(
-                      Effect.onExit((exit) =>
-                        Effect.sync(() => managed.value.runnerFinished(exit, --remaining === 0)),
+      exports: Effect.sync(() => {
+        // A program that only consumes events has no `fetch`, so nothing
+        // called `serve`: boot the server for its listeners.
+        if (!served && listeners.length > 0) {
+          served = true;
+          runners.push(
+            HttpServerResponse.text("Not Found", { status: 404 }).pipe(
+              Effect.succeed,
+              dispatch,
+              Http.serve,
+            ),
+          );
+        }
+        return {
+          program: Effect.serviceOption(ManagedHttpShutdown).pipe(
+            Effect.flatMap((managed) => {
+              let remaining = runners.length;
+              return Effect.all(
+                Option.isSome(managed)
+                  ? runners.map((runner) =>
+                      runner.pipe(
+                        Effect.onExit((exit) =>
+                          Effect.sync(() => managed.value.runnerFinished(exit, --remaining === 0)),
+                        ),
+                        Effect.scoped,
+                        // Parent interruption may discard child finalizer defects.
+                        Effect.onExit((exit) =>
+                          Effect.sync(() => managed.value.runnerFinished(exit, false)),
+                        ),
                       ),
-                      Effect.scoped,
-                      // Parent interruption may discard child finalizer defects.
-                      Effect.onExit((exit) =>
-                        Effect.sync(() => managed.value.runnerFinished(exit, false)),
-                      ),
-                    ),
-                  )
-                : runners,
-              { concurrency: "unbounded" },
-            );
-          }),
-        ),
-      })),
+                    )
+                  : runners,
+                { concurrency: "unbounded" },
+              );
+            }),
+          ),
+        };
+      }),
     } satisfies HostRuntimeContext;
   };
 
