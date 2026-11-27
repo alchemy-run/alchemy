@@ -65,10 +65,20 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(
             ),
             Effect.exit,
           );
+          // Other resources may also fail to read with this token; the role
+          // itself must fail its read with Forbidden.
           expect(Exit.isFailure(exit)).toBe(true);
-          if (Exit.isFailure(exit)) {
-            expect(Cause.pretty(exit.cause)).toContain("Forbidden");
-          }
+          const roleFailure = Exit.isFailure(exit)
+            ? exit.cause.reasons
+                .filter(Cause.isFailReason)
+                .map((reason) => reason.error)
+                .find(
+                  (error): error is Drift.DriftResourceError =>
+                    error instanceof Drift.DriftResourceError && error.logicalId === "Role",
+                )
+            : undefined;
+          expect(roleFailure?.operation).toBe("read");
+          expect(roleFailure?.cause).toMatchObject({ _tag: "Forbidden" });
 
           yield* stack.destroy();
           yield* waitForDatabaseToBeDeleted(database.name, database.organization);
@@ -85,8 +95,8 @@ const waitForDatabaseToBeDeleted = Effect.fn(function* (database: string, organi
     Effect.flatMap(() => Effect.fail(new DatabaseStillExists())),
     Effect.retry({
       while: (e): e is DatabaseStillExists => e instanceof DatabaseStillExists,
-      schedule: Schedule.exponential(100),
-      times: 30,
+      schedule: Schedule.spaced("5 seconds"),
+      times: 10,
     }),
     Effect.catchTag("NotFound", () => Effect.void),
   );
