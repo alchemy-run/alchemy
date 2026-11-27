@@ -154,7 +154,13 @@ const base: ReadonlyArray<Group> = [
     differs: `command.x !== pin.x || command.a !== pin.a`,
     bind: (known: boolean) =>
       known ? `const x = pin.x; const a = pin.a;` : `const x = command.x; const a = command.a;`,
-    both: [`Math.round(x)`, `Math.floor(x)`, `Math.ceil(x)`, `Math.trunc(x)`],
+    both: [
+      `Math.round(x)`,
+      `Math.floor(x)`,
+      `Math.ceil(x)`,
+      `Math.trunc(x)`,
+      `BigDecimal.fromNumber(x)`,
+    ],
     unread: [
       [
         `Math.round(x + a)`,
@@ -590,6 +596,26 @@ const base: ReadonlyArray<Group> = [
       `Equal.equals(Rational.sum(ratio(a), third), Rational.sum(third, ratio(a)))`,
       `Exit.hasDies(Effect.runSyncExit(Effect.sync(() => Rational.makeUnsafe(BigInt(a), 0n))))`,
       `Exit.hasDies(Effect.runSyncExit(Effect.sync(() => Rational.divideUnsafe(Rational.makeUnsafe(BigInt(a), 1n), Rational.makeUnsafe(0n, 1n)))))`,
+      `Rational.fromString("nope")`,
+      `Rational.between(ratio(3), { minimum: ratio(1), maximum: ratio(b) })`,
+      `Rational.between(ratio(3), { minimum: ratio(a), maximum: ratio(5) })`,
+      `Rational.sign(ratio(a))`,
+    ],
+    unread: [
+      [`Rational.sum(1, a)`, /is called in a way the prover has no model for/],
+      [`Rational.make("x", BigInt(a))`, /is called in a way the prover has no model for/],
+      [`Rational.clamp(ratio(a), 5)`, /is called in a way the prover has no model for/],
+      [
+        `Rational.clamp(ratio(a), { minimum: ratio(1) })`,
+        /is called in a way the prover has no model for/,
+      ],
+      [`Rational.sumAll(a)`, /is called in a way the prover has no model for/],
+      [`Rational.sumAll()`, /is called in a way the prover has no model for/],
+      [`Rational.format(ratio(a))`, /calls Rational.format on a fraction an input holds/],
+      [`Rational.fromStringUnsafe(a)`, /is called in a way the prover has no model for/],
+      [`Rational.fromString(a)`, /is called in a way the prover has no model for/],
+      [`Rational.fromBigDecimal(a)`, /is called in a way the prover has no model for/],
+      [`Rational.between(ratio(a), 5)`, /is called in a way the prover has no model for/],
     ],
     known: [
       `Rational.format(Rational.sum(ratio(a), third))`,
@@ -1122,6 +1148,38 @@ const base: ReadonlyArray<Group> = [
       `Equal.equals(BigDecimal.sum(amount, fee), BigDecimal.sum(fee, amount))`,
       `amount.pipe(BigDecimal.sum(fee), BigDecimal.multiply(decimal(a)))`,
       `Rational.fromBigDecimal(amount)`,
+      `BigDecimal.between(BigDecimal.fromBigInt(3n), { minimum: BigDecimal.fromBigInt(1n), maximum: amount })`,
+      `BigDecimal.between(BigDecimal.fromBigInt(3n), { minimum: amount, maximum: BigDecimal.fromBigInt(1000n) })`,
+    ],
+    unread: [
+      [`BigDecimal.sum(1, amount)`, /is called in a way the prover has no model for/],
+      [
+        `BigDecimal.toNumberUnsafe(amount)`,
+        /calls BigDecimal.toNumberUnsafe on a decimal an input holds/,
+      ],
+      [`BigDecimal.clamp(amount, 5)`, /is called in a way the prover has no model for/],
+      [
+        `BigDecimal.clamp(amount, { minimum: amount })`,
+        /is called in a way the prover has no model for/,
+      ],
+      [`BigDecimal.floor(amount, -1)`, /is called in a way the prover has no model for/],
+      [
+        `BigDecimal.divideUnsafe(BigDecimal.fromBigInt(1n), BigDecimal.fromBigInt(0n))`,
+        /BigDecimal.divideUnsafe divides a decimal by zero/,
+      ],
+      [`BigDecimal.make(1, a)`, /is called in a way the prover has no model for/],
+      [`BigDecimal.fromBigInt(a)`, /is called in a way the prover has no model for/],
+      [`BigDecimal.fromStringUnsafe(a)`, /is called in a way the prover has no model for/],
+      [`BigDecimal.fromString(a)`, /is called in a way the prover has no model for/],
+      [`BigDecimal.between(amount, 5)`, /is called in a way the prover has no model for/],
+      [
+        `BigDecimal.scale(BigDecimal.fromBigInt(1n), "x" + a)`,
+        /calls BigDecimal.scale on a decimal/,
+      ],
+      [`BigDecimal.fromNumber(BigInt(a))`, /is called in a way the prover has no model for/],
+      [`BigDecimal.fromNumber(a > 0)`, /is called in a way the prover has no model for/],
+      [`BigDecimal.sumAll(a)`, /is called in a way the prover has no model for/],
+      [`BigDecimal.sumAll()`, /is called in a way the prover has no model for/],
     ],
     known: [
       ...d("BigDecimal.divide", "amount", "fee"),
