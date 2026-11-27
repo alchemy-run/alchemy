@@ -131,6 +131,8 @@ export interface CapabilityGraphShape {
   readonly owns: (kind: string, name: string, resource: string) => void;
   /** Mark a frame's term as having no host. */
   readonly unhosted: (frame: Frame) => void;
+  /** Record what hosts a term that is not built inside its host. */
+  readonly hosts: (kind: string, name: string, host: string) => void;
   /** Record that a value given out for a term is the term: a lookup that receives it reaches the term. */
   readonly stands: (kind: string, name: string, value: unknown) => void;
   /** Record that a frame's term uses another term. */
@@ -177,6 +179,8 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
   const acquisitions = new Map<Frame, Map<string, Acquisition>>();
   const references = new Map<Frame, Map<string, Reference>>();
   const loose = new Set<Frame>();
+  /** Term id → what hosts it, where that was said and not built. */
+  const hosting = new Map<string, string>();
   /** A value given out for a term → the term's id. */
   const standing = new WeakMap<object, string>();
   /** Term id → the bindings that are its resources. */
@@ -311,6 +315,9 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
     unhosted: (frame) => {
       loose.add(frame);
     },
+    hosts: (kind, name, host) => {
+      hosting.set(`${kind}:${name}`, host);
+    },
     stands: (kind, name, value) => {
       if (isObject(value)) standing.set(value, `${kind}:${name}`);
     },
@@ -349,10 +356,12 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
         walk(root, true);
         return [...out];
       };
-      /** What hosts a frame: the nearest named Host frame around it. */
+      /** What hosts a frame: the nearest Host frame around it, or what was said to host a term around it. */
       const hostOf = (frame: Frame): string | undefined => {
-        for (let each = frame.parent; each !== undefined; each = each.parent) {
-          if (each.kind === HOST && each.name !== undefined) return each.name;
+        for (let each: Frame | undefined = frame; each !== undefined; each = each.parent) {
+          if (each.kind === HOST) return each.name;
+          const said = each.name === undefined ? undefined : hosting.get(idOf(each));
+          if (said !== undefined) return said;
         }
         return undefined;
       };
@@ -428,6 +437,7 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
       acquisitions.clear();
       references.clear();
       loose.clear();
+      hosting.clear();
       owned.clear();
       providersByKey.clear();
     },
@@ -497,23 +507,13 @@ export const own = (kind: string, name: string, resource: string): Effect.Effect
   });
 
 /**
- * Run `effect` as what a host builds, when the host is only known once it is
- * built: `hosted(build, (made) => made.objectName)`. Every term built inside is
- * hosted by that name; with no name, by nothing. Without a graph it is `effect`.
+ * Record what hosts a term that is not built inside its host:
+ * `hostedBy("Process", "Triage", "TriageProcess")`. The terms built inside
+ * that term are hosted by it too. Without a graph it does nothing.
  */
-export const hosted = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  name: (made: A) => string | undefined,
-): Effect.Effect<A, E, R> =>
-  Effect.flatMap(Effect.serviceOption(CapabilityGraph), (graph) => {
-    if (Option.isNone(graph)) return effect;
-    const frame = graph.value.frame(HOST, undefined, undefined);
-    return Effect.tap(Effect.provideService(effect, CurrentFrame, frame), (made) =>
-      Effect.sync(() => {
-        const host = name(made);
-        if (host !== undefined) graph.value.label(frame, host);
-      }),
-    );
+export const hostedBy = (kind: string, name: string, host: string): Effect.Effect<void> =>
+  Effect.map(Effect.serviceOption(CapabilityGraph), (graph) => {
+    if (Option.isSome(graph)) graph.value.hosts(kind, name, host);
   });
 
 /**

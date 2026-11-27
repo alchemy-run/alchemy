@@ -23,7 +23,7 @@ import {
   CapabilityGraph,
   CurrentPolicy,
   framed,
-  hosted,
+  hostedBy,
   makeCapabilityGraph,
   observeLayerBuilds,
   observeLookups,
@@ -433,19 +433,21 @@ describe("CapabilityGraph", { tags: ["unit"] }, () => {
     }),
   );
 
-  it.effect("a term built by a host that is named once it is built is hosted by it", () =>
+  it.effect("a term said to be hosted, and the terms built inside it, are hosted there", () =>
     Effect.gen(function* () {
       const graph = makeCapabilityGraph();
       yield* observed(
         graph,
         Effect.all([
-          hosted(framed("Tool", "inside")(Effect.succeed("JobsObject")), (made) => made),
-          hosted(framed("Tool", "nowhere")(Effect.void), () => undefined),
+          framed("Process", "outer")(framed("Process", "inner")(Effect.void)),
+          framed("Tool", "beside")(Effect.void),
+          hostedBy("Process", "outer", "JobsObject"),
         ]),
       );
       expect(graph.describe().map(({ id, host }) => ({ id, host }))).toEqual([
-        { id: "Tool:inside", host: "JobsObject" },
-        { id: "Tool:nowhere", host: undefined },
+        { id: "Process:inner", host: "JobsObject" },
+        { id: "Process:outer", host: "JobsObject" },
+        { id: "Tool:beside", host: undefined },
       ]);
     }),
   );
