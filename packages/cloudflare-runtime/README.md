@@ -24,8 +24,9 @@ start.
 
 **`DEFAULT_COMPATIBILITY_DATE` follows the pinned workerd's build date**, as
 miniflare's `DEFAULT_COMPAT_DATE` does. Raise them together.
-`withDefaultFlags` still adds `new_module_registry` because Workers that set an
-older date of their own need it too.
+`withDefaultFlags` still adds `new_module_registry` for Workers that set a date
+of their own before 2026-11-17. From that date workerd turns it on by default
+and refuses the flag, as it refuses any flag that is already a default.
 
 **Upstream changes left out on purpose:**
 

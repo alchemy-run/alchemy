@@ -820,7 +820,8 @@ export interface WorkerProps<
      * Alchemy's defaults.
      *
      * For all other Workers, supplied flags extend Alchemy's defaults:
-     * - `new_module_registry` is added unless `legacy_module_registry` is set.
+     * - `new_module_registry` is added for dates before `2026-11-17` unless
+     *   `legacy_module_registry` is set. From that date it is on by default.
      * - `nodejs_compat` is added for dates before `2026-08-04` unless
      *   `no_nodejs_compat` is set. External Workers also require a date on or
      *   after `2024-09-23` for this default.

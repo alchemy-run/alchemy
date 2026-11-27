@@ -173,11 +173,8 @@ export const GlobalsLive = Layer.effect(
               order: -2,
               worker: {
                 compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
-                compatibilityFlags: [
-                  "experimental",
-                  "enable_request_signal",
-                  "service_binding_extra_handlers",
-                ],
+                // enable_request_signal is the default from DEFAULT_COMPATIBILITY_DATE on, and workerd refuses it.
+                compatibilityFlags: ["experimental", "service_binding_extra_handlers"],
                 modules,
                 bindings: [
                   { name: "CF_BLOB", json: JSON.stringify(blob) },
