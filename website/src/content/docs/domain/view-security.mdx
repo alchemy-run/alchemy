@@ -256,6 +256,10 @@ The Layer's construction runs once and may resolve services, such as a permissio
 
 `validate` runs again on every change while a client watches. When support moves an account to another customer, the old owner's watch ends with `NotOwner` at that change. See the test in [Testing an Api](/domain/testing-apis#test-in-process).
 
+## Read your own write
+
+A read with `atLeast` is judged on the state it finds, and again on the state after the write it waits for. So a customer whom a command just made the account's owner reads the account at once. When `validate` refuses the state the read finds, the read waits at most a second for the write. If `validate` still refuses, the refusal comes when that second has passed, so the time a read takes tells nothing about a key the caller may not read.
+
 ## Filter only what's allowed
 
 A client's `where` filter narrows a read it's already allowed to make, and never grants one. `validate` doesn't look at filters, so a filter can't widen what someone sees.

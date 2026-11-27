@@ -656,10 +656,20 @@ const withCaughtUp = <A>(
 };
 
 /**
+ * How long a read waits for its `atLeast` while `validate` refuses the
+ * caller, and how long such a caller waits for its refusal.
+ */
+const REFUSED_WAIT = Duration.seconds(1);
+
+/**
  * Read a key for a caller, judged before anything the caller asked for
- * runs: `validate` judges the key's current state, then, if the read waits
- * for `atLeast`, the state after the wait (only if it moved). A caller
- * `validate` refuses is refused at once, so how long a wait takes tells it
+ * reaches it: `validate` judges the key's current state, then, if the read
+ * waits for `atLeast`, the state after the wait (only if it moved).
+ *
+ * A caller `validate` refuses now may be let in by the write it waits for
+ * (it just got access). Its read waits up to `REFUSED_WAIT` and is judged
+ * again on the state after it. A caller still refused gets the refusal only
+ * once `REFUSED_WAIT` has passed, so how long the read takes tells it
  * nothing about the key (#2906).
  */
 const judgedRead = Effect.fn(function* <A>(
@@ -669,12 +679,37 @@ const judgedRead = Effect.fn(function* <A>(
   wait: Effect.Effect<void, unknown> | undefined,
 ) {
   const current = yield* read;
-  yield* judge(current);
-  if (wait === undefined) return current;
-  yield* wait;
+  if (wait === undefined) {
+    yield* judge(current);
+    return current;
+  }
+  const allowed = Exit.isSuccess(yield* Effect.exit(judge(current)));
+  // An allowed caller waits the whole `atLeast` timeout; a refused one, only `REFUSED_WAIT`.
+  const started = yield* Clock.currentTimeMillis;
+  const waitedInTime = allowed
+    ? yield* Effect.as(wait, true)
+    : yield* wait.pipe(
+        Effect.timeoutOption(REFUSED_WAIT),
+        Effect.map(Option.isSome),
+        Effect.orElseSucceed(() => false),
+      );
   const waited = yield* read;
-  if (versionOf(waited) !== versionOf(current)) yield* judge(waited);
-  return waited;
+  if (allowed) {
+    if (versionOf(waited) !== versionOf(current)) yield* judge(waited);
+    return waited;
+  }
+  const verdict = yield* Effect.exit(judge(waited));
+  if (Exit.isFailure(verdict)) {
+    const left = started + Duration.toMillis(REFUSED_WAIT) - (yield* Clock.currentTimeMillis);
+    if (left > 0) yield* Effect.sleep(Duration.millis(left));
+    return yield* Effect.failCause(verdict.cause);
+  }
+  if (waitedInTime) return waited;
+  // Let in before its write arrived: wait for the rest of it, as an allowed caller does.
+  yield* wait;
+  const caughtUp = yield* read;
+  if (versionOf(caughtUp) !== versionOf(waited)) yield* judge(caughtUp);
+  return caughtUp;
 });
 
 /**
@@ -858,7 +893,7 @@ const handlersOf = (
         const refOf = (id: string) => Key.refOf(key, id);
         const visible = (state: unknown, where: unknown) =>
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
-        // The key's state with its cursor, judged before the read waits for `atLeast`.
+        // The key's state with its cursor, judged before and after the read waits for `atLeast`.
         const judgedSnapshot = (
           id: string,
           mode: Read.Mode,

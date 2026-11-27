@@ -243,11 +243,31 @@ const OwnerOfLive = OwnerOf.toLayer(
   }),
 );
 
+/** A wallet the viewer owns: refused for anyone else, judged after the wait. */
+class OwnWallet extends Domain.Query("OwnWallet", {
+  input: { wallet: Schema.String },
+  success: Schema.String,
+  waitsFor: [WalletOwner],
+  middleware: [ViewerSession],
+  rejects: [NotYours],
+}) {}
+const OwnWalletLive = OwnWallet.toLayer(
+  Effect.gen(function* () {
+    const owners = yield* WalletOwner;
+    return Effect.fn(function* ({ wallet }) {
+      const viewer = yield* Viewer;
+      const owner = Option.getOrNull(yield* owners.get(Wallet.ref(wallet)).pipe(Effect.orDie));
+      if (owner?.owner !== viewer) return yield* new NotYours({ wallet });
+      return wallet;
+    });
+  }),
+);
+
 class Wallets extends Domain.Model("QueryWallets", {
   aggregates: [Wallet],
   views: [WalletOwner],
   projections: [Ledger],
-  queries: [WalletMovements, LargeMovements, Total, Combined, OwnerOf],
+  queries: [WalletMovements, LargeMovements, Total, Combined, OwnerOf, OwnWallet],
 }) {}
 
 class WalletApi extends Domain.Api("QueryWalletApi", {
@@ -255,7 +275,7 @@ class WalletApi extends Domain.Api("QueryWalletApi", {
   commands: ["Deposit"],
   views: [],
   streams: [],
-  queries: ["WalletMovements", "LargeMovements", "Total", "Combined", "OwnerOf"],
+  queries: ["WalletMovements", "LargeMovements", "Total", "Combined", "OwnerOf", "OwnWallet"],
 }) {}
 
 const handlers = (options?: Domain.Projection.Options) =>
@@ -266,6 +286,7 @@ const handlers = (options?: Domain.Projection.Options) =>
     TotalLive,
     CombinedLive,
     OwnerOfLive,
+    OwnWalletLive,
   );
 
 const story = Story.make(Wallets, { layer: handlers() });
@@ -497,6 +518,33 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
       expect(owner).toBe("kim");
       const [waited] = named("Domain.caughtUp WalletOwner");
       expect(waited!.attributes.get("domain.stream")).toBe("Wallet/kim-1");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Wallets.layer(handlers()).pipe(
+          Layer.provideMerge(Layer.mergeAll(InMemory, Movements.memory, ViewerSessionLive)),
+        ),
+      ),
+    ),
+  );
+
+  it.live("judges a caller on the state after the write it waits for", () =>
+    Effect.gen(function* () {
+      const wallets = yield* Wallet;
+      const api = yield* WalletApi.clientInProcess;
+      const asSamHeaders = { headers: { "x-viewer": "sam" } };
+      const toKim = yield* wallets.send(new Open({ id: "kim-2", owner: "kim" }));
+      yield* api.OwnerOf({ wallet: "kim-2" }, { atLeast: toKim });
+      expect(
+        yield* api
+          .OwnWallet({ wallet: "kim-2" }, { ...asSamHeaders, atLeast: [] })
+          .pipe(Effect.flip),
+      ).toEqual(new NotYours({ wallet: "kim-2" }));
+      // The wallet passes to sam: the read waits for that write, then judges.
+      const toSam = yield* wallets.send(new Open({ id: "kim-2", owner: "sam" }));
+      expect(yield* api.OwnWallet({ wallet: "kim-2" }, { ...asSamHeaders, atLeast: toSam })).toBe(
+        "kim-2",
+      );
     }).pipe(
       Effect.scoped,
       Effect.provide(
