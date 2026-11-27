@@ -101,7 +101,6 @@ import * as Endpoint from "./Endpoint.ts";
 import * as EntityResolution from "./EntityResolution/index.ts";
 import { providedOrDefault } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
-import * as FinSpace from "./FinSpace/index.ts";
 import * as Firehose from "./Firehose/index.ts";
 import * as FIS from "./FIS/index.ts";
 import * as FMS from "./FMS/index.ts";
@@ -587,10 +586,6 @@ export const providers = () =>
         FIS.ExperimentTemplate,
         FIS.TargetAccountConfiguration,
         FMS.AdminAccount,
-        FinSpace.Environment,
-        FinSpace.KxCluster,
-        FinSpace.KxDatabase,
-        FinSpace.KxEnvironment,
         Firehose.DeliveryStream,
         FSx.FileSystem,
         Forecast.Dataset,
@@ -1863,10 +1858,6 @@ export const providers = () =>
           flociDual(SSMIncidents.ResponsePlan, () => SSMIncidents.ResponsePlanProvider()),
         ),
         Layer.mergeAll(
-          flociDual(FinSpace.Environment, () => FinSpace.EnvironmentProvider()),
-          flociDual(FinSpace.KxCluster, () => FinSpace.KxClusterProvider()),
-          flociDual(FinSpace.KxDatabase, () => FinSpace.KxDatabaseProvider()),
-          flociDual(FinSpace.KxEnvironment, () => FinSpace.KxEnvironmentProvider()),
           flociDual(ControlTower.EnabledBaseline, () => ControlTower.EnabledBaselineProvider()),
           flociDual(ControlTower.EnabledControl, () => ControlTower.EnabledControlProvider()),
           flociDual(ControlTower.LandingZone, () => ControlTower.LandingZoneProvider()),

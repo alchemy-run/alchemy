@@ -263,13 +263,11 @@ export const ProductsSfdcInstanceProvider = () =>
         const created = yield* integrations
           .createProjectsLocationsProductsSfdcInstances({
             parent,
-            body: {
-              displayName,
-              description,
-              sfdcOrgId: news.sfdcOrgId,
-              authConfigId: news.authConfigId,
-              serviceAuthority: news.serviceAuthority,
-            },
+            displayName,
+            description,
+            sfdcOrgId: news.sfdcOrgId,
+            authConfigId: news.authConfigId,
+            serviceAuthority: news.serviceAuthority,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id)));
         current = created ?? (yield* findOwned(parent, id));
@@ -297,14 +295,11 @@ export const ProductsSfdcInstanceProvider = () =>
             authorityChanged ? "service_authority" : undefined,
             authChanged ? "auth_config_id" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            description,
-            sfdcOrgId: news.sfdcOrgId,
-            authConfigId: news.authConfigId,
-            serviceAuthority: news.serviceAuthority,
-          },
+          displayName,
+          description,
+          sfdcOrgId: news.sfdcOrgId,
+          authConfigId: news.authConfigId,
+          serviceAuthority: news.serviceAuthority,
         });
       }
 

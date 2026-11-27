@@ -1,5 +1,5 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
-import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
+import * as iam from "@distilled.cloud/gcp/iam_v1";
 import type { ResourceBinding } from "alchemy/Resource";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";

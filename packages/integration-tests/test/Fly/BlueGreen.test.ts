@@ -6952,7 +6952,7 @@ describe.concurrent("BlueGreen", () => {
             after: 2_000,
             checks: new Map(p3CheckNames.map((name) => [name, 1_000])),
           };
-          const reports = p3CheckNames.map((name) => ({
+          const reports = p3CheckNames.map((name): machines.CheckStatus => ({
             name,
             status: "passing",
             updated_at: new Date(3_000).toISOString(),
@@ -8701,7 +8701,7 @@ describe.concurrent("BlueGreen", () => {
             checks: { ready: { type: "http", port: 80 } },
             services: [{ internal_port: 80, checks: [{ type: "http" }] }],
           };
-          const checks = [
+          const checks: machines.CheckStatus[] = [
             { name: "ready", status: "passing" },
             { name: "servicecheck-00-http-80", status: "passing" },
           ];
@@ -8712,8 +8712,8 @@ describe.concurrent("BlueGreen", () => {
             checks.slice(0, 1),
             [checks[0]!, checks[0]!],
             [...checks, { name: "unknown", status: "passing" }],
-            checks.map((check) => ({ ...check, status: "warning" })),
-          ]) {
+            checks.map((check): machines.CheckStatus => ({ ...check, status: "warning" })),
+          ] satisfies machines.CheckStatus[][]) {
             expect(checksPassing({ state: "started", checks: invalid }, config)).toBe(false);
           }
         }),

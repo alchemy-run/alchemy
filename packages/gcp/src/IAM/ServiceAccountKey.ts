@@ -1,4 +1,4 @@
-import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
+import * as iam from "@distilled.cloud/gcp/iam_v1";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";

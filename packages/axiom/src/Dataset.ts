@@ -1,5 +1,5 @@
-import * as Axiom from "@distilled.cloud/axiom";
 import { Credentials } from "@distilled.cloud/axiom/Credentials";
+import * as AxiomPreview from "@distilled.cloud/axiom/unstable/v2";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -196,13 +196,13 @@ export const DatasetProvider = () =>
     Dataset,
     Effect.gen(function* () {
       const credentials = yield* Credentials;
-      const create = yield* Axiom.createDataset;
-      const update = yield* Axiom.updateDataset;
-      const get = yield* Axiom.getDataset;
-      const listDatasets = yield* Axiom.getDatasets;
-      const del = yield* Axiom.deleteDataset;
+      const create = yield* AxiomPreview.createDataset;
+      const update = yield* AxiomPreview.updateDataset;
+      const get = yield* AxiomPreview.getDataset;
+      const listDatasets = yield* AxiomPreview.getDatasets;
+      const del = yield* AxiomPreview.deleteDataset;
 
-      const toAttrs = Effect.fn(function* (dataset: Axiom.Dataset) {
+      const toAttrs = Effect.fn(function* (dataset: AxiomPreview.Dataset) {
         if (!dataset.edgeDeployment || !dataset.edgeDeploymentUrl) {
           return yield* new DatasetUnexpectedResponse({
             message: `Axiom dataset "${dataset.name}" is missing its edge deployment metadata`,
@@ -289,7 +289,7 @@ export const DatasetProvider = () =>
                 kind: news.kind,
                 retentionDays: news.retentionDays,
                 useRetentionPeriod: news.useRetentionPeriod,
-              }) as Effect.Effect<Axiom.Dataset, { readonly _tag: string }, never>
+              }) as Effect.Effect<AxiomPreview.Dataset, { readonly _tag: string }, never>
             ).pipe(
               Effect.catchIf(
                 (e): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>

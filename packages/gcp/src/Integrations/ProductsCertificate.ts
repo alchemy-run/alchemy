@@ -268,12 +268,10 @@ export const ProductsCertificateProvider = () =>
         const created = yield* integrations
           .createProjectsLocationsProductsCertificates({
             parent,
-            body: {
-              displayName,
-              description,
-              requestorId: news.requestorId,
-              rawCertificate: news.rawCertificate,
-            },
+            displayName,
+            description,
+            requestorId: news.requestorId,
+            rawCertificate: news.rawCertificate,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id)));
         current = created ?? (yield* findOwned(parent, id));
@@ -294,11 +292,8 @@ export const ProductsCertificateProvider = () =>
             displayChanged ? "certificate_name" : undefined,
             descriptionChanged ? "description" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            description,
-          },
+          displayName,
+          description,
         });
       }
 

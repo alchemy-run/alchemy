@@ -1,4 +1,4 @@
-import * as apim from "@distilled.cloud/gcp/apim_v1alpha";
+import * as apim from "@distilled.cloud/gcp/unstable/apim_v1alpha";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

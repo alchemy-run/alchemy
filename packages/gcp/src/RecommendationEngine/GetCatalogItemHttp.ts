@@ -1,5 +1,5 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
-import * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
+import * as recommendationengine from "@distilled.cloud/gcp/unstable/recommendationengine_v1beta1";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";

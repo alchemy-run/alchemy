@@ -8,6 +8,7 @@ import { makeStorageClient } from "@alchemy.run/neon/Storage";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import { adopt, Unowned } from "alchemy/AdoptPolicy";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -139,7 +140,7 @@ test.provider(
           }),
         );
       const first = yield* deploy(false);
-      const listing = yield* SDK.listProjectBranchBuckets({
+      const listing = yield* SDKUnstable.listProjectBranchBuckets({
         project_id: first.bucket.projectId,
         branch_id: first.bucket.branchId,
       });
@@ -205,7 +206,7 @@ test.provider(
       yield* client.put("retained.txt", "preserve me");
       const visibility = yield* deploy(false, "public_read").pipe(Effect.result);
       expect(Result.isFailure(visibility)).toBe(true);
-      const listing = yield* SDK.listProjectBranchBuckets({
+      const listing = yield* SDKUnstable.listProjectBranchBuckets({
         project_id: bucket.projectId,
         branch_id: bucket.branchId,
       });
@@ -378,7 +379,7 @@ test.provider(
           return { branch, reader };
         }),
       );
-      const storage = yield* SDK.getProjectBranchStorage({
+      const storage = yield* SDKUnstable.getProjectBranchStorage({
         project_id: child.branch.projectId,
         branch_id: child.branch.branchId,
       });
