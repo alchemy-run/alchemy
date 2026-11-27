@@ -10,6 +10,7 @@
  *
  * @module
  */
+import { hostedBy, standsFor } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { InstanceSetup } from "alchemy/Workers/InstanceSetup";
 import * as Context from "effect/Context";
@@ -49,6 +50,8 @@ export interface Instances {
     method: string,
     args: ReadonlyArray<Wire>,
   ) => Effect.Effect<Wire, never, RuntimeContext>;
+  /** The runtime's binding that holds the instances, when they run apart: a plan lists the process under it. */
+  readonly binding?: string;
 }
 
 /**
@@ -160,14 +163,18 @@ export const make = <A, E, R, R2>(
       let provided = Context.empty() as Context.Context<never>;
       for (const process of declared.values()) {
         if (Option.isNone(Context.getOption(built, process))) continue;
-        instances.set(
+        const hosted = yield* declare(
           process.processName,
-          yield* declare(
-            process.processName,
-            instanceOf(process, layer, services, () => local!),
-          ),
+          instanceOf(process, layer, services, () => local!),
         );
-        provided = Context.add(provided, process, Context.getUnsafe(clients, process) as never);
+        instances.set(process.processName, hosted);
+        const client = Context.getUnsafe(clients, process);
+        // For a plan: what holds a client uses the process, which runs where its instances do.
+        yield* standsFor("Process", process.processName, client);
+        if (hosted.binding !== undefined) {
+          yield* hostedBy("Process", process.processName, hosted.binding);
+        }
+        provided = Context.add(provided, process, client as never);
       }
       return provided as unknown as Context.Context<A>;
     }),

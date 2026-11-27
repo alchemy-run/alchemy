@@ -125,10 +125,11 @@ const TRANSIT_RETRY = {
 export const layerDurableObjects = <A, E, R>(
   layer: Layer.Layer<A, E, R>,
 ): Layer.Layer<A, E, Exclude<R, A> | Worker> =>
-  Host.make(layer, (name, instance) =>
-    Effect.map(
+  Host.make(layer, (name, instance) => {
+    const binding = `${name}Process`.replace(/[^A-Za-z0-9_]/g, "_");
+    return Effect.map(
       declare(
-        `${name}Process`.replace(/[^A-Za-z0-9_]/g, "_"),
+        binding,
         {},
         Effect.succeed(
           // A harness schedules its wake-ups on the object's alarm.
@@ -136,6 +137,7 @@ export const layerDurableObjects = <A, E, R>(
         ),
       ),
       (namespace): Host.Instances => ({
+        binding,
         call: (key, method, args) =>
           namespace
             .getByName(key)
@@ -146,5 +148,5 @@ export const layerDurableObjects = <A, E, R>(
               Effect.orDie,
             ),
       }),
-    ),
-  );
+    );
+  });
