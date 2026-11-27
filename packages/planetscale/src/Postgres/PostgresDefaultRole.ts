@@ -96,13 +96,6 @@ export interface PostgresDefaultRoleAttributes {
  *   forceReset: true,
  * });
  * ```
- *
- * ### Drift permissions
- * Role enumeration needs permission to read the database's roles. A
- * `403 Forbidden` fails enumeration rather than returning an empty list.
- * Database-scoped tokens may receive `404 NotFound` when their grants are
- * revoked or a database is recreated; use organization-level grants for
- * drift checks, or re-grant the token after replacement.
  */
 export type PostgresDefaultRole = Resource<
   "Planetscale.PostgresDefaultRole",
@@ -309,7 +302,10 @@ export const PostgresDefaultRoleProvider = () =>
                           ),
                       ),
                       Stream.flattenIterable,
-                      Stream.catchTag("NotFound", () => Stream.empty),
+                      Stream.catchTags({
+                        NotFound: () => Stream.empty,
+                        Forbidden: () => Stream.empty,
+                      }),
                     ),
                 { concurrency: 10 },
               ),
