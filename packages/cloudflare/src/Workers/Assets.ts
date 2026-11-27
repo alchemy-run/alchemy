@@ -324,7 +324,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
   // Reading and hashing copies each file a few times, so bound the bytes
   // in flight as well as the file count. MAX_ASSET_SIZE fits the budget.
   const hashBudget = yield* Semaphore.make(HASH_BYTES_IN_FLIGHT);
-  yield* Effect.forEach(
+  const entries = yield* Effect.forEach(
     files,
     Effect.fn(function* (name) {
       const file = path.join(resolvedDirectory, name);
@@ -367,18 +367,19 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
           count,
         });
       }
-      manifest.set(
+      return [
         `${pathPrefix}${(name.startsWith("/") ? name : `/${name}`).replaceAll("\\", "/")}`,
-        {
-          hash,
-          size,
-        },
-      );
+        { hash, size },
+      ] as const;
     }),
-    // Stat, read and hash independent files concurrently, without keeping
-    // an unused array of results; sorting below fixes the manifest order.
-    { concurrency: 16, discard: true },
+    // Stat, read and hash independent files concurrently.
+    { concurrency: 16 },
   );
+  // Insert in listing order, not completion order, so names that normalize
+  // to the same key (`a\b.txt` and `a/b.txt`) resolve as they did serially.
+  for (const entry of entries) {
+    if (entry) manifest.set(entry[0], entry[1]);
+  }
   // Cloudflare's SPA fallback is hard-coded to `/index.html` at the
   // manifest root, so prefixing every key would 404 every client-side
   // route under the base. Alias the shell back to the root — one extra

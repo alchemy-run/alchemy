@@ -216,6 +216,43 @@ layer(NodeServices.layer)("Cloudflare Worker asset manifest hashing", (it) => {
     { tags: ["unit", "provider:cloudflare", "local"] },
   );
 
+  it.effect.skipIf(process.platform === "win32")(
+    "resolves names that normalize to one key independently of read completion",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const directory = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-manifest-key-" });
+          // `a\\b.txt` is one file name on POSIX; both become `/a/b.txt`.
+          yield* fs.makeDirectory(path.join(directory, "a"));
+          yield* fs.writeFileString(path.join(directory, "a", "b.txt"), "nested");
+          yield* fs.writeFileString(path.join(directory, "a\\b.txt"), "backslash");
+
+          const finishingLast = (slow: string) => ({
+            ...fs,
+            readFile: (file: string) =>
+              file === path.join(directory, slow)
+                ? Effect.gen(function* () {
+                    for (let step = 0; step < 20; step++) yield* Effect.yieldNow;
+                    return yield* fs.readFile(file);
+                  })
+                : fs.readFile(file),
+          });
+          const nestedLast = yield* readAssets({ directory }).pipe(
+            Effect.provideService(FileSystem.FileSystem, finishingLast(path.join("a", "b.txt"))),
+          );
+          const backslashLast = yield* readAssets({ directory }).pipe(
+            Effect.provideService(FileSystem.FileSystem, finishingLast("a\\b.txt")),
+          );
+          expect(Object.keys(nestedLast.manifest)).toEqual(["/a/b.txt"]);
+          expect(backslashLast.manifest).toEqual(nestedLast.manifest);
+          expect(backslashLast.hash).toBe(nestedLast.hash);
+        }),
+      ),
+    { tags: ["unit", "provider:cloudflare", "local"] },
+  );
+
   it.effect(
     "bounds the bytes of large assets read at once",
     () =>
