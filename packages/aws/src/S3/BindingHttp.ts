@@ -1,3 +1,5 @@
+import type * as Credentials from "@distilled.cloud/aws/Credentials";
+import * as Presign from "@distilled.cloud/aws/Presign";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -20,8 +22,7 @@ import type { Bucket } from "./Bucket.ts";
  *   operation is resolved with `AWSBindings.withCredentials`, so a host with
  *   a created key signs with the assumed Role in the bucket's region.
  *
- * Genuinely-different bindings stay bespoke: `PresignGetObject` /
- * `PresignPutObject` (SigV4 presigners, not API operations).
+ * The presign bindings pass their operation through {@link presign}.
  */
 export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.S3.GetObject`. */
@@ -91,3 +92,21 @@ export const makeBucketHttpBinding = <I extends { Bucket?: string }, A, E, R>(op
       });
     });
   });
+
+/**
+ * `operation` presigned instead of sent, in the shape `makeBucketHttpBinding`
+ * takes: the callable takes the operation's input without `Body`, plus
+ * `expiresIn`, and returns the presigned request, signed with the host's
+ * credentials.
+ */
+export const presign = <I, O, E, R>(
+  operation: Parameters<typeof Presign.presignRequest<I, O, E, R>>[0],
+) =>
+  Effect.map(
+    Effect.context<Credentials.Credentials>(),
+    (context) =>
+      ({ expiresIn, ...input }: Omit<I, "Body"> & { expiresIn?: number }) =>
+        Presign.presignRequest(operation, input as unknown as Omit<I, "Body">, {
+          expiresIn,
+        }).pipe(Effect.provideContext(context)),
+  );

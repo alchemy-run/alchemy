@@ -80,7 +80,7 @@ Uploads and downloads don't need to pass through your Worker. A **presigned URL*
 
 ```typescript title="src/worker.ts"
 const presignPut = yield* Cloudflare.R2.PresignPutObject(Uploads);
-const url = yield* presignPut({ key: `avatars/${userId}.png`, expiresIn: 600 });
+const { url } = yield* presignPut({ Key: `avatars/${userId}.png`, expiresIn: 600 });
 ```
 
 See [R2 presigned URLs](/cloudflare/data/r2-presigned-urls).

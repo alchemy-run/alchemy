@@ -253,7 +253,7 @@ export default VersionedObjectFunction.make(
             );
           case "PresignPutObject":
             return yield* HttpServerResponse.json({
-              url: yield* presignPut({ key: Key, contentType: "text/plain" }),
+              url: (yield* presignPut({ Key, ContentType: "text/plain" })).url,
             });
           default:
             return HttpServerResponse.text("Not found", { status: 404 });

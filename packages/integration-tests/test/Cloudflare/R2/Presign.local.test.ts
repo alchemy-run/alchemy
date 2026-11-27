@@ -9,7 +9,7 @@ import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import PresignLocalWorker, { PresignLocalBucket } from "./fixtures/presign/local-worker.ts";
 import PresignRemoteWorker, { PresignRemoteBucket } from "./fixtures/presign/remote-worker.ts";
-import { presignRoundTrip } from "./fixtures/presign/roundtrip.ts";
+import { presignFields, presignRoundTrip } from "./fixtures/presign/roundtrip.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -52,6 +52,7 @@ test.provider(
       const prefix = `${deployed.worker.url}/cdn-cgi/local/r2/s3/${encodeURIComponent(deployed.bucket.bucketName)}/`;
       expect(putUrl.startsWith(prefix)).toBe(true);
       expect(getUrl.startsWith(prefix)).toBe(true);
+      yield* presignFields(deployed.worker.url!, "uploads/pinned.txt");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -131,6 +132,7 @@ test.provider(
 
       const { putUrl } = yield* presignRoundTrip(deployed.worker.url!, "uploads/remote.txt");
       expect(new URL(putUrl).hostname).toMatch(/\.r2\.cloudflarestorage\.com$/);
+      yield* presignFields(deployed.worker.url!, "uploads/remote-pinned.txt");
 
       // Out-of-band: the upload is in the real bucket
       const { accountId } = yield* yield* CloudflareEnvironment;

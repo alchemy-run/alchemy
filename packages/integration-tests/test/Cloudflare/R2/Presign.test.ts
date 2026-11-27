@@ -11,7 +11,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import PresignRemoteWorker, { PresignRemoteBucket } from "./fixtures/presign/remote-worker.ts";
-import { presignRoundTrip } from "./fixtures/presign/roundtrip.ts";
+import { presignFields, presignRoundTrip } from "./fixtures/presign/roundtrip.ts";
 
 const { test } = Test.make({
   providers: Cloudflare.providers(),
@@ -94,6 +94,7 @@ test.provider(
         expect(parsed.hostname).toMatch(/\.r2\.cloudflarestorage\.com$/);
         expect(parsed.pathname.startsWith(`/${deployed.bucket.bucketName}/`)).toBe(true);
       }
+      yield* presignFields(deployed.worker.url!, "uploads/deployed pinned.txt");
 
       yield* stack.destroy();
     }).pipe(logLevel),

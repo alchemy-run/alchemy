@@ -53,13 +53,13 @@ export default Cloudflare.Worker(
         const key = url.searchParams.get("key")!;
 
         if (url.pathname === "/upload-url") {
-          return yield* HttpServerResponse.json({
-            url: yield* presignPut({ key, contentType: "image/png" }),
-          });
+          return yield* HttpServerResponse.json(
+            yield* presignPut({ Key: key, ContentType: "image/png" }),
+          );
         }
-        return yield* HttpServerResponse.json({
-          url: yield* presignGet({ key, expiresIn: 60 }),
-        });
+        return yield* HttpServerResponse.json(
+          yield* presignGet({ Key: key, expiresIn: 60 }),
+        );
       }).pipe(Effect.orDie),
     };
   }).pipe(
@@ -79,34 +79,42 @@ URLs point at `https://{accountId}.r2.cloudflarestorage.com`. Under
 `http://localhost:{port}/cdn-cgi/local/r2/s3`. Signing happens inside
 the Worker, so minting a URL makes no network request.
 
-The browser uploads with a plain `fetch`, sending the `Content-Type`
-that was signed into the URL:
+Each binding returns the presigned request: its `method`, its `url`,
+and the `headers` the client must send. The browser uploads with a
+plain `fetch`, sending those headers:
 
 ```typescript
-const { url } = await (await fetch(`/upload-url?key=${key}`)).json();
-await fetch(url, {
-  method: "PUT",
+const upload = await (await fetch(`/upload-url?key=${key}`)).json();
+await fetch(upload.url, {
+  method: upload.method,
+  headers: upload.headers, // { "content-type": "image/png" }
   body: file,
-  headers: { "content-type": "image/png" },
 });
 ```
 
-Both functions accept a few options:
+The bindings take the input of S3's `PutObject` and `GetObject`,
+without `Bucket` (and `Body`), plus `expiresIn`. Every field you set
+is signed, so R2 rejects a request that doesn't match it:
 
 ```typescript
 yield* presignPut({
-  key: "avatars/me.png",
+  Key: "avatars/me.png",
   expiresIn: 300, // seconds, 900 by default, 7 days at most
-  contentType: "image/png", // the uploader must send this header
+  ContentType: "image/png", // the uploader must send this header
+  ContentLength: size, // and exactly this many bytes
+  IfNoneMatch: "*", // and can't replace an existing object
 });
 
 yield* presignGet({
-  key: "reports/2026-09.pdf",
+  Key: "reports/2026-09.pdf",
   expiresIn: 60,
-  contentType: "application/pdf", // served with this Content-Type
-  contentDisposition: 'attachment; filename="report.pdf"', // force a download
+  ResponseContentType: "application/pdf", // served with this Content-Type
+  ResponseContentDisposition: 'attachment; filename="report.pdf"', // force a download
 });
 ```
+
+R2 supports a subset of S3's fields. See
+[R2's S3 API compatibility](https://developers.cloudflare.com/r2/api/s3/api/).
 
 ## Async Workers
 
@@ -192,11 +200,14 @@ export const Uploads = Cloudflare.R2.Bucket("Uploads", {
     {
       allowedMethods: ["GET", "PUT"],
       allowedOrigins: ["https://app.example.com"],
-      allowedHeaders: ["content-type"],
+      allowedHeaders: ["content-type", "if-none-match"],
     },
   ],
 });
 ```
+
+Allow every header the presigned request carries. Browsers set
+`Content-Length` themselves, so it needs no rule.
 
 ## Local development
 

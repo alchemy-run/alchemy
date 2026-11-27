@@ -1,7 +1,8 @@
+import * as S3 from "@distilled.cloud/aws/s3";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { PresignPutObject, type PresignPutObjectRequest } from "./PresignPutObject.ts";
-import { makePresignBinding, presignR2Url } from "./PresignToken.ts";
+import { PresignPutObject } from "./PresignPutObject.ts";
+import { makePresignBinding } from "./PresignToken.ts";
 
 /**
  * Implementation of {@link PresignPutObject} that signs URLs with S3
@@ -21,17 +22,10 @@ import { makePresignBinding, presignR2Url } from "./PresignToken.ts";
 export const PresignPutObjectToken = Layer.effect(
   PresignPutObject,
   Effect.suspend(() =>
-    makePresignBinding<PresignPutObjectRequest>({
+    makePresignBinding({
       name: "Cloudflare.R2.PresignPutObject",
       access: "write",
-      presign: (credentials, request) =>
-        presignR2Url(credentials, {
-          method: "PUT",
-          key: request.key,
-          expiresIn: request.expiresIn,
-          headers:
-            request.contentType !== undefined ? { "content-type": request.contentType } : undefined,
-        }),
+      operation: S3.putObject,
     }),
   ),
 );

@@ -11,6 +11,8 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
  *
  * - `GET /presign-put?key=&contentType=` → `{ url }`
  * - `GET /presign-get?key=&contentType=` → `{ url }`
+ * - `POST /presign-put`, `POST /presign-get` with the binding's input as
+ *   JSON → the presigned request (`{ method, url, headers }`)
  * - `GET /read?key=` → `{ value, contentType }` via the native binding
  * - `PUT /write?key=` → writes the body via the native binding
  */
@@ -26,14 +28,34 @@ export const presignWorker = (bucket: Effect.Effect<Bucket, never, any>) =>
         const url = new URL(request.url, "http://x");
         const key = url.searchParams.get("key") ?? "";
         const contentType = url.searchParams.get("contentType") ?? undefined;
+        if (request.method === "POST") {
+          const input = yield* request.json.pipe(Effect.orDie);
+          switch (url.pathname) {
+            case "/presign-put":
+              return yield* HttpServerResponse.json(
+                yield* presignPut(input as unknown as Cloudflare.R2.PresignPutObjectRequest).pipe(
+                  Effect.orDie,
+                ),
+              );
+            case "/presign-get":
+              return yield* HttpServerResponse.json(
+                yield* presignGet(input as unknown as Cloudflare.R2.PresignGetObjectRequest).pipe(
+                  Effect.orDie,
+                ),
+              );
+          }
+        }
         switch (url.pathname) {
           case "/presign-put":
             return yield* HttpServerResponse.json({
-              url: yield* presignPut({ key, contentType }).pipe(Effect.orDie),
+              url: (yield* presignPut({ Key: key, ContentType: contentType }).pipe(Effect.orDie))
+                .url,
             });
           case "/presign-get":
             return yield* HttpServerResponse.json({
-              url: yield* presignGet({ key, contentType }).pipe(Effect.orDie),
+              url: (yield* presignGet({ Key: key, ResponseContentType: contentType }).pipe(
+                Effect.orDie,
+              )).url,
             });
           case "/read": {
             const object = yield* r2.get(key).pipe(Effect.orDie);
