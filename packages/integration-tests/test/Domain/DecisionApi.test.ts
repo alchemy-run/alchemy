@@ -3,12 +3,14 @@ import * as DomainAi from "@alchemy.run/domain/Ai";
 import { toCli } from "@alchemy.run/domain/Cli";
 import * as DomainHttp from "@alchemy.run/domain/Http";
 import { InMemory } from "@alchemy.run/domain/InMemory";
+import * as InMemoryPlatform from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Command from "effect/cli/Command";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -133,6 +135,37 @@ describe("Domain decision through an Api", { tags: ["unit", "local"] }, () => {
       expect(rejection).toEqual(new InsufficientFunds({ balance: 60 }));
     }).pipe(Effect.scoped, Effect.provide(BankLive)),
   );
+
+  it.live("the client's reads wait for every instance a decision committed to", () => {
+    // Nothing reaches the view until the platform drains.
+    const hosted = InMemoryPlatform.make({ manual: true });
+    const settle: Effect.Effect<void> = Effect.gen(function* () {
+      while (true) {
+        yield* hosted.control.drain;
+        if (yield* hosted.control.idle) return;
+        yield* Effect.sleep("1 millis");
+      }
+    });
+    return Effect.gen(function* () {
+      const bank = yield* BankApi.clientInProcess;
+      yield* settle;
+      yield* bank.Deposit({ accountId: a, amount: 100 });
+      yield* settle;
+      yield* bank.TransferMoney({ from: a, to: b, amount: 30 });
+      // `b` is the second of the receipt's `commits`, not its `stream`.
+      const read = yield* bank.Balance.get(b).pipe(Effect.forkChild);
+      yield* Effect.sleep("100 millis");
+      expect(read.pollUnsafe()).toBeUndefined();
+      while (read.pollUnsafe() === undefined) {
+        yield* settle;
+        yield* Effect.sleep("5 millis");
+      }
+      expect(yield* Fiber.join(read)).toEqual({ balance: 30, transfers: 1 });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Bank.layer(Layer.empty).pipe(Layer.provide(hosted.layer))),
+    );
+  });
 
   it.live("plain HTTP takes its input as the body", () => {
     const http = DomainHttp.toHttpApi(BankApi, { expose: ["Deposit", "TransferMoney"] });

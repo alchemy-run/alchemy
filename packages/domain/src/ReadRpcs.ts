@@ -8,9 +8,9 @@ import * as SchemaAST from "effect/SchemaAST";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
 import type { Servable } from "./Api.ts";
+import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
 import { FilterJson } from "./Filter.ts";
-import { RemembersWrites } from "./internal.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Query from "./Query.ts";
@@ -344,7 +344,7 @@ export const outsideClient = <A, R>(api: {
   return api.clientInProcess.pipe(
     Effect.updateContext((context: Context.Context<R>) =>
       // It serves many callers: one caller's commands must not hold up another's reads.
-      Context.add(Context.omit(...halves)(context), RemembersWrites, false),
+      Context.add(Context.omit(...halves)(context), Command.ReadOwnWrites, false),
     ),
   );
 };

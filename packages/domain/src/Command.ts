@@ -68,6 +68,27 @@ export const DefaultConsistency = Context.Reference<Consistency>(
   { defaultValue: () => "eventual" },
 );
 
+/**
+ * Whether a client remembers the commands it sends, so that its reads with
+ * no `atLeast` wait for them (`true` by default). A client reads it once,
+ * when it is built, so provide it to the client or to its Layer.
+ *
+ * Turn it off for a client that serves many callers, such as one
+ * `layerClientInProcess` in a server: else each caller's reads also wait for
+ * the other callers' commands. The clients behind `toHttpApi`, `toToolkit`
+ * and mentions already serve many callers, and remember nothing.
+ *
+ * **Example:** A client a server shares between its requests
+ * ```typescript
+ * const Bank = CustomerApi.layerClientInProcess.pipe(
+ *   Layer.provide(Layer.succeed(Domain.ReadOwnWrites, false)),
+ * );
+ * ```
+ */
+export const ReadOwnWrites = Context.Reference<boolean>("alchemy/Domain/ReadOwnWrites", {
+  defaultValue: () => true,
+});
+
 /** What a client sends: an optional idempotency key, the input, and when to answer. */
 export type PayloadFields<F extends Fields> = {
   readonly commandId: Schema.optional<typeof Schema.String>;

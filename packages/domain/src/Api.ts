@@ -33,7 +33,7 @@ import type { Annotations } from "./Annotations.ts";
 import * as Command from "./Command.ts";
 import { DefinitionError, NotInModel, UnroutedCommand } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
-import { internalError, redactCause, RemembersWrites } from "./internal.ts";
+import { internalError, redactCause } from "./internal.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
@@ -439,7 +439,11 @@ export interface ApiClass<
   >;
   /** The client as a service, for code that uses it without owning the connection. */
   readonly Client: Context.Service<ClientKey<Name>, ApiClient<Serves[number]>>;
-  /** Build {@link Client} for the life of the Layer, over the protocol provided to it. */
+  /**
+   * Build {@link Client} for the life of the Layer, over the protocol
+   * provided to it. Its reads wait for every command it sent: see
+   * `Domain.ReadOwnWrites` for a client shared between callers.
+   */
   readonly layerClient: Layer.Layer<
     ClientKey<Name>,
     never,
@@ -479,7 +483,12 @@ export interface ApiClass<
     never,
     Scope.Scope | Model.Internals | MiddlewareServices<Serves> | MiddlewareClients<Serves>
   >;
-  /** {@link layerClient} over {@link protocolInProcess}. */
+  /**
+   * {@link layerClient} over {@link protocolInProcess}. One client for the
+   * Layer's life: in a server that shares it between callers, provide
+   * `Domain.ReadOwnWrites` as `false`, or each caller's reads wait for the
+   * others' commands.
+   */
   readonly layerClientInProcess: Layer.Layer<
     ClientKey<Name>,
     never,
@@ -1136,6 +1145,7 @@ const ownWrites = (enabled: boolean) => {
               readonly commits?: ReadonlyArray<Query.AtLeast>;
             };
             keep(now);
+            // Every stream a decision committed to; one with more than the limit keeps its last.
             for (const commit of commits?.length ? commits : [{ stream, version }]) {
               held = held.filter(
                 (write) => write.stream !== commit.stream || write.version !== commit.version,
@@ -1368,7 +1378,7 @@ const build = (
   const client = Effect.gen(function* () {
     // Read once, here: the consistency of every command sent without one.
     const consistency = yield* Command.DefaultConsistency;
-    const remembers = yield* RemembersWrites;
+    const remembers = yield* Command.ReadOwnWrites;
     return nest(entries, (yield* RpcClient.make(group)) as unknown as Flat, consistency, remembers);
   });
   const Client = Context.Service<ClientKey<string>, unknown>()(`alchemy/Domain/Api/${name}/Client`);
@@ -1499,8 +1509,13 @@ const build = (
  * `ConsistencyTimeout` after 10 seconds. The server waits only for the
  * commands whose events reach what the read reads. A `watch` waits for them
  * before its first value. `atLeast` names the writes to wait for in their
- * place, and `[]` waits for none. The clients behind `toHttpApi` and
- * `toToolkit` serve many callers, so they remember nothing.
+ * place, and `[]` waits for none.
+ *
+ * A client that serves many callers, such as one `layerClientInProcess` in
+ * a server, keeps one memory for all of them: each caller's reads also wait
+ * for the others' commands. Build it with `Domain.ReadOwnWrites` set to
+ * `false`, or pass `atLeast: []`. The clients behind `toHttpApi`,
+ * `toToolkit` and mentions serve many callers, and remember nothing.
  *
  * **Example:** A read right after a command
  * ```typescript

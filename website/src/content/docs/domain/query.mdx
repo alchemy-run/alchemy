@@ -247,7 +247,7 @@ For its history, or to follow it live, read a [view](/domain/view) of it instead
 
 ## Read your own write
 
-A projection writes its store after the command commits, often in batches, so a plain read can be a moment behind. Even a [strong](/domain/command#choose-when-it-answers) command doesn't wait for it. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads. An Api client does this for you: with no `atLeast`, a query waits for the commands the client sent in the last 30 seconds. Pass `atLeast` to name the writes yourself, or `[]` to wait for none.
+A projection writes its store after the command commits, often in batches, so a plain read can be a moment behind. Even a [strong](/domain/command#choose-when-it-answers) command doesn't wait for it. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads. An Api client does this for you: with no `atLeast`, a query waits for the commands the client sent in the last 30 seconds. Pass `atLeast` to name the writes yourself, or `[]` to wait for none. A client shared between callers, built with `Domain.ReadOwnWrites` set to `false`, waits only for the `atLeast` it is given.
 
 ```typescript
 const receipt = yield* bank.WithdrawMoney({ accountId, amount: 30 }, mfa);
