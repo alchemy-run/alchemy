@@ -21,6 +21,7 @@ import {
 } from "effect/cluster/ClusterError";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
@@ -39,9 +40,11 @@ import {
   RpcSerialization,
   RpcServer,
 } from "effect/rpc";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type { Workflow, WorkflowEngine } from "effect/workflow";
+import { encode, entityObjectName, OBJECT_CALL_HEADER, payloadCodec } from "./Wire.ts";
 import { WorkflowRpcs, workflowHandlers } from "./WorkflowGateway.ts";
 
 /** The path every gateway serves its RPCs on. */
@@ -63,14 +66,25 @@ export interface GatewayTarget {
    * another Worker's `workers.dev` URL in the same account.
    */
   readonly service?: string;
+  /**
+   * The environment key of a binding to the namespace of the objects the
+   * entity's instances run on, when the caller is a Worker and the pool's
+   * instances are Durable Objects: what `connect` opens WebSockets through.
+   */
+  readonly objects?: string;
 }
 
 /**
  * Give the runtime being deployed a direct route, bound under `key`, to the
- * gateway Worker `worker`. A host whose gateway is a Worker registers one;
- * it binds nothing for a caller that isn't a Worker.
+ * gateway Worker `worker`, and, for an entity, its instances' objects under
+ * `objects`. A host whose gateway is a Worker registers one; it binds
+ * nothing for a caller that isn't a Worker.
  */
-export type RouteBinder = (key: string, worker: unknown) => Effect.Effect<void, never, any>;
+export type RouteBinder = (
+  key: string,
+  worker: unknown,
+  objects: string | undefined,
+) => Effect.Effect<void, never, any>;
 
 const routeBinders: Array<RouteBinder> = ((globalThis as Record<symbol, unknown>)[
   Symbol.for("alchemy/Cluster/RouteBinders")
@@ -93,14 +107,31 @@ export const routeType = (type: string, worker: unknown) => {
 
 /**
  * While deploying, bind a route to the gateway Worker serving `type` into
- * the runtime being deployed, under `key`. Returns the key when one exists.
+ * the runtime being deployed, under `key` (and its instances' objects under
+ * `objects`, where the host has them). Returns the key when one exists.
  */
-export const bindRoute = (type: string, key: string) =>
+export const bindRoute = (type: string, key: string, objects?: string) =>
   Effect.gen(function* () {
     const worker = routedTypes.get(type);
     if (worker === undefined) return undefined;
-    for (const binder of routeBinders) yield* binder(key, worker);
+    for (const binder of routeBinders) yield* binder(key, worker, objects);
     return key;
+  });
+
+/** A Durable Object namespace binding, as a Worker's `env` holds it. */
+interface ObjectNamespaceBinding {
+  readonly getByName: (name: string) => {
+    readonly fetch: (request: Request) => Promise<Response>;
+  };
+}
+
+/** The namespace bound under `key` in the Worker this runs in, if any. */
+const objectNamespace = (key: string | undefined) =>
+  Effect.map(Effect.serviceOption(WorkerEnvironment), (env) => {
+    const namespace = key === undefined ? undefined : Option.getOrUndefined(env)?.[key];
+    return typeof namespace?.getByName === "function"
+      ? (namespace as ObjectNamespaceBinding)
+      : undefined;
   });
 
 /**
@@ -262,7 +293,43 @@ export const makeNamespace = (entity: AnyEntity, target: GatewayTarget) => {
       return methods;
     });
 
-  return { getByName };
+  /**
+   * Open a WebSocket to the object `entityId` runs on: forward the client's
+   * upgrade `request` to it with the call. `undefined` where the caller has
+   * no binding to the objects.
+   */
+  const connect = (
+    entityId: string,
+    request: Request,
+    call: { readonly tag: string; readonly payload: unknown; readonly headers?: Headers.Input },
+  ) =>
+    Effect.gen(function* () {
+      const namespace = yield* objectNamespace(target.objects);
+      if (namespace === undefined) return undefined;
+      const rpc = entity.protocol.requests.get(call.tag) as Rpc.AnyWithProps | undefined;
+      if (rpc === undefined) {
+        return yield* Effect.die(
+          new Error(`Cluster.Entity '${entity.type}' has no RPC ${call.tag}`),
+        );
+      }
+      const services = yield* Effect.context<never>();
+      const headers = yield* clientHeaders(services, rpc, call.payload, { headers: call.headers });
+      const forwarded = new Request(request.url, { headers: request.headers });
+      forwarded.headers.set(
+        OBJECT_CALL_HEADER,
+        JSON.stringify({
+          tag: call.tag,
+          payload: yield* encode(payloadCodec(rpc), call.payload),
+          headers: Object.fromEntries(Object.entries(headers)),
+        }),
+      );
+      return yield* Effect.tryPromise({
+        try: () => namespace.getByName(entityObjectName(entity.type, entityId)).fetch(forwarded),
+        catch: (cause) => PersistenceError.make({ cause }),
+      });
+    });
+
+  return { getByName, connect };
 };
 
 /**
@@ -340,6 +407,61 @@ export const authorized =
         : HttpServerResponse.empty({ status: 401 });
     });
 
+/**
+ * How often the gateway writes a keep-alive line while a call is open and
+ * silent. Proxies cut connections that send nothing for a while (CloudFront
+ * after its origin read timeout, 30 seconds by default); the RPC client's
+ * NDJSON reader skips empty lines.
+ */
+export const KEEP_ALIVE_INTERVAL = "15 seconds";
+
+const KEEP_ALIVE_LINE = new TextEncoder().encode("\n");
+
+const keepAliveLines = Stream.fromSchedule(Schedule.spaced(KEEP_ALIVE_INTERVAL)).pipe(
+  Stream.map(() => KEEP_ALIVE_LINE),
+);
+
+/** A streamed body, with a keep-alive line in every silence. */
+const withKeepAlive = <E>(body: Stream.Stream<Uint8Array, E>) =>
+  Stream.merge(body, keepAliveLines, { haltStrategy: "left" });
+
+/**
+ * Keep a gateway call's connection busy while it waits: a call that has not
+ * answered within {@link KEEP_ALIVE_INTERVAL} starts its NDJSON response
+ * and writes a keep-alive line every interval until its messages follow;
+ * a streamed response gets one in every silence.
+ */
+export const keepAlive = HttpRouter.middleware((app) =>
+  Effect.gen(function* () {
+    const call = yield* Effect.forkIn(app, yield* Effect.scope);
+    const early = yield* Fiber.await(call).pipe(Effect.timeoutOption(KEEP_ALIVE_INTERVAL));
+    if (Option.isSome(early)) {
+      const response = yield* early.value;
+      return response.body._tag === "Stream"
+        ? HttpServerResponse.stream(withKeepAlive(response.body.stream), {
+            status: response.status,
+            headers: response.headers,
+            contentType: response.body.contentType,
+          })
+        : response;
+    }
+    // Commit to a 200 now: an RPC's failures travel in its messages.
+    const body = Fiber.join(call).pipe(
+      Effect.map((response) =>
+        response.body._tag === "Stream"
+          ? response.body.stream
+          : response.body._tag === "Uint8Array"
+            ? Stream.make(response.body.body)
+            : Stream.empty,
+      ),
+      Stream.unwrap,
+    );
+    return HttpServerResponse.stream(withKeepAlive(body), {
+      contentType: RpcSerialization.ndjson.contentType,
+    });
+  }),
+).layer;
+
 /** The gateway a runner serves: every hosted entity's RPCs, behind the token. */
 export function gatewayLayer(
   entities: ReadonlyArray<AnyEntity>,
@@ -361,6 +483,7 @@ export function gatewayLayer(
     RpcServer.layerHttp({ group, path: GATEWAY_PATH, protocol: "http" }).pipe(
       Layer.provide(handlers),
       Layer.provide(RpcSerialization.layerNdjson),
+      Layer.provide(keepAlive),
     ),
     { disableListenLog: true, middleware: authorized(token) },
   );

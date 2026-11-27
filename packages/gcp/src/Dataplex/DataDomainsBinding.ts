@@ -202,9 +202,9 @@ export const DataDomainsBindingProvider = () =>
       if (current === undefined) {
         const created = yield* retryQuota(
           dataplex.createProjectsLocationsDataDomainsBindings({
+            resource: news.resource,
             parent: news.parent,
             dataDomainBindingId,
-            body: { resource: news.resource },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

@@ -282,12 +282,10 @@ export const LogScopeProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createProjectsLocationsLogScopes({
+            resourceNames: desiredResources,
+            description: desiredDescription,
             parent: `projects/${env.project}/locations/${location}`,
             logScopeId,
-            body: {
-              resourceNames: desiredResources,
-              description: desiredDescription,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -308,12 +306,10 @@ export const LogScopeProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchProjectsLocationsLogScopes({
+          resourceNames: desiredResources,
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            resourceNames: desiredResources,
-            description: desiredDescription,
-          },
         });
       }
 

@@ -337,9 +337,9 @@ export const CatalogsDatabaseProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           biglake.createProjectsLocationsCatalogsDatabases({
+            ...body,
             parent: catalog,
             databaseId,
-            body,
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -356,12 +356,12 @@ export const CatalogsDatabaseProvider = () =>
       if (typeChanged || hiveChanged) {
         current = yield* retryTransient(
           biglake.patchProjectsLocationsCatalogsDatabases({
+            ...body,
             name: currentName,
             updateMask: updateMaskOf(
               typeChanged ? "type" : undefined,
               hiveChanged ? "hiveOptions" : undefined,
             ),
-            body: { name: currentName, ...body },
           }),
         );
       }

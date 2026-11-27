@@ -1,0 +1,44 @@
+---
+title: Processes on Pi
+description: "Pi.HarnessLive runs AI.Process sessions as Pi conversations: the Layers it needs, how a session maps to a conversation, and how to reach Pi's own API beside it."
+---
+
+An [`AI.Process`](/ai/processes) names no harness. `Pi.HarnessLive` runs its sessions on Pi: each session is one Pi conversation, in the Durable Object that hosts it.
+
+## Provide the harness
+
+`Pi.HarnessLive` provides `AI.Harness` and needs Pi's storage. Provide it where the process's other Layers are:
+
+```typescript title="src/Layers.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
+import { EngineerLive } from "./Engineer.process.ts";
+import { SmartLlama, Smart } from "./Models.ts";
+
+export const Live = EngineerLive.pipe(
+  Layer.provide(Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart))),
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLlama)),
+);
+```
+
+`Pi.CodingTools` is only needed when a process mentions a [coding tool](/ai/coding-tools), and then so is an [`AI.Sandboxes`](/ai/sandboxes) Layer.
+
+## What a session is on Pi
+
+A session is the conversation named `<process>/<key>`. Its first message creates the conversation with the process's prose as its instructions and the mentioned tools as its tools. Each later message applies the prose again, so a deploy that changes a process changes its running sessions from their next message.
+
+`send` is a Pi submission that queues behind a run in progress. `prompt` waits for that submission to settle. `messages` is the conversation's context.
+
+## It survives a crash
+
+Pi journals every step of a conversation in the object's SQLite and arms the object's alarm while there is work to do. A session whose object is evicted in the middle of a tool call wakes up and carries on. See [Surviving a crash](/pi/durability).
+
+## What mentions are called
+
+Pi calls a tool by its own name: a process that mentions `Deploy` reads `deploy` in its prose. An MCP server's tools are `mcp__<server>__<tool>`.
+
+## Use Pi's own API beside it
+
+Everything Pi has beyond processes is on [`Pi.Harness`](/pi/conversations): forks, compaction, [extensions](/pi/extensions), a conversation's live view. A Durable Object that needs those yields `Pi.Harness` itself, with its own list of models and tools.

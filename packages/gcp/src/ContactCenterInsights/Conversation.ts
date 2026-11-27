@@ -383,21 +383,19 @@ export const ConversationProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsConversations({
+            medium,
+            labels: desiredLabels,
+            agentId: news.agentId,
+            languageCode: news.languageCode,
+            startTime: news.startTime,
+            expireTime: news.expireTime,
+            ttl: news.ttl,
+            dataSource: news.dataSource,
+            callMetadata: news.callMetadata,
+            metadataJson: news.metadataJson,
+            obfuscatedUserId: news.obfuscatedUserId,
             parent,
             conversationId,
-            body: {
-              medium,
-              labels: desiredLabels,
-              agentId: news.agentId,
-              languageCode: news.languageCode,
-              startTime: news.startTime,
-              expireTime: news.expireTime,
-              ttl: news.ttl,
-              dataSource: news.dataSource,
-              callMetadata: news.callMetadata,
-              metadataJson: news.metadataJson,
-              obfuscatedUserId: news.obfuscatedUserId,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -434,6 +432,12 @@ export const ConversationProvider = () =>
         callChanged
       ) {
         current = yield* cci.patchProjectsLocationsConversations({
+          labels: desiredLabels,
+          agentId: news.agentId,
+          languageCode: news.languageCode,
+          startTime: news.startTime,
+          expireTime: news.expireTime,
+          callMetadata: news.callMetadata,
           name: currentName,
           updateMask: updateMaskOf(
             labelsChanged ? "labels" : undefined,
@@ -443,15 +447,6 @@ export const ConversationProvider = () =>
             expireChanged ? "expire_time" : undefined,
             callChanged ? "call_metadata" : undefined,
           ),
-          body: {
-            name: currentName,
-            labels: desiredLabels,
-            agentId: news.agentId,
-            languageCode: news.languageCode,
-            startTime: news.startTime,
-            expireTime: news.expireTime,
-            callMetadata: news.callMetadata,
-          },
         });
       }
 

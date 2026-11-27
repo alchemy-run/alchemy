@@ -1,3 +1,4 @@
+import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { PlatformProps } from "alchemy/Platform";
 import type * as Effect from "effect/Effect";
@@ -29,11 +30,17 @@ export interface ContainerProps extends PlatformProps {
    */
   name?: string;
   /**
-   * Base image the bundle runs on. It needs Bun on the `PATH`; Alchemy adds
-   * Python (see {@link python}).
-   * @default "oven/bun:1"
+   * Base image the bundle runs on. It needs the {@link runtime}'s
+   * executable on the `PATH`; Alchemy adds Python (see {@link python}).
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /** Dockerfile lines run on the base before the bundle is added. */
   commands?: string[];
   /**

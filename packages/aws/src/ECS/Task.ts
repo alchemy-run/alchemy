@@ -3,7 +3,7 @@ import * as ecr from "@distilled.cloud/aws/ecr";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import { Region } from "@distilled.cloud/aws/Region";
-import { isResolved } from "alchemy/Diff";
+import { isResolved, stripEffects } from "alchemy/Diff";
 import {
   checkMountSupport,
   collectMountCapabilities,
@@ -21,6 +21,7 @@ import {
   type ServerHost,
 } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import { moduleExtension } from "alchemy/Util/Node";
@@ -33,17 +34,17 @@ import type { Credentials } from "../Credentials.ts";
 import {
   IMAGE_AGENT_DIR,
   imageAgentEntryPoint,
-  makeBunBootstrap,
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
+  type EcrRegistryImageSource,
   type ImageSourceLike,
-  type RegistryImageSource,
   type ResolvedImageAgent,
 } from "../ECR/ImageSource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export class TaskConflict extends Data.TaggedError("TaskConflict")<{
@@ -271,9 +272,10 @@ export interface BundledTaskProps extends TaskPropsBase, BundledImageSource {}
  */
 export interface DockerfileTaskProps extends TaskPropsBase, DockerfileImageSource {}
 /**
- * Run a pre-built registry image (`image`), mirrored into ECR.
+ * Run a pre-built registry image (`image`), mirrored into ECR unless
+ * `mirror: false`.
  */
-export interface ImageTaskProps extends TaskPropsBase, RegistryImageSource {}
+export interface ImageTaskProps extends TaskPropsBase, EcrRegistryImageSource {}
 
 /**
  * Task props — the image comes from exactly one of three sources, flat on
@@ -664,8 +666,10 @@ const sandboxAgentMain = new URL(
 export const isImageSandbox = (
   props: TaskProps,
   bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>> | undefined,
-) =>
-  (props as { main?: string }).main === undefined &&
+) => (props as { main?: string }).main === undefined && isSandbox(bindings);
+
+/** Whether a binding runs the task's containers as sandboxes. */
+const isSandbox = (bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>> | undefined) =>
   (bindings ?? []).some(
     (binding: ResourceBinding<TaskBindingContract> & { action?: string }) =>
       binding.action !== "delete" && binding.data?.sandbox === true,
@@ -681,8 +685,8 @@ export const taskImageInput = (
     platform: taskImagePlatform(props.runtimePlatform),
     port: props.port,
     isExternal: props.isExternal,
-    bootstrap: makeBunBootstrap(source.handler ?? "default"),
     agent: isImageSandbox(props, bindings) ? { main: sandboxAgentMain } : undefined,
+    terminals: isSandbox(bindings),
   };
 };
 
@@ -746,8 +750,9 @@ export const ensureTaskExecutionRole = Effect.fn(function* ({
   managedPolicyArns?: string[];
 }) {
   const roleArn = yield* createTaskRoleIfNotExists({ id, roleName });
+  const { partition } = yield* AWSEnvironment.current;
   const policies = [
-    "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+    managedPolicyArn(partition, "service-role/AmazonECSTaskExecutionRolePolicy"),
     ...(managedPolicyArns ?? []),
   ];
   for (const policyArn of policies) {
@@ -827,7 +832,7 @@ export const ensureTaskLogGroup = Effect.fn(function* ({
       tags,
     })
     .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
-  return `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`;
+  return `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${logGroupName}`;
 });
 
 /**
@@ -1002,10 +1007,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
             },
           ]
         : undefined,
-    environment: Object.entries(props.env ?? {}).map(([name, value]) => ({
-      name,
-      value: typeof value === "string" ? value : JSON.stringify(value),
-    })),
+    environment: Object.entries(envStrings(props.env)).map(([name, value]) => ({ name, value })),
     environmentFiles: props.environmentFiles,
     logConfiguration: {
       logDriver: "awslogs",
@@ -1389,7 +1391,7 @@ export const TaskProvider = () =>
           executionRoleArn,
           executionRoleName,
           logGroupName,
-          logGroupArn: `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`,
+          logGroupArn: `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${logGroupName}`,
           code: { hash },
         };
       };
@@ -1406,7 +1408,16 @@ export const TaskProvider = () =>
           "logGroupArn",
           "taskFamily",
         ],
-        diff: Effect.fn(function* ({ id, olds, news: declared, output, newBindings }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output, newBindings }) {
+          // Effect-native runtime exports remain unevaluated during planning.
+          // Their identity is represented by the image hash, so they must not
+          // prevent source changes from reaching the hash comparison below.
+          const declared =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? (Object.assign({}, desired, {
+                  exports: stripEffects(desired.exports),
+                }) as typeof desired)
+              : desired;
           if (!isResolved(declared)) return;
           const news = isResolved(newBindings)
             ? withMountInstall(declared, yield* taskMountCapabilities(id, declared, newBindings))

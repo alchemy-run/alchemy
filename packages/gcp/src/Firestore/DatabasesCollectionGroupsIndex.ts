@@ -434,10 +434,7 @@ export const DatabasesCollectionGroupsIndexProvider = () =>
 
       if (current === undefined) {
         const created = yield* firestore
-          .createProjectsDatabasesCollectionGroupsIndexes({
-            parent,
-            body,
-          })
+          .createProjectsDatabasesCollectionGroupsIndexes({ ...body, parent })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         const name = yield* resolveCreatedIndexName(created, parent, news);
         current = yield* waitUntilExists(name);

@@ -334,7 +334,7 @@ const endpointOf = (
  *
  * | Call          | Method and path              | Input                                          |
  * | ------------- | ---------------------------- | ---------------------------------------------- |
- * | a command     | `POST /<Command>`            | JSON body: `commandId`, input                  |
+ * | a command     | `POST /<Command>`            | JSON body: `commandId`, input, `consistency`   |
  * | a query       | `QUERY /<Query>`             | JSON body: `input`, `atLeast`, `after`, `take` |
  * | `get`, `peek` | `GET /<Name>/{key}`          | `?stream=&version=` waits for a write          |
  * | `snapshot`    | `GET /<Name>/{key}/snapshot` | `?stream=&version=` waits for a write          |

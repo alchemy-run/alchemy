@@ -1,13 +1,15 @@
 import * as Fly from "@alchemy.run/fly";
 import { expect, describe } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as addons from "@distilled.cloud/fly-io/addons";
+import { Query } from "@distilled.cloud/core/query";
+import { Fly as FlyGraphQL, GraphQLLive } from "@distilled.cloud/fly-io/GraphQL";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import BucketApi, { BucketIp, BucketSite, Data, OBJECT_BODY } from "./fixtures/bucket-api.ts";
 import { flyApi } from "./limit.ts";
 import { expectFound } from "./lookup.ts";
@@ -17,24 +19,11 @@ const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 const listTigris = () =>
-  Effect.gen(function* () {
-    const rows: Array<{ id: string; name: string | null; options: unknown }> = [];
-    let after: string | undefined;
-    for (let i = 0; i < 8; i++) {
-      const page = yield* addons.addOns({
-        type: "tigris",
-        first: 50,
-        after,
-      });
-      for (const edge of page.edges ?? []) {
-        if (edge?.node != null) rows.push(edge.node);
-      }
-      if (!page.pageInfo.hasNextPage) break;
-      after = page.pageInfo.endCursor ?? undefined;
-      if (after === undefined || after.length === 0) break;
-    }
-    return rows;
-  });
+  Query.items(
+    FlyGraphQL.addOns({ type: "tigris", first: 50 }).pipe(
+      Query.map((addOn) => ({ id: addOn.id, name: addOn.name, options: addOn.options })),
+    ),
+  ).pipe(Stream.runCollect, Effect.provide(GraphQLLive));
 
 const findAddOn = (addOnId: string, name: string) =>
   listTigris().pipe(

@@ -1,0 +1,112 @@
+---
+title: Conversations
+description: Create a Pi conversation by name, submit inputs to it, change what it runs with, steer or stop a run, and read its transcript.
+---
+
+A conversation is a transcript and what it runs with. It lives in the storage of the Durable Object whose harness created it, and every call names it. A conversation runs one thing at a time: an input either starts a run, joins the one going, or waits for it.
+
+## Create a conversation
+
+`createConversation` takes a name of your choosing and what the conversation runs with:
+
+```typescript
+const conversation = yield* harness.createConversation({
+  name: "pr-142",
+  tools: [Add, AI.Read],
+  instructions: "Review only. Never edit files.",
+});
+```
+
+Creating a name that exists returns the existing conversation unchanged, so the call is safe to repeat. `model`, `tools`, `extensions`, `instructions`, `cwd` and `maxTurns` each fall back to the harness's default when left out.
+
+## Submit an input
+
+`submit` stores the input and returns a submission. The run that answers it goes on in the object:
+
+```typescript
+const submission = yield* conversation.submit({
+  type: "input",
+  content: "Why does the login test fail?",
+  requestId: "msg-81",
+});
+```
+
+`requestId` makes the submission exactly-once: submitting the same `requestId` again returns the original, and no second run starts. Use the id of whatever caused the input, such as a message id or a webhook delivery id.
+
+`harness.submit(name, draft)` does the same for a conversation you have by name.
+
+## Wait for the answer
+
+`wait` resolves when the input is answered (`done`) or the run ended without an answer (`unanswered`):
+
+```typescript
+const settled = yield* submission.wait;
+if (settled.status === "done") {
+  const { messages } = yield* conversation.context;
+}
+```
+
+A caller that can't wait, such as a webhook handler, returns after `submit`. The run continues, and its tools can report the result themselves.
+
+## Steer a running conversation
+
+`whenBusy` says what an input does when a run is going. `steer` adds it to that run, `followUp` queues it for after, and `reject` refuses it:
+
+```typescript
+yield* harness.submit("pr-142", {
+  type: "input",
+  content: "Use pnpm, not npm.",
+  whenBusy: "steer",
+});
+```
+
+## Stop a run
+
+`abort` withdraws queued inputs, stops the running work and waits until the conversation is idle:
+
+```typescript
+yield* harness.abort("pr-142");
+```
+
+## Change what it runs with
+
+`configure` changes a conversation from its next model request. Tools and extensions are set exactly, or with `add` and `remove` relative to what the conversation has:
+
+```typescript
+yield* harness.configure("pr-142", { tools: { remove: [AI.Bash] } });
+yield* harness.configure("pr-142", { model: Smart, instructions: "Review only. Never edit files." });
+yield* harness.configure("pr-142", { extensions: { add: [Releasing] } });
+```
+
+A field set to `null` goes back to the harness's default.
+
+## Read the transcript
+
+`context` is what the model sees next:
+
+```typescript
+const conversation = yield* harness.conversationByName("pr-142");
+const { messages } = yield* conversation.context;
+```
+
+`watch` is a Stream of the conversation as it changes: its newest entries, the generation in progress and its queued inputs.
+
+## Start over, or branch
+
+`reset` starts a new context. Older entries stay in storage, and a handoff note becomes the first message of the new one:
+
+```typescript
+yield* conversation.reset("We were fixing the flaky login test. Continue.");
+```
+
+`compact` summarizes the context to free room, and `fork` creates a new conversation that sees this one's entries up to a point.
+
+## List conversations
+
+`listConversations` maps every name in this Durable Object to its conversation id:
+
+```typescript
+const names = yield* harness.listConversations;
+```
+
+For anything these don't cover, `conversation.raw` and `harness.raw` are Pi's own handles.

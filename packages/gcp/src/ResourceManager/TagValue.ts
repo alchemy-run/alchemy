@@ -339,13 +339,7 @@ export const TagValueProvider = () =>
 
       if (current === undefined) {
         const operation = yield* crm
-          .createTagValues({
-            body: {
-              parent,
-              shortName,
-              description: desiredDescription,
-            },
-          })
+          .createTagValues({ parent, shortName, description: desiredDescription })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           const done = yield* waitForCreate(operation);
@@ -369,13 +363,10 @@ export const TagValueProvider = () =>
 
       if ((current.description ?? "") !== (desiredDescription ?? "")) {
         const patched = yield* crm.patchTagValues({
+          description: desiredDescription,
+          etag: current.etag,
           name: current.name,
           updateMask: "description",
-          body: {
-            name: current.name,
-            description: desiredDescription,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(current.name);

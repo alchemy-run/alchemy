@@ -470,16 +470,14 @@ export const NetworkAttachmentProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertNetworkAttachments({
+            name: networkAttachmentName,
+            description: desiredDescription,
+            subnetworks,
+            connectionPreference,
+            producerAcceptLists: news.producerAcceptLists,
+            producerRejectLists: news.producerRejectLists,
             project: env.project,
             region,
-            body: {
-              name: networkAttachmentName,
-              description: desiredDescription,
-              subnetworks,
-              connectionPreference,
-              producerAcceptLists: news.producerAcceptLists,
-              producerRejectLists: news.producerRejectLists,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -507,16 +505,14 @@ export const NetworkAttachmentProvider = () =>
           region,
           networkAttachmentName,
           compute.patchNetworkAttachments({
+            fingerprint: latest.fingerprint,
+            description: desiredDescription,
+            subnetworks,
+            producerAcceptLists: news.producerAcceptLists ?? current.producerAcceptLists,
+            producerRejectLists: news.producerRejectLists ?? current.producerRejectLists,
             project: env.project,
             region,
             networkAttachment: networkAttachmentName,
-            body: {
-              fingerprint: latest.fingerprint,
-              description: desiredDescription,
-              subnetworks,
-              producerAcceptLists: news.producerAcceptLists ?? current.producerAcceptLists,
-              producerRejectLists: news.producerRejectLists ?? current.producerRejectLists,
-            },
           }),
         );
         current = (yield* getByName(env.project, region, networkAttachmentName)) ?? current;

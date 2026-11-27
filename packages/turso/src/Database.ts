@@ -438,7 +438,9 @@ export const DatabaseProvider = () =>
                 size_limit: news.sizeLimit,
                 remote_encryption: news.encryption
                   ? {
-                      encryption_key: Redacted.value(news.encryption.key),
+                      // The SDK types the key as Redacted once it marks it sensitive
+                      // (distilled#1433); either way the protocol unwraps it before sending.
+                      encryption_key: news.encryption.key as Redacted.Redacted<string> & string,
                       encryption_cipher: news.encryption.cipher,
                     }
                   : undefined,

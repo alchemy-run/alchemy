@@ -500,19 +500,17 @@ export const VolumesReplicationProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsVolumesReplications({
+            description: news.description,
+            labels: desiredLabels,
+            replicationSchedule: schedule,
+            destinationVolumeParameters: destBody(
+              news.destinationVolumeParameters,
+              env.project,
+              location,
+            ),
+            clusterLocation: news.clusterLocation,
             parent: volume,
             replicationId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              replicationSchedule: schedule,
-              destinationVolumeParameters: destBody(
-                news.destinationVolumeParameters,
-                env.project,
-                location,
-              ),
-              clusterLocation: news.clusterLocation,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -548,15 +546,12 @@ export const VolumesReplicationProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsVolumesReplications({
+          labels: desiredLabels,
+          description: news.description,
+          replicationSchedule: schedule,
+          clusterLocation: news.clusterLocation,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            replicationSchedule: schedule,
-            clusterLocation: news.clusterLocation,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
@@ -589,8 +584,8 @@ export const VolumesReplicationProvider = () =>
       } else if (!enabled && running) {
         const stopped = yield* netapp
           .stopProjectsLocationsVolumesReplications({
+            force: news.forceStopping ?? true,
             name: current.name ?? name,
-            body: { force: news.forceStopping ?? true },
           })
           .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.undefined));
         if (stopped !== undefined) {
@@ -618,8 +613,8 @@ export const VolumesReplicationProvider = () =>
       if (current !== undefined && (current.mirrorState ?? "").toUpperCase() !== STOPPED) {
         const stopped = yield* netapp
           .stopProjectsLocationsVolumesReplications({
+            force: olds?.forceStopping ?? true,
             name: output.name,
-            body: { force: olds?.forceStopping ?? true },
           })
           .pipe(Effect.catchTag(["NotFound", "Conflict", "BadRequest"], () => Effect.undefined));
         if (stopped !== undefined) {

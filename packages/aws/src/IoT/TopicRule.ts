@@ -8,6 +8,7 @@ import { hasAlchemyTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { readIotTags, sanitizeRuleName, syncIotTags } from "./internal.ts";
 
@@ -103,7 +104,7 @@ export const TopicRuleProvider = () =>
       });
 
       const ruleArnOf = (accountId: string, region: string, ruleName: string) =>
-        `arn:aws:iot:${region}:${accountId}:rule/${ruleName}`;
+        `arn:${partitionOf(region)}:iot:${region}:${accountId}:rule/${ruleName}`;
 
       const buildPayload = (props: TopicRuleProps): iot.TopicRulePayload => ({
         sql: props.sql,

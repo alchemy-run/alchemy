@@ -1,0 +1,230 @@
+---
+title: "Part 4: Replies, your own tool, and cleanup"
+description: Continue an issue's OpenCode session when someone replies, give OpenCode a tool that searches the repository's issues from your Durable Object, and remove the sandbox when the issue closes.
+sidebar:
+  order: 4
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+The bot answers an issue once. A person who replies should reach the same session, with everything OpenCode already read. OpenCode should be able to look at other issues, without a GitHub token in the sandbox. And an issue that closes should stop costing anything.
+
+## Mark the bot's own comments
+
+The bot's comments are comments too, and GitHub will deliver them. Mark each one with a hidden HTML comment, so the Worker can tell them apart:
+
+```diff lang="typescript" title="src/Repo.ts"
+  autoInit: true,
+});
++
++export const MARKER = "<!-- issue-bot -->";
+```
+
+```diff lang="typescript"
+-import { Repo } from "./Repo.ts";
++import { MARKER, Repo } from "./Repo.ts";
+import { Sandbox } from "./Sandbox.ts";
+```
+
+```diff lang="typescript"
+const reply = yield* session.prompt(job.text, { requestId: job.deliveryId });
+-yield* createComment({ issue_number: job.issue, body: reply.text });
++yield* createComment({
++  issue_number: job.issue,
++  body: `${reply.text}\n\n${MARKER}`,
++});
+```
+
+## Consume comments
+
+Subscribe to `issue_comment` as well. A reply is another `ask` on the same Durable Object, so it is another prompt in the same session:
+
+```diff lang="typescript"
+import Issue from "./Issue.ts";
+-import { owner, repository } from "./Repo.ts";
++import { MARKER, owner, repository } from "./Repo.ts";
+```
+
+```diff lang="typescript"
+yield* GitHub.consumeRepositoryEvents(
+-  { owner, repository, events: ["issues"] },
++  { owner, repository, events: ["issues", "issue_comment"] },
+  Effect.fn(function* (event) {
+-    const { action, issue } = event.payload;
+-    if (action === "opened") {
+-      yield* issues
+-        .getByName(String(issue.number))
+-        .ask(issue.number, `Issue #${issue.number}: ${issue.title}\n\n${issue.body ?? ""}`, event.id);
+-    }
++    const { number, title } = event.payload.issue;
++    const issue = issues.getByName(String(number));
++    if (event.name === "issues") {
++      const { action, issue: opened } = event.payload;
++      if (action === "opened") {
++        yield* issue.ask(number, `Issue #${number}: ${title}\n\n${opened.body ?? ""}`, event.id);
++      }
++      return;
++    }
++    const { action, comment } = event.payload;
++    if (action === "created" && !comment.body.includes(MARKER)) {
++      yield* issue.ask(number, comment.body, event.id);
++    }
+  }, Effect.orDie),
+);
+```
+
+`event.name` says which event arrived, and narrows `event.payload` to its type. The session's transcript is in the Durable Object's SQLite, so OpenCode still has the issue, the files it read and its first answer.
+
+## Declare a tool of your own
+
+The coding tools work in the sandbox. A tool of yours needs no sandbox: it runs in the Durable Object, where the GitHub token is. Declare one that searches the repository's issues:
+
+```typescript title="src/SearchIssues.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export class SearchIssues extends AI.Tool<SearchIssues>()("search_issues", {
+  description:
+    "Search this repository's issues and pull requests. Use it to find duplicates or related work.",
+  parameters: Schema.Struct({ query: Schema.String }),
+  success: Schema.Struct({
+    issues: Schema.Array(
+      Schema.Struct({ number: Schema.Number, title: Schema.String, state: Schema.String }),
+    ),
+  }),
+}) {}
+```
+
+A tool has a file of its own, named after it: its contract, and the Layer that implements it.
+
+## Implement it with a GitHub binding
+
+```diff lang="typescript" title="src/SearchIssues.tool.ts"
+import * as AI from "@alchemy.run/ai";
++import * as GitHub from "@alchemy.run/github";
++import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
++import { Repo } from "./Repo.ts";
+```
+
+```diff lang="typescript"
+    issues: Schema.Array(
+      Schema.Struct({ number: Schema.Number, title: Schema.String, state: Schema.String }),
+    ),
+  }),
+}) {}
++
++export const SearchIssuesLive = SearchIssues.make(
++  Effect.gen(function* () {
++    const search = yield* GitHub.SearchIssues(yield* Repo);
++
++    return Effect.fn(function* ({ query }) {
++      const found = yield* search({ q: query, per_page: 10 }).pipe(Effect.orDie);
++      return {
++        issues: found.items.map((issue) => ({
++          number: issue.number,
++          title: issue.title,
++          state: issue.state,
++        })),
++      };
++    });
++  }),
++).pipe(Layer.provide(GitHub.SearchIssuesHttp));
+```
+
+## Give OpenCode the tool
+
+List it on the harness, provide its Layer, and add it to the session's tools:
+
+```diff lang="typescript"
+import { Sandbox } from "./Sandbox.ts";
++import { SearchIssues, SearchIssuesLive } from "./SearchIssues.tool.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
++  SearchIssuesLive,
+  Sandbox,
+```
+
+```diff lang="typescript"
+const harness = yield* OpenCode.Harness({
+  models: [Fast],
+-  tools: [AI.CodingTools],
++  tools: [AI.CodingTools, SearchIssues],
+  cwd: "/home/user/repo",
+});
+```
+
+```diff lang="typescript"
+const session = harness.session("issue", {
+-  tools: [AI.Bash, AI.Read, AI.Grep],
++  tools: [AI.Bash, AI.Read, AI.Grep, SearchIssues],
+  instructions,
+});
+```
+
+OpenCode sees the tool as `alchemy_search_issues`. When it calls it, the handler runs in the Durable Object, beside OpenCode.
+
+## Remove the sandbox when the issue closes
+
+Add a method that removes the session's sandbox:
+
+```diff lang="typescript"
+          : [],
+      ),
+    );
+  }),
++  closed: () => session.removeSandbox,
+};
+```
+
+And call it when the issue closes:
+
+```diff lang="typescript"
+  if (action === "opened") {
+    yield* issue.ask(number, `Issue #${number}: ${title}\n\n${opened.body ?? ""}`, event.id);
+  }
++  if (action === "closed") yield* issue.closed();
+  return;
+}
+```
+
+The sandbox held only files. The session's transcript stays in the Durable Object, so an issue that is reopened and replied to continues it, in a new sandbox from the snapshot.
+
+## Deploy and reply
+
+<PackageManagers run="alchemy deploy" />
+
+Reply on the issue from Part 3: "Use the alchemy_search_issues tool with the query README and tell me how many issues it found." A comment appears with the count, and `GET /issues/1` lists the call:
+
+```json
+[
+  { "tool": "alchemy_read", "status": "completed", "output": "{\"content\":\"1\\t# Issue bot…\",\"lines\":3}" },
+  {
+    "tool": "alchemy_search_issues",
+    "status": "completed",
+    "output": "{\"issues\":[{\"number\":1,\"title\":\"What is in the README?\",\"state\":\"open\"}]}"
+  }
+]
+```
+
+Close the issue, and its sandbox is gone from your Boat dashboard.
+
+## What you built
+
+- A Durable Object for each issue, running OpenCode and its session.
+- A sandbox for each issue's tools, started from a snapshot of the repository and removed when the issue closes.
+- A model and a GitHub tool that run in the Durable Object, so the sandbox holds no key and no token.
+- An event source that turns issues and replies into jobs, each run from the object's alarm.
+
+## Where next
+
+- [Sessions & prompts](/opencode/sessions): models, tools and instructions per prompt.
+- [Model requests](/opencode/model-requests): how OpenCode's requests reach your model.
+- [Tools](/opencode/tools): OpenCode's tools, yours, and replacing one with the other.
+- [Webhooks & events](/github/events): the other GitHub events a Worker can consume.
+
+## Tear down
+
+<PackageManagers run="alchemy destroy" />

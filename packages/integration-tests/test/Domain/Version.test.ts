@@ -103,6 +103,58 @@ class BankV1 extends Domain.Model("Bank", {
   views: [SummaryV1, TotalsV1, LatestOfV1],
 }) {}
 
+class Line extends Domain.Event("Line", { amount: Schema.Number }) {}
+/** Each account's movements, as its statement projection wrote them. */
+class Lines extends Domain.Stream("Lines", { key: Account, entries: [Line] }) {}
+
+/** Writes a line for every deposit and withdrawal. */
+class Statement extends Domain.Projection("Statement", {
+  from: [Account],
+  key: Account,
+  on: [Deposited, Withdrawn],
+  writes: [Lines],
+}) {}
+/** Deposits only, at version 1: rebuilt from a history that now gives it fewer inputs. */
+class StatementV1 extends Domain.Projection("Statement", {
+  from: [Account],
+  key: Account,
+  on: [Deposited],
+  writes: [Lines],
+}) {}
+
+const StatementLive = Statement.toLayer(
+  Effect.gen(function* () {
+    const lines = yield* Lines;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        const amount = input.event._tag === "Withdrawn" ? -input.event.amount : input.event.amount;
+        yield* lines.append(input, new Line({ amount }));
+      }
+    });
+  }),
+);
+const StatementV1Live = StatementV1.toLayer(
+  Effect.gen(function* () {
+    const lines = yield* Lines;
+    return Effect.fn(function* (batch) {
+      for (const input of batch)
+        yield* lines.append(input, new Line({ amount: input.event.amount }));
+    });
+  }),
+  { version: 1 },
+);
+
+class Statements extends Domain.Model("Statements", {
+  aggregates: [Account],
+  projections: [Statement],
+  streams: [Lines],
+}) {}
+class StatementsV1 extends Domain.Model("Statements", {
+  aggregates: [Account],
+  projections: [StatementV1],
+  streams: [Lines],
+}) {}
+
 /**
  * An in-memory platform that outlives the models built on it, as storage
  * outlives a deploy. It delivers only when drained.
@@ -119,12 +171,13 @@ const platform = () => {
   return {
     settle,
     deploy: <A, E, R>(
-      model: { readonly layer: (policies: any) => Layer.Layer<any, any, any> },
+      model: { readonly layer: (handlers: any) => Layer.Layer<any, any, any> },
       effect: Effect.Effect<A, E, R>,
+      handlers?: Layer.Layer<any, any, any>,
     ) =>
       effect.pipe(
         Effect.tap(() => settle),
-        Effect.provide(model.layer(Layer.empty).pipe(Layer.provide(hosted.layer))),
+        Effect.provide(model.layer(handlers ?? Layer.empty).pipe(Layer.provide(hosted.layer))),
       ),
   };
 };
@@ -231,6 +284,42 @@ describe("Domain view versions", { tags: ["unit", "local"] }, () => {
         }),
       );
       expect(fresh).toEqual({ net: 5 });
+    }),
+  );
+});
+
+describe("Domain projection versions", { tags: ["unit", "local"] }, () => {
+  it.live("a rebuilt projection keeps its stream, and appends what follows the bump", () =>
+    Effect.gen(function* () {
+      const bank = platform();
+      const lines = Effect.gen(function* () {
+        yield* bank.settle;
+        const { entries } = yield* (yield* Lines).list(Account.ref("a-1"));
+        return entries.map((entry) => entry.event.amount);
+      });
+      const before = yield* bank.deploy(
+        Statements,
+        Effect.all([
+          send(new Deposit({ id: "a-1", amount: 10 })),
+          send(new Withdraw({ id: "a-1", amount: 4 })),
+          send(new Deposit({ id: "a-1", amount: 3 })),
+        ]).pipe(Effect.andThen(lines)),
+        StatementLive,
+      );
+      expect(before).toEqual([10, -4, 3]);
+      // Rebuilt, it replays two deposits where it handled three inputs before.
+      const after = yield* bank.deploy(
+        StatementsV1,
+        Effect.gen(function* () {
+          yield* bank.settle;
+          yield* send(new Deposit({ id: "a-1", amount: 5 }));
+          yield* send(new Deposit({ id: "a-1", amount: 7 }));
+          return yield* lines;
+        }),
+        StatementV1Live,
+      );
+      // The replay appends nothing again, and nothing after the bump is lost.
+      expect(after).toEqual([10, -4, 3, 5, 7]);
     }),
   );
 });

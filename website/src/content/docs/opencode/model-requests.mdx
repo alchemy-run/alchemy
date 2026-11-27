@@ -1,0 +1,47 @@
+---
+title: Model requests
+description: OpenCode holds no API key. It runs in your Durable Object, and the harness answers each of its model requests with your AI.Model Layer, in the same isolate.
+---
+
+import Sequence from "../../../components/diagrams/Sequence.astro";
+
+OpenCode asks a model provider for every answer. A harness gives it one provider, and that provider is the harness itself: each request is answered by the `AI.Model` Layer you provided, in the Durable Object OpenCode runs in.
+
+<Sequence
+  actors={[
+    { id: "opencode", label: "OpenCode", type: "in the Durable Object" },
+    { id: "harness", label: "harness", type: "same isolate", tone: "accent" },
+    { id: "model", label: "Fast", type: "model Layer" },
+  ]}
+  steps={[
+    { from: "opencode", to: "harness", label: "chat completion" },
+    { from: "harness", to: "model", label: "asks the model" },
+    { from: "model", to: "harness", label: "text and tool calls", dashed: true },
+    { from: "harness", to: "opencode", label: "completion", dashed: true },
+  ]}
+  caption="OpenCode's request never leaves the isolate as it is. The harness takes it, asks the Fast model through its Layer, and hands the answer back. Only the model Layer's own request, to Workers AI or your gateway, goes out."
+/>
+
+## How OpenCode is configured
+
+OpenCode is given a provider named after the harness (`alchemy` by default) with the harness's models, in the OpenAI chat completions format. Its address does not resolve. The harness is the `fetch` OpenCode uses, so it takes each request for that address and answers it; every other request OpenCode makes goes out unchanged.
+
+OpenCode holds no provider key.
+
+## How a request is answered
+
+The harness turns the request into an Effect AI prompt and runs it on the `AI.Model` the prompt chose. That is the Layer you provided: Workers AI, an AI Gateway, or any other provider. The tools OpenCode offered are passed through, and tool calls go back to OpenCode, which runs them.
+
+```typescript
+const reply = yield* harness.session("pr-142").prompt("Fix the failing test.", { model: Smart });
+```
+
+Logging, caching, rate limits and spend caps on your gateway apply to OpenCode's requests, because they are your runtime's requests.
+
+## Calls to your tools
+
+Your tools are registered with OpenCode directly. When the model calls one, OpenCode runs the handler in the Durable Object. See [Tools](/opencode/tools).
+
+## When the Durable Object is evicted
+
+OpenCode marks a prompt before it runs it, and resumes a marked prompt when it starts again. The harness keeps the object's alarm armed while a prompt runs, so an evicted object is started again by the alarm and the prompt carries on. See [Sessions & prompts](/opencode/sessions#submit-without-waiting).

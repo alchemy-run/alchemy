@@ -1,0 +1,294 @@
+---
+title: Closing the books
+description: How to keep a long-lived record small by giving each period its own aggregate instance, and when to compact, archive or remove a period instead.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+An account that stays open for ten years records ten years of events. Accountants solved this long ago: at the end of a period they close the book, carry its balance to a new one, and never write in the old one again.
+
+In a model, a book is an [aggregate](/domain/aggregate) instance, and the period is part of its id. Nothing is built into Domain for this. It is a way to choose keys.
+
+<DAG
+  nodes={[
+    { id: "jan", label: "Book a-1.2026-01", type: "closed", kind: "aggregate", layer: 0 },
+    { id: "policy", label: "OpenNextBook", type: "on BookClosed", kind: "policy", layer: 1 },
+    { id: "feb", label: "Book a-1.2026-02", type: "open", kind: "aggregate", layer: 2 },
+  ]}
+  edges={[
+    { from: "jan", to: "policy", dashed: true },
+    { from: "policy", to: "feb" },
+  ]}
+  caption="Closing January carries its balance to February. January never changes again."
+/>
+
+## Give each period its own instance
+
+The book's id names the account and the period, so every month starts a new instance with an empty log. A book refuses entries once it is closed.
+
+```typescript title="src/Book.aggregate.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+
+export const BookState = Schema.Struct({
+  balance: Schema.Int,
+  opened: Schema.Boolean,
+  closed: Schema.Boolean,
+});
+
+export class BookOpened extends Domain.Event("BookOpened", {
+  broughtForward: Schema.Int,
+  balanceAfter: Schema.Int,
+}) {}
+export class Posted extends Domain.Event("Posted", {
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
+}) {}
+export class BookClosed extends Domain.Event("BookClosed", {
+  balance: Schema.Int,
+  next: Schema.String,
+}) {}
+
+export class BookIsClosed extends Domain.Rejection("BookIsClosed") {}
+
+export class OpenBook extends Domain.Command("OpenBook", {
+  input: { bookId: Schema.String, broughtForward: Schema.Int },
+  events: [BookOpened],
+}) {}
+export class Post extends Domain.Command("Post", {
+  input: { bookId: Schema.String, amount: Schema.Int },
+  events: [Posted],
+  rejects: [BookIsClosed],
+}) {}
+export class CloseBook extends Domain.Command("CloseBook", {
+  input: { bookId: Schema.String, next: Schema.String },
+  events: [BookClosed],
+}) {}
+
+/** One account's entries for one period. Its id is the account and the period: `a-1.2026-01`. */
+export class Book extends Domain.Aggregate("Book", {
+  id: Schema.String,
+  state: BookState,
+  initial: { balance: 0, opened: false, closed: false },
+  commands: [OpenBook, Post, CloseBook],
+  keyOf: (command) => command.bookId,
+  decide: {
+    OpenBook: (book, { broughtForward }) =>
+      book.opened
+        ? []
+        : [new BookOpened({ broughtForward, balanceAfter: book.balance + broughtForward })],
+    Post: (book, { amount }) =>
+      book.closed
+        ? new BookIsClosed()
+        : [new Posted({ amount, balanceAfter: book.balance + amount })],
+    CloseBook: (book, { next }) =>
+      book.closed ? [] : [new BookClosed({ balance: book.balance, next })],
+  },
+  evolve: {
+    BookOpened: (book, e) => ({ ...book, opened: true, balance: e.balanceAfter }),
+    Posted: (book, e) => ({ ...book, balance: e.balanceAfter }),
+    BookClosed: (book) => ({ ...book, closed: true }),
+  },
+}) {}
+```
+
+`BookClosed` carries the closing balance and the id of the book that follows. Everything the next period needs is in that one event.
+
+## Carry the balance forward
+
+A [policy](/domain/policy) opens the next book whenever one closes.
+
+```typescript title="src/OpenNextBook.policy.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import { Book, BookClosed, OpenBook } from "./Book.aggregate.ts";
+
+/** Whenever a book closes, the next one opens with its balance. */
+export class OpenNextBook extends Domain.Policy("OpenNextBook", {
+  from: Book,
+  on: [BookClosed],
+}) {}
+
+export const OpenNextBookLive = OpenNextBook.toLayer(
+  Effect.gen(function* () {
+    const books = yield* Book;
+    return Effect.fn(function* ({ event }) {
+      yield* books.send(new OpenBook({ bookId: event.next, broughtForward: event.balance }));
+    });
+  }),
+);
+```
+
+The policy runs shortly after the close, so an entry can reach the new book first. `OpenBook` adds the amount brought forward to whatever the book already holds, and the order stops mattering. Opening a book twice records nothing the second time.
+
+## Read one period
+
+A [view](/domain/view) keyed by the book is that period's statement. A closed book's statement never changes again, so clients can keep it for as long as they like.
+
+```typescript title="src/Statement.view.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Book } from "./Book.aggregate.ts";
+
+/** One period of one account, as a client reads it. */
+export class Statement extends Domain.View("Statement", {
+  from: [Book],
+  key: Book,
+  state: Schema.Struct({ balance: Schema.Int, entries: Schema.Int, closed: Schema.Boolean }),
+  initial: { balance: 0, entries: 0, closed: false },
+  evolve: {
+    BookOpened: (statement, e) => ({ ...statement, balance: e.balanceAfter }),
+    Posted: (statement, e) => ({
+      ...statement,
+      balance: e.balanceAfter,
+      entries: statement.entries + 1,
+    }),
+    BookClosed: (statement) => ({ ...statement, closed: true }),
+  },
+}) {}
+```
+
+A caller finds the current book from the date: the id for November 2026 is the account's id and `2026-11`. No lookup is needed.
+
+## List it in the model
+
+```typescript title="src/Books.model.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Book } from "./Book.aggregate.ts";
+import { OpenNextBook, OpenNextBookLive } from "./OpenNextBook.policy.ts";
+import { Statement } from "./Statement.view.ts";
+
+export class Books extends Domain.Model("Books", {
+  aggregates: [Book],
+  views: [Statement],
+  policies: [OpenNextBook],
+}) {}
+
+export const BooksLive = Books.layer(OpenNextBookLive);
+```
+
+## Test it
+
+A [story](/domain/story) closes January and checks February.
+
+```typescript title="test/Books.test.ts"
+import { Story } from "@alchemy.run/domain/Story";
+import { it } from "@effect/vitest";
+import {
+  Book,
+  BookClosed,
+  BookIsClosed,
+  BookOpened,
+  CloseBook,
+  Post,
+  Posted,
+} from "../src/Book.aggregate.ts";
+import { Books } from "../src/Books.model.ts";
+import { OpenNextBookLive } from "../src/OpenNextBook.policy.ts";
+import { Statement } from "../src/Statement.view.ts";
+
+const story = Story.make(Books, { layer: OpenNextBookLive });
+const january = Book.ref("a-1.2026-01");
+const february = Book.ref("a-1.2026-02");
+
+it.effect("closing a book opens the next one with its balance", () =>
+  story(
+    Story.given(january, new Posted({ amount: 500, balanceAfter: 500 })),
+    Story.when(new CloseBook({ bookId: "a-1.2026-01", next: "a-1.2026-02" })),
+    Story.then(january, new BookClosed({ balance: 500, next: "a-1.2026-02" })),
+    Story.then(february, new BookOpened({ broughtForward: 500, balanceAfter: 500 })),
+    Story.view(Statement, january, { balance: 500, entries: 1, closed: true }),
+    Story.when(new Post({ bookId: "a-1.2026-01", amount: 1 })),
+    Story.rejected(new BookIsClosed()),
+  ),
+);
+```
+
+## Remove a period you no longer need
+
+A closed book is an ordinary instance. Once the law no longer makes you keep it, a [rewrite](/domain/rewrite) with `delete: true` removes it, and its statement with it. The books after it are untouched, because each one starts from an amount and not from the book before.
+
+```typescript title="src/DropBook.rewrite.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Book } from "./Book.aggregate.ts";
+
+/** Removes a book whose retention period has ended. */
+export class DropBook extends Domain.Rewrite("DropBook", {
+  of: Book,
+  delete: true,
+}) {}
+```
+
+List it in the model's `rewrites`, and run it with `books.rewrite(bookId, new DropBook())`.
+
+## Or compact a period when it closes
+
+To keep the statement and free the book's log, compact the book when it closes. A [compaction](/domain/compaction) replaces its events with a roll-up and hands them to your archive, and the statement keeps what it built.
+
+The roll-up is one more event of the book, which carries its final state.
+
+```diff lang="typescript" title="src/Book.aggregate.ts"
++export class BookArchived extends Domain.Event("BookArchived", { state: BookState }) {}
++
+ export class Book extends Domain.Aggregate("Book", {
+   commands: [OpenBook, Post, CloseBook],
++  events: [BookArchived],
+   evolve: {
+     BookClosed: (book) => ({ ...book, closed: true }),
++    BookArchived: (_, e) => e.state,
+   },
+ }) {}
+```
+
+```typescript title="src/ArchiveBook.compaction.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Book, BookArchived } from "./Book.aggregate.ts";
+
+/** Replaces a closed book's entries with one event carrying its final state. */
+export class ArchiveBook extends Domain.Compaction("ArchiveBook", {
+  of: Book,
+  rollup: (book) => [new BookArchived({ state: book })],
+}) {}
+```
+
+A policy compacts each book as it closes.
+
+```typescript title="src/ArchiveClosedBook.policy.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import { ArchiveBook } from "./ArchiveBook.compaction.ts";
+import { Book, BookClosed } from "./Book.aggregate.ts";
+
+/** Whenever a book closes, its entries move to the archive. */
+export class ArchiveClosedBook extends Domain.Policy("ArchiveClosedBook", {
+  from: Book,
+  on: [BookClosed],
+}) {}
+
+export const ArchiveClosedBookLive = ArchiveClosedBook.toLayer(
+  Effect.gen(function* () {
+    const books = yield* Book;
+    return Effect.fn(function* ({ source }) {
+      yield* books.compact(source, ArchiveBook).pipe(Effect.orDie);
+    });
+  }),
+);
+```
+
+The statement needs a handler for `BookArchived`, and the compaction's Layer says where the entries go: see [Compaction](/domain/compaction#teach-the-views-the-roll-up).
+
+The two work together. A compacted book can still be removed with `DropBook`, and its statement goes with it.
+
+## When there are no periods
+
+Some records have no natural period: a chat room, a document, a device. Keep one instance and let it compact itself with `after: { events: 1_000 }` on the compaction's Layer. See [When an instance compacts](/domain/compaction#when-an-instance-compacts).
+
+The compaction's Layer also decides what happens to the replaced events. It can write them to a bucket, copy them to a warehouse, or do nothing and let them go. See [Say where the replaced events go](/domain/compaction#say-where-the-replaced-events-go).
+
+## Pick by what the record is
+
+A record with periods the business already names gets an instance per period. Months, statements, shifts, matches and school years all close on their own, and a closed one is small and never changes.
+
+A record with no periods and a state worth keeping gets one instance and a compaction.
+
+A record whose history has no value after a while gets one instance, a compaction, and a Layer that keeps nothing.

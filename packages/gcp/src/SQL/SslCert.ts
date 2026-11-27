@@ -344,11 +344,7 @@ export const SslCertProvider = () =>
 
       if (current === undefined) {
         const inserted = yield* sqladmin
-          .insertSslCerts({
-            project: env.project,
-            instance,
-            body: { commonName },
-          })
+          .insertSslCerts({ commonName, project: env.project, instance })
           .pipe(
             Effect.tap((response) =>
               response.operation ? waitForOperation(env.project, response.operation) : Effect.void,

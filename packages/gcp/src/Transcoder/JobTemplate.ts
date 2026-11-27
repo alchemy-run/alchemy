@@ -291,21 +291,21 @@ export const JobTemplateProvider = () =>
       let current = yield* getJobTemplate(name);
 
       if (current === undefined) {
-        const created = yield* transcoder
-          .createProjectsLocationsJobTemplates({
-            parent,
-            jobTemplateId,
-            body: {
+        const created = yield* (
+          transcoder
+            .createProjectsLocationsJobTemplates({
               name,
               config: news.config,
               labels: desiredLabels,
-            },
-          })
-          // ALREADY_EXISTS proves the template exists (a lost race, or a
-          // retried create whose first attempt landed) — wait for it to
-          // become readable instead of failing, so the attempt converges
-          // rather than leaving an untracked template behind.
-          .pipe(Effect.catchTag("Conflict", () => waitUntilExists(name)));
+              parent,
+              jobTemplateId,
+            })
+            // ALREADY_EXISTS proves the template exists (a lost race, or a
+            // retried create whose first attempt landed) — wait for it to
+            // become readable instead of failing, so the attempt converges
+            // rather than leaving an untracked template behind.
+            .pipe(Effect.catchTag("Conflict", () => waitUntilExists(name)))
+        );
         current = created ?? undefined;
       }
 

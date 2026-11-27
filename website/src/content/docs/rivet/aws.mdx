@@ -63,6 +63,16 @@ export const Default = RivetAWS.Ec2Pool("Default", { instanceType: "t3.small" })
 
 Nodes run in the control plane's VPC. With a control plane outside AWS, the pool creates a VPC of its own.
 
+## Reach a private control plane
+
+On a [`Rivet.ControlPlane`](/rivet/control-planes#reach-it-at-a-private-address) with a private address, `network` is the VPC that address is in, its public subnets, and the security group nodes run with. `EcsPool`, `Ec2Pool` and `ServicesPool` run their nodes there:
+
+```typescript
+network: RivetAWS.Network({ vpcId: vpc.vpcId, publicSubnetIds: [a.subnetId, b.subnetId] }, nodes),
+```
+
+An `EC2.Network` has both `vpcId` and `publicSubnetIds`, so one your stack declares goes in as is: `RivetAWS.Network(network, nodes)`.
+
 ## Rivet Services
 
 `ServicesPool` runs [Rivet Services](/rivet/durable-streams) on Fargate, in the control plane's VPC:

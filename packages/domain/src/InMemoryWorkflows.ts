@@ -1,4 +1,4 @@
-import { CurrentActivity, makeCurrentActivity } from "alchemy/WorkflowEncoding";
+import { CurrentActivity, intoStoredResult, makeCurrentActivity } from "alchemy/WorkflowEncoding";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -24,6 +24,11 @@ export interface Host {
   readonly turn?: (key: string, activity: string) => Effect.Effect<void>;
   /** Take a lock, counting the run as waiting while another run holds it. */
   readonly acquire: (lock: Semaphore.Semaphore) => Effect.Effect<void>;
+  /**
+   * Give a lock back, counting the run it wakes as running from now, not
+   * from when its fiber resumes. Absent: release it.
+   */
+  readonly release?: (lock: Semaphore.Semaphore) => Effect.Effect<void>;
   /** Fire `fire` at `at` on the platform's clock; scheduling the same key again replaces it. */
   readonly timer: (key: string, at: number, fire: Effect.Effect<void>) => Effect.Effect<void>;
   /** Record a run that failed, so a story can report it. */
@@ -83,7 +88,7 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
           Effect.andThen(runOnce(key)),
           Effect.ensuring(Effect.sync(() => fresh.delete(key))),
         ),
-      () => lockOf(key).release(1),
+      () => (host.release ? host.release(lockOf(key)) : lockOf(key).release(1)),
     );
 
   const runOnce = (key: string): Effect.Effect<void> =>
@@ -102,7 +107,7 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
           instance.suspended = false;
           return Effect.withFiber((fiber) => fiber.pipe(Fiber.interrupt, Effect.interruptible));
         }),
-        Workflow.intoResult,
+        intoStoredResult,
         Effect.provide(
           Layer.mergeAll(
             Layer.succeed(WorkflowEngine.WorkflowInstance, instance),

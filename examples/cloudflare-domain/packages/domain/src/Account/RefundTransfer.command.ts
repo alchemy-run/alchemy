@@ -1,5 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
-import { Cents } from "../Money.ts";
+import { Amount, Cents } from "../Money.ts";
 import { TransferId } from "../Transfer/Transfer.id.ts";
 import { AccountId } from "./Account.id.ts";
 
@@ -17,6 +17,6 @@ export class RefundStranded extends Domain.Event("RefundStranded", {
 
 /** Reports a fact that already happened, so it never rejects. */
 export class RefundTransfer extends Domain.Command("RefundTransfer", {
-  input: { accountId: AccountId, transferId: TransferId, amount: Cents },
+  input: { accountId: AccountId, transferId: TransferId, amount: Amount },
   events: [TransferRefunded, RefundStranded],
 }) {}

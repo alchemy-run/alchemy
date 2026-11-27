@@ -102,6 +102,7 @@ export const viteDev = (
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
   serverOptions: vite.ServerOptions,
+  mode?: string,
 ) =>
   Effect.gen(function* () {
     yield* Effect.sync(() => {
@@ -129,6 +130,7 @@ export const viteDev = (
         Effect.promise(async () => {
           const devServer = await vite.createServer({
             root: rootDir,
+            mode,
             define: getDefine(env),
             plugins: [cloudflare(pluginOptions)],
             server,
@@ -161,6 +163,7 @@ export const viteBuild = (
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
   fqn: string,
+  mode?: string,
 ) =>
   Effect.gen(function* () {
     const logResourceOutput = makeResourceLogger(fqn);
@@ -176,6 +179,7 @@ export const viteBuild = (
         compatibilityDate: pluginOptions.compatibilityDate,
         compatibilityFlags: pluginOptions.compatibilityFlags,
         viteEnvironments: pluginOptions.viteEnvironments,
+        mode,
       },
       logResourceOutput,
     );
@@ -197,6 +201,7 @@ export const viteBuildInProcess = (
   rootDir: string,
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
+  mode?: string,
 ) =>
   Effect.gen(function* () {
     const outputPlugin = yield* viteBuildOutputPlugin({
@@ -210,6 +215,7 @@ export const viteBuildInProcess = (
       const builder = await vite.createBuilder(
         {
           root: rootDir,
+          mode,
           define: getDefine(env),
           plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
           customLogger: makeViteLogger(context),
@@ -316,6 +322,21 @@ export const hashViteInput = Effect.fn(function* <E, R>(
 });
 
 /**
+ * The source's `input` hash: the project tree plus the build `mode`, so
+ * switching modes rebuilds even when no file changed. Without a `mode`
+ * the hash is the tree's alone, as it was before `mode` existed.
+ */
+const hashViteSourceInput = Effect.fn(function* <E, R>(
+  vite: ViteOptions,
+  additionalWorkspaces: Effect.Effect<Iterable<string>, E, R>,
+) {
+  const input = yield* hashViteInput(vite.rootDir, vite.memo, additionalWorkspaces);
+  return vite.mode === undefined
+    ? input
+    : { ...input, hash: yield* sha256Object([input.hash, { mode: vite.mode }]) };
+});
+
+/**
  * Source provider for vite-based workers (`props.vite`, set by
  * `Website.Vite`): the vite builder produces the client assets and the
  * server bundle in one pass; diff never builds — the `input` hash over
@@ -350,6 +371,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
         viteEnvironments: vite.viteEnvironments,
       },
       ctx.fqn,
+      vite.mode,
     );
     const declaredAssets = ctx.assets && typeof ctx.assets !== "string" ? ctx.assets : undefined;
     const [assets, bundle, input] = yield* Effect.all(
@@ -367,7 +389,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
             })
           : Effect.undefined,
         serverBundle,
-        hashViteInput(vite.rootDir, vite.memo, externalWorkspaces),
+        hashViteSourceInput(vite, externalWorkspaces),
       ],
       { concurrency: "unbounded" },
     );
@@ -399,9 +421,8 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
       (cwd) => fs.exists(path.resolve(root, cwd)),
       { concurrency: "unbounded" },
     );
-    const { hash, workspaces } = yield* hashViteInput(
-      vite.rootDir,
-      vite.memo,
+    const { hash, workspaces } = yield* hashViteSourceInput(
+      vite,
       Effect.succeed(previousWorkspaces),
     );
     return { input: hash, additionalWorkspaces: workspaces };
@@ -426,6 +447,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
         context: ctx.runtimeContext,
       },
       { port: 0 },
+      vite.mode,
     );
     return {
       mode: "server",

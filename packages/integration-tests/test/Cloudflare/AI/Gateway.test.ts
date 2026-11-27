@@ -129,19 +129,19 @@ test.provider(
             spendLimits: {
               enabled: true,
               // Effect Duration.Input is decoded to whole seconds for the API.
-              rules: [{ limitType: "cost", limit: 500_00, window: "1 day" }],
+              rules: [{ limitType: "cost", limit: 5, window: "1 day" }],
             },
           });
         }),
       );
 
       expect(gateway.spendLimits?.enabled).toEqual(true);
-      expect(gateway.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
+      expect(gateway.spendLimits?.rules?.[0]?.limit).toEqual(5);
       expect(gateway.spendLimits?.rules?.[0]?.window).toEqual(86_400);
 
       const live = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
       expect(live.spendLimits?.enabled).toEqual(true);
-      expect(live.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
+      expect(live.spendLimits?.rules?.[0]?.limit).toEqual(5);
       expect(live.spendLimits?.rules?.[0]?.window).toEqual(86_400);
 
       // Re-deploying identical props must be a no-op (no perpetual drift from
@@ -152,12 +152,12 @@ test.provider(
             id: "alchemy-test-ai-gateway-spend",
             spendLimits: {
               enabled: true,
-              rules: [{ limitType: "cost", limit: 500_00, window: "1 day" }],
+              rules: [{ limitType: "cost", limit: 5, window: "1 day" }],
             },
           });
         }),
       );
-      expect(again.spendLimits?.rules?.[0]?.limit).toEqual(500_00);
+      expect(again.spendLimits?.rules?.[0]?.limit).toEqual(5);
 
       // Update the cap in place.
       const updated = yield* stack.deploy(
@@ -166,16 +166,60 @@ test.provider(
             id: "alchemy-test-ai-gateway-spend",
             spendLimits: {
               enabled: true,
-              rules: [{ limitType: "cost", limit: 1_000_00, window: "1 hour" }],
+              rules: [{ limitType: "cost", limit: 0.5, window: "1 hour" }],
             },
           });
         }),
       );
-      expect(updated.spendLimits?.rules?.[0]?.limit).toEqual(1_000_00);
+      expect(updated.spendLimits?.rules?.[0]?.limit).toEqual(0.5);
 
       const liveUpdated = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
-      expect(liveUpdated.spendLimits?.rules?.[0]?.limit).toEqual(1_000_00);
+      expect(liveUpdated.spendLimits?.rules?.[0]?.limit).toEqual(0.5);
       expect(liveUpdated.spendLimits?.rules?.[0]?.window).toEqual(3_600);
+
+      yield* stack.destroy();
+      yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"] },
+);
+
+// Workers AI billing mode is applied on create, switched in place, and left
+// alone when the prop is dropped.
+test.provider(
+  "create, update workers ai billing mode, delete ai gateway",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const program = (props: Cloudflare.AI.GatewayProps) =>
+        Effect.gen(function* () {
+          return yield* Cloudflare.AI.Gateway("BillingGateway", props);
+        });
+      const liveMode = (gatewayId: string) =>
+        aiGateway
+          .getAiGateway({ accountId, id: gatewayId })
+          .pipe(Effect.map((live) => live.workersAiBillingMode));
+
+      const gateway = yield* stack.deploy(program({ workersAiBillingMode: "postpaid" }));
+      expect(gateway.workersAiBillingMode).toEqual("postpaid");
+      expect(yield* liveMode(gateway.gatewayId)).toEqual("postpaid");
+
+      const unified = program({ workersAiBillingMode: "unified" });
+      expect((yield* stack.plan(unified)).resources.BillingGateway?.action).toBe("update");
+      const updated = yield* stack.deploy(unified);
+      expect(updated.gatewayId).toEqual(gateway.gatewayId);
+      expect(updated.workersAiBillingMode).toEqual("unified");
+      expect(yield* liveMode(gateway.gatewayId)).toEqual("unified");
+      expect((yield* stack.plan(unified)).resources.BillingGateway?.action).toBe("noop");
+
+      // Dropping the prop updates the gateway without a billing mode, and
+      // the gateway keeps the one it has.
+      const unmanaged = yield* stack.deploy(program({}));
+      expect(unmanaged.workersAiBillingMode).toEqual("unified");
+      expect(yield* liveMode(gateway.gatewayId)).toEqual("unified");
+      expect((yield* stack.plan(program({}))).resources.BillingGateway?.action).toBe("noop");
 
       yield* stack.destroy();
       yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);

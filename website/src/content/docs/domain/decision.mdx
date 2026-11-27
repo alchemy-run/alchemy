@@ -153,9 +153,9 @@ export class Bank extends Domain.Model("Bank", {
 }) {}
 ```
 
-Every command has one implementation: an aggregate or a decision. A second one is a type error on its entry in the model, and `Domain.verify` reports it as `ImplementedTwice`.
+Every command has one implementation: an aggregate or a decision. A second one is a type error on its entry in the model, and building the model's Layer fails with `ImplementedTwice`.
 
-A decision that reads an aggregate the model leaves out is a type error on its entry too, and `Domain.verify` reports it as `UnknownRead`.
+A decision that reads an aggregate the model leaves out is a type error on its entry too, and building the Layer fails with `UnknownRead`.
 
 ## Send it
 
@@ -465,6 +465,22 @@ export class Payout extends Domain.Decision(PayOut, {
 ```
 
 Every account is paid, or none is. An instance named twice is read once.
+
+## Say what it must keep
+
+A decision can state rules about the step it takes. Each entry of `transitions` is given the states it read, before and after, with the command and the events, and returns `true` while the rule holds.
+
+```diff lang="typescript" title="src/Account/Transfer.decision.ts"
+export class Transfer extends Domain.Decision(TransferMoney, {
+  reads: { from: Account, to: Account },
+  keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
++  transitions: {
++    MoneyIsConserved: ({ before, after }) =>
++      after.from.balance + after.to.balance === before.from.balance + before.to.balance,
++  },
+```
+
+Nothing runs a transition when a command arrives. It's a claim about `decide`, and [verification](/domain/verifying-models#say-what-a-decision-must-keep) proves it for every pair of states and every input, along with each account's own rules.
 
 ## What it can't do yet
 

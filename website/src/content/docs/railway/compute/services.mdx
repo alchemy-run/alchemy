@@ -54,7 +54,7 @@ export default class Api extends Railway.Service<Api>()(
 
 `main: import.meta.url` is the bundle entrypoint. Alchemy bundles
 this file with Rolldown, generates a Dockerfile (default
-`FROM oven/bun:1`), and uploads the context. Railway builds the
+`FROM node:26-slim`), and uploads the context. Railway builds the
 image.
 
 ## Serve HTTP with `fetch`
@@ -212,9 +212,9 @@ For an image Service, Alchemy sets `source.image` and deploys with
 `serviceInstanceDeployV2`. Docker is not required.
 
 For an Effect-native Service, Alchemy bundles `main` with Rolldown
-and generates a Dockerfile (`FROM oven/bun:1` unless you pass
-`image`). If the hash matches the last successful deploy, it skips
-the upload. Otherwise it tars the context and uploads it the same
+and generates a Dockerfile (`FROM node:26-slim` unless you pass
+`image`). The container runs the bundle with Node. If the hash
+matches the last successful deploy, it skips the upload. Otherwise it tars the context and uploads it the same
 way `railway up` does. Railway builds and deploys. No local Docker
 daemon. No registry.
 
@@ -240,8 +240,10 @@ export default class Api extends Railway.Service<Api>()(
 ) {}
 ```
 
-Override the base image with `image` (must still run bun when `main`
-is set).
+Override the base image with `image`. When `main` is set, the image
+must have `node` on its `PATH`, because the entrypoint is
+`node /app/index.mjs`. Imports from `bun` or `bun:*` fail at runtime
+even though they bundle.
 
 ## Config
 

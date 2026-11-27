@@ -1,6 +1,6 @@
 import { Credentials } from "@distilled.cloud/axiom/Credentials";
-import { ConfigError } from "@distilled.cloud/core/errors";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AXIOM_AUTH_PROVIDER_NAME, type AxiomResolvedCredentials } from "./AuthProvider.ts";
 
@@ -18,9 +18,11 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    lazyCredentials<AxiomResolvedCredentials, ConfigError>()(AXIOM_AUTH_PROVIDER_NAME, (creds) => ({
+    // `Credentials` has no error channel: a failed resolution dies, and the
+    // engine reports it as `CredentialsRequired`.
+    lazyCredentials<AxiomResolvedCredentials>()(AXIOM_AUTH_PROVIDER_NAME, (creds) => ({
       apiKey: creds.apiToken,
       apiBaseUrl: creds.apiBaseUrl,
       orgId: creds.orgId,
-    })),
+    })).pipe(Effect.map(Effect.orDie)),
   );

@@ -6,3 +6,4 @@
 export * from "./StatefulSetControlPlane.ts";
 export * from "./DeploymentPool.ts";
 export * from "./ServicesPool.ts";
+export * from "./Network.ts";

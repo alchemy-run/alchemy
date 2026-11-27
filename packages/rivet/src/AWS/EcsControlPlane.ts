@@ -2,8 +2,8 @@ import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ECS from "@alchemy.run/aws/ECS";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import {
+  ADMIN_TOKEN_ENV,
   DATA_PATH,
   engineEnvironment,
   makeControlPlane,
@@ -11,6 +11,7 @@ import {
   PEER_PORT,
   type ControlPlaneProps,
 } from "./internal/ControlPlane.ts";
+import { valueFrom } from "./internal/Pool.ts";
 
 export interface EcsControlPlaneProps extends ControlPlaneProps {
   /**
@@ -104,21 +105,18 @@ ECS_CONFIG
             mountPoints: [{ sourceVolume: "data", containerPath: DATA_PATH }],
             stopTimeout: 120,
           },
-          // Task environment values are plain strings.
-          env: Output.all(
-            context.token,
-            context.bucket,
-            context.region,
-            instance.privateIpAddress,
-          ).pipe(
-            Output.map(([token, bucket, region, privateIp]) =>
+          env: Output.all(context.bucket, context.region, instance.privateIpAddress).pipe(
+            Output.map(([bucket, region, privateIp]) =>
               engineEnvironment({
-                token: Redacted.value(token),
                 bucket,
                 region,
                 advertiseAddress: `${privateIp}:${PEER_PORT}`,
               }),
             ),
+          ),
+          // The token comes from Secrets Manager, never the task definition.
+          secrets: valueFrom(context.tokenSecret).pipe(
+            Output.map((token) => ({ [ADMIN_TOKEN_ENV]: token })),
           ),
         });
         // ECS hands the engine its task role's credentials ahead of the
