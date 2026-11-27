@@ -252,10 +252,7 @@ export const EnvgroupsAttachmentProvider = () =>
 
       if (current === undefined) {
         const operation = yield* apigee
-          .createOrganizationsEnvgroupsAttachments({
-            parent,
-            body: { environment },
-          })
+          .createOrganizationsEnvgroupsAttachments({ environment, parent })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           const done = yield* waitForOperation(operation);

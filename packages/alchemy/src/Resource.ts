@@ -18,7 +18,7 @@ import {
 } from "./ProviderMode.ts";
 import { ref as makeRef } from "./Ref.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
-import { RenamePolicy } from "./Rename.ts";
+import { omitRenamePolicy, RenamePolicy } from "./Rename.ts";
 import { Self } from "./Self.ts";
 import { StackContext } from "./StackContext.ts";
 
@@ -621,6 +621,10 @@ export function Resource<R extends ResourceLike>(
             Effect.provide(
               Layer.mergeAll(Layer.succeed(Self, Resource), Layer.succeed(Self(type), Resource)),
             ),
+            // `renamedFrom` names THIS resource's former ids. Resources the
+            // props declare (an API token a binding mints) must not inherit
+            // them, or they claim the same former FQN (#2219).
+            omitRenamePolicy,
           )
         : // A plain resource declared without props (every prop optional)
           // reaches its provider as `{}`. Only a platform tag keeps

@@ -75,8 +75,8 @@ layer(BunServices.layer)("Modal build capabilities", (it) => {
           8000,
           undefined,
         );
-        expect(planned.plan.base).toBe("oven/bun:1");
-        expect(planned.command[0]).toBe("bun");
+        expect(planned.plan.base).toBe("node:26-slim");
+        expect(planned.command[0]).toBe("node");
         expect(planned.python).toBe("3.12");
         const starts = planned.spec.commands.filter((line) => /^(ENTRYPOINT|CMD)\b/.test(line));
         expect(starts).toEqual(["ENTRYPOINT []"]);

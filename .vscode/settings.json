@@ -1,9 +1,10 @@
 {
   "diffEditor.renderSideBySide": false,
-  // Run the tsrs language server. `tsrs-tsdk/tsgo` symlinks the project's
-  // tsrs launcher; point this at `./node_modules/tsrs/tsdk` once tsrs >= 0.19
-  // ships it. macOS/Linux only — Windows needs a native tsgo.exe.
-  "js/ts.tsdk.path": "./.vscode/tsrs-tsdk",
+  // Run the tsrs language server from the launcher bundled in the pinned tsrs
+  // package (macOS/Linux; Windows points at `node_modules/@tsrs/win32-<arch>`).
+  // https://github.com/oxc-project/tsrs/blob/main/docs/LSP.md#editor-setup
+  "js/ts.experimental.useTsgo": true,
+  "js/ts.tsdk.path": "./node_modules/tsrs/tsdk",
   "js/ts.tsdk.promptToUseWorkspaceVersion": true,
   "js/ts.preferences.importModuleSpecifier": "relative",
   "js/ts.preferences.importModuleSpecifierEnding": "js",

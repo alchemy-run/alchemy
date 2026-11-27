@@ -3,6 +3,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { Providers } from "./Providers.ts";
 import { ShardGroups } from "./ShardGroups.ts";
@@ -25,6 +26,19 @@ export type ClusterNetwork =
       readonly subnetIds: Input<string>[];
       /** The group every runner joins: it reaches the database and the other runners. */
       readonly securityGroupId: Input<string>;
+      /**
+       * Subnets with a route to an internet gateway, where an
+       * internet-facing gateway's load balancer goes. Defaults to `subnetIds`.
+       */
+      readonly publicSubnetIds?: Input<string>[];
+      /** The VPC's IPv4 range, which an internal gateway admits by default. */
+      readonly cidrBlock?: Input<string>;
+      /**
+       * Whether runners take a public IP: in subnets without a NAT gateway
+       * it is how they reach the internet (their image registry, other APIs).
+       * @default true
+       */
+      readonly assignPublicIp?: boolean;
     }
   | {
       /** A Fly private network; runners' Apps join it by name. */
@@ -111,6 +125,26 @@ export const fromUrl = (
       return { url, shardGroups: yield* clusterShardGroups("Database") };
     }),
   );
+
+/**
+ * The variable a runner reads the size of its database pools from: a pool's
+ * `databaseConnections`, set on every runner it starts.
+ *
+ * @internal
+ */
+export const DATABASE_MAX_CONNECTIONS = "CLUSTER_DATABASE_MAX_CONNECTIONS";
+
+/**
+ * At most how many connections each of a runner's pools to the cluster's
+ * database holds (`DATABASE_MAX_CONNECTIONS`), or `undefined` for the
+ * client's default. A runner holds two such pools: the cluster's own (its
+ * shards and messages) and, when it hosts a Domain model, the models' storage.
+ *
+ * @internal
+ */
+export const databaseMaxConnections: Effect.Effect<number | undefined> = Config.Int(
+  DATABASE_MAX_CONNECTIONS,
+).pipe(Config.option, Effect.map(Option.getOrUndefined), Effect.orDie);
 
 /** The shard groups resource every database Layer declares for its cluster. @internal */
 export const clusterShardGroups = (id: string) => ShardGroups(`${id}ShardGroups`, {});

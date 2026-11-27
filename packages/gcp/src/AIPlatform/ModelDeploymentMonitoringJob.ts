@@ -322,24 +322,22 @@ export const ModelDeploymentMonitoringJobProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsModelDeploymentMonitoringJobs({
+            displayName,
+            labels: desiredLabels,
+            endpoint: news.endpoint,
+            loggingSamplingStrategy: news.loggingSamplingStrategy,
+            modelDeploymentMonitoringScheduleConfig: news.modelDeploymentMonitoringScheduleConfig,
+            modelDeploymentMonitoringObjectiveConfigs:
+              news.modelDeploymentMonitoringObjectiveConfigs,
+            modelMonitoringAlertConfig: news.modelMonitoringAlertConfig,
+            predictInstanceSchemaUri: news.predictInstanceSchemaUri,
+            analysisInstanceSchemaUri: news.analysisInstanceSchemaUri,
+            samplePredictInstance: news.samplePredictInstance,
+            statsAnomaliesBaseDirectory: news.statsAnomaliesBaseDirectory,
+            logTtl: news.logTtl,
+            enableMonitoringPipelineLogs: enableLogs,
+            encryptionSpec: news.encryptionSpec,
             parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              displayName,
-              labels: desiredLabels,
-              endpoint: news.endpoint,
-              loggingSamplingStrategy: news.loggingSamplingStrategy,
-              modelDeploymentMonitoringScheduleConfig: news.modelDeploymentMonitoringScheduleConfig,
-              modelDeploymentMonitoringObjectiveConfigs:
-                news.modelDeploymentMonitoringObjectiveConfigs,
-              modelMonitoringAlertConfig: news.modelMonitoringAlertConfig,
-              predictInstanceSchemaUri: news.predictInstanceSchemaUri,
-              analysisInstanceSchemaUri: news.analysisInstanceSchemaUri,
-              samplePredictInstance: news.samplePredictInstance,
-              statsAnomaliesBaseDirectory: news.statsAnomaliesBaseDirectory,
-              logTtl: news.logTtl,
-              enableMonitoringPipelineLogs: enableLogs,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* findOwned(env.project, location, desiredLabels));
@@ -380,6 +378,14 @@ export const ModelDeploymentMonitoringJobProvider = () =>
         logTtlChanged
       ) {
         const operation = yield* aiplatform.patchProjectsLocationsModelDeploymentMonitoringJobs({
+          displayName,
+          labels: desiredLabels,
+          enableMonitoringPipelineLogs: enableLogs,
+          loggingSamplingStrategy: news.loggingSamplingStrategy,
+          modelDeploymentMonitoringScheduleConfig: news.modelDeploymentMonitoringScheduleConfig,
+          modelDeploymentMonitoringObjectiveConfigs: news.modelDeploymentMonitoringObjectiveConfigs,
+          modelMonitoringAlertConfig: news.modelMonitoringAlertConfig,
+          logTtl: news.logTtl,
           name,
           updateMask: [
             displayChanged ? "display_name" : undefined,
@@ -393,18 +399,6 @@ export const ModelDeploymentMonitoringJobProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            labels: desiredLabels,
-            enableMonitoringPipelineLogs: enableLogs,
-            loggingSamplingStrategy: news.loggingSamplingStrategy,
-            modelDeploymentMonitoringScheduleConfig: news.modelDeploymentMonitoringScheduleConfig,
-            modelDeploymentMonitoringObjectiveConfigs:
-              news.modelDeploymentMonitoringObjectiveConfigs,
-            modelMonitoringAlertConfig: news.modelMonitoringAlertConfig,
-            logTtl: news.logTtl,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);

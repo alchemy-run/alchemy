@@ -267,13 +267,11 @@ export const DatacollectorProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsDatacollectors({
+            name: dataCollectorId,
+            description: desiredDescription,
+            type,
             parent: organization,
             dataCollectorId,
-            body: {
-              name: dataCollectorId,
-              description: desiredDescription,
-              type,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -285,9 +283,9 @@ export const DatacollectorProvider = () =>
 
       if ((current.description ?? "") !== desiredDescription) {
         current = yield* apigee.patchOrganizationsDatacollectors({
+          description: desiredDescription,
           name,
           updateMask: "description",
-          body: { description: desiredDescription },
         });
       }
 

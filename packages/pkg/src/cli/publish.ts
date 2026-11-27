@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import * as HttpClientError from "effect/http/HttpClientError";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
@@ -65,6 +66,36 @@ const whileRunCatchesUp = <A, E extends { readonly _tag: string }, R>(
   );
 
 /**
+ * Failures that pass on their own: the connection dropped, the registry or
+ * its storage failed (a 5xx), or GitHub did (`Upstream`).
+ */
+const isTransient = (e: { readonly _tag: string }) =>
+  e._tag === "Upstream" ||
+  e._tag === "Unavailable" ||
+  (e instanceof HttpClientError.HttpClientError &&
+    (e.reason._tag === "TransportError" || (e.response?.status ?? 0) >= 500));
+
+/**
+ * Every registry request is idempotent: uploads are content-addressed and a
+ * publish either reports missing tarballs or writes the same tags. So a
+ * transient failure is sent again, five times over about half a minute, and
+ * a run GitHub does not report yet is waited out (see
+ * {@link whileRunCatchesUp}).
+ */
+const withRetries = <A, E extends { readonly _tag: string; readonly message?: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.tapError((e) =>
+      isTransient(e)
+        ? Effect.logInfo(`${failed("Registry request failed, retrying")(e).message}`)
+        : Effect.void,
+    ),
+    Effect.retry({ while: isTransient, schedule: Schedule.exponential("1 second"), times: 5 }),
+    whileRunCatchesUp,
+  );
+
+/**
  * Publish a `pkg pack` directory from the current GitHub Actions job. The
  * workflow must first have uploaded the manifest as an artifact of the run
  * under the name `pkg pack` printed; the registry verifies that artifact
@@ -95,13 +126,17 @@ export const publish = Effect.fn("publish")(function* (options: PublishOptions) 
   const upload = (pkg: Manifest["packages"][number]) =>
     Effect.gen(function* () {
       const bytes = yield* fs.readFile(path.join(dir, pkg.file));
-      const result = yield* whileRunCatchesUp(
+      const result = yield* withRetries(
         client.Registry.uploadTarball({
           params: { name: pkg.name, sha256: pkg.sha256 },
           query: run,
           payload: bytes,
         }),
-      ).pipe(Effect.mapError(failed(`upload ${pkg.name}`)));
+      ).pipe(
+        Effect.mapError((e) =>
+          e._tag === "NoOpenPullRequest" ? e : failed(`upload ${pkg.name}`)(e),
+        ),
+      );
       yield* Effect.logInfo(
         `${result.uploaded ? "Uploaded" : "Reused"} ${pkg.name} (${pkg.sha256.slice(0, 12)}, ${pkg.size} bytes)`,
       );
@@ -122,7 +157,7 @@ export const publish = Effect.fn("publish")(function* (options: PublishOptions) 
     );
   };
 
-  const attempt = whileRunCatchesUp(
+  const attempt = withRetries(
     client.Registry.publish({
       payload: { run, manifest: manifestText },
     }),
@@ -131,13 +166,17 @@ export const publish = Effect.fn("publish")(function* (options: PublishOptions) 
     // The first answer is usually the tarballs to upload; publish once more
     // after uploading them.
     Effect.catchTag("MissingTarballs", (e) => Effect.andThen(uploadMissing(e.missing), attempt)),
-    Effect.catchTag(
-      "MissingTarballs",
-      (e) =>
+    Effect.catchTags({
+      MissingTarballs: (e) =>
         new PublishError({
           message: `registry still reports missing tarballs after upload: ${e.missing.map((ref) => ref.name).join(", ")}`,
         }),
-    ),
+      // The pull request was merged or closed, or a newer push replaced this
+      // commit, while the job ran. Nothing is left to preview, so the job
+      // succeeds without publishing.
+      NoOpenPullRequest: (e) =>
+        Effect.logInfo(`Not publishing: ${e.message}`).pipe(Effect.as({ packages: [] })),
+    }),
     Effect.mapError((e) => (e._tag === "PublishError" ? e : failed("publish")(e))),
   );
 

@@ -19,7 +19,8 @@ import * as Storage from "../../globals/Storage.ts";
 import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
-import type { BindingHook } from "../../PluginContext.ts";
+import type { BindingHook, PluginContext } from "../../PluginContext.ts";
+import * as SharedStorage from "../../registry/SharedStorage.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
@@ -41,6 +42,7 @@ import {
   SERVICE_SECRETS_STORE_SECRET,
   SERVICE_SECRETS_STORE_STORAGE,
 } from "./SecretsStoreOptions.shared.ts";
+import { ensureSecretsStoreDirectory } from "./SecretsStorePersistence.ts";
 
 export class SecretsStore extends Plugin.Service<
   SecretsStore,
@@ -55,7 +57,7 @@ export class SecretsStore extends Plugin.Service<
      */
     readonly register: (
       props: SecretsStoreSecretServiceProps,
-    ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
+    ) => Effect.Effect<WorkerdConfig.ServiceDesignator, never, PluginContext>;
     /**
      * Resolve a designator addressing a store directly as a raw KV
      * namespace — the admin/seeding surface (`admin`) that deploy-time
@@ -63,7 +65,7 @@ export class SecretsStore extends Plugin.Service<
      */
     readonly registerStore: (
       props: SecretsStoreStoreServiceProps,
-    ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
+    ) => Effect.Effect<WorkerdConfig.ServiceDesignator, never, PluginContext>;
   }
 >()("cloudflare-runtime/plugin/SecretsStore") {}
 
@@ -85,17 +87,10 @@ export const SecretsStoreLive = Layer.effect(
           hint: "Configure a disk-backed storage layer (`Storage.layerDisk` or `Storage.layerTemp`).",
         });
       }
-      const persistPath = path.join(storageDiskPath, "secrets-store");
-      yield* fs.makeDirectory(persistPath, { recursive: true }).pipe(
-        Effect.mapError((cause) =>
-          ConfigError.make({
-            subtag: "SecretsStore",
-            message: `Failed to create Secrets Store persistence directory "${persistPath}": ${cause.message}`,
-            hint: "Ensure the storage directory is writable.",
-            detail: { persistPath },
-            cause,
-          }),
-        ),
+      const persistPath = yield* ensureSecretsStoreDirectory(
+        path.join(storageDiskPath, "secrets-store"),
+      ).pipe(
+        Effect.provide([Layer.succeed(FileSystem.FileSystem, fs), Layer.succeed(Path.Path, path)]),
       );
       return {
         name: SERVICE_SECRETS_STORE_STORAGE,
@@ -106,31 +101,44 @@ export const SecretsStoreLive = Layer.effect(
     return SecretsStore.of(
       Effect.sync(() => {
         let used = false;
+        // The store the local secret service reads, reached through the
+        // storage owner (see `SharedStorage`). Routed while binding hooks
+        // run, since `defer` is too late to subscribe to the registry proxy.
+        let storeService: WorkerdConfig.ServiceDesignator = { name: SERVICE_SECRETS_STORE };
 
         return {
           api: {
             register: (props: SecretsStoreSecretServiceProps) =>
-              Effect.sync(() => {
-                used = true;
-                return {
-                  name: SERVICE_SECRETS_STORE_SECRET,
-                  entrypoint: SECRETS_STORE_SECRET_ENTRYPOINT,
-                  props: { json: JSON.stringify(props) },
-                };
-              }),
+              SharedStorage.route({ name: SERVICE_SECRETS_STORE }).pipe(
+                Effect.map((service) => {
+                  used = true;
+                  storeService = service;
+                  return {
+                    name: SERVICE_SECRETS_STORE_SECRET,
+                    entrypoint: SECRETS_STORE_SECRET_ENTRYPOINT,
+                    props: { json: JSON.stringify(props) },
+                  };
+                }),
+              ),
             registerStore: (props: SecretsStoreStoreServiceProps) =>
-              Effect.sync(() => {
-                used = true;
-                return {
-                  name: SERVICE_SECRETS_STORE,
-                  props: { json: JSON.stringify(props) },
-                };
-              }),
+              SharedStorage.route({
+                name: SERVICE_SECRETS_STORE,
+                props: { json: JSON.stringify(props) },
+              }).pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => {
+                    used = true;
+                  }),
+                ),
+              ),
           },
           defer: Effect.gen(function* () {
-            if (!used) return {};
+            // A candidate storage owner hosts the store even unbound, so it
+            // can serve other runtimes' secrets (see `SharedStorage`).
+            const hosting = yield* SharedStorage.hosting;
+            if (!used && !hosting) return {};
             const storageService = yield* makeStorageService;
-            const storeService: WorkerdConfig.Service = {
+            const storeSimulator: WorkerdConfig.Service = {
               name: SERVICE_SECRETS_STORE,
               worker: {
                 compatibilityDate: DEFAULT_COMPATIBILITY_DATE,
@@ -180,12 +188,12 @@ export const SecretsStoreLive = Layer.effect(
                 bindings: [
                   {
                     name: BINDING_SECRETS_STORE_STORE,
-                    service: { name: SERVICE_SECRETS_STORE },
+                    service: storeService,
                   },
                 ],
               },
             };
-            return { services: [storageService, storeService, secretService] };
+            return { services: [storageService, storeSimulator, secretService] };
           }),
         };
       }),

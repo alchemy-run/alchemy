@@ -51,8 +51,8 @@ const uploadSource = Effect.fn(function* () {
     },
   ]);
   const uploaded = yield* cloudfunctions.generateUploadUrlProjectsLocationsFunctions({
+    environment: "GEN_2",
     parent: `projects/${project}/locations/${LOCATION}`,
-    body: { environment: "GEN_2" },
   });
   if (uploaded.uploadUrl === undefined) {
     return yield* Effect.die(new Error("generateUploadUrl did not return uploadUrl"));
@@ -110,7 +110,7 @@ test.provider.skipIf(!runLifecycle)(
             description: "test http function",
             labels: { env: "test" },
             buildConfig: {
-              runtime: "nodejs20",
+              runtime: "nodejs26",
               entryPoint: "helloHttp",
               source: { storageSource },
             },
@@ -135,7 +135,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.environment).toEqual("GEN_2");
       expect(created.description).toEqual("test http function");
       expect(created.labels).toMatchObject({ env: "test" });
-      expect(created.runtime).toEqual("nodejs20");
+      expect(created.runtime).toEqual("nodejs26");
       expect(created.entryPoint).toEqual("helloHttp");
       expect(created.state).toEqual("ACTIVE");
 
@@ -145,7 +145,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.description).toEqual("test http function");
-      expect(fetched.buildConfig?.runtime).toEqual("nodejs20");
+      expect(fetched.buildConfig?.runtime).toEqual("nodejs26");
       expect(fetched.serviceConfig?.timeoutSeconds).toEqual(60);
 
       const downloaded = yield* cloudfunctions.generateDownloadUrlProjectsLocationsFunctions({

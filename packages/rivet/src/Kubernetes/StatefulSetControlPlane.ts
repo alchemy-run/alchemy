@@ -16,11 +16,12 @@ import {
 } from "../internal/ObjectStorage.ts";
 import { stackDnsLabel } from "../internal/PoolHost.ts";
 import { Namespace } from "../Namespace.ts";
+import { Network } from "./Network.ts";
 
 export { ObjectStorageRequired, type ObjectStorage } from "../internal/ObjectStorage.ts";
 
 /** The engine release `RivetKubernetes.StatefulSetControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
 
 const DATA_PATH = "/var/lib/rivet";
 const API_PORT = 6420;
@@ -36,12 +37,13 @@ export type ControlPlaneExposure =
   | {
       /**
        * A fixed node port, reached at `endpoint` (e.g. a kind cluster's
-       * port mapping, `http://localhost:16450`). Callers inside the cluster
-       * use the cluster-internal address.
+       * port mapping, `http://localhost:16450`, or an Effect reading the
+       * port from the cluster). Callers inside the cluster use the
+       * cluster-internal address.
        */
       readonly type: "NodePort";
       readonly nodePort: number;
-      readonly endpoint: string;
+      readonly endpoint: Input<string> | Effect.Effect<Input<string>, never, any>;
     }
   | {
       /** A cluster-internal Service, reached at `endpoint` through your own ingress. */
@@ -88,7 +90,7 @@ export interface StatefulSetControlPlaneProps {
   expose?: ControlPlaneExposure;
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0"
+   * @default "rivetdev/engine:3.1.1"
    */
   image?: string;
   /**
@@ -103,18 +105,42 @@ export class LoadBalancerNotReady extends Data.TaggedError("RivetKubernetes.Load
   readonly message: string;
 }> {}
 
-/** The engine environment for the chosen object storage. */
-const storageEnvironment = (storage: ObjectStorage | undefined) =>
-  storage === undefined
-    ? Effect.succeed([
+/** Object storage settings that are credentials, kept in a Secret. */
+const SECRET_SETTINGS = /__(SECRET_ACCESS_KEY|SERVICE_ACCOUNT_KEY)$/;
+
+/**
+ * The engine environment for the chosen object storage. A credential (an
+ * access key, a service account key) is kept in the control plane's Secret
+ * under `secrets`, and the engine reads it through `secretKeyRef`.
+ */
+const storageEnvironment = Effect.fn(function* (
+  storage: ObjectStorage | undefined,
+  secretName: string,
+) {
+  if (storage === undefined) {
+    return {
+      env: [
         {
           name: "RIVET__OBJECT_STORAGE__PRIMARY__FILE_SYSTEM__PATH",
           value: `${DATA_PATH}/objects` as unknown,
         },
-      ])
-    : objectStorageEnvironment(storage).pipe(
-        Effect.map((entries) => entries.map(([name, value]) => ({ name, value }))),
-      );
+      ],
+      secrets: {} as Record<string, unknown>,
+    };
+  }
+  const entries = yield* objectStorageEnvironment(storage);
+  const secrets: Record<string, unknown> = {};
+  const env = entries.map(([name, value]) => {
+    if (!SECRET_SETTINGS.test(name)) return { name, value };
+    const key = name
+      .slice(name.lastIndexOf("__") + 2)
+      .toLowerCase()
+      .replaceAll("_", "-");
+    secrets[key] = value;
+    return { name, valueFrom: { secretKeyRef: { name: secretName, key } } as unknown };
+  });
+  return { env, secrets };
+});
 
 /**
  * A Rivet control plane on Kubernetes, as a `Rivet.Cluster` Layer: a
@@ -146,6 +172,28 @@ const storageEnvironment = (storage: ObjectStorage | undefined) =>
  * });
  * ```
  *
+ * **Example:** On the host port kind picked for the node port
+ * ```typescript
+ * export const Kind = Kubernetes.LocalCluster("Kind", {
+ *   nodes: [{ role: "control-plane", extraPortMappings: [{ containerPort: 30642, hostPort: 0 }] }],
+ * });
+ * export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", {
+ *   cluster: Kind,
+ *   expose: {
+ *     type: "NodePort",
+ *     nodePort: 30642,
+ *     endpoint: Effect.map(Kind, (kind) =>
+ *       kind.ports.pipe(
+ *         Output.map((ports) => {
+ *           const port = ports.find((p) => p.containerPort === 30642);
+ *           return `http://localhost:${port?.hostPort}`;
+ *         }),
+ *       ),
+ *     ),
+ *   },
+ * });
+ * ```
+ *
  * @primitive
  */
 export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPlaneProps) =>
@@ -165,7 +213,6 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
           }),
         );
       }
-      const storageEnv = yield* storageEnvironment(props.objectStorage);
       const cluster = Effect.isEffect(props.cluster) ? yield* props.cluster : props.cluster;
       const k8sNamespace = props.namespace ?? "default";
       const name = props.name ?? (yield* stackDnsLabel(id, 40));
@@ -173,14 +220,18 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
       const expose = props.expose ?? { type: "LoadBalancer" as const };
 
       const token = yield* adminToken(id);
+      const secretName = `${name}-token`;
+      // The admin token and any secret object storage setting, never in the
+      // StatefulSet's pod template.
+      const storage = yield* storageEnvironment(props.objectStorage, secretName);
       const secret = yield* Kubernetes.Manifest(`${id}TokenSecret`, {
         cluster,
         manifest: {
           apiVersion: "v1",
           kind: "Secret",
-          metadata: { name: `${name}-token`, namespace: k8sNamespace, labels },
+          metadata: { name: secretName, namespace: k8sNamespace, labels },
           type: "Opaque",
-          stringData: { token: token.text },
+          stringData: { token: token.text, ...storage.secrets },
         },
       });
       const peers = yield* Kubernetes.Manifest(`${id}PeerService`, {
@@ -227,12 +278,14 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
                         valueFrom: { secretKeyRef: { name: secret.name, key: "token" } },
                       },
                       { name: "RIVET__STORAGE__LOG_DIRECTORY", value: DATA_PATH },
+                      // Engine 3.1 places its storage partitions only when asked to.
+                      { name: "RIVET__STORAGE__AUTO_PROVISION_PARTITIONS", value: "true" },
                       {
                         name: "RIVET__API_PEER__ADVERTISE_ADDRESS",
                         value: `$(POD_IP):${PEER_PORT}`,
                       },
                       { name: "RIVET__TELEMETRY__ENABLED", value: "false" },
-                      ...storageEnv,
+                      ...storage.env,
                     ],
                     volumeMounts: [{ name: "data", mountPath: DATA_PATH }],
                     readinessProbe: {
@@ -287,14 +340,20 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
       });
 
       const internal = `http://${name}.${k8sNamespace}.svc.cluster.local:${API_PORT}`;
-      const external: Output.Output<string> =
+      const endpoint =
         expose.type === "LoadBalancer"
+          ? undefined
+          : !Output.isOutput(expose.endpoint) && Effect.isEffect(expose.endpoint)
+            ? yield* expose.endpoint
+            : expose.endpoint;
+      const external: Output.Output<string> =
+        endpoint === undefined
           ? Output.all(api.connection, api.ref).pipe(
               Output.mapEffect(([connection, ref]) => loadBalancerEndpoint(connection, ref)),
             )
-          : Output.isOutput(expose.endpoint)
-            ? (expose.endpoint as Output.Output<string>)
-            : Output.literal(expose.endpoint as string);
+          : Output.isOutput(endpoint)
+            ? (endpoint as Output.Output<string>)
+            : Output.literal(endpoint as string);
 
       const namespace = yield* Namespace(`${id}Namespace`, {
         // Created through the API the engines serve, once they are declared.
@@ -307,7 +366,7 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
         // A node port's endpoint is the deploying machine's (a local cluster's
         // port mapping); callers in the cluster use the Service.
         clientEndpoint: expose.type === "NodePort" ? internal : external,
-        network: { kind: "kubernetes", cluster, namespace: k8sNamespace },
+        network: Network({ cluster, namespace: k8sNamespace }),
         token: token.text,
         namespace: namespace.name,
       };

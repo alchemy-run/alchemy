@@ -314,16 +314,14 @@ export const LbRouteExtensionProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsLbRouteExtensions({
+            labels: desiredLabels,
+            description: news.description,
+            forwardingRules: desiredRules,
+            extensionChains: desiredChains,
+            loadBalancingScheme,
+            metadata: news.metadata,
             parent: parentOf(env.project, location),
             lbRouteExtensionId,
-            body: {
-              labels: desiredLabels,
-              description: news.description,
-              forwardingRules: desiredRules,
-              extensionChains: desiredChains,
-              loadBalancingScheme,
-              metadata: news.metadata,
-            },
           })
           .pipe(
             Effect.retry({
@@ -357,17 +355,14 @@ export const LbRouteExtensionProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsLbRouteExtensions({
+          labels: desiredLabels,
+          description: news.description,
+          forwardingRules: desiredRules,
+          extensionChains: desiredChains,
+          loadBalancingScheme,
+          metadata: news.metadata,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            forwardingRules: desiredRules,
-            extensionChains: desiredChains,
-            loadBalancingScheme,
-            metadata: news.metadata,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

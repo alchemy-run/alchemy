@@ -326,8 +326,8 @@ export const SessionTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* dataproc
           .createProjectsLocationsSessionTemplates({
+            ...desired,
             parent: locationParent(env.project, location),
-            body: desired,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -343,11 +343,8 @@ export const SessionTemplateProvider = () =>
 
       if (labelsChanged || templateChanged(current, desired)) {
         current = yield* dataproc.patchProjectsLocationsSessionTemplates({
+          ...desired,
           name: current.name ?? name,
-          body: {
-            ...desired,
-            name: current.name ?? name,
-          },
         });
       }
 

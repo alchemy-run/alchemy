@@ -85,14 +85,12 @@ test.provider.skipIf(entitled)(
 
       const error = yield* Effect.flip(
         workloadmanager.createProjectsLocationsEvaluations({
+          evaluationType: "SAP",
+          ruleNames: ["sap-hana"],
+          resourceFilter: { scopes: [`projects/${project}`] },
+          description: "alchemy-probe",
           parent,
           evaluationId: "alchemy-evaluation-probe",
-          body: {
-            evaluationType: "SAP",
-            ruleNames: ["sap-hana"],
-            resourceFilter: { scopes: [`projects/${project}`] },
-            description: "alchemy-probe",
-          },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

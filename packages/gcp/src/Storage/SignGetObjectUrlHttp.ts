@@ -148,10 +148,8 @@ export const SignGetObjectUrlHttp = Layer.effect(
           yield* Effect.sync(() => sha256Hex(canonicalRequest)),
         ].join("\n");
         const signed = yield* signBlob({
+          payload: yield* Effect.sync(() => Buffer.from(stringToSign, "utf8").toString("base64")),
           name: `projects/-/serviceAccounts/${email}`,
-          body: {
-            payload: yield* Effect.sync(() => Buffer.from(stringToSign, "utf8").toString("base64")),
-          },
         });
         if (signed.signedBlob === undefined) {
           return yield* new SignedUrlFailed({

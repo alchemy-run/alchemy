@@ -36,9 +36,8 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 
 /** Take money out of an account, within the balance and the daily limit. */
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,                       // the id schema of its aggregate, exactly
   middleware: [Session, MfaChallenge],     // authenticate; provide context to decide
-  input: { amount: Cents },
+  input: { accountId: AccountId, amount: Cents },  // includes the id of the instance it is for
   events: [MoneyWithdrawn],                // every event it may record
   rejects: [NotOpen, DailyLimitExceeded],  // every way it can be refused
   reply: { balance: Cents },               // optional typed reply
@@ -67,6 +66,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: AccountState,                    // a Schema, usually a TaggedStruct union
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, DepositMoney, WithdrawMoney],  // events derive from the commands
+  keyOf: (cmd) => cmd.accountId,
   decide: {
     OpenAccount: (account, cmd) =>
       account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
@@ -98,6 +98,8 @@ An aggregate's state is never read by clients directly: a view projects what the
 
 `Aggregate.ref(id)` builds a reference for stories and views.
 
+To move history in from another system, `accounts.import(id, events, { commandId })` appends already-decided events without `decide` (pass `{ event, at }` to keep an event's original commit time; times must go forward from the instance's latest event and not pass the clock, else `ImportOutOfOrder`): views and projections apply them, policies and sagas never react. A retry with the same `commandId` returns the first receipt; it fails with `UnexpectedVersion` unless the instance is at `expectedVersion` (default `0`, so import in batches by passing the previous receipt's `version`). Wait with `Projection.caughtUp(receipt)`.
+
 More: [Aggregate](https://alchemy.run/domain/aggregate).
 
 ### Patterns for decide, evolve and reply
@@ -105,12 +107,66 @@ More: [Aggregate](https://alchemy.run/domain/aggregate).
 - **decide answers one of three ways.** Events when the command changes something; `[]` when the state already is what it asks for (freezing a frozen account); a declared rejection when it can't be done.
 - **Name shared rules as pure guards** that return the narrowed state or the rejection (`openFor`), and start each handler from one. In an `Effect.fn` handler, fail with `return yield* o`.
 - **Events carry the outcome**, not just the request (`balanceAfter`), so `evolve` copies it and never repeats a rule. Views and policies see the same numbers.
-- **decide reads time from `now`** (its third argument) and the actor from middleware context. Never `Date.now()`, `Clock` or randomness.
+- **decide reads time from `now`** (its third argument) and the actor from middleware context. In an effectful `decide`, `DateTime.now` and `Clock.currentTimeMillis` give that same time. Never `Date.now()` or randomness.
 - **evolve and reply are total and never fail.** decide already refused the command, so a handler keeps any state its event can't follow: `s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`. An event that changes the stage returns the new state whole.
-- **Optics are an opt-in shorthand** for many handlers that repeat the same check. `const balance = Optic.id<State>().tag("Open").key("balance")` focuses on the Open state; `Optic.replace(s, balance, e.balanceAfter)` sets one field and `open.modify((o) => ({ ...o, ... }))(s)` several, leaving other states unchanged. The example bank uses them.
+- **Use optics (`effect/Optic`) once an `evolve` nests or repeats a check**, in aggregates and views alike. Never spread three levels deep. `Optic.id<State>().tag("Open").key("balance")` focuses on a field of one state; `.key("issues").at(id)` on a record entry, and does nothing when it is missing; `.key("issues").optionalKey(id)` on one that may be added. `Optic.replace(s, balance, e.balanceAfter)` sets a field, `issue(id).key("replies").modify((n) => n + 1)(s)` changes one, and `pipe(s, a.modify(...), b.modify(...))` makes several changes. An optic that does not match leaves the state as it is, which keeps `evolve` total. The example bank's `Account` and the issue board's `IssueList` view use them.
 - **A compensation never refuses.** A command that undoes another process's step (`RefundTransfer`) records a fact for every state (`TransferRefunded`, or `RefundStranded` when the account closed), so the saga that sent it has no refusal to handle.
 
 More: [Aggregate: Focus on a state with optics](https://alchemy.run/domain/aggregate#focus-on-a-state-with-optics), [Aggregate: Never refuse a compensation](https://alchemy.run/domain/aggregate#never-refuse-a-compensation).
+
+## Decision
+
+A command that involves several aggregate instances names each in its input. A decision implements it. It reads the instances, decides against all their states, and records events on them; all commit, or none.
+
+```ts
+// Customer/RegisterCustomer.command.ts
+export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
+  input: { customerId: CustomerId, name: Schema.String, username: Username },
+  events: [CustomerRegistered, UsernameClaimed],
+  rejects: [AlreadyRegistered, UsernameTaken],
+}) {}
+
+// Customer/UsernameClaim.aggregate.ts: only folds what decisions record on it
+export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
+  id: Username,
+  state: Schema.Union([
+    Schema.TaggedStruct("Free", {}),
+    Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
+  ]),
+  initial: { _tag: "Free" },
+  events: [UsernameClaimed],              // no `commands`, no `decide`
+  evolve: { UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }) },
+}) {}
+
+// Customer/Registration.decision.ts
+export class Registration extends Domain.Decision(RegisterCustomer, {
+  reads: { customer: Customer, claim: UsernameClaim },
+  keyOf: (cmd) => ({ customer: cmd.customerId, claim: cmd.username }),
+  decide: ({ customer, claim }, cmd) =>
+    customer.state._tag === "Registered"
+      ? new AlreadyRegistered()
+      : claim.state._tag === "Claimed"
+        ? new UsernameTaken()
+        : [
+            customer.record(new CustomerRegistered({ name: cmd.name, username: cmd.username })),
+            claim.record(new UsernameClaimed({ customerId: customer.id })),
+          ],
+}) {}
+
+const registration = yield* Registration;
+yield* registration.send(new RegisterCustomer({ customerId, name: "Sam", username }));
+```
+
+- **`reads` is static, `keyOf` depends only on the command.** `reads` maps a key to an aggregate; `keyOf` gives each key an id, or an array of ids for several instances. Each instance arrives in `decide` under its key, with `id`, `state`, `version` and `record`. Reading an aggregate the model leaves out is a type error.
+- **`record` puts an event on one instance**, which folds it with its own `evolve`. An aggregate lists such events in `events`. Views and policies see them like any other.
+- **`decide` follows an aggregate's rules:** events, `[]`, or a declared rejection; pure, or an `Effect.fn` that reads only middleware context. A command with a `reply` needs the decision's `reply`, from each instance's state after the events.
+- **List it in the model's `decisions`.** Every command has one implementation, an aggregate or a decision; a second is a type error.
+- **The receipt has `commits`**, one `{ stream, version }` per instance read: pass one as a view's `atLeast`.
+- **Send it like any command:** `bank.RegisterCustomer({ customerId, name, username })` from an Api client, `Story.when(command)` in a story.
+- **State what it must keep in `transitions`:** `({ before, after, command, events }) => boolean`, with each state under its key in `reads`. Verification proves them, and that the decision keeps each aggregate's own rules.
+- **Use a saga instead** when the process waits, takes time, or calls an external system.
+
+More: [Decision](https://alchemy.run/domain/decision), [Decision: How it commits](https://alchemy.run/domain/decision#how-it-commits), [Decision: Say what it must keep](https://alchemy.run/domain/decision#say-what-it-must-keep), [Unique values](https://alchemy.run/domain/unique-values).
 
 ## Request context and middleware
 
@@ -201,14 +257,14 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
     const accounts = yield* Account;   // resolve clients once
     return Effect.fn(function* ({ source, event }) {
       yield* accounts
-        .send(mainAccountId(source.id), new OpenAccount({ customerId: source.id, owner: event.name }))
+        .send(new OpenAccount({ accountId: mainAccountId(source.id), customerId: source.id, owner: event.name }))
         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));   // handle every rejection
     });
   }),
 );
 ```
 
-The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled. `schedule` returns a `ScheduleReceipt` (`{ commandId, at }`). To cancel one that no longer applies, call `transfers.unschedule(ref, commandId)` with a known `commandId` or the receipt's. Scheduling again under the same `commandId` replaces that command, pending or already run, so a deadline can be armed again; a policy that runs again for the same event arms nothing new. `unschedule` fails with `AlreadyExecuted` (it ran), `AlreadyCancelled` (cancelled before) or `NotScheduled` (never scheduled). A policy catches the ones it expects with `Effect.catchTag([...], ...)`, since a redelivery finds its expiry already cancelled. A policy cancels after the event is recorded, so the command can still fire first: keep the guard in `decide`.
+The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(new ExpireTransfer({ transferId: ref.id }), { after: "24 hours" })`. Only commands that never reject can be scheduled. `schedule` returns a `ScheduleReceipt` (`{ commandId, at }`). To cancel one that no longer applies, call `transfers.unschedule(ref, commandId)` with a known `commandId` or the receipt's. Scheduling again under the same `commandId` replaces that command, pending or already run, so a deadline can be armed again; a policy that runs again for the same event arms nothing new. `unschedule` fails with `AlreadyExecuted` (it ran), `AlreadyCancelled` (cancelled before) or `NotScheduled` (never scheduled). A policy catches the ones it expects with `Effect.catchTag([...], ...)`, since a redelivery finds its expiry already cancelled. A policy cancels after the event is recorded, so the command can still fire first: keep the guard in `decide`.
 
 More: [Policy](https://alchemy.run/domain/policy).
 
@@ -216,7 +272,7 @@ More: [Policy](https://alchemy.run/domain/policy).
 
 ```ts
 // Transfer/ExecuteTransfer.saga.ts
-export const Decision = DurableDeferred.make("decision", { success: Schema.Literals(["approved", "expired"]) });
+export const Approval = DurableDeferred.make("approval", { success: Schema.Literals(["approved", "expired"]) });
 
 export class ExecuteTransfer extends Domain.Saga("ExecuteTransfer", {
   key: TransferId,
@@ -229,18 +285,18 @@ export const ExecuteTransferLive = ExecuteTransfer.toLayer(
     const accounts = yield* Account;
     const transfers = yield* Transfer;
     return Effect.fn(function* ({ key, from, to, amount, requestedBy, needsApproval }) {
-      if (needsApproval && (yield* DurableDeferred.await(Decision)) === "expired") return;
+      if (needsApproval && (yield* DurableDeferred.await(Approval)) === "expired") return;
       yield* Activity.make({
         name: "debit",
         error: Schema.Union([NotOpen, InsufficientFunds]),
-        execute: accounts.send(from, new DebitTransfer({ transferId: key, amount, requestedBy })),
+        execute: accounts.send(new DebitTransfer({ accountId: from, transferId: key, amount, requestedBy })),
       }).pipe(
         ExecuteTransfer.withCompensation(() =>
-          Activity.make({ name: "refund", execute: accounts.send(from, new RefundTransfer({ transferId: key, amount })) }),
+          Activity.make({ name: "refund", execute: accounts.send(new RefundTransfer({ accountId: from, transferId: key, amount })) }),
         ),
       );
       yield* Activity.make({ name: "credit", error: DestinationClosed, execute: /* ... */ });
-      yield* Activity.make({ name: "complete", execute: transfers.send(key, new CompleteTransfer()) });
+      yield* Activity.make({ name: "complete", execute: transfers.send(new CompleteTransfer({ transferId: key })) });
     });
   }),
 );
@@ -251,7 +307,7 @@ Start and signal it from a policy, keyed by the aggregate:
 ```ts
 const executions = yield* ExecuteTransfer;
 yield* executions.start(source, { from, to, amount, requestedBy, needsApproval });  // returns a run handle at once
-yield* executions.get(source).signal(Decision, "approved");
+yield* executions.get(source).signal(Approval, "approved");
 // run handle: executionId, status, result, signal(deferred, value), interrupt
 ```
 
@@ -261,6 +317,108 @@ Rules:
 - `DurableClock.sleep` waits durably.
 
 More: [Saga](https://alchemy.run/domain/saga).
+
+## Rewrite
+
+Changes events an instance has already recorded: for removing personal data, or what should never have been stored. Each handler keeps (returns the event), replaces (returns another event) or removes (returns `null`) one kind of event. `delete: true` removes the whole instance.
+
+```ts
+// Account/ForgetOwner.rewrite.ts
+export class ForgetOwner extends Domain.Rewrite("ForgetOwner", {
+  of: Account,
+  input: { customerId: CustomerId },
+  events: {
+    AccountOpened: (event, { customerId }) =>
+      event.customerId === customerId ? new AccountOpened({ ...event, owner: "" }) : event,
+  },
+}) {}
+
+// Customer/DeleteCustomer.rewrite.ts
+export class DeleteCustomer extends Domain.Rewrite("DeleteCustomer", { of: Customer, delete: true }) {}
+
+// anywhere the aggregate's client is available
+const receipt = yield* accounts.rewrite(accountId, new ForgetOwner({ customerId }));
+yield* accounts.rewritten(receipt); // every view, projection and stream has caught up
+```
+
+- List it in the model's `rewrites`.
+- Handlers are pure. Sequence numbers never change: a removed event leaves a gap.
+- It fails with `InvariantBroken`, changing nothing, when the rewritten state breaks an invariant.
+- Views fold again by themselves. Every projection a rewrite reaches needs a `rewrite` handler, or the model won't build.
+- Policies and sagas are not told.
+- Run several rewrites as one process in a saga: one `Activity` per rewrite, each ending with `rewritten`.
+
+More: [Rewrite](https://alchemy.run/domain/rewrite), [Erasing personal data](https://alchemy.run/domain/erasing-personal-data).
+
+## Sealed fields and the Vault
+
+Seal personal data under a key kept per subject, and erase it everywhere by deleting the key: backups, archives and exported copies included.
+
+```ts
+// Customer/Address.ts
+export const Address = Domain.Sealed(Schema.String);
+
+// Customer/SetAddress.command.ts
+export class AddressSet extends Domain.Event("AddressSet", { address: Address }) {}
+export class SetAddress extends Domain.Command("SetAddress", {
+  input: { customerId: CustomerId, address: Address },
+  events: [AddressSet],
+  rejects: [NotYourAddress],
+}) {}
+
+// a client: the model seals the value when the command arrives
+yield* bank.SetAddress({ customerId, address: Address.plain(customerId, "1 Main St") });
+
+// a query, policy or saga step: open it, or shred the subject's key
+const vault = yield* Domain.Vault;
+const address = yield* vault.open(Address, contact.address); // Option; None once shredded
+yield* vault.shred(customerId);
+```
+
+- `decide`, `evolve` and views see `{ subject, box }`, never the value. In `decide`, reject a value whose `subject` is not the instance's own.
+- Keep ids, unique values and anything a rule compares plain; remove those with a rewrite.
+- Provide `Domain.VaultLive` where the model's Layer is built, over a `Domain.KeyStore` (where each subject's key is kept) and a `Domain.KeyWrap` (what is stored of it).
+- Stores: `Domain.HostKeyStore` (the model's own host), `DomainCloudflare.D1KeyStore`, `DomainAWS.DynamoKeyStore`, `DomainGCP.FirestoreKeyStore`, `SqlKeyStore`, `Domain.MemoryKeyStore`.
+- Wraps: `DomainCloudflare.SecretKeyWrap`, `DomainAWS.KmsKeyWrap`, `DomainGCP.KmsKeyWrap`, `Domain.RootKeyWrap`, `Domain.NoKeyWrap`. Any store pairs with any wrap.
+- A KMS wrap calls KMS on every seal and open. `KmsKeyWrap(RootKey, { intermediateKey: { keep: "5 minutes" } })` calls it once per process instead; it puts an intermediate key in memory and drops per-subject KMS logs. Shredding is unchanged.
+- A restored backup of the key store brings shredded keys back: keep its backups off or expiring.
+- Stories run with a test Vault: expect values with `Domain.sealedInTest(Address, subject, value)`, shred with `Story.shred(subject)`.
+
+More: [Sealed Value](https://alchemy.run/domain/sealed-value), [Crypto-shredding](https://alchemy.run/domain/crypto-shredding), [Choose where the keys are kept](https://alchemy.run/domain/crypto-shredding#choose-where-the-keys-are-kept), [Call KMS less often](https://alchemy.run/domain/crypto-shredding#call-kms-less-often), [Erasing personal data: Or seal it under a key you can delete](https://alchemy.run/domain/erasing-personal-data#or-seal-it-under-a-key-you-can-delete).
+
+## Compaction
+
+Replaces an instance's history with a roll-up of its state, so its log stops growing. The declaration says what the roll-up is. Its Layer says where the replaced events go and when an instance compacts.
+
+```ts
+// Account/BringForward.compaction.ts
+export class BringForward extends Domain.Compaction("BringForward", {
+  of: Account,
+  rollup: (account) => [new AccountBroughtForward({ state: account })],
+}) {}
+
+// Account/BringForward.live.ts
+export const BringForwardLive = BringForward.toLayer(
+  Effect.gen(function* () {
+    const archive = yield* Cloudflare.R2.WriteBucket(Archive);
+    return Effect.fn(function* ({ stream, events }) {
+      const first = events[0]!.envelope.seq;
+      const last = events[events.length - 1]!.envelope.seq;
+      yield* archive.put(`${stream}/${first}-${last}.json`, JSON.stringify(events)).pipe(Effect.orDie);
+    });
+  }).pipe(Effect.provide(Cloudflare.R2.WriteBucketBinding)),
+  { after: { events: 1_000 } },
+);
+```
+
+- The roll-up is ordinary events of the aggregate: `evolve` handles them, and so does every view that reads the aggregate.
+- A view's roll-up handler says what the replaced events amount to (a total adds `e.state.balance`). A view key that already holds those events never folds the roll-up; only one added or rebuilt later does.
+- Folding the roll-up from `initial` must give the state back, or it is refused with `CompactionLossy`.
+- List it in the model's `compactions`, and its Layer in the model's handlers.
+- `after: { events }` makes each instance compact by itself after its own commits. Without it, call `accounts.compact(id, BringForward)`.
+- Views and projections keep what they built. A later rewrite still reaches the copies views kept.
+
+More: [Compaction](https://alchemy.run/domain/compaction), [Compaction: Teach the views the roll-up](https://alchemy.run/domain/compaction#teach-the-views-the-roll-up).
 
 ## External system
 
@@ -311,7 +469,9 @@ export const LedgerLive = Ledger.toLayer(
 
 The server provides `LedgerStore` with D1; a story provides it with memory.
 
-More: [Projection](https://alchemy.run/domain/projection).
+A projection given events a `Domain.Rewrite` changes returns `{ write, rewrite }` instead of the handler alone. `rewrite` gets each such event as it was (`before`) and as it is now (`after`, `undefined` when removed).
+
+More: [Projection](https://alchemy.run/domain/projection), [Projection: Follow a rewrite](https://alchemy.run/domain/projection#follow-a-rewrite).
 
 ## Stream
 
@@ -333,7 +493,9 @@ export const AccountCardLive = AccountCard.toLayer(
 
 A projection with `writes: [AccountCard]` appends entries with `yield* cards.append(input, new CardChanged({...}))`. Clients `peek`, `watch`, `list` and read `events`.
 
-More: [Stream](https://alchemy.run/domain/stream).
+In the writer's `rewrite` handler, `cards.rewrite(input, ...entries)` replaces what was appended for that input; with no entries it removes them.
+
+More: [Stream](https://alchemy.run/domain/stream), [Stream: Rewrite what was appended](https://alchemy.run/domain/stream#rewrite-what-was-appended).
 
 ## Query
 
@@ -383,7 +545,7 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
 // A kind left out is served whole; `[]` serves none. An aggregate's state is never served.
 ```
 
-Clients call commands and queries as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
+Clients call commands and queries as methods (`bank.WithdrawMoney({ accountId, amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
 
 Give every declaration a `{ description }` as its last argument, written for the person or agent who calls it; `toMcp` tools, `toCli` help and the `toHttpApi` OpenAPI document show it. Add your own keys by augmenting `Domain.Annotations` (`declare module "@alchemy.run/domain"`), and read them as `X.annotations`.
 
@@ -397,17 +559,19 @@ An Api is the domain's interface for its own clients. For a public or partner AP
 // Bank.model.ts
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Customer, UsernameClaim, Account, Transfer],
+  decisions: [Registration],
   views: [AccountSummary, Statement, CustomerDashboard],
-  policies: [UsernameReservation, MainAccountProvisioning, TransferExecution],
+  policies: [MainAccountProvisioning, TransferExecution],
   projections: [Ledger, AccountCards],
   streams: [AccountCard],
-  sagas: [ExecuteTransfer],
+  sagas: [ExecuteTransfer, EraseCustomer],
   queries: [AccountLedger],
+  rewrites: [ForgetOwner, ReleaseUsername, DeleteCustomer],
 }) {}
 
 /** Every policy, saga, projection and query implementation, as one Layer. */
 export const BankHandlers = Layer.mergeAll(
-  UsernameReservationLive, MainAccountProvisioningLive, TransferExecutionLive,
+  MainAccountProvisioningLive, TransferExecutionLive,
   ExecuteTransferLive, LedgerLive, AccountCardsLive, AccountLedgerLive,
 );
 ```

@@ -675,16 +675,14 @@ export const HttpRouteProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsHttpRoutes({
+            labels: desiredLabels,
+            description: news.description,
+            hostnames: desiredHostnames,
+            rules: desiredRules,
+            meshes: desiredMeshes,
+            gateways: desiredGateways,
             parent: parentOf(env.project, location),
             httpRouteId,
-            body: {
-              labels: desiredLabels,
-              description: news.description,
-              hostnames: desiredHostnames,
-              rules: desiredRules,
-              meshes: desiredMeshes,
-              gateways: desiredGateways,
-            },
           })
           .pipe(
             Effect.retry({
@@ -720,17 +718,14 @@ export const HttpRouteProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsHttpRoutes({
+          labels: desiredLabels,
+          description: news.description,
+          hostnames: desiredHostnames,
+          rules: desiredRules,
+          meshes: desiredMeshes,
+          gateways: desiredGateways,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            hostnames: desiredHostnames,
-            rules: desiredRules,
-            meshes: desiredMeshes,
-            gateways: desiredGateways,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

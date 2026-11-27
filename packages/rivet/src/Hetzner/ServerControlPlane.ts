@@ -15,7 +15,7 @@ import { Namespace } from "../Namespace.ts";
 export { ObjectStorageRequired, type ObjectStorage } from "../internal/ObjectStorage.ts";
 
 /** The engine release `RivetHetzner.ServerControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
 
 /** Hetzner's Ubuntu image with Docker preinstalled. */
 const DOCKER_IMAGE = "docker-ce";
@@ -48,7 +48,7 @@ export interface ServerControlPlaneProps {
   diskSize?: number;
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0"
+   * @default "rivetdev/engine:3.1.1"
    */
   image?: string;
   /**
@@ -228,6 +228,7 @@ export const ServerControlPlane = (id: string, props: ServerControlPlaneProps = 
         Output.map(([text, ...values]) => [
           ["RIVET__AUTH__ADMIN_TOKEN", String(plain(text))] as const,
           ["RIVET__STORAGE__LOG_DIRECTORY", DATA_PATH] as const,
+          ["RIVET__STORAGE__AUTO_PROVISION_PARTITIONS", "true"] as const,
           ["RIVET__TELEMETRY__ENABLED", "false"] as const,
           ...storage.map(([name], i) => [name, String(plain(values[i]))] as const),
         ]),

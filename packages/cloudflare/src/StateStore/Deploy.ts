@@ -14,6 +14,7 @@ import * as Stream from "effect/Stream";
 import { waitForSecretActive } from "../SecretsStore/Secret.ts";
 import { getCompatibility } from "../Workers/Compatibility.ts";
 import { WorkerBundle } from "../Workers/Sources/Rolldown.ts";
+import type { WorkerObservability } from "../Workers/Worker.ts";
 import { contentTypeForModule, putWorkerScript } from "../Workers/WorkerProvider.ts";
 import { resolveZoneId } from "../Zone/lookup.ts";
 import { API_MAIN, STATE_STORE_VERSION } from "./Api.ts";
@@ -50,10 +51,12 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
   accountId,
   scriptName,
   domain,
+  observability = { enabled: true, logs: { enabled: true, invocationLogs: true } },
 }: {
   accountId: string;
   scriptName: string;
   domain: string | undefined;
+  observability?: WorkerObservability;
 }) {
   yield* Effect.annotateCurrentSpan({ "alchemy.state_store.script_name": scriptName });
   yield* validateStateStoreWorkerName(scriptName);
@@ -143,7 +146,7 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
           storage: yield* observedStoreStorage(accountId, scriptName),
         },
       },
-      observability: { enabled: true, logs: { enabled: true, invocationLogs: true } },
+      observability,
     },
     files: bundle.files.map(
       (file) =>

@@ -58,10 +58,9 @@ class OverLimit extends Domain.Rejection("OverLimit", { limit: Schema.Int }) {}
 class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 }) {}
 
 class Deposit extends Domain.Command("Deposit", {
-  target: WalletId,
   middleware: [Session],
   // `at` is a transform (an ISO string on the wire, a DateTime in `decide`).
-  input: { amount: Schema.Int, at: Schema.DateTimeUtc },
+  input: { walletId: WalletId, amount: Schema.Int, at: Schema.DateTimeUtc },
   events: [Deposited],
   rejects: [OverLimit],
   reply: { balance: Schema.Int, at: Schema.NullOr(Schema.DateTimeUtc) },
@@ -78,6 +77,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: WalletState,
   initial: { owner: null, balance: 0, at: null },
   commands: [Deposit],
+  keyOf: (command) => command.walletId,
   decide: {
     Deposit: Effect.fn(function* (_, cmd) {
       if (cmd.amount > 100) return yield* new OverLimit({ limit: 100 });
@@ -138,7 +138,7 @@ const ServerCredential = RpcMiddleware.layerClient(SignedSession, ({ request, ne
 
 class Signed extends Domain.Event("Signed", { owner: Schema.String }) {}
 class Sign extends Domain.Command("Sign", {
-  target: Schema.String,
+  input: { id: Schema.String },
   middleware: [SignedSession],
   events: [Signed],
   reply: { owner: Schema.NullOr(Schema.String) },
@@ -148,6 +148,7 @@ class Ledger extends Domain.Aggregate("Ledger", {
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
   initial: { owner: null },
   commands: [Sign],
+  keyOf: (command) => command.id,
   decide: {
     Sign: Effect.fn(function* () {
       return [new Signed({ owner: yield* Owner })];
@@ -293,11 +294,16 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const { status, body } = yield* send("POST", "/Deposit", {
         owner: "sam",
-        body: { target: "w-1", input: { amount: 40, at } },
+        body: { input: { walletId: "w-1", amount: 40, at } },
       });
       expect(status).toBe(200);
       // The transform is decoded once on the way in and encoded once on the way out.
-      expect(body).toEqual({ reply: { balance: 40, at }, stream: expect.any(String), version: 1 });
+      expect(body).toEqual({
+        reply: { balance: 40, at },
+        stream: expect.any(String),
+        version: 1,
+        commits: [{ stream: expect.any(String), version: 1 }],
+      });
     }).pipe(Effect.provide(Served)),
   );
 
@@ -307,11 +313,11 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
         // A defect in the command's handler, then in its middleware, then in a read's middleware.
         yield* execute("POST", "/Deposit", {
           owner: "sam",
-          body: { target: "w-defect", input: { amount: 13, at } },
+          body: { input: { walletId: "w-defect", amount: 13, at } },
         }),
         yield* execute("POST", "/Deposit", {
           owner: CRASH,
-          body: { target: "w-defect", input: { amount: 1, at } },
+          body: { input: { walletId: "w-defect", amount: 1, at } },
         }),
         yield* execute("GET", "/Balance/w-defect", { owner: CRASH }),
       ];
@@ -326,21 +332,21 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const over = yield* send("POST", "/Deposit", {
         owner: "sam",
-        body: { target: "w-1", input: { amount: 500, at } },
+        body: { input: { walletId: "w-1", amount: 500, at } },
       });
       // A declared rejection with no status of its own is a 422.
       expect(over).toEqual({ status: 422, body: { _tag: "OverLimit", limit: 100 } });
 
       // The middleware runs as for any client, and its error keeps its annotated status.
       const anonymous = yield* send("POST", "/Deposit", {
-        body: { target: "w-1", input: { amount: 1, at } },
+        body: { input: { walletId: "w-1", amount: 1, at } },
       });
       expect(anonymous).toEqual({ status: 401, body: { _tag: "Unauthenticated" } });
 
       // Input the command's schema refuses never reaches the model.
       const malformed = yield* send("POST", "/Deposit", {
         owner: "sam",
-        body: { target: "w-1", input: { amount: "lots", at } },
+        body: { input: { walletId: "w-1", amount: "lots", at } },
       });
       expect(malformed.status).toBe(400);
     }).pipe(Effect.provide(Served)),
@@ -385,7 +391,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
         const responses = [
           yield* execute("POST", "/Deposit", {
             owner: "sam",
-            body: { target: "w-cache", input: { amount: 1, at } },
+            body: { input: { walletId: "w-cache", amount: 1, at } },
           }),
           yield* execute("QUERY", "/Rates", { owner: "sam", body: { input: { base: "USD" } } }),
           yield* execute("QUERY", "/Rates", { owner: "sam", body: { input: { base: "XYZ" } } }),
@@ -418,7 +424,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const { body: receipt } = yield* send("POST", "/Deposit", {
         owner: "kim",
-        body: { target: "w-2", input: { amount: 25, at } },
+        body: { input: { walletId: "w-2", amount: 25, at } },
       });
       const read = yield* send(
         "GET",
@@ -445,7 +451,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       yield* send("POST", "/Deposit", {
         owner: "kim",
-        body: { target: "w-4", input: { amount: 7, at } },
+        body: { input: { walletId: "w-4", amount: 7, at } },
       });
       const snapshot = yield* send("GET", "/Balance/w-4/snapshot", { owner: "kim" });
       expect(snapshot).toEqual({
@@ -464,7 +470,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       yield* send("POST", "/Deposit", {
         owner: "kim",
-        body: { target: "w-5", input: { amount: 10, at } },
+        body: { input: { walletId: "w-5", amount: 10, at } },
       });
       const watch = yield* listen("/Balance/w-5/watch", { owner: "kim" });
       expect(watch.status).toBe(200);
@@ -472,7 +478,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       const events = yield* Effect.forkChild(watch.take(2));
       yield* send("POST", "/Deposit", {
         owner: "kim",
-        body: { target: "w-5", input: { amount: 5, at } },
+        body: { input: { walletId: "w-5", amount: 5, at } },
       });
       expect(yield* Fiber.join(events)).toEqual([
         {
@@ -491,7 +497,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       yield* send("POST", "/Deposit", {
         owner: "kim",
-        body: { target: "w-6", input: { amount: 1, at } },
+        body: { input: { walletId: "w-6", amount: 1, at } },
       });
       // The session middleware refuses a caller with no owner.
       expect(yield* send("GET", "/Balance/w-6/watch")).toEqual({
@@ -512,14 +518,14 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       yield* send("POST", "/Deposit", {
         owner: "kim",
-        body: { target: "w-7", input: { amount: 1, at } },
+        body: { input: { walletId: "w-7", amount: 1, at } },
       });
       const watch = yield* listen("/Balance/w-7/watch", { owner: "kim" });
       const events = yield* Effect.forkChild(watch.take(3));
       // Sam's deposit makes Sam the owner, so Kim may no longer read the wallet.
       yield* send("POST", "/Deposit", {
         owner: "sam",
-        body: { target: "w-7", input: { amount: 1, at } },
+        body: { input: { walletId: "w-7", amount: 1, at } },
       });
       const [first, failure, ...rest] = yield* Fiber.join(events);
       expect(first!.data.state).toEqual({ owner: "kim", balance: 1 });
@@ -535,17 +541,17 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       yield* send("POST", "/Deposit", {
         owner: "kim",
-        body: { target: "w-8", input: { amount: 2, at } },
+        body: { input: { walletId: "w-8", amount: 2, at } },
       });
       yield* send("POST", "/Deposit", {
         owner: "kim",
-        body: { target: "w-8", input: { amount: 3, at } },
+        body: { input: { walletId: "w-8", amount: 3, at } },
       });
       const all = yield* listen("/Balance/w-8/events", { owner: "kim" });
       const history = yield* Effect.forkChild(all.take(4));
       yield* send("POST", "/Deposit", {
         owner: "kim",
-        body: { target: "w-8", input: { amount: 4, at } },
+        body: { input: { walletId: "w-8", amount: 4, at } },
       });
       const frames = (yield* Fiber.join(history)).map(({ data }) =>
         data._tag === "CaughtUp" ? "caught up" : data.event.amount,
@@ -568,13 +574,18 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       // The server holds a credential for its own calls; an HTTP caller signs as itself.
       expect(
-        yield* send("POST", "/Sign", { owner: "alice", body: { target: "l-1", input: {} } }),
+        yield* send("POST", "/Sign", { owner: "alice", body: { input: { id: "l-1" } } }),
       ).toEqual({
         status: 200,
-        body: { reply: { owner: "alice" }, stream: "Ledger/l-1", version: 1 },
+        body: {
+          reply: { owner: "alice" },
+          stream: "Ledger/l-1",
+          version: 1,
+          commits: [{ stream: "Ledger/l-1", version: 1 }],
+        },
       });
       // A caller without one is refused, not signed in as the server.
-      expect(yield* send("POST", "/Sign", { body: { target: "l-2", input: {} } })).toEqual({
+      expect(yield* send("POST", "/Sign", { body: { input: { id: "l-2" } } })).toEqual({
         status: 401,
         body: { _tag: "Unauthenticated" },
       });
@@ -592,7 +603,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const deposit = yield* send("POST", "/v1/Deposit", {
         owner: "sam",
-        body: { target: "w-3", input: { amount: 5, at } },
+        body: { input: { walletId: "w-3", amount: 5, at } },
       });
       expect(deposit.status).toBe(200);
       expect((yield* send("POST", "/Deposit", { owner: "sam", body: {} })).status).toBe(404);
@@ -603,7 +614,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const deposit = yield* send("POST", "/Deposit", {
         owner: "sam",
-        body: { target: "w-10", input: { amount: 2, at } },
+        body: { input: { walletId: "w-10", amount: 2, at } },
       });
       expect(deposit.status).toBe(200);
       expect((yield* send("GET", "/Balance/w-10", { owner: "sam" })).status).toBe(404);
@@ -623,7 +634,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     class Credit extends Domain.Command(
       "Credit",
       {
-        target: Schema.String,
+        input: { id: Schema.String },
         events: [Credited],
       },
       { description: "Add a cent to a purse." },
@@ -633,6 +644,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       state: Schema.Struct({ balance: Schema.Int }),
       initial: { balance: 0 },
       commands: [Credit],
+      keyOf: (command) => command.id,
       decide: { Credit: () => [] },
       evolve: { Credited: (_, e) => ({ balance: e.balance }) },
     }) {}
@@ -678,7 +690,7 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
     const deposit = spec.paths["/Deposit"]!.post!;
     expect(deposit.operationId).toBe("WalletApi.Deposit");
     const body = JSON.stringify(deposit.requestBody);
-    for (const field of ["target", "amount", "at", "commandId"]) expect(body).toContain(field);
+    for (const field of ["walletId", "amount", "at", "commandId"]) expect(body).toContain(field);
     expect(Object.keys(deposit.responses).sort()).toEqual(["200", "401", "422"]);
     expect(JSON.stringify(deposit.responses["422"])).toContain("OverLimit");
 

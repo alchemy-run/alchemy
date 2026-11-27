@@ -8,6 +8,7 @@
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { runProcess } from "alchemy/Runtime/Bootstrap";
+import { TerminalsBun } from "alchemy/Runtime/TerminalBun";
 import { runSandboxAgent } from "alchemy/SandboxAgent";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -28,6 +29,7 @@ export const bootstrap = (): Promise<void> =>
           Layer.provideMerge(
             Layer.mergeAll(
               BunServices.layer,
+              TerminalsBun,
               FetchHttpClient.layer,
               Logger.layer([Logger.consolePretty()]),
             ),

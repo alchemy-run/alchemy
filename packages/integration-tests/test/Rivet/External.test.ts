@@ -13,16 +13,17 @@ import * as Schedule from "effect/Schedule";
 import { createClient } from "rivetkit/client";
 import type { registry } from "./fixtures/external/async-actors.ts";
 
-const CONTROL_PLANE_PORT = 16460;
-
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "RivetExternal", import.meta.url);
 
-const Cluster = RivetDocker.SwarmControlPlane("RivetExternal", { port: CONTROL_PLANE_PORT });
+// On a free port, so the suite runs beside itself in other worktrees.
+const Cluster = RivetDocker.SwarmControlPlane("RivetExternal", { port: 0 });
 const AsyncPool = RivetDocker.SwarmPool("AsyncPool").pipe(Layer.provide(Cluster));
 const EffectPool = RivetDocker.SwarmPool("EffectPool").pipe(Layer.provide(Cluster));
 const RustPool = RivetDocker.SwarmPool("RustPool").pipe(Layer.provide(Cluster));
+const ImagePool = RivetDocker.SwarmPool("ImagePool").pipe(Layer.provide(Cluster));
+const DockerfilePool = RivetDocker.SwarmPool("DockerfilePool").pipe(Layer.provide(Cluster));
 
 const fixture = (file: string) =>
   fileURLToPath(new URL(`./fixtures/external/${file}`, import.meta.url));
@@ -37,17 +38,67 @@ const call = <A>(f: () => Promise<A>) =>
     Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 30 }),
   );
 
+/**
+ * Every external Durable Object, on a pool of its own. `step` is baked into
+ * the prebuilt image as `STEP`: its counter adds `x * STEP`.
+ */
+const program = (step: string) =>
+  Effect.gen(function* () {
+    const asyncActors = yield* Rivet.DurableObject("AsyncActors", {
+      main: fixture("async-actors.ts"),
+    }).pipe(Effect.provide(AsyncPool));
+    const effectActors = yield* Rivet.DurableObject("EffectActors", {
+      main: fixture("effect/main.ts"),
+    }).pipe(Effect.provide(EffectPool));
+    // A member of a Cargo workspace, built with a feature.
+    const rustActors = yield* Rivet.DurableObject("RustActors", {
+      crate: fixture("rust/counter"),
+      build: { features: ["double"] },
+    }).pipe(Effect.provide(RustPool));
+    // An image the app builds itself, with its own runtime and RivetKit,
+    // run as it is.
+    const appImage = yield* Docker.Image("AppImage", {
+      build: {
+        context: fixture("."),
+        dockerfile: fixture("image.Dockerfile"),
+        args: { STEP: step },
+      },
+    });
+    const imageActors = yield* Rivet.DurableObject("ImageActors", {
+      image: appImage.imageRef,
+    }).pipe(Effect.provide(ImagePool));
+    // The app's own Dockerfile, built by the pool.
+    const dockerfileActors = yield* Rivet.DurableObject("DockerfileActors", {
+      context: fixture("."),
+      dockerfile: fixture("image.Dockerfile"),
+    }).pipe(Effect.provide(DockerfilePool));
+    const cluster = yield* Rivet.Cluster.pipe(Effect.provide(Cluster));
+    return {
+      endpoint: cluster.endpoint,
+      token: asyncActors.token,
+      namespace: asyncActors.namespace,
+      asyncPool: asyncActors.pool,
+      effectPool: effectActors.pool,
+      rustPool: rustActors.pool,
+      imagePool: imageActors.pool,
+      dockerfilePool: dockerfileActors.pool,
+    };
+  });
+
 let deployed: {
+  endpoint: string;
   token: Redacted.Redacted<string>;
   namespace: string;
   asyncPool: string;
   effectPool: string;
   rustPool: string;
+  imagePool: string;
+  dockerfilePool: string;
 };
 
 const clientFor = (poolName: string) =>
   createClient<typeof registry>({
-    endpoint: `http://localhost:${CONTROL_PLANE_PORT}`,
+    endpoint: deployed.endpoint,
     token: Redacted.value(deployed.token),
     namespace: deployed.namespace,
     poolName,
@@ -58,34 +109,12 @@ const clientFor = (poolName: string) =>
 // the Rust crate into its node image, and runs each on a pool.
 describe.skipIf(!!process.env.FAST)(
   "Rivet external Durable Objects",
-  { tags: ["provider:rivet", "provider:docker", "live"] },
+  { tags: ["provider:rivet", "provider:docker", "live"], sequential: true },
   () => {
     beforeAll(
       Effect.gen(function* () {
         if (!process.env.NO_DESTROY) yield* sharedStack.destroy();
-        const out = yield* sharedStack.deploy(
-          Effect.gen(function* () {
-            const asyncActors = yield* Rivet.DurableObject("AsyncActors", {
-              main: fixture("async-actors.ts"),
-            }).pipe(Effect.provide(AsyncPool));
-            const effectActors = yield* Rivet.DurableObject("EffectActors", {
-              main: fixture("effect/main.ts"),
-            }).pipe(Effect.provide(EffectPool));
-            // A member of a Cargo workspace, built with a feature.
-            const rustActors = yield* Rivet.DurableObject("RustActors", {
-              crate: fixture("rust/counter"),
-              build: { features: ["double"] },
-            }).pipe(Effect.provide(RustPool));
-            return {
-              token: asyncActors.token,
-              namespace: asyncActors.namespace,
-              asyncPool: asyncActors.pool,
-              effectPool: effectActors.pool,
-              rustPool: rustActors.pool,
-            };
-          }),
-        );
-        deployed = out as typeof deployed;
+        deployed = (yield* sharedStack.deploy(program("1"))) as typeof deployed;
       }),
       { timeout: 900_000 },
     );
@@ -131,6 +160,55 @@ describe.skipIf(!!process.env.FAST)(
         expect(second - first).toBe(8);
       }),
       { timeout: 300_000 },
+    );
+
+    test(
+      "a prebuilt image runs as it is",
+      Effect.gen(function* () {
+        expect(deployed.imagePool).toBeTruthy();
+        const counter = clientFor(deployed.imagePool).counter.getOrCreate(["external-image"]);
+        const first = yield* call(() => counter.increment(3));
+        const second = yield* call(() => counter.increment(4));
+        expect(second - first).toBe(4);
+      }),
+      { timeout: 300_000 },
+    );
+
+    test(
+      "an app's own Dockerfile runs as it is",
+      Effect.gen(function* () {
+        expect(deployed.dockerfilePool).toBeTruthy();
+        const counter = clientFor(deployed.dockerfilePool).counter.getOrCreate([
+          "external-dockerfile",
+        ]);
+        const first = yield* call(() => counter.increment(3));
+        const second = yield* call(() => counter.increment(4));
+        expect(second - first).toBe(4);
+      }),
+      { timeout: 300_000 },
+    );
+
+    // Runs last: it redeploys the shared stack.
+    test(
+      "a new image rolls the pool's nodes onto it",
+      Effect.gen(function* () {
+        deployed = (yield* sharedStack.deploy(program("2"))) as typeof deployed;
+        const counter = clientFor(deployed.imagePool).counter.getOrCreate(["external-image-2"]);
+        // The old nodes may still answer while the new ones start.
+        const doubled = yield* call(() =>
+          counter
+            .increment(4)
+            .then((before) => counter.increment(4).then((after) => after - before)),
+        ).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (delta) => delta === 8,
+            times: 30,
+          }),
+        );
+        expect(doubled).toBe(8);
+      }),
+      { timeout: 600_000 },
     );
   },
 );

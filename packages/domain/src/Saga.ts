@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeRun, StorageName } from "alchemy/Workflows";
 import * as EffectCause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -213,12 +214,12 @@ export interface ImplementationKey<Name extends string> {
  *     return Effect.fn(function* ({ key, from, to, amount }) {
  *       yield* Activity.make({
  *         name: "debit",
- *         execute: accounts.send(from, new DebitTransfer({ transferId: key, amount })).pipe(Effect.orDie),
+ *         execute: accounts.send(new DebitTransfer({ accountId: from, transferId: key, amount })).pipe(Effect.orDie),
  *       }).pipe(
  *         ExecuteTransfer.withCompensation(() =>
  *           Activity.make({
  *             name: "refund",
- *             execute: accounts.send(from, new RefundTransfer({ transferId: key, amount })).pipe(Effect.orDie),
+ *             execute: accounts.send(new RefundTransfer({ accountId: from, transferId: key, amount })).pipe(Effect.orDie),
  *           }),
  *         ),
  *       );
@@ -226,7 +227,7 @@ export interface ImplementationKey<Name extends string> {
  *         name: "credit",
  *         error: DestinationClosed,
  *         execute: accounts
- *           .send(to, new CreditTransfer({ transferId: key, amount }))
+ *           .send(new CreditTransfer({ accountId: to, transferId: key, amount }))
  *           .pipe(Effect.catchTag("NotOpen", () => new DestinationClosed()), Effect.orDie),
  *       });
  *     });
@@ -326,8 +327,12 @@ export const make = <
 /** What a saga's implementation runs for each run: its key and input. */
 export type Handler<Payload, A, E, Req> = (payload: Payload) => Effect.Effect<A, E, Req>;
 
-/** The services Effect workflows provide to a run, which a handler may use freely. */
+/**
+ * The services a run has, which a handler may use freely: what Effect
+ * workflows provide, and the context of the runtime the run happens in.
+ */
 type RunServices =
+  | RuntimeContext
   | WorkflowEngine.WorkflowEngine
   | WorkflowEngine.WorkflowInstance
   | Workflow.Execution<string>

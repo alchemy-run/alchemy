@@ -365,15 +365,13 @@ export const DeliveryPipelineProvider = () =>
       if (current === undefined) {
         const created = yield* clouddeploy
           .createProjectsLocationsDeliveryPipelines({
+            description: news.description,
+            serialPipeline: news.serialPipeline,
+            suspended: desiredSuspended,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             deliveryPipelineId,
-            body: {
-              description: news.description,
-              serialPipeline: news.serialPipeline,
-              suspended: desiredSuspended,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -400,16 +398,14 @@ export const DeliveryPipelineProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* clouddeploy.patchProjectsLocationsDeliveryPipelines({
+          etag: current.etag,
+          description: news.description,
+          serialPipeline: news.serialPipeline,
+          suspended: desiredSuspended,
+          annotations: desiredAnnotations,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            description: news.description,
-            serialPipeline: news.serialPipeline,
-            suspended: desiredSuspended,
-            annotations: desiredAnnotations,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

@@ -113,6 +113,10 @@ interface DockerBuildContextSelection {
   readonly dockerfilePath: string | undefined;
   /** Return whether an entry must be sent to the Docker builder. */
   readonly includes: (relativePath: string) => boolean;
+  /** The selected `.dockerignore` rules, for pruning a walk of the context. */
+  readonly rules: IgnoreRules | undefined;
+  /** Paths a walk must reach even below a pruned directory: the Dockerfile and ignore file. */
+  readonly force: ReadonlyArray<string>;
 }
 
 /**
@@ -147,6 +151,8 @@ export const selectDockerBuildContext = Effect.fn(function* (
       }
       return dockerignore === undefined || !dockerignore.rules.ignores(normalized);
     },
+    rules: dockerignore?.rules,
+    force: [dockerfilePath, dockerignore?.path].filter((entry) => entry !== undefined),
   } satisfies DockerBuildContextSelection;
 });
 

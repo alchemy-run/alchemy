@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import type { Annotations } from "./Annotations.ts";
@@ -6,14 +7,12 @@ import type { Data, Fields } from "./Event.ts";
 import { inputSchema } from "./internal.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Rejection from "./Rejection.ts";
+import * as View from "./View.ts";
 
 /**
  * Instance type of a Command class: its `_tag` plus its input.
  */
 export type Instance<Tag extends string, F extends Fields> = { readonly _tag: Tag } & Data<F>;
-
-/** The schema of the aggregate id a command addresses. */
-export type TargetSchema = Schema.Top & { readonly Type: string; readonly Encoded: string };
 
 /**
  * Structural constraint satisfied by every class produced by {@link make}.
@@ -22,7 +21,6 @@ export interface Any extends Schema.Top {
   readonly kind: "Command";
   readonly annotations: Annotations;
   readonly tag: string;
-  readonly target: TargetSchema;
   readonly events: ReadonlyArray<Event.Any>;
   readonly rejects: ReadonlyArray<Rejection.Any>;
   readonly reply: Schema.Top | undefined;
@@ -44,32 +42,67 @@ export type ReplySchema<Reply extends Fields | undefined> = Reply extends Fields
   ? Schema.Struct<Reply>
   : undefined;
 
-/** What a client sends: the target, an optional idempotency key, and the input. */
-export type PayloadFields<Target extends TargetSchema, F extends Fields> = {
-  readonly target: Target;
+/**
+ * When a command answers. `"eventual"`, the default, answers as soon as the
+ * events are committed: the views apply them a moment later. `"strong"`
+ * answers once every view its events reach has applied them, so any read of
+ * a view after the answer includes the command.
+ */
+export const Consistency = Schema.Literals(["strong", "eventual"]);
+export type Consistency = typeof Consistency.Type;
+
+/**
+ * The `consistency` of every command a client sends without one. A client
+ * reads it once, when it is built, so provide it to the client or to its
+ * Layer.
+ *
+ * **Example:** A client whose commands wait for their views
+ * ```typescript
+ * const bank = yield* CustomerApi.clientHttp("https://bank.example.com/api").pipe(
+ *   Effect.provideService(Domain.DefaultConsistency, "strong"),
+ * );
+ * ```
+ */
+export const DefaultConsistency = Context.Reference<Consistency>(
+  "alchemy/Domain/DefaultConsistency",
+  { defaultValue: () => "eventual" },
+);
+
+/** What a client sends: an optional idempotency key, the input, and when to answer. */
+export type PayloadFields<F extends Fields> = {
   readonly commandId: Schema.optional<typeof Schema.String>;
   readonly input: Schema.Struct<F>;
+  readonly consistency: Schema.optional<typeof Consistency>;
 };
 
-/** What a client receives: the reply and the position of the committed events. */
+/** Where a command's events were committed: one stream, and its version after them. */
+export const Commit = Schema.Struct({ stream: Schema.String, version: Schema.Number });
+export type Commit = typeof Commit.Type;
+
+/**
+ * What a client receives: the reply, and where the events were committed.
+ * `stream` and `version` are the first stream it committed to: the one
+ * instance an aggregate's command addresses. `commits` lists every stream,
+ * for a command a `Decision` implements across several.
+ */
 export type SuccessFields<Reply extends Schema.Top | undefined> = {
   readonly reply: Reply extends Schema.Top ? Reply : typeof Schema.Void;
   readonly stream: typeof Schema.String;
   readonly version: typeof Schema.Number;
+  readonly commits: Schema.$Array<typeof Commit>;
 };
 
 /** The Effect RPC definition of a command. */
 export type CommandRpc<
   Tag extends string,
-  Target extends TargetSchema,
   F extends Fields,
   Rejects extends ReadonlyArray<Rejection.Any>,
   Reply extends Schema.Top | undefined,
 > = Rpc.Rpc<
   Tag,
-  Schema.Struct<PayloadFields<Target, F>>,
+  Schema.Struct<PayloadFields<F>>,
   Schema.Struct<SuccessFields<Reply>>,
-  Rejects extends readonly [] ? typeof Schema.Never : Schema.Union<Rejects>
+  Schema.Union<[...Rejects, typeof View.ConsistencyTimeout]>
 >;
 
 /**
@@ -77,7 +110,6 @@ export type CommandRpc<
  */
 export interface CommandClass<
   Tag extends string,
-  Target extends TargetSchema,
   F extends Fields,
   Events extends ReadonlyArray<Event.Any>,
   Rejects extends ReadonlyArray<Rejection.Any>,
@@ -88,7 +120,6 @@ export interface CommandClass<
   readonly kind: "Command";
   readonly annotations: Annotations;
   readonly tag: Tag;
-  readonly target: Target;
   readonly events: Events;
   readonly rejects: Rejects;
   readonly reply: Reply;
@@ -99,7 +130,6 @@ export interface CommandClass<
 }
 
 interface Options {
-  readonly target: TargetSchema;
   readonly input?: Fields;
   readonly middleware?: Middleware.List;
   readonly events?: ReadonlyArray<Event.Any>;
@@ -117,7 +147,6 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
     static readonly kind = "Command" as const;
     static readonly annotations: Annotations = annotations;
     static readonly tag = tag;
-    static readonly target = options.target;
     static readonly events = options.events ?? [];
     static readonly rejects = options.rejects ?? [];
     static readonly reply = options.reply ? Schema.Struct(options.reply) : undefined;
@@ -127,9 +156,11 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
 };
 
 /**
- * A request to change one aggregate instance. It names the instance it
- * targets, its input, the events it may record, the rejections it may return,
- * the middleware that guards it, and the reply its caller receives.
+ * A request to change the model. It names its input, which includes the id
+ * of every aggregate instance it involves, the events it may record, the
+ * rejections it may return, the middleware that guards it, and the reply its
+ * caller receives. An aggregate implements it for one instance; a
+ * `Domain.Decision` implements it across several.
  *
  * ### Declaring a command
  * **Example:** A command with its event and rejection
@@ -150,8 +181,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  * }) {}
  *
  * export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
- *   target: AccountId,
- *   input: { amount: Schema.Int },
+ *   input: { accountId: AccountId, amount: Schema.Int },
  *   events: [MoneyWithdrawn],
  *   rejects: [InsufficientFunds],
  *   reply: { balance: Schema.Int },
@@ -172,11 +202,27 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  * import { Session } from "./Session.ts";
  *
  * export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
- *   target: AccountId,
  *   middleware: [Session, MfaChallenge],
- *   input: { amount: Schema.Int },
+ *   input: { accountId: AccountId, amount: Schema.Int },
  *   events: [MoneyWithdrawn],
  *   reply: { balance: Schema.Int },
+ * }) {}
+ * ```
+ *
+ * ### Involving several instances
+ * A command that involves more than one aggregate instance names each of
+ * them in its input, and a `Domain.Decision` implements it.
+ *
+ * **Example:** A transfer between two accounts
+ * ```typescript
+ * import * as Domain from "@alchemy.run/domain";
+ * import * as Schema from "effect/Schema";
+ * import { AccountId, InsufficientFunds, TransferReceived, TransferSent } from "./Account.ts";
+ *
+ * export class TransferMoney extends Domain.Command("TransferMoney", {
+ *   input: { from: AccountId, to: AccountId, amount: Schema.Int },
+ *   events: [TransferSent, TransferReceived],
+ *   rejects: [InsufficientFunds],
  * }) {}
  * ```
  *
@@ -186,7 +232,25 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  *
  * **Example:** An idempotent send through an Api
  * ```typescript
- * const receipt = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId });
+ * const receipt = yield* bank.WithdrawMoney({ accountId, amount: 2_000 }, { commandId: requestId });
+ * ```
+ *
+ * ### Choosing when it answers
+ * A command answers as soon as its events are committed; the views apply
+ * them a moment later. Through an Api, pass `consistency: "strong"` to
+ * answer once every view the events reach has applied them, so a read of a
+ * view after the answer includes the command. A view that takes longer than
+ * 10 seconds fails the call with `ConsistencyTimeout`; the command is
+ * committed all the same. `Domain.DefaultConsistency` sets it for every
+ * command of a client.
+ *
+ * **Example:** Reading right after a command
+ * ```typescript
+ * yield* bank.DepositMoney({ accountId, amount: 500 }, { consistency: "strong" });
+ * const summary = yield* bank.AccountSummary.get(accountId); // includes the deposit
+ *
+ * const receipt = yield* bank.DepositMoney({ accountId, amount: 500 });
+ * const later = yield* bank.AccountSummary.get(accountId, { atLeast: receipt });
  * ```
  *
  * ### Annotating commands
@@ -201,7 +265,7 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  * ```typescript
  * export class WithdrawMoney extends Domain.Command(
  *   "WithdrawMoney",
- *   { target: AccountId, input: { amount: Schema.Int }, events: [MoneyWithdrawn] },
+ *   { input: { accountId: AccountId, amount: Schema.Int }, events: [MoneyWithdrawn] },
  *   { description: "Take money out of an account. The amount is in cents." },
  * ) {}
  * ```
@@ -210,7 +274,6 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  */
 export const make = <
   const Tag extends string,
-  Target extends TargetSchema,
   const F extends Fields = {},
   const Ms extends Middleware.List = readonly [],
   const Events extends ReadonlyArray<Event.Any> = readonly [],
@@ -219,9 +282,10 @@ export const make = <
 >(
   tag: Tag,
   options: {
-    /** The id schema of the aggregate this command addresses. */
-    readonly target: Target;
-    /** The command's fields. */
+    /**
+     * The command's fields, including the id of every aggregate instance it
+     * involves: what implements it reads them from here.
+     */
     readonly input?: F;
     /**
      * Middleware that guards the command when an Api exposes it, run in list
@@ -239,27 +303,29 @@ export const make = <
   annotations: Annotations = {},
 ): CommandClass<
   Tag,
-  Target,
   F,
   Events,
   Rejects,
   ReplySchema<Reply>,
   Ms,
-  Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>
+  Middleware.Apply<CommandRpc<Tag, F, Rejects, ReplySchema<Reply>>, Ms>
 > => {
   const rejects = options.rejects ?? [];
+  const reply = options.reply ? Schema.Struct(options.reply) : Schema.Void;
   const rpc = Rpc.make(tag, {
     payload: {
-      target: options.target,
       commandId: Schema.optional(Schema.String),
       input: inputSchema(options.input),
+      consistency: Schema.optional(Consistency),
     },
     success: Schema.Struct({
-      reply: options.reply ? Schema.Struct(options.reply) : Schema.Void,
+      reply,
       stream: Schema.String,
       version: Schema.Number,
+      commits: Schema.Array(Commit),
     }),
-    error: rejects.length === 0 ? Schema.Never : Schema.Union(rejects),
+    // A command that committed can still time out waiting for a view (`consistency: "strong"`).
+    error: Schema.Union([...rejects, View.ConsistencyTimeout]),
   });
   return build(
     tag,
@@ -268,12 +334,11 @@ export const make = <
     annotations,
   ) as CommandClass<
     Tag,
-    Target,
     F,
     Events,
     Rejects,
     ReplySchema<Reply>,
     Ms,
-    Middleware.Apply<CommandRpc<Tag, Target, F, Rejects, ReplySchema<Reply>>, Ms>
+    Middleware.Apply<CommandRpc<Tag, F, Rejects, ReplySchema<Reply>>, Ms>
   >;
 };

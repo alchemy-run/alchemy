@@ -320,24 +320,22 @@ export const DataStoresServingConfigProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsDataStoresServingConfigs({
+            displayName,
+            solutionType,
+            filterControlIds: news.filterControlIds,
+            boostControlIds: news.boostControlIds,
+            redirectControlIds: news.redirectControlIds,
+            synonymsControlIds: news.synonymsControlIds,
+            onewaySynonymsControlIds: news.onewaySynonymsControlIds,
+            dissociateControlIds: news.dissociateControlIds,
+            replacementControlIds: news.replacementControlIds,
+            ignoreControlIds: news.ignoreControlIds,
+            promoteControlIds: news.promoteControlIds,
+            rankingExpression: news.rankingExpression,
+            modelId: news.modelId,
+            diversityLevel: news.diversityLevel,
             parent,
             servingConfigId,
-            body: {
-              displayName,
-              solutionType,
-              filterControlIds: news.filterControlIds,
-              boostControlIds: news.boostControlIds,
-              redirectControlIds: news.redirectControlIds,
-              synonymsControlIds: news.synonymsControlIds,
-              onewaySynonymsControlIds: news.onewaySynonymsControlIds,
-              dissociateControlIds: news.dissociateControlIds,
-              replacementControlIds: news.replacementControlIds,
-              ignoreControlIds: news.ignoreControlIds,
-              promoteControlIds: news.promoteControlIds,
-              rankingExpression: news.rankingExpression,
-              modelId: news.modelId,
-              diversityLevel: news.diversityLevel,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -367,6 +365,14 @@ export const DataStoresServingConfigProvider = () =>
         synonymsChanged
       ) {
         current = yield* discoveryengine.patchProjectsLocationsDataStoresServingConfigs({
+          displayName,
+          filterControlIds: news.filterControlIds,
+          boostControlIds: news.boostControlIds,
+          redirectControlIds: news.redirectControlIds,
+          synonymsControlIds: news.synonymsControlIds,
+          rankingExpression: news.rankingExpression,
+          modelId: news.modelId,
+          diversityLevel: news.diversityLevel,
           name: current.name ?? name,
           updateMask: [
             displayChanged ? "display_name" : undefined,
@@ -380,17 +386,6 @@ export const DataStoresServingConfigProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            displayName,
-            filterControlIds: news.filterControlIds,
-            boostControlIds: news.boostControlIds,
-            redirectControlIds: news.redirectControlIds,
-            synonymsControlIds: news.synonymsControlIds,
-            rankingExpression: news.rankingExpression,
-            modelId: news.modelId,
-            diversityLevel: news.diversityLevel,
-          },
         });
       }
 

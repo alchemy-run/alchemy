@@ -1,0 +1,268 @@
+---
+title: "Part 5: Prove what a session can't break"
+description: State the board's rules on its aggregate and verify them with Domain's prover, so no command a session sends can break them, whatever the model decides to do.
+sidebar:
+  order: 5
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+A session decides for itself which commands to send, and in what order. You can't test every choice a model might make. You can state the rules the board must keep and have [Domain verify](/domain/verifying-models) them for every state and every command, so they hold whoever sends the command.
+
+## Install
+
+<PackageManagers add="-D vitest @effect/vitest @effect/platform-node" />
+
+## Give an issue its states
+
+A rule is about state, so the state has to say what matters. An issue is unreported, or open with a label and a count of replies:
+
+```typescript title="src/Board/Issue.aggregate.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { CommentOnIssue, IssueCommented } from "./CommentOnIssue.command.ts";
+import { IssueId } from "./Issue.id.ts";
+import { IssueLabeled, Label, LabelIssue } from "./LabelIssue.command.ts";
+import { IssueReported, ReportIssue } from "./ReportIssue.command.ts";
+
+export class Issue extends Domain.Aggregate("Issue", {
+  id: IssueId,
+  state: Schema.Union([
+    Schema.TaggedStruct("Unreported", {}),
+    Schema.TaggedStruct("Open", { label: Schema.NullOr(Label), replies: Schema.Int }),
+  ]),
+  initial: { _tag: "Unreported" },
+  commands: [ReportIssue, LabelIssue, CommentOnIssue],
+  keyOf: (command) => command.issueId,
+  decide: {
+    ReportIssue: (issue, command) =>
+      issue._tag === "Open"
+        ? []
+        : [new IssueReported({ title: command.title, body: command.body })],
+    LabelIssue: (_, command) => [new IssueLabeled({ label: command.label })],
+    CommentOnIssue: (_, command) => [
+      new IssueCommented({ commentId: command.commentId, body: command.body }),
+    ],
+  },
+  evolve: {
+    IssueReported: () => ({ _tag: "Open" as const, label: null, replies: 0 }),
+    IssueLabeled: (issue, event) =>
+      issue._tag === "Open" ? { ...issue, label: event.label } : issue,
+    IssueCommented: (issue) =>
+      issue._tag === "Open" ? { ...issue, replies: issue.replies + 1 } : issue,
+  },
+}) {}
+```
+
+## Refuse a label for an issue nobody reported
+
+A session could send `LabelIssue` for any issue number. Declare the refusal:
+
+```typescript title="src/Board/NotReported.rejection.ts"
+import * as Domain from "@alchemy.run/domain";
+
+export class NotReported extends Domain.Rejection("NotReported") {}
+```
+
+```diff lang="typescript" title="src/Board/LabelIssue.command.ts"
+import { IssueId } from "./Issue.id.ts";
++import { NotReported } from "./NotReported.rejection.ts";
+
+    events: [IssueLabeled],
+-    rejects: [],
++    rejects: [NotReported],
+```
+
+```diff lang="typescript" title="src/Board/Issue.aggregate.ts"
+import { IssueLabeled, Label, LabelIssue } from "./LabelIssue.command.ts";
++import { NotReported } from "./NotReported.rejection.ts";
+
+-    LabelIssue: (_, command) => [new IssueLabeled({ label: command.label })],
++    LabelIssue: (issue, command) =>
++      issue._tag !== "Open" ? new NotReported() : [new IssueLabeled({ label: command.label })],
+```
+
+The model reads `NotReported` as the tool's failure, and can correct itself.
+
+## Refuse a reply the same way
+
+```diff lang="typescript" title="src/Board/CommentOnIssue.command.ts"
+import { IssueId } from "./Issue.id.ts";
++import { NotReported } from "./NotReported.rejection.ts";
+
+  events: [IssueCommented],
+-  rejects: [],
++  rejects: [NotReported],
+```
+
+```diff lang="typescript" title="src/Board/Issue.aggregate.ts"
+export class Issue extends Domain.Aggregate("Issue", {
+-    CommentOnIssue: (_, command) => [
+-      new IssueCommented({ commentId: command.commentId, body: command.body }),
+-    ],
++    CommentOnIssue: (issue, command) =>
++      issue._tag !== "Open"
++        ? new NotReported()
++        : [new IssueCommented({ commentId: command.commentId, body: command.body })],
+```
+
+## Ignore replies on issues the board never saw
+
+A rejection is typed, so the webhook now has to say what it does with one:
+
+```diff lang="typescript" title="src/GitHubIssues.ts"
+import { MARKER } from "./PostAnswer.tool.ts";
+
+                once,
+-              ),
++              ).pipe(Effect.catchTag("NotReported", () => Effect.void)),
+```
+
+## Say what a state must never be
+
+An invariant is given the state and returns `true` while the rule holds:
+
+```diff lang="typescript" title="src/Board/Issue.aggregate.ts"
+export class Issue extends Domain.Aggregate("Issue", {
+  keyOf: (command) => command.issueId,
++  invariants: {
++    RepliesAreCounted: (issue) => issue._tag !== "Open" || issue.replies >= 0,
++  },
+  decide: {
+```
+
+Nothing runs it when a command arrives. It is a claim about `decide` and `evolve`, and verification checks it.
+
+## Say what a command must never do
+
+A transition is given the state before a command, the command, and the state after. These three are what a session must not be able to break:
+
+```diff lang="typescript" title="src/Board/Issue.aggregate.ts"
+export class Issue extends Domain.Aggregate("Issue", {
+  invariants: {
+    RepliesAreCounted: (issue) => issue._tag !== "Open" || issue.replies >= 0,
+  },
++  transitions: {
++    AReportedIssueStaysReported: ({ before, after }) =>
++      before._tag !== "Open" || after._tag === "Open",
++    OnlyLabelingChangesTheLabel: ({ before, after, command }) =>
++      before._tag !== "Open" ||
++      after._tag !== "Open" ||
++      before.label === after.label ||
++      command._tag === "LabelIssue",
++    NoReplyIsLost: ({ before, after }) =>
++      before._tag !== "Open" || after._tag !== "Open" || after.replies >= before.replies,
++  },
+```
+
+## Say what the board must be able to do
+
+Rules that only forbid are kept by a board that does nothing. A `sometimes` entry says what has to be reachable:
+
+```diff lang="typescript" title="src/Board/Board.model.ts"
+export class Board extends Domain.Model("Board", {
+  policies: [IssueWork],
++  sometimes: {
++    AnIssueGetsLabeled: (board) =>
++      board.Issue.some((issue) => issue.state._tag === "Open" && issue.state.label !== null),
++  },
+```
+
+## List what reaches the board
+
+Verification tries the commands callers can send. An Api lists them: here, every command of the model.
+
+```typescript title="src/Board/BoardApi.api.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Board } from "./Board.model.ts";
+
+export class BoardApi extends Domain.Api("BoardApi", { model: Board }) {}
+```
+
+## Verify the board
+
+One test verifies all of it. `story` runs each sequence the prover finds on the real board in memory, with the triager stubbed: the rules have to hold whatever a session does.
+
+```typescript title="test/Board.verify.test.ts"
+import { Story } from "@alchemy.run/domain/Story";
+import * as Verify from "@alchemy.run/domain/Verify";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { Board } from "../src/Board/Board.model.ts";
+import { BoardApi } from "../src/Board/BoardApi.api.ts";
+import { IssueWorkLive } from "../src/Board/IssueWork.policy.ts";
+import { Triager } from "../src/Board/Triager.external.ts";
+
+const story = Story.make(Board, { layer: IssueWorkLive, stub: [Triager] });
+
+it.effect(
+  "no command, from a person or a session, breaks the board's rules",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Verify.report(Board, {
+        apis: [BoardApi],
+        story,
+        require: {
+          proved: [
+            "Issue.RepliesAreCounted",
+            "Issue.AReportedIssueStaysReported",
+            "Issue.OnlyLabelingChangesTheLabel",
+            "Issue.NoReplyIsLost",
+          ],
+        },
+      });
+      expect(Object.fromEntries(report.rules.map((rule) => [rule.name, rule.standing]))).toEqual({
+        "Issue.RepliesAreCounted": "proved",
+        "Issue.AReportedIssueStaysReported": "proved",
+        "Issue.OnlyLabelingChangesTheLabel": "proved",
+        "Issue.NoReplyIsLost": "proved",
+        "Board.AnIssueGetsLabeled": "reached",
+      });
+      expect(report.undone).toEqual([]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  120_000,
+);
+```
+
+`require` keeps the four rules proved: one that slips to merely checked fails the test.
+
+## Run it
+
+```typescript title="vitest.config.ts"
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({ test: { include: ["test/**/*.test.ts"], testTimeout: 30_000 } });
+```
+
+<PackageManagers run="vitest run" />
+
+**Proved** means a solver found no state and no command that breaks the rule. **Reached** means some sequence of commands gets there.
+
+## Break a rule
+
+Make a reply clear the label, as a careless change might:
+
+```diff lang="typescript" title="src/Board/Issue.aggregate.ts"
+export class Issue extends Domain.Aggregate("Issue", {
+    IssueCommented: (issue) =>
+-      issue._tag === "Open" ? { ...issue, replies: issue.replies + 1 } : issue,
++      issue._tag === "Open" ? { ...issue, replies: issue.replies + 1, label: null } : issue,
+```
+
+The test fails, and names the rule:
+
+```text
+-   "Issue.OnlyLabelingChangesTheLabel": "proved",
++   "Issue.OnlyLabelingChangesTheLabel": "broken",
+```
+
+Put the line back.
+
+## What you have
+
+- Rules of the board, stated on the aggregate and proved for every state and command.
+- A refusal the model can read when it labels an issue that was never reported.
+- A test that fails when a change, to the board or to what a session may send, breaks a rule.
+
+See [Verifying models](/domain/verifying-models) for rules across aggregates, what a pass does not say, and how to read a failure.

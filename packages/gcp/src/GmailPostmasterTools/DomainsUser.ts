@@ -186,10 +186,7 @@ export const DomainsUserProvider = () =>
 
       if (current === undefined) {
         const created = yield* gmailpostmastertools
-          .createDomainsUsers({
-            parent,
-            body: { userId, permission },
-          })
+          .createDomainsUsers({ userId, permission, parent })
           .pipe(Effect.catchTag("Conflict", () => findUser(parent, userId, name)));
         current = created ?? undefined;
       }
@@ -201,9 +198,9 @@ export const DomainsUserProvider = () =>
       const resourceName = fullUserName(parent, current);
       if (isPatchablePermission(permission) && !sameText(current.permission, permission)) {
         current = yield* gmailpostmastertools.patchDomainsUsers({
+          permission,
           name: resourceName,
           updateMask: "permission",
-          body: { permission },
         });
       }
 

@@ -1,3 +1,8 @@
+import {
+  type ContainerRuntime,
+  makeContainerBootstrap,
+  resolveContainerRuntime,
+} from "@alchemy.run/docker/ContainerRuntime";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type { DockerfileBuild } from "@alchemy.run/docker/ImageSource";
 import * as templates from "@distilled.cloud/e2b/templates";
@@ -19,8 +24,8 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "alchemy/Runtime/Process";
+import { envStrings } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { E2BUnexpectedResponse } from "./Errors.ts";
@@ -57,13 +62,21 @@ export interface TemplateProps extends Omit<TemplateSteps, "env">, PlatformProps
   /**
    * A program to run in every sandbox: a module entrypoint, typically
    * `import.meta.url` in the class form. Alchemy bundles it, copies it into
-   * the template under `/app`, and starts it with Bun as the template's start
-   * command, so every sandbox boots with it already serving on {@link port}.
-   * `image` / `dockerfile` are then the program's environment, which must
-   * have Bun; the default is `oven/bun:1`.
+   * the template under `/app`, and starts it on its {@link runtime} as the
+   * template's start command, so every sandbox boots with it already
+   * serving on {@link port}. `image` / `dockerfile` are then the program's
+   * environment, which must have that runtime: Node.js 26 on `node:26-slim`
+   * by default.
    * @default no program
    */
   main?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * Only used with `main`.
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /**
    * Named export to load from `main`.
    * @default "default"
@@ -240,8 +253,8 @@ export interface Template extends Resource<
  * Give the template a `main` and an Effect, and every sandbox from it boots
  * with the program already serving HTTP on `port`. Alchemy bundles `main`,
  * copies it into the template, and E2B snapshots the template once the
- * program answers. The program runs with Bun; the image defaults to
- * `oven/bun:1`.
+ * program answers. The program runs on Node.js 26 (`node:26-slim`) unless
+ * the template sets `runtime`, for example `runtime: "bun1.3"`.
  *
  * **Example:** A program in every sandbox
  * ```typescript
@@ -265,7 +278,7 @@ export interface Template extends Resource<
  * ```
  *
  * ### Async program
- * A `main` without an Effect is bundled and run with Bun as-is. It must
+ * A `main` without an Effect is bundled and run as-is. It must
  * listen on `PORT`. `E2B.InferEnv` types its `env`.
  *
  * **Example:** A plain server
@@ -405,7 +418,19 @@ const planOf = Effect.fn(function* (
   news: TemplateProps,
   bindings: ReadonlyArray<ResourceBinding<TemplateBinding>> | undefined,
 ) {
-  const { main, handler, port, build, env, dockerfile, context, image, ...steps } = news;
+  const {
+    main,
+    runtime: runtimeName,
+    handler,
+    port,
+    build,
+    env,
+    dockerfile,
+    context,
+    image,
+    ...steps
+  } = news;
+  const runtime = yield* resolveContainerRuntime(runtimeName);
   const programPort = port ?? DEFAULT_PORT;
   const { args, ...bundle } = build ?? {};
   let lowered: LoweredSource | undefined;
@@ -425,11 +450,23 @@ const planOf = Effect.fn(function* (
       },
       {
         port: programPort,
+        runtime,
         ...(args !== undefined ? { args } : {}),
         install: mountInstallLines(capabilities),
         ...((news as { isExternal?: boolean }).isExternal
           ? {}
-          : { bootstrap: makeBootstrap(handler ?? "default") }),
+          : {
+              bootstrap:
+                runtime.preset === "bun"
+                  ? makeBootstrap(handler ?? "default")
+                  : makeContainerBootstrap(
+                      runtime.platformModule,
+                      "alchemy/Runtime/ContainerProcess",
+                      handler ?? "default",
+                      "server",
+                      { deferEntrypointImport: true },
+                    ),
+            }),
       },
     );
   } else if (dockerfile !== undefined || context !== undefined) {
@@ -455,26 +492,16 @@ const planOf = Effect.fn(function* (
       main === undefined
         ? yield* plainEnv(env)
         : yield* programEnv(programPort, { ...mountEnv(capabilities), ...boundEnv(bindings) }, env),
-    ...(main !== undefined ? { readyCmd: steps.readyCmd ?? programReadyCmd(programPort) } : {}),
+    ...(main !== undefined
+      ? { readyCmd: steps.readyCmd ?? programReadyCmd(programPort, runtime.command) }
+      : {}),
   } satisfies TemplateBuildSpec;
   return { spec, plan: yield* planTemplateBuild(spec, lowered) };
 });
 
-/** `env` for a template without a program: plain values only. */
+/** `env` for a template without a program. */
 const plainEnv = (env: Readonly<Record<string, unknown>> | undefined) =>
-  Effect.succeed(
-    env === undefined
-      ? undefined
-      : Object.fromEntries(
-          Object.entries(env).flatMap(([key, value]) =>
-            Redacted.isRedacted(value)
-              ? [[key, String(Redacted.value(value))]]
-              : typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-                ? [[key, String(value)]]
-                : [],
-          ),
-        ),
-  );
+  Effect.succeed(env === undefined ? undefined : envStrings(env));
 
 export const TemplateProvider = () =>
   Provider.effect(

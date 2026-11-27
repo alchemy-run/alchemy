@@ -440,15 +440,13 @@ export const FeatureOnlineStoreProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsFeatureOnlineStores({
+            labels: desiredLabels,
+            bigtable: optimized ? undefined : bigtableOf(news),
+            optimized: optimized ? {} : undefined,
+            dedicatedServingEndpoint: news.dedicatedServingEndpoint,
+            encryptionSpec: news.encryptionSpec,
             parent: `projects/${env.project}/locations/${location}`,
             featureOnlineStoreId: storeId,
-            body: {
-              labels: desiredLabels,
-              bigtable: optimized ? undefined : bigtableOf(news),
-              optimized: optimized ? {} : undefined,
-              dedicatedServingEndpoint: news.dedicatedServingEndpoint,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -485,13 +483,10 @@ export const FeatureOnlineStoreProvider = () =>
 
         const patched = yield* aiplatform
           .patchProjectsLocationsFeatureOnlineStores({
+            labels: desiredLabels,
+            bigtable: news.bigtable,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              bigtable: news.bigtable,
-            },
           })
           .pipe(
             Effect.retry({

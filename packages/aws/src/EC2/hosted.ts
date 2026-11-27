@@ -15,6 +15,7 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { createInternalTags, createTagsList, hasTags } from "alchemy/Tags";
+import { containerEnvFile, DOCKER_ENV, systemdEnvFile } from "alchemy/Util/envFile";
 import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import * as Data from "effect/Data";
@@ -140,6 +141,13 @@ export interface Ec2HostedProps extends PlatformProps {
   /** Environment variables injected into the hosted runtime. */
   env?: Record<string, any>;
   /**
+   * Environment variables the instance reads with its own role when the
+   * runtime starts: env-var name → Secrets Manager secret ARN (optionally
+   * pinned to a version, `arn:…:secret:name-AbCdEf:::versionId`) or SSM
+   * Parameter Store parameter ARN. Only the ARNs reach S3 and user data.
+   */
+  secrets?: Record<string, string>;
+  /**
    * Overrides for the rolldown bundling of `main`. Unused code is
    * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
    * pure so unused parts prune more aggressively. List extra packages
@@ -162,6 +170,10 @@ export interface Ec2HostedRuntimeState {
   assetPrefix?: string;
   code?: {
     hash: string;
+    /** {@link CONTAINER_UNIT_VERSION} a container instance was launched with. */
+    unit?: number;
+    /** {@link SECRETS_UNIT_VERSION} the instance's unit reads `secrets` with, if any. */
+    secrets?: number;
   };
 }
 
@@ -181,6 +193,56 @@ export interface Ec2HostedCleanupState {
 export type Ec2HostRuntimeContext = HostRuntimeContext;
 
 export const createEc2HostRuntimeContext = createHostRuntimeContext;
+
+/**
+ * Version of the systemd unit a container instance's user data installs.
+ * User data runs once per instance, so an instance whose stored version
+ * differs is replaced: version 2 reads its env file through systemd, which
+ * a version 1 unit (`docker run --env-file`) can't.
+ */
+export const CONTAINER_UNIT_VERSION = 2;
+
+/**
+ * Version of the setup step that reads `secrets`. User data runs once per
+ * instance, so an instance launched before it, which can't read them, is
+ * replaced when `secrets` is set.
+ */
+export const SECRETS_UNIT_VERSION = 1;
+
+/** A Secrets Manager reference without its `:json-key:version-stage:version-id` suffix. */
+export const secretArnOf = (ref: string) =>
+  ref.split(":")[2] === "secretsmanager" ? ref.split(":").slice(0, 7).join(":") : ref;
+
+/**
+ * Setup lines that read each `NAME=ARN` line of `list` with the instance's
+ * role and write the values to `file`, which only root can read, as a
+ * systemd `EnvironmentFile=`. Fails, so the service doesn't start, when a
+ * secret can't be read.
+ */
+const readSecretsScript = (list: string, file: string, region: string) => `umask 077
+: > "${file}.next"
+while IFS='=' read -r NAME REF; do
+  [ -n "$NAME" ] || continue
+  case "$REF" in
+    arn:*:ssm:*)
+      VALUE="$(aws ssm get-parameter --name "$REF" --with-decryption --query Parameter.Value --output text --region "${region}")" ;;
+    *)
+      IFS=: read -r -a PART <<< "$REF"
+      VERSION="\${PART[9]:-}"
+      VALUE="$(aws secretsmanager get-secret-value --secret-id "$(IFS=:; echo "\${PART[*]:0:7}")" \${VERSION:+--version-id "$VERSION"} --query SecretString --output text --region "${region}")" ;;
+  esac
+  printf '%s="%s"\n' "$NAME" "$(printf '%s' "$VALUE" | sed 's/[\\"\`$]/\\\\&/g')" >> "${file}.next"
+done < "${list}"
+mv "${file}.next" "${file}"
+umask 022`;
+
+/**
+ * The unit's setup step, run with an empty environment: `EnvironmentFile=`
+ * applies to every command, and the app's env (a `PATH`, AWS credentials)
+ * must not change how setup reaches S3 and Docker.
+ */
+const setupCommand = (unitName: string) =>
+  `/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root /usr/local/bin/${unitName}-setup.sh`;
 
 export const createEc2HostedSupport = ({
   stackName,
@@ -336,43 +398,33 @@ await bootstrap(entrypoint);
     return { archive, hash: bundleOutput.hash };
   });
 
-  const quoteEnvValue = (value: any) => {
-    const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-    return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
-  };
-
-  /** A `docker run --env-file`: one literal `NAME=value` per line, no quoting. */
-  const renderDockerEnvFile = (env: Record<string, any>) =>
-    Object.entries(env)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => {
-        const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-        return `${key}=${text.replaceAll("\n", " ")}`;
-      })
-      .join("\n");
-
-  const renderEnvFile = (env: Record<string, any>) =>
-    Object.entries(env)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
-      .join("\n");
-
   const renderHostedUserData = Effect.fn(function* ({
     unitName,
     bundleKey,
     envKey,
+    secretsKey,
     region,
     image,
   }: {
     unitName: string;
     bundleKey: string;
     envKey: string;
+    secretsKey: string;
     region: string;
     image: boolean;
   }) {
     const appDir = `/opt/${unitName}`;
     const bucket = yield* Assets.BucketName;
-    if (image) return renderImageUserData({ unitName, appDir, bucket, bundleKey, envKey, region });
+    if (image)
+      return renderImageUserData({
+        unitName,
+        appDir,
+        bucket,
+        bundleKey,
+        envKey,
+        secretsKey,
+        region,
+      });
     // User-data runs once via cloud-init's `scripts-user` (once-per-instance),
     // and is skipped on any subsequent boot — so it must NOT carry the work
     // that can fail transiently (bun install over the network, S3 sync). It
@@ -415,6 +467,8 @@ set -e
 mkdir -p "${appDir}"
 aws s3 cp "s3://${bucket}/${bundleKey}" "${appDir}/bundle.zip" --region "${region}"
 aws s3 cp "s3://${bucket}/${envKey}" "${appDir}/env" --region "${region}"
+aws s3 cp "s3://${bucket}/${secretsKey}" "${appDir}/secrets.list" --region "${region}"
+${readSecretsScript(`${appDir}/secrets.list`, `${appDir}/secrets.env`, region)}
 rm -f "${appDir}/index.mjs"
 unzip -o "${appDir}/bundle.zip" -d "${appDir}"
 SETUP_EOF
@@ -429,8 +483,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${appDir}
-ExecStartPre=/usr/local/bin/${unitName}-setup.sh
+ExecStartPre=${setupCommand(unitName)}
 EnvironmentFile=-${appDir}/env
+EnvironmentFile=-${appDir}/secrets.env
 # --no-install: the uploaded bundle is self-contained; bun must never fall
 # into its auto-install path (which hangs startup on network package
 # resolution) — fail fast if the bundle is incomplete instead.
@@ -457,6 +512,7 @@ systemctl enable --now ${unitName}.service
     bucket,
     bundleKey,
     envKey,
+    secretsKey,
     region,
   }: {
     unitName: string;
@@ -464,6 +520,7 @@ systemctl enable --now ${unitName}.service
     bucket: string;
     bundleKey: string;
     envKey: string;
+    secretsKey: string;
     region: string;
   }) => `#!/bin/bash
 set -uo pipefail
@@ -485,7 +542,11 @@ systemctl enable --now docker
 
 # AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
 command -v aws >/dev/null 2>&1 || {
-  command -v unzip >/dev/null 2>&1 || (apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
+  command -v unzip >/dev/null 2>&1 || {
+    (command -v dnf >/dev/null 2>&1 && dnf install -y unzip) \
+      || (command -v yum >/dev/null 2>&1 && yum install -y unzip) \
+      || (command -v apt-get >/dev/null 2>&1 && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
+  }
   curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
     && (cd /tmp && unzip -q -o awscliv2.zip && ./aws/install) || true
 }
@@ -494,8 +555,9 @@ command -v aws >/dev/null 2>&1 || {
 set -e
 aws s3 cp "s3://${bucket}/${bundleKey}" "${appDir}/image.tar" --region "${region}"
 aws s3 cp "s3://${bucket}/${envKey}" "${appDir}/env" --region "${region}"
+aws s3 cp "s3://${bucket}/${secretsKey}" "${appDir}/secrets.list" --region "${region}"
+${readSecretsScript(`${appDir}/secrets.list`, `${appDir}/secrets.env`, region)}
 ${loadImageArchiveScript(`${appDir}/image.tar`)}
-echo "$IMAGE" > "${appDir}/image"
 docker rm -f ${unitName} >/dev/null 2>&1 || true
 SETUP_EOF
 chmod +x /usr/local/bin/${unitName}-setup.sh
@@ -508,8 +570,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre=/usr/local/bin/${unitName}-setup.sh
-ExecStart=/bin/sh -c 'exec docker run --rm --name ${unitName} --network host --env-file ${appDir}/env "$(cat ${appDir}/image)"'
+ExecStartPre=${setupCommand(unitName)}
+EnvironmentFile=-${appDir}/env
+EnvironmentFile=-${appDir}/secrets.env
+ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} alchemy-${unitName}:latest
 ExecStop=/usr/bin/docker stop ${unitName}
 Restart=always
 RestartSec=5
@@ -569,7 +633,7 @@ systemctl enable --now ${unitName}.service
     roleName: string;
     managedPolicyArns: string[];
   }) {
-    const { accountId } = yield* AWSEnvironment.current;
+    const { accountId, partition } = yield* AWSEnvironment.current;
     const tags = yield* createInternalTags(id);
     const role = yield* iam
       .createRole({
@@ -607,7 +671,7 @@ systemctl enable --now ${unitName}.service
       managedPolicyArns,
     });
 
-    return role.Role?.Arn ?? `arn:aws:iam::${accountId}:role/${roleName}`;
+    return role.Role?.Arn ?? `arn:${partition}:iam::${accountId}:role/${roleName}`;
   });
 
   const ensureManagedInstanceProfile = Effect.fn(function* ({
@@ -662,11 +726,13 @@ systemctl enable --now ${unitName}.service
     policyName,
     assetPrefix,
     bindings,
+    secrets,
   }: {
     roleName: string;
     policyName: string;
     assetPrefix: string;
     bindings: ResourceBinding<Ec2HostedBinding>[];
+    secrets: ReadonlyArray<string>;
   }) {
     const activeBindings = bindings.filter(
       (binding: ResourceBinding<Ec2HostedBinding> & { action?: string }) =>
@@ -685,12 +751,34 @@ systemctl enable --now ${unitName}.service
         })) ?? [],
     );
 
+    const { partition } = yield* AWSEnvironment.current;
     policyStatements.push({
       Sid: undefined,
       Effect: "Allow",
       Action: ["s3:GetObject"],
-      Resource: [`arn:aws:s3:::${yield* Assets.BucketName}/${assetPrefix}/*`],
+      Resource: [`arn:${partition}:s3:::${yield* Assets.BucketName}/${assetPrefix}/*`],
     });
+    // The instance reads its secrets itself: exactly the ones it names.
+    const ssmArns = secrets.filter((ref) => ref.split(":")[2] === "ssm");
+    const secretArns = [
+      ...new Set(secrets.filter((ref) => !ssmArns.includes(ref)).map(secretArnOf)),
+    ];
+    if (ssmArns.length > 0) {
+      policyStatements.push({
+        Sid: undefined,
+        Effect: "Allow",
+        Action: ["ssm:GetParameter"],
+        Resource: ssmArns,
+      });
+    }
+    if (secretArns.length > 0) {
+      policyStatements.push({
+        Sid: undefined,
+        Effect: "Allow",
+        Action: ["secretsmanager:GetSecretValue"],
+        Resource: secretArns,
+      });
+    }
 
     yield* iam.putRolePolicy({
       RoleName: roleName,
@@ -707,15 +795,18 @@ systemctl enable --now ${unitName}.service
   const uploadHostedArtifacts = Effect.fn(function* ({
     bundleKey,
     envKey,
+    secretsKey,
     archive,
-    env,
-    image,
+    envFile,
+    secretsList,
   }: {
     bundleKey: string;
     envKey: string;
+    secretsKey: string;
     archive: Uint8Array<ArrayBufferLike>;
-    env: Record<string, any>;
-    image: boolean;
+    envFile: string;
+    /** `NAME=ARN` lines: where each secret is, never its value. */
+    secretsList: string;
   }) {
     const assets = yield* Assets;
     const contentHash = yield* sha256(archive);
@@ -728,7 +819,13 @@ systemctl enable --now ${unitName}.service
     yield* s3.putObject({
       Bucket: yield* assets.bucketName,
       Key: envKey,
-      Body: image ? renderDockerEnvFile(env) : renderEnvFile(env),
+      Body: envFile,
+      ContentType: "text/plain; charset=utf-8",
+    });
+    yield* s3.putObject({
+      Bucket: yield* assets.bucketName,
+      Key: secretsKey,
+      Body: secretsList,
       ContentType: "text/plain; charset=utf-8",
     });
   });
@@ -771,6 +868,8 @@ systemctl enable --now ${unitName}.service
     const image = news.context !== undefined;
     const bundleKey = `${assetPrefix}/${image ? "image.tar" : "bundle.zip"}`;
     const envKey = `${assetPrefix}/env`;
+    const secretsKey = `${assetPrefix}/secrets`;
+    const secrets = Object.entries(news.secrets ?? {}).sort(([a], [b]) => a.localeCompare(b));
     const policyName = output?.policyName ?? (yield* createPolicyName(id));
 
     const managedIam = !news.instanceProfileName;
@@ -817,6 +916,7 @@ systemctl enable --now ${unitName}.service
       policyName,
       assetPrefix,
       bindings,
+      secrets: secrets.map(([, ref]) => ref),
     });
     const env = {
       ...bindingEnv,
@@ -829,6 +929,16 @@ systemctl enable --now ${unitName}.service
       ...(news.port !== undefined ? { PORT: news.port } : {}),
       ...news.env,
     };
+    // Before anything is built or published: a key systemd can't hold fails here.
+    const envFile = yield* image
+      ? containerEnvFile(
+          env,
+          secrets.map(([name]) => name),
+        )
+      : systemdEnvFile(env);
+    // The secrets' names must be ones systemd can set, as the env's are.
+    yield* systemdEnvFile(Object.fromEntries(secrets.map(([name]) => [name, ""])));
+    const secretsList = secrets.map(([name, ref]) => `${name}=${ref}\n`).join("");
 
     const { archive, hash } = image
       ? yield* Effect.gen(function* () {
@@ -845,15 +955,17 @@ systemctl enable --now ${unitName}.service
     yield* uploadHostedArtifacts({
       bundleKey,
       envKey,
+      secretsKey,
       archive,
-      env,
-      image,
+      envFile,
+      secretsList,
     });
 
     const hostedUserData = yield* renderHostedUserData({
       unitName: runtimeUnitName,
       bundleKey,
       envKey,
+      secretsKey,
       region,
       image,
     });
@@ -870,6 +982,8 @@ systemctl enable --now ${unitName}.service
       assetPrefix,
       code: {
         hash,
+        ...(image ? { unit: CONTAINER_UNIT_VERSION } : {}),
+        secrets: SECRETS_UNIT_VERSION,
       },
     } satisfies Ec2HostedRuntimeState;
   });

@@ -349,17 +349,15 @@ export const DevelopersAppProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsDevelopersApps({
+            name: appName,
+            callbackUrl: news.callbackUrl,
+            apiProducts: news.apiProducts,
+            scopes: news.scopes,
+            status: news.status,
+            keyExpiresIn: news.keyExpiresIn,
+            appFamily: news.appFamily,
+            attributes: recordToAttributes(attributes),
             parent,
-            body: {
-              name: appName,
-              callbackUrl: news.callbackUrl,
-              apiProducts: news.apiProducts,
-              scopes: news.scopes,
-              status: news.status,
-              keyExpiresIn: news.keyExpiresIn,
-              appFamily: news.appFamily,
-              attributes: recordToAttributes(attributes),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -386,16 +384,13 @@ export const DevelopersAppProvider = () =>
         attributesChanged
       ) {
         current = yield* apigee.updateOrganizationsDevelopersApps({
+          callbackUrl: news.callbackUrl,
+          apiProducts: news.apiProducts,
+          scopes: news.scopes,
+          status: news.status ?? current.status,
+          appFamily: news.appFamily,
+          attributes: recordToAttributes(attributes),
           name,
-          body: {
-            name: appName,
-            callbackUrl: news.callbackUrl,
-            apiProducts: news.apiProducts,
-            scopes: news.scopes,
-            status: news.status ?? current.status,
-            appFamily: news.appFamily,
-            attributes: recordToAttributes(attributes),
-          },
         });
       }
 

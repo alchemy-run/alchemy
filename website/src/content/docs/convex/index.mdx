@@ -1,0 +1,73 @@
+---
+title: Convex
+description: Build on Convex with Alchemy. Declare projects and deployments in TypeScript, write queries, mutations and actions with Effect, and call them typed from your Workers and Lambdas.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Convex is a backend platform: a document database and the TypeScript functions that read and write it, running next to the data. Queries are reactive: a client subscribes to one, and Convex reruns it and pushes the new result whenever the data it read changes. Mutations run as transactions, and actions call the outside world. Convex runs it for you on Convex Cloud, or you run the open-source backend yourself.
+
+**New to Convex?** Start with [What is Convex?](/convex/what-is-convex).
+
+## A quick example
+
+A table and a query are declarations:
+
+```typescript title="src/messages.ts"
+import * as Convex from "@alchemy.run/convex/Server";
+import * as Schema from "effect/Schema";
+
+export const Messages = Convex.Table("messages", Schema.Struct({ body: Schema.String }));
+
+export class ListMessages extends Convex.Query<ListMessages>()("messages:list", {
+  args: Schema.Struct({}),
+  returns: Schema.Array(Messages.Document),
+}) {}
+```
+
+A Layer implements the query, and a file in `convex/` serves it:
+
+```typescript title="convex/messages.ts"
+import * as Convex from "@alchemy.run/convex/Server";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { ListMessages, Messages } from "../src/messages.ts";
+
+const ListMessagesLive = Layer.succeed(
+  ListMessages,
+  Effect.fn(function* () {
+    return yield* Messages.query().collect;
+  }),
+);
+
+export const list = Convex.serve(ListMessages, ListMessagesLive);
+```
+
+The Stack creates a project and a deployment, and pushes the functions on every deploy:
+
+```typescript title="alchemy.run.ts"
+import * as Convex from "@alchemy.run/convex";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Convex.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const project = yield* Convex.Project("App");
+    const deployment = yield* Convex.Deployment("Backend", { project, type: "preview" });
+    yield* Convex.Functions("Functions", { deployment, rootDir: "." });
+    return { url: deployment.url };
+  }),
+);
+```
+
+## Where to start
+
+**Want to build?** Follow [Setup](/convex/setup), then the [tutorial](/convex/tutorial/part-1).
+
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />
