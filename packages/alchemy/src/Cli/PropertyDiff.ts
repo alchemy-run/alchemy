@@ -192,12 +192,17 @@ const hidePrevious = (
     isPlainData(previous) &&
     isPlainData(desired) &&
     Array.isArray(previous) === Array.isArray(desired);
-  if (!sameShape) return mayHoldSecret(desired) ? HIDDEN : previous;
+  if (!sameShape && mayHoldSecret(desired)) return HIDDEN;
+  if (!isPlainData(previous)) return previous;
+  // Copy all plain data, matched or not: a reference back to an ancestor that
+  // was masked must not reach the renderer as the original, unmasked object.
   if (ancestors.has(previous)) return CIRCULAR;
   ancestors.add(previous);
   try {
     const at = (key: string | number) =>
-      Object.hasOwn(desired, key) ? (desired as Record<string | number, unknown>)[key] : undefined;
+      sameShape && Object.hasOwn(desired, key)
+        ? (desired as Record<string | number, unknown>)[key]
+        : undefined;
     return Array.isArray(previous)
       ? previous.map((value, index) => hidePrevious(value, at(index), ancestors))
       : Object.fromEntries(

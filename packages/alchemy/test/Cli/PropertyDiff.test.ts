@@ -268,6 +268,19 @@ describe("YAML property display", { tags: ["unit", "local"] }, () => {
     expect(lines).not.toContain("legacy-");
   });
 
+  test("never reaches masked plaintext through a removed cycle", () => {
+    const oldProps: Record<string, unknown> = { token: "legacy-secret" };
+    oldProps.self = oldProps;
+    const lines = formatDeclaredPropertyYaml(
+      oldProps,
+      { token: Redacted.make("new-secret") },
+      "update",
+    )?.lines.join("\n");
+
+    expect(lines).toContain("self: (circular)");
+    expect(lines).not.toContain("legacy-secret");
+  });
+
   test("handles bigint and cycles", () => {
     const value: Record<string, unknown> = { size: 2n };
     value.self = value;
