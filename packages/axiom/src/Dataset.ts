@@ -369,8 +369,10 @@ export const DatasetProvider = () =>
           // here mutation is safe.
           const next = yield* get({ dataset_id: datasetId }).pipe(
             Effect.map(sync),
-            Effect.catchTag("NotFound", () => Effect.succeed(ensure)),
-            Effect.catchTag("Forbidden", () => Effect.succeed(writeBlind)),
+            Effect.catchTags({
+              NotFound: () => Effect.succeed(ensure),
+              Forbidden: () => Effect.succeed(writeBlind),
+            }),
           );
           return yield* toAttrs(yield* next);
         }),
@@ -381,10 +383,11 @@ export const DatasetProvider = () =>
         }),
         lookup: Effect.fn(function* ({ name }) {
           const existing = yield* get({ dataset_id: name }).pipe(
-            Effect.catchTag("NotFound", () => Effect.undefined),
-            Effect.catchTag("Forbidden", () =>
-              Effect.fail(new DatasetNotReadable({ dataset: name, exists: undefined })),
-            ),
+            Effect.catchTags({
+              NotFound: () => Effect.undefined,
+              Forbidden: () =>
+                Effect.fail(new DatasetNotReadable({ dataset: name, exists: undefined })),
+            }),
           );
           return existing === undefined ? undefined : yield* toAttrs(existing);
         }),
@@ -407,10 +410,12 @@ export const DatasetProvider = () =>
                 return isOurs ? attrs : Unowned(attrs);
               }),
             ),
-            Effect.catchTag("NotFound", () => Effect.undefined),
-            // The token can't read datasets. Keep what state says; with no
-            // state, report nothing and let reconcile's create find out.
-            Effect.catchTag("Forbidden", () => Effect.succeed(output)),
+            Effect.catchTags({
+              NotFound: () => Effect.undefined,
+              // The token can't read datasets. Keep what state says; with no
+              // state, report nothing and let reconcile's create find out.
+              Forbidden: () => Effect.succeed(output),
+            }),
           );
         }),
       };
