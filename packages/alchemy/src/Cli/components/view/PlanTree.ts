@@ -49,6 +49,16 @@ export type PlanRow =
     }
   | {
       key: string;
+      /** A process or a tool of a runtime, or a binding one of them reaches. Shown, never applied. */
+      type: "capability";
+      id: string;
+      kind: string;
+      detail?: string;
+      depth: number;
+      action: "noop";
+    }
+  | {
+      key: string;
       type: "task";
       id: string;
       depth: number;
@@ -151,10 +161,21 @@ const buildRows = (plan: Plan, detailed: boolean): PlanRow[] => {
       return {
         key: getRowKey(item),
         type: "binding" as const,
-        id: item.bindingSid ?? item.id,
+        id: item.id,
         depth: item.depth,
         action: item.action as "create" | "update" | "delete" | "noop",
         hostKey: item.path.slice(0, -1).join("/"),
+      };
+    }
+    if (item.type === "capability") {
+      return {
+        key: getRowKey(item),
+        type: "capability" as const,
+        id: item.id,
+        kind: item.capabilityKind ?? "",
+        ...(item.capabilityDetail ? { detail: item.capabilityDetail } : {}),
+        depth: item.depth,
+        action: "noop" as const,
       };
     }
     if (item.type === "action") {
