@@ -1,5 +1,6 @@
 import * as NodeFs from "node:fs/promises";
 import * as NodeHttp from "node:http";
+import * as NodePath from "node:path";
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import type * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -110,92 +111,132 @@ const closeScope = async (scope: Scope.Closeable) => {
   await Effect.runPromiseExit(Scope.closeUnsafe(scope, Exit.void) ?? Effect.void);
 };
 
-const makeModuleFallbackService = Effect.gen(function* () {
-  const server = NodeHttp.createServer(async (req, res) => {
-    try {
-      const request = await parseModuleFallbackRequest(req);
-      if (!request) {
-        res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end("Invalid module fallback request");
-        return;
-      }
-
-      const candidate = request.rawSpecifier ?? request.specifier;
-      const match = MODULE_REFERENCE_REGEX.exec(candidate);
-      if (!match) {
-        res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end(`No match for module: ${candidate}`);
-        return;
-      }
-
-      const [, moduleType, modulePath] = match;
-      if (!moduleType || !modulePath) {
-        res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end(`Invalid module type or path: ${match[0]}`);
-        return;
-      }
-
-      let content: Buffer;
-      try {
-        content = await NodeFs.readFile(modulePath);
-      } catch {
-        res.writeHead(404, { "Content-Type": "text/plain" });
-        res.end(`Module not found: ${modulePath}`);
-        return;
-      }
-
-      switch (moduleType) {
-        case "CompiledWasm": {
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ wasm: Array.from(content) }));
-          return;
-        }
-        case "Data": {
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ data: Array.from(content) }));
-          return;
-        }
-        case "Text": {
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ text: content.toString() }));
-          return;
-        }
-        default: {
-          res.writeHead(400, { "Content-Type": "text/plain" });
-          res.end(`Invalid module type: ${moduleType}`);
-        }
-      }
-    } catch (error) {
-      res.writeHead(500, { "Content-Type": "text/plain" });
-      res.end(error instanceof Error ? (error.stack ?? error.message) : String(error));
-    }
-  });
-
-  // workerd fetches every fallback module over this server. Node's default
-  // 5s `keepAliveTimeout` closes idle sockets between module bursts, forcing
-  // workerd to open a fresh TCP connection per burst — on Windows CI the
-  // resulting TIME_WAIT churn exhausts ephemeral ports (WSAENOBUFS #10055).
-  // Keep idle connections around for a minute so they get reused.
-  server.keepAliveTimeout = 60_000;
-  server.headersTimeout = 65_000;
-  yield* Effect.callback<void>((resume) => {
-    server.listen(0, "127.0.0.1", () => resume(Effect.void));
-  });
-  yield* Effect.addFinalizer(() =>
-    Effect.callback<void>((resume) => {
-      server.close(() => resume(Effect.void));
-      // `close()` waits for in-flight/keep-alive connections; destroy them so
-      // shutdown doesn't hang for up to `keepAliveTimeout`.
-      server.closeAllConnections();
-    }),
-  );
-
-  const address = server.address();
-  if (address === null || typeof address === "string") {
-    return yield* Effect.die(new Error("Module fallback server address unavailable"));
+/**
+ * Whether `target` resolves inside one of `allow` (Vite's `server.fs.allow`
+ * roots). Both sides are canonicalized with `realpath` so a symlink can't
+ * point out of the allowed tree. A path that doesn't exist (or can't be
+ * resolved) is not allowed.
+ */
+const isWithinAllowedRoots = async (
+  target: string,
+  allow: ReadonlyArray<string>,
+): Promise<boolean> => {
+  let real: string;
+  try {
+    real = await NodeFs.realpath(NodePath.resolve(target));
+  } catch {
+    return false;
   }
-  return `127.0.0.1:${address.port}`;
-});
+  for (const root of allow) {
+    let base: string;
+    try {
+      base = await NodeFs.realpath(NodePath.resolve(root));
+    } catch {
+      continue;
+    }
+    if (real === base || real.startsWith(base + NodePath.sep)) return true;
+  }
+  return false;
+};
+
+const makeModuleFallbackService = (allow: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const server = NodeHttp.createServer(async (req, res) => {
+      try {
+        const request = await parseModuleFallbackRequest(req);
+        if (!request) {
+          res.writeHead(400, { "Content-Type": "text/plain" });
+          res.end("Invalid module fallback request");
+          return;
+        }
+
+        const candidate = request.rawSpecifier ?? request.specifier;
+        const match = MODULE_REFERENCE_REGEX.exec(candidate);
+        if (!match) {
+          res.writeHead(400, { "Content-Type": "text/plain" });
+          res.end(`No match for module: ${candidate}`);
+          return;
+        }
+
+        const [, moduleType, modulePath] = match;
+        if (!moduleType || !modulePath) {
+          res.writeHead(400, { "Content-Type": "text/plain" });
+          res.end(`Invalid module type or path: ${match[0]}`);
+          return;
+        }
+
+        // The specifier is attacker-controllable (the fallback server binds a
+        // loopback port any local process — or a browser page via
+        // DNS-rebinding — can reach), and it is read straight off disk. Confine
+        // it to Vite's own filesystem allowlist so it can't exfiltrate
+        // arbitrary files like /etc/passwd or a user's SSH key.
+        if (!(await isWithinAllowedRoots(modulePath, allow))) {
+          res.writeHead(403, { "Content-Type": "text/plain" });
+          res.end(`Module path not allowed: ${modulePath}`);
+          return;
+        }
+
+        let content: Buffer;
+        try {
+          content = await NodeFs.readFile(modulePath);
+        } catch {
+          res.writeHead(404, { "Content-Type": "text/plain" });
+          res.end(`Module not found: ${modulePath}`);
+          return;
+        }
+
+        switch (moduleType) {
+          case "CompiledWasm": {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ wasm: Array.from(content) }));
+            return;
+          }
+          case "Data": {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ data: Array.from(content) }));
+            return;
+          }
+          case "Text": {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ text: content.toString() }));
+            return;
+          }
+          default: {
+            res.writeHead(400, { "Content-Type": "text/plain" });
+            res.end(`Invalid module type: ${moduleType}`);
+          }
+        }
+      } catch (error) {
+        res.writeHead(500, { "Content-Type": "text/plain" });
+        res.end(error instanceof Error ? (error.stack ?? error.message) : String(error));
+      }
+    });
+
+    // workerd fetches every fallback module over this server. Node's default
+    // 5s `keepAliveTimeout` closes idle sockets between module bursts, forcing
+    // workerd to open a fresh TCP connection per burst — on Windows CI the
+    // resulting TIME_WAIT churn exhausts ephemeral ports (WSAENOBUFS #10055).
+    // Keep idle connections around for a minute so they get reused.
+    server.keepAliveTimeout = 60_000;
+    server.headersTimeout = 65_000;
+    yield* Effect.callback<void>((resume) => {
+      server.listen(0, "127.0.0.1", () => resume(Effect.void));
+    });
+    yield* Effect.addFinalizer(() =>
+      Effect.callback<void>((resume) => {
+        server.close(() => resume(Effect.void));
+        // `close()` waits for in-flight/keep-alive connections; destroy them so
+        // shutdown doesn't hang for up to `keepAliveTimeout`.
+        server.closeAllConnections();
+      }),
+    );
+
+    const address = server.address();
+    if (address === null || typeof address === "string") {
+      return yield* Effect.die(new Error("Module fallback server address unavailable"));
+    }
+    return `127.0.0.1:${address.port}`;
+  });
 
 const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   options: CloudflareVitePluginOptions<B>,
@@ -207,7 +248,10 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   onRestart?: () => void,
 ) {
   const runtime = yield* Runtime.Runtime;
-  const moduleFallback = yield* makeModuleFallbackService;
+  // Vite's own filesystem allowlist (workspace root + configured extras) is the
+  // boundary the module fallback server may read from.
+  const fsAllow = server.config.server.fs?.allow ?? [server.config.root];
+  const moduleFallback = yield* makeModuleFallbackService(fsAllow);
 
   const name =
     options.worker?.name ??
