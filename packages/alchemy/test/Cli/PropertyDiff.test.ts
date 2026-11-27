@@ -245,6 +245,17 @@ describe("YAML property display", { tags: ["unit", "local"] }, () => {
     ]);
   });
 
+  test("hides a previous plain value that became data holding a secret", () => {
+    const lines = formatDeclaredPropertyYaml(
+      { auth: "legacy-token" },
+      { auth: { token: Redacted.make("legacy-token") } },
+      "update",
+    )?.lines.join("\n");
+
+    expect(lines).toContain("auth: (hidden)");
+    expect(lines).not.toContain("legacy-token");
+  });
+
   test("handles bigint and cycles", () => {
     const value: Record<string, unknown> = { size: 2n };
     value.self = value;

@@ -144,6 +144,18 @@ const hidesPrevious = (desired: unknown) =>
   Effect.isEffect(desired) ||
   typeof desired === "function";
 
+/** Whether any value inside plain desired data {@link hidesPrevious}. */
+const containsHidden = (desired: unknown, ancestors = new WeakSet<object>()): boolean => {
+  if (hidesPrevious(desired)) return true;
+  if (!isPlainData(desired) || ancestors.has(desired)) return false;
+  ancestors.add(desired);
+  try {
+    return Object.values(desired).some((value) => containsHidden(value, ancestors));
+  } finally {
+    ancestors.delete(desired);
+  }
+};
+
 /**
  * Render previous props beside the desired ones: wherever the desired value
  * {@link hidesPrevious}, the previous value prints as `(hidden)`, so a value
@@ -157,6 +169,9 @@ const toYamlDisplayValueRedacting = (
   // Output expressions are Effects too, so this order is security-sensitive.
   if (Redacted.isRedacted(value)) return REDACTED;
   if (hidesPrevious(desired)) return HIDDEN;
+  // A value turned into data holding a secret (`"tok"` → `{ token: Redacted }`)
+  // has no matching path inside it to hide by, so hide it whole.
+  if (!isPlainData(value) && containsHidden(desired)) return HIDDEN;
   if (Output.isExpr(value)) return KNOWN_AFTER_APPLY;
   if (Effect.isEffect(value) || typeof value === "function") return COMPUTED;
   if (value === undefined) return UNDEFINED;
