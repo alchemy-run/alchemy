@@ -90,6 +90,12 @@ const hostPort = api.ports["3000/tcp"];
 
 `external: 0` lets Docker choose a free host port, and `ports` reports the one it chose, keyed by container port and protocol. Add `protocol: "udp"` for UDP.
 
+Set `hostIp` to bind a published port to a particular address on the Docker host. For example, `{ external: 0, internal: 3000, hostIp: "127.0.0.1" }` allocates a host port bound only to IPv4 loopback. For IPv6 loopback, use `hostIp: "::1"` without brackets. If you omit `hostIp`, Docker uses its default bind addresses, normally all interfaces. Publishing needs a network mode that supports port mappings; the `host` and `none` modes, and another container’s network namespace do not.
+
+With `hostIp`, a host range such as `external: "9000-9002"` lets Docker pick a port from that range for a single container port. The selected port appears in the output only after the container starts. To map an internal range one-to-one, use equally sized ranges. Use `external: 0` to let Docker allocate a host port for each internal port.
+
+If you rely on loopback to restrict access, use Docker Engine 28.0.0 or newer. Older engines can expose localhost-published ports to peers on the same network segment. A host bind is not a substitute for container network isolation; see [Docker's port publishing and routing guide](https://docs.docker.com/engine/network/port-publishing/).
+
 ## Pass secrets in the environment
 
 `environment` takes plain strings and `Redacted` values:

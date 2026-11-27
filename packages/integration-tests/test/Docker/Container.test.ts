@@ -184,6 +184,149 @@ test.provider(
 );
 
 test.provider(
+  "applies declared CPU and NUMA affinity independently of CPU quota",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const deploy = (cpuSet?: string, memoryNodes?: string) =>
+        Docker.Container("runtime-affinity", {
+          image: "alpine:3.22",
+          command: ["sleep", "3600"],
+          stopTimeout: "1 second",
+          start: true,
+          cpus: 0.5,
+          ...(cpuSet === undefined ? {} : { cpuSet }),
+          ...(memoryNodes === undefined ? {} : { memoryNodes }),
+        });
+
+      const baseline = yield* stack.deploy(deploy());
+      const { stdout: status } = yield* docker.run([
+        "exec",
+        baseline.id,
+        "cat",
+        "/proc/self/status",
+      ]);
+      // Select resources allowed to a process on the daemon, including remote
+      // daemons and hosts whose allowed CPU set does not start at zero.
+      const cpuSet = /^Cpus_allowed_list:\s*(\d+)/m.exec(status)?.[1];
+      const memoryNodes = /^Mems_allowed_list:\s*(\d+)/m.exec(status)?.[1];
+      if (cpuSet === undefined || memoryNodes === undefined) {
+        throw new Error("Docker test container did not report its allowed CPUs and memory nodes");
+      }
+      const pinned = deploy(cpuSet, memoryNodes);
+      expect((yield* stack.plan(pinned)).resources["runtime-affinity"]?.action).toBe("replace");
+      const first = yield* stack.deploy(pinned);
+      expect(first.id).not.toBe(baseline.id);
+      const { HostConfig } = yield* docker.container.inspect(first.id);
+      expect(HostConfig.CpusetCpus).toBe(cpuSet);
+      expect(HostConfig.CpusetMems).toBe(memoryNodes);
+      expect(HostConfig.NanoCpus).toBe(500000000);
+      const { stdout: pinnedStatus } = yield* docker.run([
+        "exec",
+        first.id,
+        "cat",
+        "/proc/self/status",
+      ]);
+      expect(/^Cpus_allowed_list:[ \t]*([^\n]+)/m.exec(pinnedStatus)?.[1]).toBe(cpuSet);
+      expect(/^Mems_allowed_list:[ \t]*([^\n]+)/m.exec(pinnedStatus)?.[1]).toBe(memoryNodes);
+      expect((yield* stack.deploy(pinned)).id).toBe(first.id);
+
+      const cpuOnly = deploy(cpuSet);
+      expect((yield* stack.plan(cpuOnly)).resources["runtime-affinity"]?.action).toBe("replace");
+      const second = yield* stack.deploy(cpuOnly);
+      expect(second.id).not.toBe(first.id);
+      const cpuOnlyConfig = (yield* docker.container.inspect(second.id)).HostConfig;
+      expect(cpuOnlyConfig.CpusetCpus).toBe(cpuSet);
+      expect(cpuOnlyConfig.CpusetMems).toBe("");
+
+      expect((yield* stack.plan(deploy())).resources["runtime-affinity"]?.action).toBe("replace");
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "publishes fixed and automatic host ports only on their requested address",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const hostPort = yield* findAvailablePort();
+      const rangeEnd = yield* findAvailablePort();
+      const rangeStart = rangeEnd - 1;
+      const deploy = (hostIp: string, legacy = false) =>
+        Docker.Container("host-bound-ports", {
+          image: "alpine:3.22",
+          command: ["sleep", "3600"],
+          stopTimeout: "1 second",
+          start: true,
+          ports: [
+            legacy
+              ? { external: `${hostIp}:${hostPort}`, internal: 8080 }
+              : { external: hostPort, internal: 8080, hostIp },
+            { external: "0", internal: 8081, hostIp, protocol: "udp" },
+            { external: `${rangeStart}-${rangeEnd}`, internal: 8082, hostIp },
+          ],
+        });
+      const loopback = deploy("127.0.0.1");
+      const legacy = yield* stack.deploy(deploy("127.0.0.1", true));
+      const first = yield* stack.deploy(loopback);
+      expect(first.id).toBe(legacy.id);
+      const live = yield* docker.container.inspect(first.id);
+      expect(live.NetworkSettings.Ports?.["8080/tcp"]).toEqual([
+        { HostIp: "127.0.0.1", HostPort: String(hostPort) },
+      ]);
+      const assigned = first.ports["8081/udp"];
+      expect(assigned).toBeGreaterThan(0);
+      expect(live.NetworkSettings.Ports?.["8081/udp"]).toEqual([
+        { HostIp: "127.0.0.1", HostPort: String(assigned) },
+      ]);
+      const ranged = first.ports["8082/tcp"];
+      expect(ranged).toBeGreaterThanOrEqual(rangeStart);
+      expect(ranged).toBeLessThanOrEqual(rangeEnd);
+      expect(live.NetworkSettings.Ports?.["8082/tcp"]).toEqual([
+        { HostIp: "127.0.0.1", HostPort: String(ranged) },
+      ]);
+      const unchanged = yield* stack.deploy(loopback);
+      expect(unchanged.id).toBe(first.id);
+      expect(unchanged.ports["8081/udp"]).toBe(assigned);
+
+      const other = deploy("127.0.0.2");
+      expect((yield* stack.plan(other)).resources["host-bound-ports"]?.action).toBe("replace");
+      const second = yield* stack.deploy(other);
+      expect(second.id).not.toBe(first.id);
+      expect(
+        (yield* docker.container.inspect(second.id)).NetworkSettings.Ports?.["8080/tcp"],
+      ).toEqual([{ HostIp: "127.0.0.2", HostPort: String(hostPort) }]);
+
+      const stopped = yield* stack.deploy(
+        Docker.Container("host-bound-ports", {
+          image: "alpine:3.22",
+          start: false,
+          ports: [
+            { external: 0, internal: 8080, hostIp: "::1" },
+            { external: `0.0.0.0:${hostPort}`, internal: 8081 },
+            { external: "9000-9002", internal: 8082, hostIp: "127.0.0.1" },
+            { external: "9003-9004", internal: "8083-8084", hostIp: "127.0.0.1" },
+            { external: 0, internal: "8085-8086", hostIp: "127.0.0.1" },
+          ],
+        }),
+      );
+      const configured = (yield* docker.container.inspect(stopped.id)).HostConfig.PortBindings;
+      expect(configured?.["8080/tcp"]?.[0]?.HostIp).toBe("::1");
+      expect(configured?.["8081/tcp"]).toEqual([{ HostIp: "0.0.0.0", HostPort: String(hostPort) }]);
+      expect(configured?.["8082/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "9000-9002" }]);
+      expect(stopped.ports["8082/tcp"]).toBeUndefined();
+      expect(stopped.ports["8083/tcp"]).toBe(9003);
+      expect(configured?.["8083/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "9003" }]);
+      expect(configured?.["8084/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "9004" }]);
+      expect(configured?.["8085/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "" }]);
+      expect(configured?.["8086/tcp"]).toEqual([{ HostIp: "127.0.0.1", HostPort: "" }]);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
   "enforces unprivileged read-only execution while keeping tmpfs writable",
   (stack) =>
     Effect.gen(function* () {
@@ -364,6 +507,42 @@ test.provider(
       const first = yield* stack.deploy(deploy({ sharedMemorySize: "128m" }));
       for (const { options, reason } of [
         { options: { sharedMemorySize: "garbage" }, reason: "sharedMemorySize" },
+        { options: { cpuSet: "4-2" }, reason: "cpuSet" },
+        {
+          options: { ports: [{ external: 0, internal: 80, hostIp: "localhost" }] },
+          reason: "ports[0].hostIp",
+        },
+        {
+          options: { ports: [{ external: 65536, internal: 80, hostIp: "127.0.0.1" }] },
+          reason: "ports[0].external",
+        },
+        {
+          options: { ports: [{ external: 8080, internal: "81-80", hostIp: "127.0.0.1" }] },
+          reason: "ports[0].internal",
+        },
+        {
+          options: { ports: [{ external: "8080-8082", internal: "80-81", hostIp: "127.0.0.1" }] },
+          reason: "ports[0].external",
+        },
+        {
+          options: { ports: [{ external: "0-0", internal: "80-81", hostIp: "127.0.0.1" }] },
+          reason: "ports[0].external",
+        },
+        {
+          options: { ports: [{ external: 0, internal: 0, hostIp: "127.0.0.1" }] },
+          reason: "ports[0].internal",
+        },
+        {
+          options: { ports: [{ external: "0-1", internal: 80, hostIp: "127.0.0.1" }] },
+          reason: "ports[0].external",
+        },
+        {
+          options: {
+            networkMode: "none" as const,
+            ports: [{ external: 0, internal: 80, hostIp: "127.0.0.1" }],
+          },
+          reason: "ports[0].hostIp",
+        },
         { options: { sharedMemorySize: "0" }, reason: "sharedMemorySize" },
         { options: { sharedMemorySize: "-1m" }, reason: "sharedMemorySize" },
         { options: { sharedMemorySize: "1e999m" }, reason: "sharedMemorySize" },
@@ -462,6 +641,40 @@ test.provider(
 );
 
 test.provider(
+  "replaces a legacy wildcard container before claiming a loopback binding on adoption",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const name = `alchemy-test-loopback-adoption-${stack.stage}`;
+      const { stdout } = yield* docker.run([
+        "container",
+        "create",
+        "--name",
+        name,
+        "-p",
+        "0.0.0.0:8080:80",
+        "alpine:3.22",
+      ]);
+      const original = stdout.trim();
+      yield* Effect.addFinalizer(() => docker.container.remove(original, true).pipe(Effect.ignore));
+      const resource = Docker.Container("loopback-adoption", {
+        name,
+        image: "alpine:3.22",
+        ports: [{ external: 8080, internal: 80, hostIp: "127.0.0.1" }],
+      });
+      const replacement = yield* stack.deploy(resource);
+      expect(replacement.id).not.toBe(original);
+      const inspected = yield* docker.container.inspect(replacement.id);
+      expect(inspected.HostConfig.PortBindings?.["80/tcp"]).toEqual([
+        { HostIp: "127.0.0.1", HostPort: "8080" },
+      ]);
+      expect((yield* stack.deploy(resource)).id).toBe(replacement.id);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
   "rejects invalid tmpfs targets before creating a Docker container",
   (stack) =>
     Effect.gen(function* () {
@@ -501,6 +714,35 @@ test.provider(
           id: "invalid-cpu-quota",
           props: { cpus: 0 },
           reason: "cpus must be a finite, positive number",
+        },
+        {
+          id: "invalid-cpu-set",
+          props: { cpuSet: "4-2" },
+          reason: "cpuSet must be a comma-separated list of non-negative IDs or ascending ranges",
+        },
+        {
+          id: "invalid-memory-nodes",
+          props: { memoryNodes: "0,,1" },
+          reason:
+            "memoryNodes must be a comma-separated list of non-negative IDs or ascending ranges",
+        },
+        {
+          id: "invalid-host-ip",
+          props: { ports: [{ external: 0, internal: 80, hostIp: "localhost" }] },
+          reason: "ports[0].hostIp must be an IPv4 or IPv6 address, without brackets",
+        },
+        {
+          id: "conflicting-host-ip",
+          props: { ports: [{ external: "0.0.0.0:8080", internal: 80, hostIp: "127.0.0.1" }] },
+          reason: "ports[0].external must be a port number or range when hostIp is set",
+        },
+        {
+          id: "host-ip-without-publishing",
+          props: {
+            networkMode: "host" as const,
+            ports: [{ external: 0, internal: 80, hostIp: "127.0.0.1" }],
+          },
+          reason: "ports[0].hostIp requires a network mode that supports port publishing",
         },
         {
           id: "invalid-pids-limit",
