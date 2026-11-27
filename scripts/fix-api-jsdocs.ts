@@ -46,6 +46,7 @@ const packages = [
   "domain",
   "kubernetes",
   "docker",
+  "portless",
   "redis",
   "sql",
 ];
