@@ -700,6 +700,27 @@ layer(services, { excludeTestServices: true })((it) => {
     60_000,
   );
 
+  it.effect("rejects a response when the upstream aborts before its body completes", () =>
+    Effect.gen(function* () {
+      const upstream = yield* serveTcpUpstream((socket) =>
+        socket.once("data", () => {
+          socket.write(
+            "HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\nConnection: keep-alive\r\n\r\npartial",
+            () => socket.resetAndDestroy(),
+          );
+        }),
+      );
+      const proxy = yield* WorkerProxy.WorkerProxy;
+      const instance = yield* proxy.serve({ host: "127.0.0.1" });
+      yield* instance.set(upstream);
+      yield* Effect.promise(async () => {
+        const signal = AbortSignal.timeout(3000);
+        await expect(fetch(instance.url, { signal }).then((res) => res.text())).rejects.toThrow();
+        expect(signal.aborted).toBe(false);
+      });
+    }),
+  );
+
   it.effect(
     "answers Expect: 100-continue before the client sends the body",
     () =>
@@ -825,3 +846,44 @@ const roundTrip = (url: URL, payload: string) =>
       ws.close();
     });
   });
+
+const serveTcpUpstream = (accept: (socket: NodeNet.Socket) => void) =>
+  Effect.acquireRelease(
+    Effect.promise(
+      () =>
+        new Promise<{
+          server: NodeNet.Server;
+          sockets: Set<NodeNet.Socket>;
+          url: URL;
+        }>((resolve, reject) => {
+          const sockets = new Set<NodeNet.Socket>();
+          const server = NodeNet.createServer((socket) => {
+            sockets.add(socket);
+            socket.on("error", () => {});
+            socket.once("close", () => sockets.delete(socket));
+            accept(socket);
+          });
+          server.once("error", reject);
+          server.listen(0, "127.0.0.1", () => {
+            const address = server.address();
+            if (address === null || typeof address === "string") {
+              reject(new Error("expected upstream TCP address"));
+              return;
+            }
+            resolve({
+              server,
+              sockets,
+              url: new URL(`http://127.0.0.1:${address.port}`),
+            });
+          });
+        }),
+    ),
+    ({ server, sockets }) =>
+      Effect.promise(
+        () =>
+          new Promise<void>((resolve) => {
+            for (const socket of sockets) socket.destroy();
+            server.close(() => resolve());
+          }),
+      ),
+  ).pipe(Effect.map(({ url }) => url));
