@@ -376,7 +376,8 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
     { concurrency: 16 },
   );
   // Insert in listing order, not completion order, so names that normalize
-  // to the same key (`a\b.txt` and `a/b.txt`) resolve as they did serially.
+  // to one key (`a\b.txt` and `a/b.txt`) or collate equal (NFC vs NFD) resolve
+  // as they did serially.
   for (const entry of entries) {
     if (entry) manifest.set(entry[0], entry[1]);
   }
@@ -393,11 +394,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
     manifest.set("/index.html", indexHtml);
   }
   const sortedManifest = Object.fromEntries(
-    // Distinct names can collate equal (NFC vs NFD `café.html`); break the
-    // tie by code unit so read completion order never reaches the digest.
-    Array.from(manifest.entries()).sort(
-      (a, b) => a[0].localeCompare(b[0]) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0),
-    ),
+    Array.from(manifest.entries()).sort((a, b) => a[0].localeCompare(b[0])),
   );
   // Hash only inputs that affect what gets uploaded — the file
   // manifest, asset config, and the special `_headers` / `_redirects`
