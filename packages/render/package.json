@@ -53,7 +53,9 @@
   },
   "dependencies": {
     "@alchemy.run/redis": "workspace:*",
-    "@alchemy.run/sql": "workspace:*"
+    "@alchemy.run/sql": "workspace:*",
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/render": "workspace:*"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

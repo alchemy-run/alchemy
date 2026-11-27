@@ -12,6 +12,8 @@
     "lib": ["DOM", "DOM.Iterable", "ES2023"]
   },
   "references": [
+    { "path": "../../submodules/distilled/packages/render/tsconfig.json" },
+    { "path": "../../submodules/distilled/packages/core/tsconfig.json" },
     { "path": "../alchemy/tsconfig.json" },
     { "path": "../redis/tsconfig.json" },
     { "path": "../sql/tsconfig.json" }
