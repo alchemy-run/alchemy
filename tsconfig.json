@@ -57,6 +57,9 @@
       "path": "./submodules/distilled/packages/hetzner/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/coolify/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/digitalocean/tsconfig.json"
     },
     {
@@ -182,6 +185,9 @@
     },
     {
       "path": "./packages/hetzner/tsconfig.json"
+    },
+    {
+      "path": "./packages/coolify/tsconfig.json"
     },
     {
       "path": "./packages/digitalocean/tsconfig.json"

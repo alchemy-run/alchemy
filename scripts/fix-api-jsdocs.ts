@@ -35,6 +35,7 @@ const packages = [
   "neon",
   "prisma",
   "hetzner",
+  "coolify",
   "digitalocean",
   "railway",
   "fly",

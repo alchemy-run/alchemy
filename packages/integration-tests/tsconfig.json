@@ -122,6 +122,7 @@
     { "path": "../neon/tsconfig.json" },
     { "path": "../prisma/tsconfig.json" },
     { "path": "../hetzner/tsconfig.json" },
+    { "path": "../coolify/tsconfig.json" },
     { "path": "../digitalocean/tsconfig.json" },
     { "path": "../railway/tsconfig.json" },
     { "path": "../fly/tsconfig.json" },
