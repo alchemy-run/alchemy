@@ -35,7 +35,6 @@ const desk = Effect.gen(function* () {
     () => import(`./${scenario}/Helper.process.ts`),
   );
   const { HandoverLive } = yield* Effect.promise(() => import(`./${scenario}/Handover.policy.ts`));
-  const { Workload, ALL } = yield* Effect.promise(() => import(`./${scenario}/Workload.view.ts`));
   const { Ticket, OpenTicket } = yield* Effect.promise(
     () => import("./shared/Ticket.aggregate.ts"),
   );
@@ -45,9 +44,6 @@ const desk = Effect.gen(function* () {
     yield* tickets.send(new OpenTicket({ ticketId: "t-1", subject: "Stuck" }));
     const helper = yield* Helper;
     yield* helper.get("t-1").send("Close it.");
-    // The view that follows the process is hosted and readable.
-    const workload = yield* Workload;
-    yield* workload.get(ALL);
     return { tools: harness.sessions.get("Helper/t-1")?.tools ?? [] };
   }).pipe(
     Effect.provide(

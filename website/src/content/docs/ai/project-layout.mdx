@@ -86,7 +86,7 @@ src/
 
 ## With a Domain model
 
-A Domain model's files follow [its own layout](/domain/project-layout), in a folder or a package of their own. A process is not one of them: it can work with several models, so it sits beside the tools, its name and its prose in one `.process.ts`. When the prose mentions a model whose policy or view uses the process, the mentions and the model's members are [thunks](/ai/domain#break-the-cycle-with-thunks).
+A Domain model's files follow [its own layout](/domain/project-layout), in a folder or a package of their own. A process is not one of them: it can work with several models, so it sits beside the tools, its name and its prose in one `.process.ts`. When the prose mentions a model whose policy holds the process, the mentions and the model's members are [thunks](/ai/domain#break-the-cycle-with-thunks).
 
 ```text
 src/
@@ -103,14 +103,15 @@ src/
 
 ## With a front end
 
-A page reads sessions through the model's `Triage` view, which the model keeps once one of its views follows the process: there is no file to write for it. The page is in `web/`, and imports only the model's Api, ids and value Schemas.
+A page reads the board through the model's Api, and a session through a route the Worker serves from the session itself. The page is in `web/`, and imports only the model's Api, ids and value Schemas, and the Schema of that route.
 
 ```text
 src/
   Board/
     WebApi.api.ts               what a page may send and read
-    IssueList.view.ts           every issue, and whether its session is working
-  Worker.ts
+    IssueList.view.ts           every issue, for the page's list
+  SessionRead.ts                what the page reads of a session: its status and new items
+  Worker.ts                     serves the Api at /api and a session at /sessions/<key>
 web/
   src/
     Board.ts                    Model, Message, update, Commands, Subscriptions

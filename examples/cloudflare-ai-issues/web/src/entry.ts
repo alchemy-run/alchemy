@@ -7,7 +7,17 @@ import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import { Runtime } from "foldkit";
 import { WebApi } from "../../src/Board/WebApi.api.ts";
-import { Flags, init, Listed, Model, REMEMBERED, subscriptions, update } from "./Board.ts";
+import { SessionRead } from "../../src/SessionRead.ts";
+import {
+  Flags,
+  init,
+  Listed,
+  Model,
+  REMEMBERED,
+  Sessions,
+  subscriptions,
+  update,
+} from "./Board.ts";
 import { issueIn } from "./Location.ts";
 import { view } from "./View.ts";
 
@@ -20,6 +30,16 @@ const BoardConnection = WebApi.layerClient.pipe(
   Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
 );
 
+/** An issue's session, read from the board's Worker on the page's own origin. */
+const SessionsOverHttp = Layer.succeed(Sessions, {
+  read: (issueId, after) =>
+    Effect.tryPromise(() =>
+      fetch(`${location.origin}/sessions/${encodeURIComponent(issueId)}?after=${after}`).then(
+        (response) => response.json(),
+      ),
+    ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(SessionRead))),
+});
+
 Runtime.run(
   Runtime.makeApplication({
     Model,
@@ -28,7 +48,7 @@ Runtime.run(
     update,
     view,
     subscriptions,
-    resources: BoardConnection,
+    resources: Layer.mergeAll(BoardConnection, SessionsOverHttp),
     container: document.getElementById("root"),
   }),
   {

@@ -10,7 +10,6 @@ import * as Schema from "effect/Schema";
 import { Desk as EagerDesk } from "./fixtures/eager/Desk.model.ts";
 import { Desk } from "./fixtures/lazy/Desk.model.ts";
 import { Helper, HelperLive } from "./fixtures/lazy/Helper.process.ts";
-import { Workload } from "./fixtures/lazy/Workload.view.ts";
 import { Author, AuthorLive } from "./fixtures/mutual-lazy/Author.process.ts";
 import { Reviewer } from "./fixtures/mutual-lazy/Reviewer.process.ts";
 import { Ticket } from "./fixtures/shared/Ticket.aggregate.ts";
@@ -23,9 +22,7 @@ const assert = <T extends true>(_: T) => _;
 
 // Its members are what the thunk returns, as if listed directly.
 assert<Equals<(typeof Desk)["modelName"], "Desk">>(true);
-assert<Equals<(typeof Desk)["views"][number]["viewName"], "TicketDetail" | "Workload" | "Helper">>(
-  true,
-);
+assert<Equals<(typeof Desk)["views"][number]["viewName"], "TicketDetail">>(true);
 // What a process mentions of it is there too.
 Desk.CloseTicket;
 Desk.TicketDetail;
@@ -42,26 +39,29 @@ assert<
 
 // ---------------------------------------------------------------- a view given as a thunk
 
-type WorkloadState = Domain.View.StateOf<typeof Workload>;
-assert<Equals<WorkloadState, { readonly opened: number; readonly working: ReadonlyArray<string> }>>(
-  true,
-);
-
-// Its handlers are typed from what the thunk's `from` lists, the process among them.
+// Its handlers are typed from what the thunk's `from` lists.
 export class Opened extends Domain.View("Opened", () => ({
-  from: [Ticket, Helper],
+  from: [Ticket],
   key: Schema.String,
-  keyOf: { TicketOpened: () => "all", HelperActivity: () => "all" },
+  keyOf: { TicketOpened: () => "all" },
   state: Schema.Struct({ subjects: Schema.Array(Schema.String) }),
   initial: { subjects: [] },
   evolve: {
     TicketOpened: (state, event) => ({ subjects: [...state.subjects, event.subject] }),
-    HelperActivity: (state, event) => {
-      const status: "idle" | "working" = event.status;
-      void status;
-      return state;
-    },
   },
+})) {}
+assert<Equals<Domain.View.StateOf<typeof Opened>, { readonly subjects: ReadonlyArray<string> }>>(
+  true,
+);
+
+// A view takes aggregates and views: an AI process is not a source.
+// @ts-expect-error a process is not something a view reads from
+export class Follows extends Domain.View("Follows", () => ({
+  from: [Helper],
+  key: Schema.String,
+  state: Schema.Struct({ n: Schema.Number }),
+  initial: { n: 0 },
+  evolve: {},
 })) {}
 
 // A mistake inside the thunk is reported on the thunk, not on the line it is on.
@@ -94,13 +94,12 @@ void Author;
 
 export class DeskApi extends Domain.Api("DeskApi", {
   model: Desk,
-  views: ["Workload", "Helper"],
+  views: ["TicketDetail"],
 }) {}
 declare const client: Domain.Api.ClientOf<typeof DeskApi>;
-client.Helper.watch("t-1");
-client.Workload.get("all");
-// @ts-expect-error the Api leaves TicketDetail out
 client.TicketDetail.get("t-1");
+// @ts-expect-error the model keeps no view of a process
+client.Helper.watch("t-1");
 
 // ---------------------------------------------------------------- what a thunk cannot break
 

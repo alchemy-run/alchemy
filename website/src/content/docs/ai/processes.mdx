@@ -123,9 +123,17 @@ Each item has a `seq`. A client that reconnects passes the last one it saw and m
 session.events({ after: lastSeq });
 ```
 
-So a client needs no other call to know where a session stands. It reads `events`, and the stream tells it.
+A [hosted session](/ai/hosting) keeps its events in its own object, where `events` is read. From outside it, ask instead: see [Read a session from outside](/ai/hosting#read-a-session-from-outside). To read it in a browser, see [Connect a front end](/ai/front-end).
 
-A [hosted session](/ai/hosting) keeps its events in its own object, where `events` is read. The rest of the app follows it through a Domain model: see [Follow a session from a model](/ai/hosting#follow-a-session-from-a-model). To read it in a browser, see [Connect a front end](/ai/front-end).
+## Ask where a session stands
+
+`status` answers once, without a stream: whether the session is working, and what is queued. A session nobody sent anything is idle.
+
+```typescript
+const { status, queued } = yield* session.status;
+```
+
+It works from anywhere the client does, a hosted session's included.
 
 ## Read the transcript
 
@@ -162,7 +170,7 @@ export const TriageLive = Triage.toLayer({
 
 Code that yields `Triage` depends on the name alone: it never sees the prose, the tools or the models. `TriageLive` requires what its own prose mentions, and a second Layer with other words and other tools can replace it without touching that code.
 
-The name is also what a [Domain model](/ai/domain)'s policies and views use. Prose that mentions such a model's commands and views writes each mention as a thunk, `${() => Board.LabelIssue}`, because the model's files import the name: see [Break the cycle with thunks](/ai/domain#break-the-cycle-with-thunks).
+The name is also what a [Domain model](/ai/domain)'s policies use. Prose that mentions such a model's commands and views writes each mention as a thunk, `${() => Board.LabelIssue}`, because the model's files import the name: see [Break the cycle with thunks](/ai/domain#break-the-cycle-with-thunks).
 
 ## Run it
 

@@ -45,8 +45,7 @@ More: [Mention a command or a view](https://alchemy.run/ai/domain#mention-a-comm
 The prose imports the model, the model imports its policy, and the policy imports the process: a cycle. Whichever file loads first would read another's class before it exists. A thunk is read when the declaration is first used, once every file has loaded:
 
 - each mention in the prose: `${() => Bank.DepositMoney}`;
-- the model's members: `Domain.Model("Bank", () => ({ ... }))`;
-- any view that lists the process in `from`: `Domain.View("Busy", () => ({ from: [Assistant], ... }))`.
+- the model's members: `Domain.Model("Bank", () => ({ ... }))`.
 
 A declaration's type is the same with a thunk. Use one only to break a cycle: props given directly are checked as the file loads.
 
@@ -132,23 +131,11 @@ A saga holds the client the same way, and may `prompt` inside an activity when a
 
 More: [Let a policy hand it work](https://alchemy.run/ai/domain#let-a-policy-hand-it-work).
 
-## Follow what a session does from a model
+## A session reports with commands
 
-A view follows a process by listing it in `from` and handling `<Process>Activity`: the status, the queue and the transcript items stored since the last one. The source's id is the session's key. The session's own instance sends each batch, through an eviction too, to every model that follows it.
+A model never reads a session. What it knows of the work is what the session sends: `Triage` reports by sending `LabelIssue`, an event the board's views show and its policies can react to. When the model should know more (a session gave up, what it found), declare a command for it and mention it in the prose. Never list a process in a view's `from`, and never copy a transcript into a model: read a session's status and transcript from the session (see [running.md](running.md) and [front-end.md](front-end.md)).
 
-```typescript
-// src/Board/IssueList.view.ts
-export class IssueList extends Domain.View("IssueList", () => ({
-  from: [Issue, Triage],
-  key: Schema.String,
-  keyOf: { IssueReported: () => ALL, TriageActivity: () => ALL },
-  // ...
-})) {}
-```
-
-A model with such a view also keeps a view named after the process, keyed by the session, with nothing declared for it. Its state is `{ status: "idle" | "working", queued }` and its events are the same activity. An Api serves it like any view (`Api.Triage.watch`, `Api.Triage.events`).
-
-More: [Follow what a session does](https://alchemy.run/ai/domain#follow-what-a-session-does).
+More: [A session reports with commands](https://alchemy.run/ai/domain#a-session-reports-with-commands).
 
 ## Keep entry points thin
 

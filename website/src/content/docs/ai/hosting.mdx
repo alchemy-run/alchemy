@@ -1,6 +1,6 @@
 ---
 title: Where sessions run
-description: Give a process's Layer to a host and each of its sessions runs in an instance of its own, a Durable Object on Cloudflare. Policies, sagas and Workers hold a session by its key, and a Domain model follows what it does.
+description: Give a process's Layer to a host and each of its sessions runs in an instance of its own, a Durable Object on Cloudflare. Policies, sagas and Workers hold a session by its key, send it work, and read where it stands and its transcript.
 ---
 
 A session needs somewhere to keep its conversation and to wake up again after an eviction. You do not write that place. A process's Layer says how the work is done; a host takes that Layer and gives each session an instance of its own.
@@ -167,42 +167,28 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
 `send` returns once the message is stored. `prompt` waits for the answer.
 
-## Follow a session from a model
+## Read a session from outside
 
-A session's events stay in its object. A model follows a process by listing it in a view's `from`. The view receives `EngineerActivity`: whether the session is working, what is queued, and the transcript items stored since the last one. The source's id is the session's key.
+The client reads a session too. `status` says whether it is working and what is queued, and `history` pages through its transcript:
 
-```typescript title="src/Workshop/Busy.view.ts"
-import * as Domain from "@alchemy.run/domain";
-import * as Schema from "effect/Schema";
-import { Engineer } from "../Engineer.process.ts";
+```typescript
+const session = engineer.get(taskId);
 
-/** The tasks whose engineer is working. */
-export class Busy extends Domain.View("Busy", () => ({
-  from: [Engineer],
-  key: Schema.String,
-  keyOf: { EngineerActivity: () => "all" },
-  state: Schema.Struct({ tasks: Schema.Array(Schema.String) }),
-  initial: { tasks: [] },
-  evolve: {
-    EngineerActivity: (state, event, { source }) => ({
-      tasks:
-        event.status === "working"
-          ? [...state.tasks.filter((id) => id !== source.id), source.id]
-          : state.tasks.filter((id) => id !== source.id),
-    }),
-  },
-})) {}
+const { status, queued } = yield* session.status;
+const page = yield* session.history({ after, take: 100 });
 ```
 
-A model with such a view also keeps a view named after the process, `Engineer`, keyed by the session: its state is where the session stands, and its events carry the transcript. The model's Layer then requires `Engineer`, and any number of models can follow the same process.
+`history({ after })` returns the items stored after the one you last saw, so a caller that asks again reads only what is new. A Worker can serve the two on a route of its own for a page to poll: [`examples/cloudflare-ai-issues`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-ai-issues) does.
 
-The session's object does the recording. It sends what the session reports to each model that follows it, and keeps doing so through an eviction: a job on its alarm wakes it and sends what was stored meanwhile, until the session is idle.
+A session's live `events` stream stays in its object. Read it there, or [serve it from an object you write](/ai/front-end#or-serve-the-session-over-rpc).
 
-A browser reads both through the model's [Api](/domain/api), with no route of its own: `Engineer.watch` for a session's status and `Engineer.events` for its transcript. See [Connect a front end](/ai/front-end).
+## Tell a model what a session did
+
+A Domain model knows nothing of a session. A session tells it by sending a command its prose mentions, as `CompleteTask` above: the command is an event of the model, which its views show and its policies react to. What the model should know of the work is a command you declare, and the session sends it when the prose says to.
 
 ## Break the import cycle
 
-`Busy` and `TaskWork` import `Engineer`, the model imports them, and `Engineer`'s prose imports the model. The prose's mentions, the model's members and the view's definition are thunks, each read when first used. [Break the cycle with thunks](/ai/domain#break-the-cycle-with-thunks) says why.
+`TaskWork` imports `Engineer`, the model imports `TaskWork`, and `Engineer`'s prose imports the model. The prose's mentions and the model's members are thunks, each read when first used. [Break the cycle with thunks](/ai/domain#break-the-cycle-with-thunks) says why.
 
 ## Run it in memory
 
@@ -268,4 +254,4 @@ export default class Reviewers extends Cloudflare.DurableObject<Reviewers>()(
 ) {}
 ```
 
-Here `get` is a lookup in this object, not a call to another one, and no model follows the session. Reach for it when a session belongs to something that is already an object of yours.
+Here `get` is a lookup in this object, not a call to another one, and the session's live `events` can be read where it is yielded. Reach for it when a session belongs to something that is already an object of yours.

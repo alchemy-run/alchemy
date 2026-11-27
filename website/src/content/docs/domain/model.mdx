@@ -228,7 +228,7 @@ A [projection](/domain/projection) writes events into a store you own, such as a
 
 A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and never replays.
 
-An [AI process](/ai/domain) is not a member: it works with a model, or several, from beside them. A policy or a saga hands one of its sessions work by key, and a view follows what its sessions do by listing the process in its `from`. The model then records the process as a view named after it, and its Layer requires the process.
+An [AI process](/ai/domain) is not a member: it works with a model, or several, from beside them. A policy or a saga hands one of its sessions work by key, and a session reports back by sending the model's commands. Domain knows nothing of it: the process is a service the policy's Layer requires.
 
 A [query](/domain/query) is not a consumer: it serves what a projection wrote to clients, across keys, guarded by middleware and rejections like the model's other reads, with a handler that checks the caller.
 

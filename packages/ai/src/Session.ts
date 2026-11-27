@@ -50,6 +50,14 @@ export const SessionStatus = Schema.Literals(["idle", "working"]);
 /** Whether a session is working on a turn. */
 export type SessionStatus = typeof SessionStatus.Type;
 
+/** Where a session stands: whether it is working on a turn, and what is queued for it. */
+export const SessionState = Schema.Struct({
+  status: SessionStatus,
+  queued: Schema.Array(QueuedMessage),
+});
+/** Where a session stands: whether it is working on a turn, and what is queued for it. */
+export type SessionState = typeof SessionState.Type;
+
 /**
  * What a session reports. `status` says whether it is working and what is
  * queued: it is the first event of every `events` stream, and is sent again

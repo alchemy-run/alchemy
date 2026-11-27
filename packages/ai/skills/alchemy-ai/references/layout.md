@@ -18,7 +18,7 @@ More: [Name a file after what it declares and its kind](https://alchemy.run/ai/p
 
 ## With a Domain model
 
-The model's files follow the Domain layout, in a folder or package of their own: see the `alchemy-domain` skill's `references/layout.md` for its rules. A process is not one of its files: it can work with several models, so it sits beside the tools. When its prose mentions a model whose policy or view uses it, the mentions are thunks.
+The model's files follow the Domain layout, in a folder or package of their own: see the `alchemy-domain` skill's `references/layout.md` for its rules. A process is not one of its files: it can work with several models, so it sits beside the tools. When its prose mentions a model whose policy holds it, the mentions are thunks.
 
 ```text
 src/
@@ -38,7 +38,7 @@ More: [With a Domain model](https://alchemy.run/ai/project-layout#with-a-domain-
 
 ## With a front end
 
-A page reads sessions through the process's view, which a model keeps once one of its views follows the process: no file records a session. The page is in `web/`, and its tests beside the model's.
+A page reads a session through a route the Worker serves from the session itself: no file records a session. The page is in `web/`, and its tests beside the model's.
 
 ```text
 src/
@@ -46,9 +46,10 @@ src/
     Board.model.ts
     BoardApi.api.ts             what changes an issue: verified
     WebApi.api.ts               what a page may send and read
-    IssueList.view.ts           every issue, for the page's list: from [Issue, Triage]
+    IssueList.view.ts           every issue, for the page's list
+  SessionRead.ts                what the page reads of a session: one Schema
   Triage.process.ts
-  Worker.ts                     serves WebApi at /api
+  Worker.ts                     serves WebApi at /api and a session at /sessions/<key>
 web/
   index.html
   vite.config.ts
@@ -67,6 +68,6 @@ test/
 alchemy.run.ts                  the Worker, and Cloudflare.Website.Foldkit for web/
 ```
 
-A larger app splits these into the `domain`, `server` and `web` packages of the `alchemy-domain` skill's layout. The tools, the prose and the Layers go in `server`; a process's name goes in `domain`, beside the models whose policies and views use it.
+A larger app splits these into the `domain`, `server` and `web` packages of the `alchemy-domain` skill's layout. The tools, the prose and the Layers go in `server`; a process's name goes in `domain`, beside the models whose policies hold it.
 
 More: [With a front end](https://alchemy.run/ai/project-layout#with-a-front-end), [Connect a front end](https://alchemy.run/ai/front-end), [Domain project layout: Keep the model in its own package](https://alchemy.run/domain/project-layout#keep-the-model-in-its-own-package).

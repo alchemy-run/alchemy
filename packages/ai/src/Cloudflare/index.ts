@@ -5,10 +5,7 @@
  * @module
  */
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import {
-  DurableObjectCallbacks,
-  outsideAlarmPass,
-} from "@alchemy.run/cloudflare/Workers/AlarmCallback";
+import { DurableObjectCallbacks } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
 import {
   DurableObject,
   type InlineDurableObjectProps,
@@ -503,7 +500,22 @@ const TRANSIT_RETRY = {
  *   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
  * );
  *
- * export const Live = WorkshopLive.pipe(Layer.provide(EngineerSessions));
+ * export const Live = WorkshopLive.pipe(Layer.provideMerge(EngineerSessions));
+ * ```
+ *
+ * ### Reaching a session
+ * Whatever the hosted Layer is provided to holds the process's client. Each
+ * call goes to the object of the session it names. A session's live
+ * `events` stay in its object: from outside, read `status` and `history`.
+ *
+ * **Example:** Send a session work, and read what it did
+ * ```typescript
+ * const engineer = yield* Engineer;
+ * const session = engineer.get(taskId);
+ *
+ * yield* session.send("Rename the config flag.", { requestId: "start" });
+ * const { status, queued } = yield* session.status;
+ * const page = yield* session.history({ after: lastSeq, take: 100 });
  * ```
  *
  * @layer
@@ -517,18 +529,8 @@ export const layerDurableObjects = <A, E, R>(
         `${name}Process`.replace(/[^A-Za-z0-9_]/g, "_"),
         {},
         Effect.succeed(
-          Effect.gen(function* () {
-            const state = yield* DurableObjectState;
-            const runtime = yield* RuntimeContext;
-            return yield* instance({
-              apart: true,
-              // Outside the alarm pass, so a callback's alarm isn't held open by it.
-              background: (effect) =>
-                state
-                  .waitUntil(outsideAlarmPass(effect))
-                  .pipe(Effect.provideService(RuntimeContext, runtime)),
-            }).pipe(Effect.provide(DurableObjectCallbacks));
-          }),
+          // A harness schedules its wake-ups on the object's alarm.
+          instance({ apart: true }).pipe(Effect.provide(DurableObjectCallbacks)),
         ),
       ),
       (namespace): Host.Instances => ({

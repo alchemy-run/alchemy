@@ -16,10 +16,10 @@ Docs: https://alchemy.run/ai, with every page listed in https://alchemy.run/llms
 An app with agents has three rings. Program in the middle one.
 
 1. **Entry points**: a Worker's `fetch`, a webhook (`GitHub.consumeRepositoryEvents`), a page. Each turns what happened outside into a command, or reads a view. None of them starts a session or knows a process exists.
-2. **The models and the processes**: a Domain model's commands, events and views are the rules, and they hold whoever sends a command, a person or an agent. A **process** is a member of no model. It works with models from beside them, as many as it needs: its prose mentions their commands and views, a policy or a saga hands a session work with `yield* Triage`, and a view follows what its sessions do by listing the process in `from`. A model that follows a process keeps a view named after it (`Triage`, keyed by the session), so a page can read each session. Use the **`alchemy-domain` skill** for the rest of this ring (`packages/domain/skills/alchemy-domain`, or https://alchemy.run/domain). Everything about aggregates, views, policies, stories and hosting the model is there, not here.
+2. **The models and the processes**: a Domain model's commands, events and views are the rules, and they hold whoever sends a command, a person or an agent. A **process** is a member of no model, and neither package knows the other. A process works with models from beside them, as many as it needs: its prose mentions their commands and views, which become its tools, and a policy or a saga hands a session work with `yield* Triage`. A session tells a model what it did by sending one of those commands. Use the **`alchemy-domain` skill** for the rest of this ring (`packages/domain/skills/alchemy-domain`, or https://alchemy.run/domain). Everything about aggregates, views, policies, stories and hosting the model is there, not here.
 3. **Layers**: where it runs. `DomainCloudflare.layerDurableObjects()` makes every member of a model a Durable Object class, and `AICloudflare.layerDurableObjects(layer)` gives each session of a process an object of its own. A harness Layer, a model Layer and a sandbox Layer say what a session runs on. Swap one and nothing else changes; `Domain.InMemory`, `AI.layerInMemory` and `AI.scripted` run all of it in a test.
 
-A front end is an entry point: one Api over the model. A page sends commands and watches views and streams. It never talks to a session.
+A front end is an entry point. A page sends commands and watches views through an Api over the model, and reads a session's status and transcript from a route the Worker serves from the session.
 
 When a step below says "see the `alchemy-domain` skill", load that skill and follow its reference file. Don't re-derive Domain patterns from this one.
 
@@ -33,9 +33,9 @@ Work in this order. Each step has a reference file with templates.
 2. **Lay out the files**: the model in a folder or package of its own, one file per tool and per process, the page in `web/`. See [references/layout.md](references/layout.md).
 3. **Describe the work** as processes: what each is told, what it is started with, what it may use. See [references/processes.md](references/processes.md).
 4. **Declare each tool and model** from its template. See [references/tools-and-models.md](references/tools-and-models.md).
-5. **Connect the processes and the models**: mention each model's commands and views in the prose, say who each session acts as, let a policy hand it work and a view follow it. See [references/domain.md](references/domain.md).
+5. **Connect the processes and the models**: mention each model's commands and views in the prose, say who each session acts as, and let a policy hand it work. See [references/domain.md](references/domain.md).
 6. **Run it**: host the model, then give a host the prose with a harness Layer, a model Layer, a sandbox if tools need files, and the model. See [references/running.md](references/running.md).
-7. **Serve it to a front end**: list what a page may send and read, and build the page, which follows each session through the process's view. See [references/front-end.md](references/front-end.md), then the `alchemy-domain` skill's `references/frontend.md` for the page itself.
+7. **Serve it to a front end**: list what a page may send and read, serve each session's status and transcript on a route, and build the page. See [references/front-end.md](references/front-end.md), then the `alchemy-domain` skill's `references/frontend.md` for the page itself.
 8. **Test every layer**: stories and `Verify` for the model, stories for the page, the page with the board in memory, then the deployed app. See [references/testing.md](references/testing.md).
 
 More: [Tutorial, part 1](https://alchemy.run/ai/tutorial/part-1), [Connect a front end](https://alchemy.run/ai/front-end).
@@ -63,11 +63,11 @@ More: [What is Alchemy AI?](https://alchemy.run/ai/what-is-alchemy-ai).
 - **One declaration per file, named `<Name>.<kind>.ts`.** The kinds are `.tool`, `.process` and `.mcp`. Never a `tools.ts` or `processes.ts` that collects several.
 - **A tool's file holds its class and its Layer** (`PostAnswer` and `PostAnswerLive` in `PostAnswer.tool.ts`), and any failure only it returns.
 - **A process is one file, outside every model's folder.** `<Name>.process.ts` holds the name (`class Triage extends AI.Process<Triage>()("Triage", {})`) and `<Name>Live`, its prose, or the prose on the class when nothing else needs the name. Never list a process on a model: `Domain.Model` has no `processes`.
-- **Break an import cycle with thunks, and only then.** When the prose mentions a model whose policy or view uses the process, each mention is `${() => Board.LabelIssue}`, and the model, and any view that lists the process in `from`, takes its props as `() => ({ ... })`.
+- **Break an import cycle with thunks, and only then.** When the prose mentions a model whose policy holds the process, each mention is `${() => Board.LabelIssue}`, and the model takes its members as `() => ({ ... })`.
 - **Models share `Models.ts`.** `.model.ts` means a Domain model.
 - **The Worker and the sandbox Layer keep plain names** (`Worker.ts`, `Sandbox.ts`). The Layers that say where and on what the model runs are composed in one place, beside the Worker.
 - **Never write a Durable Object to hold a session**: give the process's Layer to `AICloudflare.layerDurableObjects`.
-- **A Domain model never imports a tool.** Its policies and views import a process by its name. Its own files follow the `alchemy-domain` skill's conventions (`<Noun>.<kind>.ts`).
+- **A Domain model never imports a tool.** Its policies import a process by its name, and nothing else of the model knows a process exists: a view never lists one in `from`. Its own files follow the `alchemy-domain` skill's conventions (`<Noun>.<kind>.ts`).
 - **The page lives in `web/`** and imports only the model's Api, ids and value Schemas, never a process or a tool.
 
 More: [Project layout](https://alchemy.run/ai/project-layout).
@@ -86,9 +86,10 @@ More: [Project layout](https://alchemy.run/ai/project-layout).
 - `requestId` makes a message exactly-once, and starting a key twice does nothing: use them from code that may run twice (a policy, a webhook).
 - A session's key is the id of what it works on (the issue, the customer). A policy reaches it with `triage.get(source.id)`: never invent a second key for the same thing.
 - Reach a session from a policy or a saga, or from an entry point given the hosted process: `yield* Triage`, then `get(key)`. Each call goes to the session's own object, and `send` never waits for the model.
-- Read what a session does through a model that follows it: a view that lists the process in `from`, and the view the model then keeps for the process (`Api.Triage.watch` for its status, `Api.Triage.events` for its transcript). `events()` on a hosted session's client is not available outside its object.
+- Read what a session does from the session: `status` and `history({ after })` on its client, from a policy, a saga or a Worker route. `events()` on a hosted session's client is not available outside its object.
+- What a model should know of a session's work is a command the prose mentions and the session sends. Never copy a transcript into a model.
 - Provide what a session runs on (harness, default model, tools, sandbox) and the models its prose mentions to the process's prose Layer, inside what the host takes. The host builds it in each session's object, so a harness is never shared between sessions.
-- A model whose policy holds a process, or whose view follows one, needs it: leave the model's Layer needing the process, give that Layer to the prose, and provide the hosted process back to the model.
+- A model whose policy holds a process needs it: leave the model's Layer needing the process, give that Layer to the prose, and provide the hosted process back to the model.
 - A method that uses a session requires `RuntimeContext`. A policy's handler already has it. Never capture the context and provide it by hand.
 - Never `throw`. A tool fails with its declared `failure` (`Schema.TaggedError`).
 

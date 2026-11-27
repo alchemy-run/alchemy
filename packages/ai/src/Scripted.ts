@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import type { ProcessService, ProcessTag, Session } from "./Process.ts";
-import type { SessionEntry, SessionEvent, SessionItem } from "./Session.ts";
+import type { SessionEntry, SessionEvent, SessionItem, SessionState } from "./Session.ts";
 
 /** One message a scripted session is answering. */
 export interface Turn {
@@ -38,9 +38,12 @@ export interface Turn {
  *   }),
  * );
  *
- * const BoardInMemory = Board.layer(Layer.mergeAll(BoardHandlers, TriagePlayed)).pipe(
- *   Layer.provide(Domain.InMemory),
- * );
+ * const BoardInMemory = Board.layer(IssueWorkLive).pipe(Layer.provide(Domain.InMemory));
+ *
+ * // The board's policy holds Triage, and Triage sends the board's commands.
+ * const TriageInMemory = AI.layerInMemory(TriagePlayed.pipe(Layer.provide(BoardInMemory)));
+ *
+ * const Live = BoardInMemory.pipe(Layer.provideMerge(TriageInMemory));
  * ```
  */
 export const scripted = <Service, R = never>(
@@ -114,6 +117,10 @@ export const scripted = <Service, R = never>(
                 (follower) => Effect.sync(() => void followers.delete(follower)),
               ),
             ),
+          status: Effect.sync((): SessionState => ({
+            status: working > 0 ? "working" : "idle",
+            queued: [],
+          })),
           history: (options) =>
             Effect.sync(() => {
               const after = options?.after ?? 0;

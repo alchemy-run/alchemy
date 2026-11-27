@@ -1,13 +1,13 @@
 import { describe, expect, layer } from "@alchemy.run/test";
 /**
- * Which import cycles between a model and its members load, in every order.
+ * Which import cycles between a model and a process load, in every order.
  *
  * Each scenario under `fixtures/` is one help desk whose files import each
- * other in a cycle: the process's prose mentions the model, the model's
- * policy holds the process, and one of its views follows it. They differ
- * only in which of them are written as thunks. Each entry file is loaded first in a fresh process, as
- * a Worker, a page or a test might, and the desk is then built and its
- * mentions resolved.
+ * other in a cycle: the process's prose mentions the model, the model lists
+ * a policy, and the policy holds the process. They differ only in which of
+ * them are written as thunks. Each entry file is loaded first in a fresh
+ * process, as a Worker, a page or a test might, and the desk is then built
+ * and its mentions resolved.
  */
 import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Effect from "effect/Effect";
@@ -42,22 +42,24 @@ const matrix = Effect.fn(function* (scenario: string, entries: ReadonlyArray<str
   return Object.fromEntries(entries.map((entry, index) => [entry, results[index]!]));
 });
 
-const desk = ["Desk.model.ts", "Workload.view.ts", "Helper.process.ts", "Handover.policy.ts"];
+const desk = ["Desk.model.ts", "Helper.process.ts", "Handover.policy.ts"];
 const studio = ["Author.process.ts", "Reviewer.process.ts"];
 const okOf = (results: Record<string, { readonly ok: boolean }>) =>
   Object.fromEntries(Object.entries(results).map(([entry, { ok }]) => [entry, ok]));
 
 layer(BunServices.layer)("Domain: import cycles", (it) => {
-  describe("a model, a view and a process that import each other", { tags: ["unit"] }, () => {
+  describe("a model, a policy and a process that import each other", { tags: ["unit"] }, () => {
     it.effect(
-      "without thunks, no file loads: the prose reads the model before it exists",
+      "without thunks, only the process's file loads first",
       () =>
         Effect.gen(function* () {
+          // Loaded first, the process's file loads the model and the policy
+          // before its prose reads the model. Any other file gets to the
+          // prose, or to the model's list, before what it reads exists.
           const results = yield* matrix("eager", desk);
           expect(okOf(results)).toEqual({
             "Desk.model.ts": false,
-            "Workload.view.ts": false,
-            "Helper.process.ts": false,
+            "Helper.process.ts": true,
             "Handover.policy.ts": false,
           });
           expect(results["Desk.model.ts"]!.error).toContain("before initialization");
@@ -66,13 +68,14 @@ layer(BunServices.layer)("Domain: import cycles", (it) => {
     );
 
     it.effect(
-      "a thunk in the prose loads only when the model's file is loaded first",
+      "a thunk in the prose loads unless the policy's file is loaded first",
       () =>
         Effect.gen(function* () {
+          // The model still lists the policy at once: loading the policy
+          // first loads the process, then the model, before the policy exists.
           expect(okOf(yield* matrix("prose-thunk", desk))).toEqual({
             "Desk.model.ts": true,
-            "Workload.view.ts": false,
-            "Helper.process.ts": false,
+            "Helper.process.ts": true,
             "Handover.policy.ts": false,
           });
         }),
@@ -80,29 +83,12 @@ layer(BunServices.layer)("Domain: import cycles", (it) => {
     );
 
     it.effect(
-      "a thunk in the model too loads unless the process's file is loaded first",
-      () =>
-        Effect.gen(function* () {
-          // The view still follows the process at once: loading the process
-          // first loads the model, then the view, before the process exists.
-          expect(okOf(yield* matrix("model-thunk", desk))).toEqual({
-            "Desk.model.ts": true,
-            "Workload.view.ts": true,
-            "Helper.process.ts": false,
-            "Handover.policy.ts": false,
-          });
-        }),
-      { timeout: 60_000 },
-    );
-
-    it.effect(
-      "with thunks in the prose, the model and the view, every file loads first",
+      "with thunks in the prose and the model, every file loads first",
       () =>
         Effect.gen(function* () {
           const results = yield* matrix("lazy", desk);
           expect(okOf(results)).toEqual({
             "Desk.model.ts": true,
-            "Workload.view.ts": true,
             "Helper.process.ts": true,
             "Handover.policy.ts": true,
           });

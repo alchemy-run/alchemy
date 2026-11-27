@@ -10,7 +10,6 @@
  *
  * @module
  */
-import { Callbacks, makeCallback, type Callback } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { InstanceSetup } from "alchemy/Workers/InstanceSetup";
 import * as Context from "effect/Context";
@@ -19,14 +18,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import {
-  declared,
-  HostedTypeId,
-  Recorders,
-  type DeclaredProcess,
-  type Hosted,
-  type Sink,
-} from "./Process.ts";
+import { declared, HostedTypeId, type DeclaredProcess, type Hosted } from "./Process.ts";
 
 /** A value that crosses from a session's instance to its callers. */
 type Wire = unknown;
@@ -42,8 +34,6 @@ export interface Instance {
 
 /** How to build one instance of a process, handed to whatever keeps the instances. */
 export type MakeInstance = (host: {
-  /** Run work that outlives the call that started it, for as long as the instance stays up. */
-  readonly background: (effect: Effect.Effect<void>) => Effect.Effect<void>;
   /**
    * Whether the instance runs apart from the code that hosts it (a Durable
    * Object), and so builds the Layer for itself. Otherwise it is the Layer
@@ -61,30 +51,9 @@ export interface Instances {
   ) => Effect.Effect<Wire, never, RuntimeContext>;
 }
 
-/** How long a session that is not done is left before its reports are looked at again. */
-const RECORD_AGAIN = "5 seconds";
-
-/** Who keeps what a session reports, by process. A model that follows one adds itself. */
-type Sinks = Map<string, Array<(key: string) => Sink>>;
-
-/** The registry a Layer's build is given, filling `sinks`. */
-const recordersInto = (sinks: Sinks): Recorders["Service"] => ({
-  add: (name, sink) => {
-    const kept = sinks.get(name);
-    if (kept === undefined) sinks.set(name, [sink]);
-    else kept.push(sink);
-  },
-});
-
-/** A Layer as it was built, and who keeps what its sessions report. */
-interface Built {
-  readonly context: Context.Context<unknown>;
-  readonly sinks: Sinks;
-}
-
 /**
- * One instance of `process`: the sessions it serves, and the recording of
- * what they report. Apart from its host, it builds the Layer for itself.
+ * One instance of `process`: the sessions it serves. Apart from its host,
+ * it builds the Layer for itself.
  */
 const instanceOf =
   <A, E, R>(
@@ -93,27 +62,22 @@ const instanceOf =
     /** What the Layer is built with: what the host was given, and each hosted process's client. */
     services: Context.Context<never>,
     /** The Layer as the host built it. */
-    local: () => Built,
+    local: () => Context.Context<unknown>,
   ): MakeInstance =>
-  ({ background, apart }) =>
+  ({ apart }) =>
     Effect.gen(function* () {
       const hosted = process[HostedTypeId];
-      const mutating = new Set(hosted.mutating);
       const own = Effect.gen(function* () {
         const scope = yield* Effect.scope;
         // What the instance itself runs with wins over what the host was given.
         const ambient = yield* Effect.context<never>();
         const setup: Array<Effect.Effect<void, never, RuntimeContext>> = [];
-        const sinks: Sinks = new Map();
         // A harness is one per instance, so the Layer is built here, apart from every other build.
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `services` holds what the Layer requires
         const context = yield* Layer.buildWithMemoMap(layer, Layer.makeMemoMapUnsafe(), scope).pipe(
           Effect.provideContext(
             Context.merge(
-              services.pipe(
-                Context.add(InstanceSetup, { add: (effect) => void setup.push(effect) }),
-                Context.add(Recorders, recordersInto(sinks)),
-              ),
+              Context.add(services, InstanceSetup, { add: (effect) => void setup.push(effect) }),
               Context.omit(InstanceSetup)(ambient),
             ),
           ),
@@ -122,65 +86,10 @@ const instanceOf =
         // What a library asked to run once the instance exists: a harness opens here.
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- an instance is built inside its runtime
         for (const effect of setup) yield* effect as Effect.Effect<void>;
-        return { context, sinks } satisfies Built;
+        return context;
       });
       const built = apart ? yield* own : local();
-      const service = Context.getUnsafe(built.context, process as Context.Key<unknown, unknown>);
-      const keepers = built.sinks.get(process.processName) ?? [];
-
-      const callbacks = yield* Effect.serviceOption(Callbacks);
-      const recorders = new Map<string, ReadonlyArray<ReturnType<Hosted["record"]>>>();
-      const recordersOf = (key: string) => {
-        let recorder = recorders.get(key);
-        if (recorder === undefined) {
-          recorders.set(
-            key,
-            (recorder = keepers.map((sink) => hosted.record(service, key, sink(key)))),
-          );
-        }
-        return recorder;
-      };
-
-      const following = new Set<string>();
-      /** Follow the session live, once for as long as this instance lives. */
-      const follow = (key: string) =>
-        Effect.suspend(() => {
-          if (following.has(key)) return Effect.void;
-          following.add(key);
-          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- an instance's background work runs inside its runtime
-          const live = Effect.forEach(
-            recordersOf(key),
-            (recorder) => Effect.ignore(recorder.live),
-            { concurrency: "unbounded", discard: true },
-          ).pipe(
-            Effect.ensuring(Effect.sync(() => void following.delete(key))),
-          ) as Effect.Effect<void>;
-          return background(live);
-        });
-
-      /**
-       * What makes recording durable where an instance can be evicted: a job
-       * on its alarm, kept in its storage. It wakes the instance, keeps what
-       * was stored meanwhile, and comes back until the session is done.
-       */
-      let onRecord: Callback<string> | undefined;
-      const again = (key: string): Effect.Effect<void, never, RuntimeContext> =>
-        onRecord === undefined
-          ? Effect.void
-          : onRecord.schedule(key, { after: RECORD_AGAIN, payload: key }).pipe(Effect.orDie);
-      if (Option.isSome(callbacks) && keepers.length > 0) {
-        onRecord = yield* makeCallback(
-          `record-${process.processName}`,
-          Effect.fn(function* (key: string) {
-            yield* follow(key);
-            const done = yield* Effect.forEach(recordersOf(key), (recorder) => recorder.catchUp);
-            if (!done.every((each) => each)) yield* again(key);
-          }, Effect.orDie),
-        ).pipe(Effect.provideService(Callbacks, callbacks.value));
-      }
-      /** Record from now until the session is done. */
-      const record = (key: string) =>
-        keepers.length === 0 ? Effect.void : Effect.andThen(follow(key), again(key));
+      const service = Context.getUnsafe(built, process as Context.Key<unknown, unknown>);
 
       const methods = new Map<string, ReturnType<Hosted["serve"]>>();
       return {
@@ -189,11 +98,8 @@ const instanceOf =
             let served = methods.get(key);
             if (served === undefined) methods.set(key, (served = hosted.serve(service, key)));
             const run = served[method];
-            if (run === undefined) {
-              return Effect.die(new Error(`${process.processName} has no method ${method}`));
-            }
-            return mutating.has(method)
-              ? Effect.tap(run(...args), () => record(key))
+            return run === undefined
+              ? Effect.die(new Error(`${process.processName} has no method ${method}`))
               : run(...args);
           }),
       };
@@ -220,7 +126,7 @@ export const make = <A, E, R, R2>(
       const memoMap = yield* Layer.CurrentMemoMap;
       const instances = new Map<string, Instances>();
       // The Layer as this code built it: set once it is.
-      let local: Built | undefined;
+      let local: Context.Context<unknown> | undefined;
       // The Layer does not say which processes it provides, so every declared
       // one that nothing else provides gets a client. Those it turns out to
       // provide are hosted; a call to another one finds no instances.
@@ -239,19 +145,18 @@ export const make = <A, E, R, R2>(
                   : hosted.call(key, method, args);
               },
             },
-            () => Context.getUnsafe(local!.context, process as Context.Key<unknown, unknown>),
+            () => Context.getUnsafe(local!, process as Context.Key<unknown, unknown>),
           ) as never,
         );
       }
       const services = Context.merge(given, clients);
-      const sinks: Sinks = new Map();
       // Built once here too, with the Layers around it: what it binds at
       // deploy is bound, and a model it is given is the one everything else
       // is given.
       const built = (yield* Layer.buildWithMemoMap(layer, memoMap, scope).pipe(
-        Effect.provideContext(Context.add(services, Recorders, recordersInto(sinks))),
+        Effect.provideContext(services),
       )) as Context.Context<unknown>;
-      local = { context: built, sinks };
+      local = built;
       let provided = Context.empty() as Context.Context<never>;
       for (const process of declared.values()) {
         if (Option.isNone(Context.getOption(built, process))) continue;
@@ -286,7 +191,7 @@ export const make = <A, E, R, R2>(
  *   TriagePlayed.pipe(Layer.provide(BoardInMemory)),
  * );
  *
- * const Live = BoardInMemory.pipe(Layer.provide(TriageInMemory));
+ * const Live = BoardInMemory.pipe(Layer.provideMerge(TriageInMemory));
  * ```
  */
 export const layerInMemory = <A, E, R>(
@@ -303,10 +208,7 @@ export const layerInMemory = <A, E, R>(
         Effect.suspend(() =>
           made !== undefined
             ? Effect.succeed(made)
-            : instance({
-                apart: false,
-                background: (effect) => Effect.asVoid(Effect.forkIn(effect, scope)),
-              }).pipe(
+            : instance({ apart: false }).pipe(
                 Effect.provideService(Scope.Scope, scope),
                 Effect.tap((instance) => Effect.sync(() => void (made = instance))),
               ),

@@ -14,7 +14,6 @@ import type { Filter } from "./Filter.ts";
 import { evolveView, type LocalViewInput } from "./internal.ts";
 import type * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
-import * as Process from "./Process.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
 import { memo, type Thunk } from "./Thunk.ts";
@@ -85,17 +84,6 @@ export interface Any extends Context.Key<unknown, unknown> {
 /** Something a view or policy can consume: an aggregate or a view. */
 export type Source = Aggregate.Any | Any;
 
-/**
- * What a view's `from` lists: an aggregate, a view, or an `AI.Process`,
- * which stands for the view the model records it as.
- */
-export type FromSource = Source | Process.Any;
-
-/** A view's `from`, each process replaced by the view the model records it as. */
-export type Sources<From extends ReadonlyArray<FromSource>> = {
-  readonly [K in keyof From]: From[K] extends Process.Any ? Process.ViewOf<From[K]> : From[K];
-};
-
 /** The state type of a view class (`null` for a view without state). */
 export type StateOf<V extends Any> = V["~state"];
 /** The events a view class emits. */
@@ -103,36 +91,22 @@ export type EventOf<V extends Any> = V["~events"];
 /** The key aggregate of a view class. */
 export type KeyOf<V extends Any> = V["definition"]["key"];
 
-/** The name of a source. A process is named as its view is: after itself. */
-export type NameOf<S> = S extends Process.Any
-  ? S["processName"]
-  : S extends Aggregate.Any
-    ? S["aggregateName"]
-    : S extends Any
-      ? S["viewName"]
-      : never;
-/** The events a source produces. A process's are what each session reports. */
-export type SourceEvent<S> = S extends Process.Any
-  ? Process.ActivityOf<S>
-  : S extends Aggregate.Any
-    ? Aggregate.EventOf<S>
-    : S extends Any
-      ? EventOf<S>
-      : never;
-/** The key that identifies a source's instances: an aggregate, or a view's key. A process's are its sessions. */
-export type SourceKey<S> = S extends Process.Any
-  ? Process.SessionsOf<S>
-  : S extends Aggregate.Any
-    ? S
-    : S extends Any
-      ? KeyOf<S>
-      : never;
-/** What a source attaches to each event: a view's state after it, nothing for an aggregate. */
-export type SourceState<S> = S extends Process.Any
-  ? Process.StandsOf<S> | null
+/** The name of a source. */
+export type NameOf<S> = S extends Aggregate.Any
+  ? S["aggregateName"]
   : S extends Any
-    ? StateOf<S> | null
-    : undefined;
+    ? S["viewName"]
+    : never;
+/** The events a source produces. */
+export type SourceEvent<S> = S extends Aggregate.Any
+  ? Aggregate.EventOf<S>
+  : S extends Any
+    ? EventOf<S>
+    : never;
+/** The key that identifies a source's instances: an aggregate, or a view's key. */
+export type SourceKey<S> = S extends Aggregate.Any ? S : S extends Any ? KeyOf<S> : never;
+/** What a source attaches to each event: a view's state after it, nothing for an aggregate. */
+export type SourceState<S> = S extends Any ? StateOf<S> | null : undefined;
 
 /**
  * One input to a view or policy: an event, the source instance it came from,
@@ -230,7 +204,7 @@ export type Routed<F> = F | { readonly [route: string]: F };
  * The pure definition of a view.
  */
 export interface Definition<
-  From extends ReadonlyArray<FromSource>,
+  From extends ReadonlyArray<Source>,
   Key extends Key.Any,
   S extends Schema.Top | undefined,
   Events extends ReadonlyArray<Event.Any>,
@@ -238,11 +212,7 @@ export interface Definition<
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 > extends Read.Contract<Ms, Rejects> {
-  /**
-   * The aggregates and views this view consumes. An `AI.Process`
-   * stands for the view the model records it as: its events carry what each
-   * session reports, and its state is where the session stands.
-   */
+  /** The aggregates and views this view consumes. */
   readonly from: From;
   /**
    * What keys this view's instances: an aggregate, whose refs key them, or a
@@ -520,33 +490,6 @@ export interface ViewKey<Name extends string> {
  * );
  * ```
  *
- * ### Following an AI process
- * An `AI.Process` is a source like a view: `from` it, and handle
- * `<Process>Activity`, each batch of what a session did. The source's id
- * is the session's key. The model then records the process as a view
- * named after it, and its Layer requires the process. A process's prose
- * usually mentions the model that lists this view, so give the definition
- * as a thunk, read when the view is first used, to break that import cycle.
- *
- * **Example:** Which issues have a session at work
- * ```typescript
- * export class Working extends Domain.View("Working", () => ({
- *   from: [Triage],
- *   key: Schema.String,
- *   keyOf: { TriageActivity: () => "all" },
- *   state: Schema.Struct({ issues: Schema.Array(Schema.String) }),
- *   initial: { issues: [] },
- *   evolve: {
- *     TriageActivity: (state, event, { source }) => ({
- *       issues:
- *         event.status === "working"
- *           ? [...state.issues.filter((id) => id !== source.id), source.id]
- *           : state.issues.filter((id) => id !== source.id),
- *     }),
- *   },
- * })) {}
- * ```
- *
  * ### Annotating views
  * The last argument is its annotations: data for what is built on the
  * model, read back as `X.annotations`. Add your own keys by augmenting
@@ -574,7 +517,7 @@ export interface ViewKey<Name extends string> {
  */
 export const make = <
   const Name extends string,
-  const From extends ReadonlyArray<FromSource>,
+  const From extends ReadonlyArray<Source>,
   Key extends Key.Any,
   S extends Schema.Top | undefined = undefined,
   const Events extends ReadonlyArray<Event.Any> = readonly [],
@@ -587,7 +530,7 @@ export const make = <
   annotations: Annotations = {},
 ): ViewClass<
   Name,
-  Definition<Sources<From>, Key, S, Events, Computed, Ms, Rejects>,
+  Definition<From, Key, S, Events, Computed, Ms, Rejects>,
   S,
   StateType<S>,
   Key,
@@ -595,16 +538,6 @@ export const make = <
   Output<From, Events>
 > => {
   const given = memo(definition);
-  // A process in `from` stands for the view the model records it as.
-  const resolved = memo(
-    () =>
-      ({
-        ...given(),
-        from: given().from.map((source) =>
-          Process.isProcess(source) ? Process.recordingOf(source).view : source,
-        ),
-      }) as unknown as Definition<Sources<From>, Key, S, Events, Computed, Ms, Rejects>,
-  );
   const Tag = Context.Service<ViewKey<Name>, Host<StateType<S>, Key, Output<From, Events>>>()(
     `alchemy/Domain/View/${name}`,
   );
@@ -622,8 +555,8 @@ export const make = <
     static readonly kind = "View" as const;
     static readonly annotations: Annotations = annotations;
     static readonly viewName: Name = name;
-    static get definition(): Definition<Sources<From>, Key, S, Events, Computed, Ms, Rejects> {
-      return resolved();
+    static get definition(): Definition<From, Key, S, Events, Computed, Ms, Rejects> {
+      return given();
     }
     /** The view's state schema. */
     static get State(): S {
@@ -635,11 +568,11 @@ export const make = <
     }
     /** Apply one input to one key's state, as the server's view does. */
     static evolve(state: unknown, input: LocalViewInput) {
-      return evolveView({ definition: resolved() }, state, input);
+      return evolveView({ definition: given() }, state, input);
     }
   } as unknown as ViewClass<
     Name,
-    Definition<Sources<From>, Key, S, Events, Computed, Ms, Rejects>,
+    Definition<From, Key, S, Events, Computed, Ms, Rejects>,
     S,
     StateType<S>,
     Key,

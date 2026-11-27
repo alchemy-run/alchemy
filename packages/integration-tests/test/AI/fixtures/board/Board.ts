@@ -102,26 +102,6 @@ export class IssueDetail extends Domain.View(
   { description: "An issue's title, its label and the comments on it." },
 ) {}
 
-/**
- * The issues whose session is at work. It follows Triage, so the board
- * records each session: its status and transcript are the board's `Triage` view.
- */
-export class Working extends Domain.View("Working", {
-  from: [Triage],
-  key: Schema.String,
-  keyOf: { TriageActivity: () => "all" },
-  state: Schema.Struct({ issues: Schema.Array(Schema.String) }),
-  initial: { issues: [] },
-  evolve: {
-    TriageActivity: (state, event, { source }) => ({
-      issues:
-        event.status === "working"
-          ? [...state.issues.filter((id) => id !== source.id), source.id]
-          : state.issues.filter((id) => id !== source.id),
-    }),
-  },
-}) {}
-
 /** A reported issue is handed to its Triage session; a comment on it is passed on. */
 export class IssueWork extends Domain.Policy("IssueWork", {
   from: Issue,
@@ -152,12 +132,6 @@ export const IssueWorkLive = IssueWork.toLayer(
 
 export class Board extends Domain.Model("Board", {
   aggregates: [Issue],
-  views: [IssueDetail, Working],
+  views: [IssueDetail],
   policies: [IssueWork],
-}) {}
-
-/** What a front end may do and read, the Triage view among it. Labeling belongs to the session. */
-export class BoardApi extends Domain.Api("BoardApi", {
-  model: Board,
-  commands: ["ReportIssue", "CommentOnIssue"],
 }) {}

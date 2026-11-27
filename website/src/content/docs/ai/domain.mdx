@@ -1,9 +1,9 @@
 ---
 title: Processes and Domain models
-description: Mention a Domain model's commands and views in a process's prose, say who each session acts as, let a policy hand it work and a view follow what it does. A process belongs to no model, and can work with several.
+description: Mention a Domain model's commands and views in a process's prose, say who each session acts as, and let a policy hand it work. A process belongs to no model, can work with several, and reports by sending their commands.
 ---
 
-A process has no output, so it needs somewhere to report, and something has to decide when there is work for it. A [Domain model](/domain) is both. Write the rules as models: commands, aggregates, events, policies and views. A process is defined beside them: its prose mentions the models it works with, and a model's policies and views use the process. Workers and webhooks only bring the outside world in as commands, and Layers underneath say where it all runs.
+A process has no output, so it needs somewhere to report, and something has to decide when there is work for it. A [Domain model](/domain) is both. Write the rules as models: commands, aggregates, events, policies and views. A process is defined beside them: its prose mentions the models it works with, and a model's policies hand it work. Neither package knows the other: a mention becomes tools, and a policy holds an ordinary service. Workers and webhooks only bring the outside world in as commands, and Layers underneath say where it all runs.
 
 ## Declare the process
 
@@ -43,7 +43,7 @@ The prose requires the model it mentions: provide `AssistantLive` with the bank'
 
 ## Break the cycle with thunks
 
-The prose mentions `Bank`. Once a policy or a view of `Bank` uses `Assistant`, the files import each other in a cycle: the prose imports the model, the model imports the policy, and the policy imports the process. Whichever loads first reads another before it exists. A thunk delays the read until the declaration is first used, when all have loaded.
+The prose mentions `Bank`. Once a policy of `Bank` holds `Assistant`, the files import each other in a cycle: the prose imports the model, the model imports the policy, and the policy imports the process. Whichever loads first reads another before it exists. A thunk delays the read until the declaration is first used, when all have loaded.
 
 Write each mention as a thunk, `${() => Bank.DepositMoney}`, as above. Give the model its members as a thunk too:
 
@@ -55,7 +55,7 @@ export class Bank extends Domain.Model("Bank", () => ({
 })) {}
 ```
 
-A view that follows the process takes a thunk the same way: `Domain.View("Busy", () => ({ from: [Assistant], ... }))`. Every declaration takes its props directly or as a thunk, and its type is the same either way. Use a thunk only where a cycle needs one: props given directly are checked as the file loads, which reports a mistake sooner. [Import cycles](/domain/model#break-an-import-cycle) says which declarations take one.
+Every declaration takes its props directly or as a thunk, and its type is the same either way. Use a thunk only where a cycle needs one: props given directly are checked as the file loads, which reports a mistake sooner. [Import cycles](/domain/model#break-an-import-cycle) says which declarations take one.
 
 ## Mention an aggregate
 
@@ -167,47 +167,11 @@ The policy's Layer requires `Triage`, and so does the model it is given to. A po
 
 A [saga](/domain/saga) holds the client the same way, and may `prompt` a session inside an activity when a step needs its answer.
 
-## Follow what a session does
+## A session reports with commands
 
-A model follows a process through a view. List the process in `from`, and handle its activity:
+A model never reads a session. What it knows of the work is what the session sends it: `Triage` reports by sending `LabelIssue`, which is an event the board's views show and its policies can react to. When the model should know more (that a session gave up, or what it found), declare a command for it and mention it in the prose.
 
-```typescript title="src/Board/IssueList.view.ts"
-export class IssueList extends Domain.View("IssueList", () => ({
-  from: [Issue, Triage],
-  key: Schema.String,
-  keyOf: { IssueReported: () => ALL, TriageActivity: () => ALL },
-  state: State,
-  initial: { order: [], working: [] },
-  evolve: {
-    IssueReported: (state, _, { source }) => ({ ...state, order: [source.id, ...state.order] }),
-    TriageActivity: (state, event, { source }) => ({
-      ...state,
-      working:
-        event.status === "working"
-          ? [...state.working.filter((id) => id !== source.id), source.id]
-          : state.working.filter((id) => id !== source.id),
-    }),
-  },
-})) {}
-```
-
-It is a thunk because `Triage`'s prose mentions the board, which lists `IssueList`.
-
-Each `TriageActivity` is what a session did since the last one, and its source is the session:
-
-```typescript
-{ status: "idle" | "working", queued, items: ReadonlyArray<{ seq: number, item: SessionItem }> }
-```
-
-A model with such a view also keeps a view named after the process, keyed by the session. Nothing is declared for it. Its state is where the session stands, and its events are the same activity, so they carry the transcript:
-
-```typescript
-{ status: "idle" | "working", queued: ReadonlyArray<QueuedMessage> }
-```
-
-An Api serves it like any view, and a page reads `BoardClient.Triage.watch` for the status and `BoardClient.Triage.events` for the transcript. See [Connect a front end](/ai/front-end).
-
-The session's own instance sends each batch as it happens, and through an eviction, so the model holds every item the harness stored. Several models can follow one process.
+To show a session itself, its status and its transcript, read them from the session: see [Read a session from outside](/ai/hosting#read-a-session-from-outside) and [Connect a front end](/ai/front-end).
 
 ## The outside world comes in as commands
 

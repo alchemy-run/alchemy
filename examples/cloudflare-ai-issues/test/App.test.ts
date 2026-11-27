@@ -14,7 +14,7 @@ import { LabelIssue } from "../src/Board/LabelIssue.command.ts";
 import { started } from "../src/Board/Said.ts";
 import { WebApi } from "../src/Board/WebApi.api.ts";
 import { Triage } from "../src/Triage.process.ts";
-import { listOf, Message, threadOf } from "../web/src/Board.ts";
+import { listOf, Message, Sessions, threadOf } from "../web/src/Board.ts";
 import { open } from "./App.ts";
 
 /**
@@ -43,8 +43,25 @@ const TriageInMemory = AI.layerInMemory(TriagePlayed.pipe(Layer.provide(BoardInM
 
 const Hosted = Layer.mergeAll(BoardInMemory, TriageInMemory).pipe(Layer.provide(TriageInMemory));
 
+/** The page's read of a session, from the session itself instead of over a network. */
+const SessionsInProcess = Layer.effect(
+  Sessions,
+  Effect.gen(function* () {
+    const triage = yield* Triage;
+    return {
+      read: (issueId, after) =>
+        Effect.gen(function* () {
+          const session = triage.get(issueId);
+          return { ...(yield* session.status), ...(yield* session.history({ after, take: 100 })) };
+        }).pipe(Effect.provide(RuntimeContext.phantom)),
+    };
+  }),
+);
+
 /** The page's client, with the board in this process instead of over a network. */
-const Live = WebApi.layerClientInProcess.pipe(Layer.provideMerge(Hosted));
+const Live = Layer.mergeAll(WebApi.layerClientInProcess, SessionsInProcess).pipe(
+  Layer.provideMerge(Hosted),
+);
 
 const report = (page: Effect.Success<ReturnType<typeof open>>, title: string) =>
   Effect.gen(function* () {

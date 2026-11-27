@@ -11,7 +11,6 @@ import * as Aggregate from "../../Aggregate.ts";
 import type * as Decision from "../../Decision.ts";
 import * as ExternalSystem from "../../ExternalSystem.ts";
 import * as Key from "../../Key.ts";
-import { HostedTypeId } from "../../Process.ts";
 import * as Check from "../../Prove/internal/Check.ts";
 import * as Decide from "../../Prove/internal/Decide.ts";
 import * as Induction from "../../Prove/internal/Induction.ts";
@@ -286,8 +285,6 @@ export interface Options {
 /** A model, as far as the explorer reads it. */
 export interface ModelLike {
   readonly modelName: string;
-  /** Its own aggregates: what it records of a process is left out. */
-  readonly aggregates?: ReadonlyArray<Aggregate.Any>;
   readonly definitions: {
     readonly aggregates: ReadonlyArray<Aggregate.Any>;
     readonly decisions?: ReadonlyArray<Decision.Any>;
@@ -672,7 +669,15 @@ const textOf = (value: V | undefined): string | undefined =>
       ? value.term.text
       : undefined;
 
-/** Whether a yielded service is a process a model hosts. */
+/**
+ * The key an `AI.Process` declared by name carries. Nothing of
+ * `@alchemy.run/ai` is imported: a policy that holds a process is only
+ * recognised, so that telling a session something is known to change
+ * nothing by itself.
+ */
+const HostedTypeId = "~alchemy/AI/Hosted";
+
+/** Whether a yielded service is an AI process. */
 const isProcess = (host: unknown): host is { readonly processName: string } =>
   typeof host === "function" && HostedTypeId in host;
 
@@ -722,10 +727,6 @@ export const locate = Effect.fn(function* (
   const missing: Array<string> = [];
   const unread: Array<string> = [];
   for (const cls of model.definitions.aggregates) {
-    // The aggregate a model keeps for a process's sessions is not among its
-    // own: only a session's object sends its command, and no Api reaches
-    // it, so the explorer leaves it as it starts.
-    if (model.aggregates !== undefined && !model.aggregates.includes(cls)) continue;
     const module = modules.find(
       (m) =>
         Object.values(m.exports).includes(cls) &&

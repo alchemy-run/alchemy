@@ -17,6 +17,8 @@ export {
   SessionEvent,
   SessionItem,
   SessionPage,
+  SessionState,
+  SessionStatus,
 } from "./Session.ts";
 
 /** A harness could not run what a process asked of it. */

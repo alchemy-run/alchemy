@@ -19,7 +19,7 @@ import {
 } from "./Harness.ts";
 import { isMcpServer, type McpServerClass } from "./McpServer.ts";
 import { isModel, type AnyModel, type ModelClass } from "./Model.ts";
-import { QueuedMessage, SessionItem } from "./Session.ts";
+import type { SessionState } from "./Session.ts";
 import {
   isToolGroup,
   Tool,
@@ -165,6 +165,11 @@ export interface Session {
   readonly events: (options?: {
     readonly after?: number;
   }) => Stream.Stream<SessionEvent, HarnessError, RuntimeContext>;
+  /**
+   * Where the session stands now: whether it is working, and what is
+   * queued. A session nobody sent anything is idle.
+   */
+  readonly status: Effect.Effect<SessionState, HarnessError, RuntimeContext>;
   /** A page of the transcript: the items the session has stored. */
   readonly history: (
     options?: HistoryOptions,
@@ -246,33 +251,8 @@ export const declared = new Map<string, DeclaredProcess>();
 /** A value that crosses from a session's object to its callers. */
 type Wire = unknown;
 
-/** How a session's reports reach whoever keeps them: a Domain model that follows the process. */
-export interface Sink {
-  /** The `seq` of the last item that was kept. */
-  readonly cursor: Effect.Effect<number, unknown, RuntimeContext>;
-  /** Keep these events, in order. An item already kept is dropped. */
-  readonly write: (
-    reports: ReadonlyArray<SessionEvent>,
-  ) => Effect.Effect<void, unknown, RuntimeContext>;
-}
-
-/**
- * Where the instance of a session keeps what it reports. A host provides it
- * while it builds a process inside an instance, and whatever follows the
- * process (a Domain model with a view `from` it) adds itself.
- *
- * @internal
- */
-export class Recorders extends Context.Service<
-  Recorders,
-  {
-    /** Keep what each session of the process named `process` reports in the sink `sink` gives for its key. */
-    readonly add: (process: string, sink: (key: string) => Sink) => void;
-  }
->()("alchemy/AI/Recorders") {}
-
 /** How a process's client reaches the instances of its sessions. */
-export interface Remote {
+interface Remote {
   readonly call: (
     key: string,
     method: string,
@@ -283,30 +263,19 @@ export interface Remote {
 /**
  * How a host runs a process with each session in an instance of its own
  * (`AI.layerInMemory`, `AICloudflare.layerDurableObjects`). `serve` is one
- * session's methods inside its instance, `client` what everything else
- * holds, and `record` hands what the session reports to whoever keeps it.
+ * session's methods inside its instance, and `client` what everything else
+ * holds.
  *
  * @internal
  */
 export interface Hosted {
   readonly name: string;
-  readonly mutating: ReadonlyArray<string>;
-  /** What a session reports, as schemas: one transcript item, and one queued message. */
-  readonly reports: { readonly item: typeof SessionItem; readonly queued: typeof QueuedMessage };
   readonly serve: (
     service: unknown,
     key: string,
   ) => Readonly<
     Record<string, (...args: ReadonlyArray<any>) => Effect.Effect<Wire, never, RuntimeContext>>
   >;
-  readonly record: (
-    service: unknown,
-    key: string,
-    sink: Sink,
-  ) => {
-    readonly live: Effect.Effect<void, unknown, RuntimeContext>;
-    readonly catchUp: Effect.Effect<boolean, unknown, RuntimeContext>;
-  };
   readonly client: (remote: Remote, local: () => unknown) => unknown;
 }
 
@@ -887,6 +856,13 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
               return session.events(options);
             }),
           ),
+        status: Effect.gen(function* () {
+          const session = yield* sessionOf(key);
+          if (!(yield* session.exists)) return IDLE;
+          // The first event of a session's stream is where it stands.
+          const first = Option.getOrUndefined(yield* Stream.runHead(session.events()));
+          return first?.type === "status" ? { status: first.status, queued: first.queued } : IDLE;
+        }),
         history: (options) => Effect.flatMap(sessionOf(key), (session) => session.history(options)),
         prompt: (text, options) =>
           Effect.flatMap(started(key), (session) => session.prompt(text, options)),
@@ -895,6 +871,9 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
     state.services.set(definition, service);
     return service;
   });
+
+/** Where a session nobody sent anything stands. */
+const IDLE: SessionState = { status: "idle", queued: [] };
 
 /** What a call to a session's object answers: its value, or the error it failed with. */
 type Answer =
@@ -934,8 +913,6 @@ const hostedAs = (name: string): Hosted => {
     );
   return {
     name,
-    mutating: ["start", "send", "steer", "withdraw", "interrupt", "prompt"],
-    reports: { item: SessionItem, queued: QueuedMessage },
     serve: (given, key) => {
       const service = given as ProcessService<any>;
       const session = service.get(key);
@@ -972,35 +949,9 @@ const hostedAs = (name: string): Hosted => {
           answer(Effect.flatMap(sendOptions(options), (options) => session.prompt(text, options))),
         withdraw: (id: string) => answer(session.withdraw(id)),
         interrupt: () => answer(session.interrupt),
+        status: () => answer(session.status),
         history: (options?: HistoryOptions) => answer(session.history(options)),
         exists: () => answer(service["~exists"]?.(key) ?? Effect.succeed(true)),
-      };
-    },
-    record: (given, key, sink) => {
-      const session = (given as ProcessService<any>).get(key);
-      return {
-        live: Effect.gen(function* () {
-          const after = yield* sink.cursor;
-          yield* session.events({ after }).pipe(
-            Stream.groupedWithin(50, "100 millis"),
-            Stream.runForEach((batch) => sink.write(Array.from(batch))),
-          );
-        }),
-        catchUp: Effect.gen(function* () {
-          const status = Option.getOrUndefined(yield* Stream.runHead(session.events()));
-          if (status?.type !== "status") return true;
-          let after = yield* sink.cursor;
-          while (true) {
-            const page = yield* session.history({ after, take: 100 });
-            yield* sink.write([
-              status,
-              ...page.items.map((entry) => ({ type: "item" as const, ...entry })),
-            ]);
-            if (page.next === undefined) break;
-            after = page.next;
-          }
-          return status.status === "idle" && status.queued.length === 0;
-        }),
       };
     },
     client: (remote, local): ProcessService<any> => {
@@ -1050,12 +1001,13 @@ const hostedAs = (name: string): Hosted => {
           prompt: (text, options) => call(key, "prompt", text, wireOptions(options)),
           withdraw: (id) => sure(call(key, "withdraw", id)),
           interrupt: sure(call(key, "interrupt")),
+          status: sure(call(key, "status")),
           history: (options) => sure(call(key, "history", options ?? {})),
-          // A session's events stay in its instance: a model that follows the process records them.
+          // A session's live events stay in its instance.
           events: () =>
             Stream.die(
               new HarnessError({
-                message: `A session of ${name} lives in an instance of its own, where its events stay. Follow it through a Domain model: a view with ${name} in its \`from\` receives ${name}Activity, and the model's ${name} view carries each session's transcript.`,
+                message: `A session of ${name} lives in an instance of its own, where its live events stay. From outside it, read \`status\` and \`history({ after })\`.`,
               }),
             ),
         }),

@@ -41,6 +41,8 @@ export {
   SessionEvent,
   SessionItem,
   SessionPage,
+  SessionState,
+  SessionStatus,
 } from "./Harness.ts";
 export {
   Acting,

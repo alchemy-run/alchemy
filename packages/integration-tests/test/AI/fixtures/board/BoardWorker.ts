@@ -14,7 +14,6 @@ import * as Option from "effect/Option";
 import { Fast, FastLlama } from "../Processes.ts";
 import {
   Board,
-  BoardApi,
   CommentOnIssue,
   Issue,
   IssueDetail,
@@ -74,7 +73,7 @@ const Live = BoardLive.pipe(Layer.provideMerge(TriageSessions));
 /**
  * Stands in for a webhook: `POST /report/<issue>` and `POST /comment/<issue>`
  * become commands on the board, `POST /issue/<issue>` reads it,
- * `POST /session/<issue>` reads the transcript of the issue's session, and
+ * `POST /session/<issue>` reads where the issue's session stands and its transcript, and
  * `POST /ask/<issue>` sends its session a message and waits for the answer.
  */
 export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
@@ -84,15 +83,10 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
     const issues = yield* Issue;
     const details = yield* IssueDetail;
     const triage = yield* Triage;
-    const api = yield* BoardApi;
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        // What a front end uses: commands, and live reads over WebSockets.
-        if (new URL(request.url, "http://board").pathname.startsWith("/api")) {
-          return yield* api.fetch;
-        }
         const [, action, id] = new URL(request.url, "http://board").pathname.split("/");
         const issueId = IssueId.make(id ?? "");
         const body = (yield* request.json) as {
@@ -141,11 +135,14 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
                 Effect.as({ ok: true as const }),
               ),
           ),
-          // What the issue's session was told and did, as its harness stores it.
+          // Where the issue's session stands, and what it was told and did, read from outside its object.
           Match.when("session", () =>
-            Effect.map(triage.get(issueId).history({ take: 200 }), (page) => ({
-              messages: JSON.stringify(page.items),
-            })),
+            Effect.gen(function* () {
+              const session = triage.get(issueId);
+              const { status, queued } = yield* session.status;
+              const page = yield* session.history({ take: 200 });
+              return { status, queued, items: page.items };
+            }),
           ),
           Match.orElse(() => Effect.succeed(undefined)),
         );

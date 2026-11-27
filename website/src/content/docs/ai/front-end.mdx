@@ -1,33 +1,48 @@
 ---
 title: Connect a front end
-description: Follow a session through your Domain model, so a front end sends commands and reads the agent's status and transcript through one Api. Or serve a session over an RPC interface of your own.
+description: A front end sends commands and reads the board through your Domain model's Api, and reads an agent's status and transcript from its session. Or serve a session over an RPC interface of your own.
 ---
 
-A front end needs two things from a session: a live view of what it does, and a way to act on it. The way that needs nothing new is to follow the session from your [Domain model](/ai/domain). The front end then talks to one Api: it sends commands, and watches the agent's status and transcript like any other view and stream.
+A front end needs two things from a session: a view of what it does, and a way to act on it. It acts through your [Domain model](/ai/domain): it sends commands, and a policy passes them to the session. It reads what the session does from the session, through a route your Worker serves.
 
 The code is from the [`cloudflare-ai-issues`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-ai-issues) example, which has a web page for an issue.
 
-## Follow the session through the model
+## Read a session from the Worker
 
-The board's `IssueList` view lists `Triage` in its `from`, and that is all the recording there is to write. A model that follows a process keeps a view named after it, keyed by the session. Here a session's key is its issue, so `Triage` is a view of each issue's session.
+A session's client says where it stands and pages through its transcript, from outside the session's object. The Worker serves both on one route, keyed like the session, by its issue:
 
-Its state is where the session stands:
-
-```typescript
-{ status: "idle" | "working", queued: ReadonlyArray<QueuedMessage> }
+```typescript title="src/Worker.ts"
+if (area === "sessions") {
+  // A session's key is its issue. The page asks again for what came after the item it last saw.
+  const session = triage.get(number);
+  const after = Number(url.searchParams.get("after") ?? 0);
+  const read: SessionRead = {
+    ...(yield* session.status),
+    ...(yield* session.history({ after, take: 100 })),
+  };
+  return yield* HttpServerResponse.json(read);
+}
 ```
 
-Its events carry the transcript. Each `TriageActivity` is what the session did since the last one: where it stands now, and the items it stored, in order:
+What it answers is one Schema, which the page decodes with:
 
-```typescript
-{ status, queued, items: ReadonlyArray<{ seq: number, item: SessionItem }> }
+```typescript title="src/SessionRead.ts"
+import { SessionPage, SessionState } from "@alchemy.run/ai/Session";
+import * as Schema from "effect/Schema";
+
+/**
+ * What the page reads of one issue's session: where it stands, and the
+ * transcript items it stored after the one the page last saw.
+ */
+export const SessionRead = Schema.Struct({ ...SessionState.fields, ...SessionPage.fields });
+export type SessionRead = typeof SessionRead.Type;
 ```
 
-The session's own object sends each batch as it happens. An item that was already recorded is dropped, so a batch sent twice changes nothing. The object keeps recording through an eviction: a job on its alarm wakes it, sends what was stored meanwhile, and comes back until the session is idle.
+The Schemas of a session (`SessionState`, `SessionPage`, `SessionEntry`) are in `@alchemy.run/ai/Session`, which imports only `effect`, so a browser can bundle them. The page asks again every second with the `seq` of the last item it has, and gets only what is new. A session's live `events` stream stays in its object: to push instead of poll, see [serving a session over RPC](#or-serve-the-session-over-rpc).
 
 ## Serve what the front end may use
 
-The Api lists the commands a page may send, and serves every view, `Triage` among them. The command the session's object records with belongs to no Api.
+The Api lists the commands a page may send, and serves every view of the board.
 
 ```typescript title="src/Board/WebApi.api.ts"
 import * as Domain from "@alchemy.run/domain";
@@ -35,8 +50,7 @@ import { Board } from "./Board.model.ts";
 
 /**
  * What the web app may do and read: report an issue, reply on one, and read
- * every view, `Triage` among them. Labeling is left out: only a session
- * sends it.
+ * every view. Labeling is left out: only a session sends it.
  */
 export class WebApi extends Domain.Api("WebApi", {
   model: Board,
@@ -50,14 +64,13 @@ A page does not call the session. It sends a command, and the model's policy pas
 
 ## List every issue
 
-The page's sidebar needs every issue at once, with whether its agent is working. That is one more view, over the issues and the `Triage` process, kept under a single key:
+The page's sidebar needs every issue at once. That is one more view, kept under a single key:
 
 ```typescript title="src/Board/IssueList.view.ts"
 import * as Domain from "@alchemy.run/domain";
 import { pipe } from "effect/Function";
 import * as Optic from "effect/Optic";
 import * as Schema from "effect/Schema";
-import { Triage } from "../Triage.process.ts";
 import { Issue } from "./Issue.aggregate.ts";
 import { IssueId } from "./Issue.id.ts";
 import { Label } from "./LabelIssue.command.ts";
@@ -75,37 +88,31 @@ const State = Schema.Struct({
   /** Newest first. */
   order: Schema.Array(IssueId),
   issues: Schema.Record(IssueId, Listed),
-  /** The issues whose agent is working now. */
-  working: Schema.Array(IssueId),
 });
 
 // Optics into the list. One that focuses on an issue leaves the list as it
 // is when the issue is not in it, which keeps evolve total.
 const list = Optic.id<typeof State.Type>();
 const order = list.key("order");
-const working = list.key("working");
 const listed = (id: IssueId) => list.key("issues").optionalKey(id);
 const issue = (id: IssueId) => list.key("issues").at(id);
 
 const without = (id: IssueId) => (ids: ReadonlyArray<IssueId>) => ids.filter((each) => each !== id);
 
 /**
- * Every issue of the board, newest first, with whether its agent is working:
- * what the page's sidebar shows. It is one entry, which suits a board of a
- * few hundred issues. It follows Triage, whose prose mentions the board, so
- * its definition is a thunk.
+ * Every issue of the board, newest first: what the page's sidebar shows. It
+ * is one entry, which suits a board of a few hundred issues.
  */
-export class IssueList extends Domain.View("IssueList", () => ({
-  from: [Issue, Triage],
+export class IssueList extends Domain.View("IssueList", {
+  from: [Issue],
   key: Schema.String,
   keyOf: {
     IssueReported: () => ALL,
     IssueLabeled: () => ALL,
     IssueCommented: () => ALL,
-    TriageActivity: () => ALL,
   },
   state: State,
-  initial: { order: [], issues: {}, working: [] },
+  initial: { order: [], issues: {} },
   evolve: {
     IssueReported: (state, event, { source }) =>
       pipe(
@@ -121,24 +128,15 @@ export class IssueList extends Domain.View("IssueList", () => ({
       issue(source.id)
         .key("replies")
         .modify((replies) => replies + 1)(state),
-    // A Triage session's key is its issue.
-    TriageActivity: (state, event, { source }) =>
-      working.modify((ids) =>
-        event.status === "working"
-          ? [...without(IssueId.make(source.id))(ids), IssueId.make(source.id)]
-          : without(IssueId.make(source.id))(ids),
-      )(state),
   },
-})) {}
+}) {}
 ```
 
-It lists `Triage` in its `from`, and `Triage`'s prose mentions the board, which lists `IssueList`. Its definition is a thunk so that cycle loads in any order: see [Break the cycle with thunks](/ai/domain#break-the-cycle-with-thunks).
-
-Views are stored, so the list and every transcript are still there after a refresh or a deploy.
+Views are stored, so the list is still there after a refresh or a deploy, and a session keeps its own transcript.
 
 ## Read it in a Foldkit app
 
-`DomainFoldkit.make` gives a Command for each command of the Api, and `watch` and `events` for each view and stream. The page follows `BoardClient.Triage.watch` for the status and `BoardClient.Triage.events` for the transcript. Opening another issue changes the key the reads follow.
+`DomainFoldkit.make` gives a Command for each command of the Api, and `watch` and `events` for each view and stream. The session is one more Subscription: `Sessions` is a service the page reads it through, a request to `/sessions/<issue>` in a browser, and the Subscription asks it every second for the open issue. Opening another issue changes what both follow.
 
 The page never waits for the board before it shows something. It keeps what it has read of every issue it opened, so going back to one is instant. A new issue or a reply is put in `pending` and shown at once, then dropped when the board's own copy arrives, or taken back when the board refuses it:
 
@@ -146,8 +144,10 @@ The page never waits for the board before it shows something. It keeps what it h
 import { QueuedMessage, SessionEntry, SessionStatus } from "@alchemy.run/ai/Session";
 import type * as Domain from "@alchemy.run/domain";
 import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Command, Subscription, type Update } from "foldkit";
@@ -158,11 +158,25 @@ import { ALL } from "../../src/Board/IssueList.view.ts";
 import { Label } from "../../src/Board/LabelIssue.command.ts";
 import { replied } from "../../src/Board/Said.ts";
 import { WebApi } from "../../src/Board/WebApi.api.ts";
+import type { SessionRead } from "../../src/SessionRead.ts";
 import { issueIn, urlOf } from "./Location.ts";
 
 export type Board = Domain.Api.ClientKey<"WebApi">;
 /** One Command per command of the Api, and a read namespace per view and stream. */
 export const BoardClient = DomainFoldkit.make(WebApi);
+
+/**
+ * How the page reads an issue's session: where it stands, and the transcript
+ * items after `after`. In a browser it is a request to `/sessions/<issue>`;
+ * a test gives the session itself.
+ */
+export class Sessions extends Context.Service<
+  Sessions,
+  { readonly read: (issueId: IssueId, after: number) => Effect.Effect<SessionRead, unknown> }
+>()("Sessions") {}
+
+/** How often the open issue's session is read. */
+const POLL = "1 second";
 
 // MODEL
 
@@ -602,7 +616,7 @@ const failed = (error: { readonly _tag: string }): Message =>
   Message.FailedRead({ reason: error._tag });
 const defect = (): Message => Message.FailedRead({ reason: "The board could not be read" });
 
-export const subscriptions = Subscription.make<Model, Message, Board>()((entry) => ({
+export const subscriptions = Subscription.make<Model, Message, Board | Sessions>()((entry) => ({
   // Back and forward open the issue their address names.
   address: entry(
     {},
@@ -627,7 +641,8 @@ export const subscriptions = Subscription.make<Model, Message, Board>()((entry) 
               const issue = list.issues[issueId];
               return issue === undefined
                 ? []
-                : [{ issueId, ...issue, working: list.working.includes(issueId) }];
+                : // Whether an agent is working is its session's to say, not the board's.
+                  [{ issueId, ...issue, working: false }];
             }),
         }),
       }),
@@ -645,34 +660,38 @@ export const subscriptions = Subscription.make<Model, Message, Board>()((entry) 
     onFailure: failed,
     onDefect: defect,
   }),
-  // The board's Triage view: its state is where the session stands, and its
-  // events carry the transcript.
-  status: BoardClient.Triage.watch({
-    key: open,
-    isEnabled: isOpen,
-    toMessage: ({ state }, issueId): Message =>
-      Message.ReceivedStatus({
-        issueId: IssueId.make(issueId),
-        ...Option.getOrElse(state, () => ({ status: "idle" as const, queued: [] })),
-      }),
-    onFailure: failed,
-    onDefect: defect,
-  }),
-  transcript: BoardClient.Triage.events({
-    key: open,
-    isEnabled: isOpen,
-    cursor: (model) => threadOf(model).cursor,
-    onEntry: ({ event, envelope }): Message =>
-      Message.ReceivedItems({
-        issueId: IssueId.make(envelope.id),
-        entries: event.items,
-        cursor: envelope.seq,
-      }),
-    onCaughtUp: (cursor, issueId): Message =>
-      Message.CaughtUpTranscript({ issueId: IssueId.make(issueId), cursor }),
-    onFailure: failed,
-    onDefect: defect,
-  }),
+  // The open issue's session, read again every second: where it stands,
+  // then each transcript item the page does not have yet.
+  session: entry(
+    { issueId: IssueId, isEnabled: Schema.Boolean },
+    {
+      modelToDependencies: (model) => ({ issueId: open(model), isEnabled: isOpen(model) }),
+      dependenciesToStream: ({ issueId, isEnabled }) => {
+        if (!isEnabled) return Stream.empty;
+        // The last item this stream handed over: the next read asks for what came after.
+        let after = 0;
+        const read = Effect.gen(function* () {
+          const sessions = yield* Sessions;
+          const { status, queued, items, next } = yield* sessions.read(issueId, after);
+          after = items.at(-1)?.seq ?? after;
+          return [
+            Message.ReceivedStatus({ issueId, status, queued }),
+            ...(items.length === 0
+              ? []
+              : [Message.ReceivedItems({ issueId, entries: items, cursor: after })]),
+            // The last page: what arrives from now on is new.
+            ...(next === undefined ? [Message.CaughtUpTranscript({ issueId, cursor: after })] : []),
+          ];
+        }).pipe(
+          // A read that fails is tried again at the next tick.
+          Effect.catchCause(() => Effect.succeed<ReadonlyArray<Message>>([])),
+        );
+        return Stream.fromEffectSchedule(read, Schedule.spaced(POLL)).pipe(
+          Stream.flatMap((messages) => Stream.fromIterable(messages)),
+        );
+      },
+    },
+  ),
 }));
 ```
 
@@ -711,7 +730,17 @@ import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import { Runtime } from "foldkit";
 import { WebApi } from "../../src/Board/WebApi.api.ts";
-import { Flags, init, Listed, Model, REMEMBERED, subscriptions, update } from "./Board.ts";
+import { SessionRead } from "../../src/SessionRead.ts";
+import {
+  Flags,
+  init,
+  Listed,
+  Model,
+  REMEMBERED,
+  Sessions,
+  subscriptions,
+  update,
+} from "./Board.ts";
 import { issueIn } from "./Location.ts";
 import { view } from "./View.ts";
 
@@ -724,6 +753,16 @@ const BoardConnection = WebApi.layerClient.pipe(
   Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
 );
 
+/** An issue's session, read from the board's Worker on the page's own origin. */
+const SessionsOverHttp = Layer.succeed(Sessions, {
+  read: (issueId, after) =>
+    Effect.tryPromise(() =>
+      fetch(`${location.origin}/sessions/${encodeURIComponent(issueId)}?after=${after}`).then(
+        (response) => response.json(),
+      ),
+    ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(SessionRead))),
+});
+
 Runtime.run(
   Runtime.makeApplication({
     Model,
@@ -732,7 +771,7 @@ Runtime.run(
     update,
     view,
     subscriptions,
-    resources: BoardConnection,
+    resources: Layer.mergeAll(BoardConnection, SessionsOverHttp),
     container: document.getElementById("root"),
   }),
   {
@@ -769,16 +808,17 @@ import {
   init,
   type Message,
   type Model,
+  type Sessions,
   subscriptions,
   update,
 } from "../web/src/Board.ts";
 
-type Client = (typeof WebApi)["Client"]["Identifier"];
+type Client = (typeof WebApi)["Client"]["Identifier"] | Sessions;
 
 /**
  * Run the web page without a browser: its own `init`, `update`, Commands and
- * Subscriptions, against whatever board the `WebApi` client reaches. Only
- * the view is left out. It stops when the scope closes.
+ * Subscriptions, against whatever board the `WebApi` client reaches and
+ * whatever sessions `Sessions` reads. Only the view is left out. It stops when the scope closes.
  */
 export const open = Effect.fn(function* (flags: Flags) {
   const started = init(flags);
@@ -831,7 +871,7 @@ export const open = Effect.fn(function* (flags: Flags) {
 });
 ```
 
-`AI.scripted` plays `Triage` in place of a model. `AI.layerInMemory` hosts it as the real one is hosted, and the board records what it does the same way, so the page sees a status and a transcript:
+`AI.scripted` plays `Triage` in place of a model, and `AI.layerInMemory` hosts it as the real one is hosted. `Sessions` reads the session itself, so the page sees a status and a transcript with no network:
 
 ```typescript title="test/App.test.ts"
 const TriagePlayed = AI.scripted(
@@ -855,15 +895,32 @@ const TriageInMemory = AI.layerInMemory(TriagePlayed.pipe(Layer.provide(BoardInM
 
 const Hosted = Layer.mergeAll(BoardInMemory, TriageInMemory).pipe(Layer.provide(TriageInMemory));
 
+/** The page's read of a session, from the session itself instead of over a network. */
+const SessionsInProcess = Layer.effect(
+  Sessions,
+  Effect.gen(function* () {
+    const triage = yield* Triage;
+    return {
+      read: (issueId, after) =>
+        Effect.gen(function* () {
+          const session = triage.get(issueId);
+          return { ...(yield* session.status), ...(yield* session.history({ after, take: 100 })) };
+        }).pipe(Effect.provide(RuntimeContext.phantom)),
+    };
+  }),
+);
+
 /** The page's client, with the board in this process instead of over a network. */
-const Live = WebApi.layerClientInProcess.pipe(Layer.provideMerge(Hosted));
+const Live = Layer.mergeAll(WebApi.layerClientInProcess, SessionsInProcess).pipe(
+  Layer.provideMerge(Hosted),
+);
 ```
 
 The same runner drives a deployed stack in `test/integ.test.ts`, with the real agent.
 
 ## Deploy the page with the board
 
-The page is built with Vite and served by its own Worker, which forwards `/api` to the board:
+The page is built with Vite and served by its own Worker, which forwards `/api` and `/sessions` to the board:
 
 ```typescript title="alchemy.run.ts"
 import * as Boat from "@alchemy.run/boat";
@@ -891,21 +948,21 @@ export default Alchemy.Stack(
     const repo = yield* Repo;
     const worker = yield* Worker;
     // The foldkit app, built with Vite. Its Worker serves the build and
-    // forwards /api to the board, so the app and the Api share one origin.
+    // forwards /api and /sessions to the board, so they share one origin.
     const app = yield* Cloudflare.Website.Foldkit("BoardApp", {
       rootDir: "web",
       main: "src/worker.ts",
       env: { BOARD: worker },
-      assets: { runWorkerFirst: ["/api", "/api/*"] },
+      assets: { runWorkerFirst: ["/api", "/api/*", "/sessions/*"] },
     });
     return { url: worker.url, app: app.url, repository: repo.htmlUrl };
   }),
 );
 ```
 
-## Without a Domain model
+## Or serve the session over RPC
 
-An app with no model can serve a session over an [Effect RPC](/cloudflare/apis/effect-rpc) group of its own. Alchemy AI gives the Schemas, and Alchemy serves the group over a WebSocket from the session's Durable Object.
+To push a session's events to a page as they happen, or to let a page act on a session with no model in between, serve the session over an [Effect RPC](/cloudflare/apis/effect-rpc) group of your own. A session's live `events` are read where its process's Layer is built, so this is a Durable Object you write that yields the process. Alchemy AI gives the Schemas, and Alchemy serves the group over a WebSocket from that object.
 
 ### Define the interface
 

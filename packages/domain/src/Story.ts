@@ -1005,9 +1005,9 @@ interface StoryOptions<Policies, LE, LR, Systems, Provided = never, Hosted = nev
    */
   readonly stub?: ReadonlyArray<Systems>;
   /**
-   * What the model and its handlers need hosted beside them: an AI process
-   * a policy holds or a view follows. It is given the model as the story
-   * hosts it, which a process that mentions the model needs in turn.
+   * What the model's handlers need hosted beside the model: an AI process a
+   * policy holds. It is given the model as the story hosts it, which a
+   * process that mentions the model needs in turn.
    *
    * **Example:** A process played in memory
    * ```typescript
@@ -1187,12 +1187,10 @@ const make =
     LR = never,
     Systems extends ExternalSystem.Any = never,
     Cmds extends Command.Any = never,
-    Requires = never,
     Hosted = never,
   >(
     // The model's command classes: each `when` is checked against the one with its tag.
-    domain: Model.ModelClass<Name, Provided, Policies, Model.Servable, any> & {
-      readonly "~requires": Requires;
+    domain: Model.ModelClass<Name, Provided, Policies> & {
       readonly commands: ReadonlyArray<Cmds>;
     },
     ...[options = {}]: [Policies] extends [never]
@@ -1209,9 +1207,8 @@ const make =
     void,
     StoryFailure | LE,
     // A story is a runtime of its own, in memory: its handlers need no other.
-    // What the model itself requires (a process its views follow) is hosted beside it.
     Exclude<
-      LR | Requires,
+      LR,
       | Provided
       | Hosted
       | ExternalSystem.Identifier<Systems>
@@ -2059,7 +2056,7 @@ const make =
       StoryFailure | LE,
       // A story is a runtime of its own, in memory: its handlers need no other.
       Exclude<
-        LR | Requires,
+        LR,
         | Provided
         | Hosted
         | ExternalSystem.Identifier<Systems>

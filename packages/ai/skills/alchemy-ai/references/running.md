@@ -85,7 +85,7 @@ More: [Run it in memory](https://alchemy.run/ai/hosting#run-it-in-memory).
 
 ## Without a host
 
-A process's Layer runs its sessions wherever it is built: yield the process in a Durable Object you write, and its sessions live in that object's storage. `get` is then a local lookup, and no model follows the sessions. Use it only when a session belongs to something that is already an object of yours.
+A process's Layer runs its sessions wherever it is built: yield the process in a Durable Object you write, and its sessions live in that object's storage. `get` is then a local lookup, and the session's live `events()` can be read there. Use it only when a session belongs to something that is already an object of yours.
 
 More: [Without a host](https://alchemy.run/ai/hosting#without-a-host).
 
@@ -114,10 +114,13 @@ More: [A session survives its object](https://alchemy.run/ai/hosting#a-session-s
 ## See what a session did
 
 ```typescript
-const page = yield* triage.get(String(issue)).history({ take: 50 });
+const session = triage.get(String(issue));
+
+const { status, queued } = yield* session.status;
+const page = yield* session.history({ after, take: 50 });
 ```
 
-Each item is a message, the tools an answer called, or a tool's result. To follow a session live, read the process's view on a model that follows it (`Api.Triage.events`): a hosted session's `events()` stays in its object.
+Each item is a message, the tools an answer called, or a tool's result. Both work from outside a hosted session's object; ask again with the `seq` of the last item to read only what is new. A hosted session's live `events()` stays in its object.
 
 More: [Read the transcript](https://alchemy.run/ai/processes#read-the-transcript), [Watch a session](https://alchemy.run/ai/processes#watch-a-session).
 

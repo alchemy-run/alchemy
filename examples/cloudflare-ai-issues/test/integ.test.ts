@@ -13,11 +13,13 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import Stack from "../alchemy.run.ts";
 import { started } from "../src/Board/Said.ts";
 import { WebApi } from "../src/Board/WebApi.api.ts";
-import { Message, threadOf } from "../web/src/Board.ts";
+import { SessionRead } from "../src/SessionRead.ts";
+import { listOf, Message, Sessions, threadOf } from "../web/src/Board.ts";
 import { open } from "./App.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -35,9 +37,19 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 /** The page's own connection, as `web/src/entry.ts` makes it, on the app's origin. */
 const connection = (app: string) =>
-  WebApi.layerClient.pipe(
-    Layer.provide(Domain.protocolWebSocket(`${app}/api`)),
-    Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
+  Layer.mergeAll(
+    WebApi.layerClient.pipe(
+      Layer.provide(Domain.protocolWebSocket(`${app}/api`)),
+      Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
+    ),
+    Layer.succeed(Sessions, {
+      read: (issueId, after) =>
+        Effect.tryPromise(() =>
+          fetch(`${app}/sessions/${encodeURIComponent(issueId)}?after=${after}`).then((response) =>
+            response.json(),
+          ),
+        ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(SessionRead))),
+    }),
   );
 
 test(
@@ -60,7 +72,7 @@ test(
     expect(yield* text(`${app}${style}`)).toContain(".sidebar");
     const code = yield* text(`${app}${script}`);
     // The build is the page: it names the reads and the commands it uses.
-    for (const name of ["IssueList", "Triage", "ReportIssue", "CommentOnIssue"]) {
+    for (const name of ["IssueList", "/sessions/", "ReportIssue", "CommentOnIssue"]) {
       expect(code).toContain(name);
     }
   }).pipe(Effect.provide(FetchHttpClient.layer)),
@@ -87,7 +99,7 @@ test(
       );
       // The sidebar shows it, with its agent at work.
       yield* page.until((model) =>
-        model.issues.some((issue) => issue.issueId === issueId && issue.working),
+        listOf(model).some((issue) => issue.issueId === issueId && issue.working),
       );
 
       const done = yield* page.until(
