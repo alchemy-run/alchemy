@@ -11421,6 +11421,9 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)
+      '@effect/ui':
+        specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab
+        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab(effect@4.1.4)
       '@electric-sql/pglite':
         specifier: 'catalog:'
         version: 0.3.15
@@ -16421,6 +16424,12 @@ packages:
   '@effect/tsgo@0.73.2':
     resolution: {integrity: sha512-eM5ayjlp0fD2l+aL+4O/y9d1LwF1m5in5EdNkOYwLFcXI3kcee8CWP4wr2xTc4L/+KJmS/uaYUGWdOj4G46BDA==}
     hasBin: true
+
+  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab':
+    resolution: {integrity: sha512-b0RsW02XDOdvCfglyl3oGB1wfFpiLc/ANQa+zmKe8qS0z7Z1rTdxsa3fVZfTAlgkdxsyc0jtijYOHC1Mgh5JFQ==, tarball: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab}
+    version: 0.0.0
+    peerDependencies:
+      effect: 4.1.4
 
   '@effect/vitest@4.0.0-rc.112':
     resolution: {integrity: sha512-mEKh/FI64mt8JK1/v9mpOrJYdnp+UFZdRUBMEdZMiKz7klg6NPqVgg/oeAGH6wOOQc2iAPcfc2H9BbAv1KyzMQ==}
@@ -34925,6 +34934,10 @@ snapshots:
       '@effect/tsgo-linux-x64': 0.73.2
       '@effect/tsgo-win32-arm64': 0.73.2
       '@effect/tsgo-win32-x64': 0.73.2
+
+  '@effect/ui@https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab(effect@4.1.4)':
+    dependencies:
+      effect: 4.1.4
 
   '@effect/vitest@4.0.0-rc.112(effect@4.1.4)':
     dependencies:
