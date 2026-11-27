@@ -130,9 +130,9 @@ export const make = (kit: Kit) => {
                 cause: Value.obj({
                   reasons: arr(
                     cause.reasons.map((reason) => {
-                      if (!Cause.isFailReason(reason))
+                      if (!Cause.isFailReason(reason) || !(reason.error instanceof Value.Rejected))
                         return Value.obj({ _tag: Value.str("Interrupt") });
-                      const rejected = reason.error as Value.Rejected;
+                      const rejected = reason.error;
                       return rejected.defect === true
                         ? died(rejected.rejection)
                         : failed(rejected.rejection);

@@ -272,7 +272,9 @@ export const make = (
    * one that does fails the effect it finalizes all the same: the library
    * keeps the failure, and does not make it a defect.
    */
-  const sure = <A>(self: Effect.Effect<A, Held>): Effect.Effect<A> => self as Effect.Effect<A>;
+  const sure = <A>(self: Effect.Effect<A, Held>): Effect.Effect<A> =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the library's finalizer types say never, and it passes the failure on all the same
+    self as Effect.Effect<A>;
 
   /** What a function of the code gives when the library calls it for an effect. */
   const called =

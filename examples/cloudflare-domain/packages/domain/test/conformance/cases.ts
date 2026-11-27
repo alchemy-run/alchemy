@@ -1586,7 +1586,6 @@ const base: ReadonlyArray<Group> = [
         /runs more than one item at a time, which the prover does not read/,
       ],
     ],
-    unread: [],
     known: [`Stream.runCollect(Stream.range(1, 3))`, `Stream.runCollect(Stream.range(a, a + 2))`],
   },
 ];
