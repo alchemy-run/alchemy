@@ -1,8 +1,8 @@
+import { getProject } from "@distilled.cloud/prisma/management";
 import {
-  getProject,
   getService,
   getWorkspaceDomainOwnershipsVerification,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import type * as DNS from "alchemy/DNS/Adapter";
 import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";

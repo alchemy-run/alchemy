@@ -1,8 +1,9 @@
 import { resolve4, resolveNs, Resolver } from "node:dns/promises";
 import { expect } from "@alchemy.run/test";
 import type * as Test from "@alchemy.run/test/Alchemy";
-import { createUrlCheck, getProject, getUrl } from "@distilled.cloud/prisma/management";
+import { getProject } from "@distilled.cloud/prisma/management";
 import * as Retry from "@distilled.cloud/prisma/Retry";
+import { createUrlCheck, getUrl } from "@distilled.cloud/prisma/unstable/management";
 import { isActionState, State } from "alchemy/State/State";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";

@@ -1,9 +1,9 @@
+import { getProject } from "@distilled.cloud/prisma/management";
 import {
   type CreateWorkspaceDomainOwnershipResponseData,
   type DomainOwnershipRequired,
-  getProject,
   getWorkspaceDomainOwnerships,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";

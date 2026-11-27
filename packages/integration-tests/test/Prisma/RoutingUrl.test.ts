@@ -18,15 +18,15 @@ import {
 } from "@alchemy.run/prisma/RoutingUrl";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import { getProject } from "@distilled.cloud/prisma/management";
 import {
   createServiceUrl,
   deleteDomainOwnership,
   deleteUrl,
-  getProject,
   getUrl,
   getWorkspaceDomainOwnerships,
   updateUrl,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as DNS from "alchemy/DNS/Adapter";

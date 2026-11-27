@@ -1,11 +1,11 @@
+import { getWorkspaces } from "@distilled.cloud/prisma/management";
 import {
   createDomainOwnershipVerify,
   createWorkspaceDomainOwnership,
   deleteDomainOwnership,
   getDomainOwnership,
   getWorkspaceDomainOwnershipsVerification,
-  getWorkspaces,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";

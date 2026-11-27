@@ -1,25 +1,25 @@
 import type { Conflict, UnprocessableEntity } from "@distilled.cloud/prisma";
+import { getProject } from "@distilled.cloud/prisma/management";
+import * as Retry from "@distilled.cloud/prisma/Retry";
 import type {
   RoutingUrlInvalidHostname as PrismaInvalidHostname,
   RoutingUrlLogicalIdTaken as PrismaLogicalIdTaken,
   RoutingUrlQuotaExceeded as PrismaQuotaExceeded,
   RoutingUrlServiceNotOnABranch as PrismaServiceNotOnABranch,
   RoutingUrlServiceOnAnotherBranch as PrismaServiceOnAnotherBranch,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import {
   type GetUrlResponseData,
   createServiceUrl,
   createUrlCheck,
   deleteUrl,
-  getProject,
   getProjectBranchUrls,
   getService,
   getUrl,
   getWorkspaceDomainOwnerships,
   getWorkspaceDomainOwnershipsVerification,
   updateUrl,
-} from "@distilled.cloud/prisma/management";
-import * as Retry from "@distilled.cloud/prisma/Retry";
+} from "@distilled.cloud/prisma/unstable/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import * as DNS from "alchemy/DNS/Adapter";
 import type { Input } from "alchemy/Input";

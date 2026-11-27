@@ -12,15 +12,15 @@ import { deployWebsite, type WebsiteDomain } from "@alchemy.run/prisma/Website/F
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
+import { getProject } from "@distilled.cloud/prisma/management";
 import {
   getDomainOwnership,
   getDomain,
-  getProject,
   getServiceUrls,
   getWorkspaceDomainOwnerships,
   getService,
   getUrl,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as DNS from "alchemy/DNS/Adapter";
 import * as Namespace from "alchemy/Namespace";

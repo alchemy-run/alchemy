@@ -1,4 +1,5 @@
 import { isThrottling } from "@distilled.cloud/core/category";
+import * as Retry from "@distilled.cloud/prisma/Retry";
 import {
   type CreateServiceDomainResponseData,
   createDomainRetry,
@@ -8,8 +9,7 @@ import {
   getServiceDomains,
   getServiceUrls,
   getServices,
-} from "@distilled.cloud/prisma/management";
-import * as Retry from "@distilled.cloud/prisma/Retry";
+} from "@distilled.cloud/prisma/unstable/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
