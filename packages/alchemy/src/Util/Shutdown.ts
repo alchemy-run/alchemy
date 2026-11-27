@@ -1,5 +1,7 @@
 import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 
 /**
@@ -67,13 +69,21 @@ export const ignoreClosedStdio = Effect.sync(() => {
   }
 });
 
+/** The pid of the process that spawned this one, set by `alchemy dev`. */
+export const PARENT_PID_ENV = "ALCHEMY_DEV_PARENT_PID";
+
 /**
  * Completes once this process's parent is gone: it was reparented, so its
  * parent pid changed. Race the process's work against it to shut down with
- * finalizers when the parent is SIGKILLed, which no handler can see.
+ * finalizers when the parent is SIGKILLed, which no handler can see. The
+ * parent's pid comes from {@link PARENT_PID_ENV} when set, so a parent that
+ * died before this check started is caught too.
  */
 export const parentExited = Effect.gen(function* () {
-  const parent = yield* Effect.sync(() => process.ppid);
+  const declared = yield* Config.option(Config.Number(PARENT_PID_ENV)).pipe(
+    Effect.orElseSucceed(() => Option.none<number>()),
+  );
+  const parent = Option.isSome(declared) ? declared.value : yield* Effect.sync(() => process.ppid);
   yield* Effect.sync(() => process.ppid).pipe(
     Effect.repeat({
       schedule: Schedule.spaced("1 second"),
