@@ -145,6 +145,24 @@ describe("Domain Vault", { tags: ["unit", "local"] }, () => {
         }).pipe(Effect.provide(peopleOn(platform))),
       );
 
+      it.live(
+        "a sealed command sent again with the same id and input answers its first receipt",
+        () =>
+          Effect.gen(function* () {
+            const api = yield* PeopleApi.clientInProcess;
+            const register = () =>
+              api.Register({ id: "c-1", name: Name.plain("c-1", "Sam") }, { commandId: "r-1" });
+            const first = yield* register();
+            // Each send seals the name with a fresh IV: the fingerprint leaves it out.
+            expect(yield* register()).toEqual(first);
+            // A value sealed for another subject is another input.
+            const reused = yield* api
+              .Register({ id: "c-1", name: Name.plain("c-2", "Sam") }, { commandId: "r-1" })
+              .pipe(Effect.flip);
+            expect(reused).toBeInstanceOf(Domain.CommandIdReused);
+          }).pipe(Effect.provide(peopleOn(platform))),
+      );
+
       it.live("shredding a subject's key leaves every copy unreadable, and changes no event", () =>
         Effect.gen(function* () {
           const api = yield* PeopleApi.clientInProcess;

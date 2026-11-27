@@ -57,7 +57,7 @@ const send = BankClient.DepositMoney({
 const command = Command.mapMessage(send, (result) => Message.ReceivedBankResult({ result }));
 ```
 
-Allocate ids with `DomainFoldkit.next(model.commandIds)` and store the returned state with `modifyFields`. Declare `ReceivedBankResult` with `{ result: BankClient.Message }`. Match the result through `BankClient.Message.match`: `SucceededDepositMoney` carries the reply and receipt; `FailedDepositMoney` carries `Rejected`, `Denied`, or `Unknown`. Preserve Rejection and middleware error fields. Retry `Unknown` with the original id because the write may have committed. Command defects also produce `Unknown`.
+Allocate ids with `DomainFoldkit.next(model.commandIds)` and store the returned state with `modifyFields`. Declare `ReceivedBankResult` with `{ result: BankClient.Message }`. Match the result through `BankClient.Message.match`: `SucceededDepositMoney` carries the reply and receipt; `FailedDepositMoney` carries `Rejected`, `Denied`, `Reused`, or `Unknown`. Preserve Rejection and middleware error fields. `Reused` means the id was sent before with another input and nothing was applied: send again with a new id. Retry `Unknown` with the original id because the write may have committed. Command defects also produce `Unknown`.
 
 More: [Integrate with Foldkit: Derive the Commands](https://alchemy.run/domain/foldkit#derive-the-commands), [Send a command from update](https://alchemy.run/domain/foldkit#send-a-command-from-update).
 

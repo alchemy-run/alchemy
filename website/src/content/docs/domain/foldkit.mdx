@@ -75,6 +75,7 @@ Handle `ReceivedBankResult` through `Bank.Message.match`. The matcher preserves 
 | --- | --- | --- |
 | `Rejected { rejection }` | The aggregate refused the command. | Show the reason. |
 | `Denied { error }` | Middleware refused the command. | Request authentication or MFA. |
+| `Reused` | The `commandId` was sent before with another input. Nothing was applied. | Send the command again with a new `commandId`. |
 | `Unknown` | The reply did not establish the outcome. | Retry with the same `commandId`. |
 
 A Command defect produces `Unknown`. Read defects call `onDefect` with their Cause. Typed read failures call `onFailure`. Interruption ends the operation without a Message.
