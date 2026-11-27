@@ -1461,6 +1461,33 @@ Example PR description (BAD — do not do this):
 Persist the user's theme...
 ```
 
+## Stacked PRs
+
+When PRs build on each other, or a batch of related fixes goes up together, make them one stack with [`gh stack`](https://gh.io/stacks) (the `github/gh-stack` extension). A PR whose base was set by hand to another PR's branch is not a stack: GitHub won't show the chain or merge it in order.
+
+```sh
+# start a stack, or adopt existing branches (bottom to top)
+gh stack init fix/a fix/b fix/c
+
+# add a branch on top of the current stack
+gh stack add fix/d
+
+# push every branch, create or update each PR, set its base, and link the stack
+gh stack submit --auto
+
+# after main moves or a lower branch changes: rebase every branch, push, re-link
+gh stack sync
+
+gh stack view
+```
+
+- **One change per branch.** Each branch fixes one issue, has its own conventional title, and ends its PR body with its own `Fixes #N`.
+- **Order by readiness.** Put the branch most ready to merge at the bottom, next to `main`. Put a branch that depends on another above it.
+- **Each branch stands alone.** Its tests pass with only the branches below it. Run the touched suites on each branch, not just on the top one.
+- **Fix review comments in the branch that introduced the code.** Then run `gh stack sync`, which rebases the branches above it. Never cherry-pick a fix into a higher branch.
+- **Agents pass `--auto`.** Without a TTY, `submit` creates new PRs as drafts unless you add `--open`. If the PRs already exist, `submit` links them without creating new ones.
+- **Merge with `gh stack merge <PR>`.** It merges that PR and every PR below it as one all-or-nothing operation. Run it only when the user asks for a merge. In a non-interactive shell it merges without prompting.
+
 # Blog / Release Notes Conventions
 
 Release blog posts live in `website/src/content/docs/blog/` named
