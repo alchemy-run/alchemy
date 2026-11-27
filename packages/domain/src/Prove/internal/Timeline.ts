@@ -167,7 +167,19 @@ export const back = <A, B = V>(
     onSuccess: (value) => Effect.succeed(give(value)),
     onFailure: (cause): Eval<B> => {
       const stop = stopOf(timeline, cause);
-      return stop ? Effect.fail(stop) : Effect.failCause(cause as Cause.Cause<never>);
+      if (!stop) return Effect.failCause(cause as Cause.Cause<never>);
+      // An interrupt beside a failure is kept with it, as the library's exit holds both.
+      if (stop._tag !== "Rejected" || !cause.reasons.some(Cause.isInterruptReason))
+        return Effect.fail(stop);
+      return Effect.failCause(
+        Cause.fromReasons(
+          cause.reasons.flatMap((reason): ReadonlyArray<Cause.Reason<Stop>> => {
+            if (Cause.isInterruptReason(reason)) return [reason];
+            const one = stopOf(timeline, Cause.fromReasons([reason]));
+            return one ? [Cause.makeFailReason(one)] : [];
+          }),
+        ),
+      );
     },
   });
 

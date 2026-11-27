@@ -135,6 +135,34 @@ const lists = {
 
 const base: ReadonlyArray<Group> = [
   {
+    // A number that need not be whole: what rounds it, read on the solver's reals.
+    name: "Fraction",
+    input: `x: Schema.Number.check(Schema.isBetween({ minimum: -20, maximum: 20 })), a: Small`,
+    pins: pinned(
+      [
+        { x: 0.5, a: 1 },
+        { x: -2.5, a: 0 },
+        { x: 3.25, a: 2 },
+        { x: -0.75, a: -1 },
+        { x: 7, a: 3 },
+        { x: 1.5, a: 4 },
+      ],
+      6,
+      (next) => ({ x: next(-80, 80) / 4, a: next(-20, 20) }),
+      17,
+    ),
+    differs: `command.x !== pin.x || command.a !== pin.a`,
+    bind: (known: boolean) =>
+      known ? `const x = pin.x; const a = pin.a;` : `const x = command.x; const a = command.a;`,
+    both: [`Math.round(x)`, `Math.floor(x)`, `Math.ceil(x)`, `Math.trunc(x)`],
+    unread: [
+      [
+        `Math.round(x + a)`,
+        /applies \+ to numbers that may not be whole, which JavaScript rounds and the prover does not/,
+      ],
+    ],
+  },
+  {
     name: "Number",
     ...numbers,
     both: [
@@ -1550,6 +1578,13 @@ const base: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const seen = []; yield* Stream.run(stream, Sink.forEach((n) => Effect.sync(() => void seen.push(n)))); return seen; })`,
       `Stream.make(a, 2).pipe(Stream.mapEffect((n) => Effect.succeed(n + 1), { concurrency: 1 }), Stream.runCollect)`,
       `Stream.run(Stream.make(a, 2), Sink.count.pipe(Sink.map((n) => n * 10)))`,
+      `Stream.run(stream, Sink.map((n) => n * 10)(Sink.count))`,
+    ],
+    unread: [
+      [
+        `stream.pipe(Stream.mapEffect((n) => Effect.succeed(n + a), { concurrency: 2 }), Stream.runCollect)`,
+        /runs more than one item at a time, which the prover does not read/,
+      ],
     ],
     unread: [],
     known: [`Stream.runCollect(Stream.range(1, 3))`, `Stream.runCollect(Stream.range(a, a + 2))`],
@@ -2002,6 +2037,10 @@ const syntax: ReadonlyArray<Group> = [
     name: "Expressions",
     chunk: 1,
     ...numbers,
+    prelude: [
+      `class Spot extends Data.TaggedClass("Spot")<{ readonly x: number }> {}`,
+      `class Tally { constructor(n) { this.n = n; } }`,
+    ],
     both: [
       // More of Math: a power the code writes, a sign, and the rest on numbers the code writes.
       `[Math.pow(a, 2), Math.pow(2, 5), Math.pow(a, 0), Math.sign(a), Math.sign(-3)]`,
@@ -2163,6 +2202,7 @@ const syntax: ReadonlyArray<Group> = [
       `new Point({ x: a, y: b }).x`,
       `new Circle({ radius: a })._tag`,
       `new Odd({ n: a }).n`,
+      `[new Spot({ x: a })._tag, new Spot({ x: b }).x, Equal.equals(new Spot({ x: a }), new Spot({ x: a }))]`,
     ],
     known: [
       `a + b * 2 - a / 2`,
@@ -2173,6 +2213,7 @@ const syntax: ReadonlyArray<Group> = [
       `[BigInt(a) & 3n, BigInt(a) | 4n, BigInt(a) ^ 1n, ~BigInt(a), BigInt(a) << 2n, BigInt(a) >> 1n].map((n) => n === 0n)`,
     ],
     unread: [
+      [`Tally(a)`, /calls the class Tally without new/],
       [`a.toFixed(2)`, /calls toFixed on a number an input holds, which it rounds/],
       [`a.toString(2)`, /writes a number an input holds in another base/],
       // `==` between two kinds turns one into the other, which is not read.
@@ -3347,6 +3388,7 @@ const rest: ReadonlyArray<Group> = [
       `Effect.map(Effect.exit(Cause.done()), (exit) => Exit.isFailure(exit) ? [Result.isSuccess(Pull.filterDoneVoid(exit.cause)), exit.cause.reasons.map((reason) => Pull.isDoneFailure(reason))] : [])`,
       `Effect.scoped(Effect.gen(function* () { const hub = yield* PubSub.unbounded(); const got = yield* Effect.forkChild(Channel.fromPubSub(hub).pipe(Channel.pipeTo(Channel.identity()), Channel.runHead)); yield* Effect.sleep(1); yield* PubSub.publish(hub, a); return yield* Fiber.join(got); }))`,
       `Channel.fail(new Odd({ n: a })).pipe(Channel.orDie, Channel.runCollect, Effect.exit, Effect.map(Exit.hasDies))`,
+      `Channel.fail(new Odd({ n: a })).pipe(Channel.catchTag(["Odd", "Other"], (error) => Channel.succeed(error.n + b)), Channel.runCollect)`,
     ],
     unread: [
       [
@@ -3613,6 +3655,8 @@ const rest: ReadonlyArray<Group> = [
       `[...[a, b].values()]`,
     ],
     unread: [
+      [`JSON.stringify({ n: 1n })`, /calls JSON.stringify on a value it cannot write/],
+      [`Map([[a, 1]])`, /calls Map without new/],
       [`JSON.stringify({ n: 1n, m: a })`, /calls JSON.stringify on a value it cannot write/],
       [`Uint8Array([a])`, /calls Uint8Array without new/],
       [`Number(String(a))`, /calls Number on a value the prover cannot see/],
@@ -4090,6 +4134,7 @@ const rest: ReadonlyArray<Group> = [
       `Stream.run(four(a, b), Sink.flatMap(Sink.take(2), () => Sink.drain))`,
       `Stream.run(Stream.concat(four(a, b), Stream.fail(new Odd({ n: a }))), Sink.flatMap(Sink.take(1), () => Sink.collect())).pipe(Effect.flip, Effect.map((error) => error.n))`,
       `Stream.run(Stream.concat(Stream.make(a), Stream.fail(new Odd({ n: b }))), Sink.orElse(Sink.collect(), () => Sink.succeed(-1))).pipe(Effect.result)`,
+      `Stream.run(Stream.concat(Stream.make(a), Stream.fail(new Odd({ n: b }))), Sink.flatMap(Sink.collect(), (all) => Sink.succeed(all))).pipe(Effect.flip, Effect.map((error) => error.n))`,
     ],
     unread: [
       [
@@ -4201,6 +4246,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.gen(function* () { const handle = yield* FiberHandle.make(); const none = yield* FiberHandle.get(handle); yield* FiberHandle.run(handle, Effect.as(Effect.sleep(1), a)); const some = yield* FiberHandle.get(handle); const unsafe = FiberHandle.getUnsafe(handle); return [Option.isNone(none), Option.isSome(some), Option.isSome(unsafe), yield* Fiber.join(some.value)]; }))`,
       `Effect.gen(function* () { const stock = yield* TxHashMap.make(["tea", a]); return [yield* TxHashMap.getHash(stock, "tea", Hash.hash("tea")), yield* TxHashMap.hasHash(stock, "milk", Hash.hash("milk"))]; })`,
       `Effect.gen(function* () { const ref = yield* TxRef.make(Chunk.make(a, b)); const held = TxChunk.makeUnsafe(ref); yield* TxChunk.append(held, 3); const seen = yield* TxRef.get(ref); yield* TxRef.set(ref, Chunk.make(9)); return [Chunk.toReadonlyArray(seen), Chunk.toReadonlyArray(yield* TxChunk.get(held)), TxChunk.isTxChunk(held)]; })`,
+      `Effect.scoped(Effect.gen(function* () { const scope = yield* Effect.scope; yield* Scope.addFinalizer(scope, Effect.fail(new Odd({ n: a }))); return b; })).pipe(Effect.exit, Effect.map((exit) => [Exit.hasDies(exit), Exit.isFailure(exit)]))`,
+      `Effect.scoped(Effect.acquireRelease(Effect.succeed(a), () => Effect.fail(new Odd({ n: b })))).pipe(Effect.exit, Effect.map((exit) => [Exit.hasDies(exit), Exit.isFailure(exit)]))`,
+      `Effect.onInterrupt(Effect.interrupt, () => Effect.fail(new Odd({ n: a }))).pipe(Effect.exit, Effect.map((exit) => [Exit.hasDies(exit), Exit.hasInterrupts(exit), b]))`,
+      `Effect.onInterrupt(Effect.interrupt, () => Effect.fail(new Odd({ n: a }))).pipe(Effect.exit, Effect.map((exit) => exit.cause.reasons.map((reason) => reason._tag)))`,
     ],
     unread: [
       [

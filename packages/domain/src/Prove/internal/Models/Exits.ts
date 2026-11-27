@@ -112,6 +112,36 @@ export const make = (kit: Kit) => {
         Effect.catchCauseIf(Cause.hasInterruptsOnly, () =>
           Effect.succeed(failure(Value.obj({ _tag: Value.str("Interrupt") }))),
         ),
+        // An interrupt beside a failure: the exit holds every reason, in order.
+        Effect.catchCauseIf(
+          (cause) =>
+            cause.reasons.some(Cause.isInterruptReason) &&
+            cause.reasons.every(
+              (reason) =>
+                Cause.isInterruptReason(reason) ||
+                (Cause.isFailReason(reason) &&
+                  reason.error instanceof Value.Rejected &&
+                  reason.error.rejection._tag !== "Opaque"),
+            ),
+          (cause) =>
+            Effect.succeed(
+              Value.obj({
+                _tag: Value.str("Failure"),
+                cause: Value.obj({
+                  reasons: arr(
+                    cause.reasons.map((reason) => {
+                      if (!Cause.isFailReason(reason))
+                        return Value.obj({ _tag: Value.str("Interrupt") });
+                      const rejected = reason.error as Value.Rejected;
+                      return rejected.defect === true
+                        ? died(rejected.rejection)
+                        : failed(rejected.rejection);
+                    }),
+                  ),
+                }),
+              }),
+            ),
+        ),
         Effect.catchTag("Rejected", (rejected) =>
           // What stops a saga until a signal comes is not an end of the effect.
           rejected.rejection._tag === "Opaque"

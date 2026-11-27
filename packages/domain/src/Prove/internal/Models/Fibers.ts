@@ -267,9 +267,12 @@ export const make = (
     };
   };
 
-  /** A finalizer, as the library takes one: it cannot fail, so a failure of it is a defect. */
-  const sure = <A>(self: Effect.Effect<A, Held>): Effect.Effect<A> =>
-    Effect.catch(self, (failed) => Effect.die(new Timeline.Defect(failed.rejection)));
+  /**
+   * A finalizer, as the library takes one. Its type says it cannot fail, but
+   * one that does fails the effect it finalizes all the same: the library
+   * keeps the failure, and does not make it a defect.
+   */
+  const sure = <A>(self: Effect.Effect<A, Held>): Effect.Effect<A> => self as Effect.Effect<A>;
 
   /** What a function of the code gives when the library calls it for an effect. */
   const called =
