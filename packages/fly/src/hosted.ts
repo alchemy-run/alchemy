@@ -1,4 +1,5 @@
 import type { Docker } from "@alchemy.run/docker/Docker";
+import { Credentials } from "@distilled.cloud/fly-io";
 import type { FlyMachineService } from "@distilled.cloud/fly-io/machines";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Bundle from "alchemy/Bundle/Bundle";
@@ -26,15 +27,18 @@ import {
   type ExtraFile,
 } from "alchemy/Util/extraFiles";
 import { sha256, sha256Object } from "alchemy/Util/sha256";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import { flyHostBundle, flyOidcToken } from "./internal/Oidc.ts";
 import { buildOnRemoteBuilder } from "./internal/RemoteBuilder.ts";
+import { ACTION_ALL, attenuate } from "./Macaroon.ts";
 import type { BoundTarget, DiskSpec, ServiceBinding } from "./MountVolume.ts";
 import { rpcMethodsOf, serveFlyRpc } from "./rpc.ts";
 
@@ -103,6 +107,9 @@ export interface FlyBuildOptions extends Bundle.BundleConfig {
    * uploaded; the builder pulls the base image and pushes the result to
    * `registry.fly.io` next to it. Set `false` to build and push locally.
    * Either way, the local `docker buildx` client drives the build.
+   *
+   * Fly won't let a token restricted to specific Apps manage the
+   * organization's remote builders; set `false` to deploy with one.
    *
    * @default true
    */
@@ -501,9 +508,50 @@ export const createFlyHostedSupport = ({
   const pushBackoff = Schedule.exponential("2 seconds");
 
   /**
+   * Login for `registry.fly.io/{appName}`: the deploy's token, narrowed
+   * offline to this App for an hour, so Docker and the remote builder never
+   * hold the full token. A legacy token that is not a macaroon can't be
+   * narrowed, and Fly owns the token format, so when narrowing fails or Fly
+   * rejects the result, it mints an App deploy token instead.
+   */
+  const registryCredentials = Effect.fn(function* (appName: string) {
+    const app = yield* machines.getApp({ app_name: appName });
+    const credentials = yield* yield* Credentials;
+    const now = Math.floor((yield* Clock.currentTimeMillis) / 1000);
+    const narrowed =
+      app.internal_numeric_id === undefined
+        ? Option.none<Redacted.Redacted<string>>()
+        : yield* attenuate(credentials.apiKey, [
+            { type: "Apps", apps: new Map([[app.internal_numeric_id, ACTION_ALL]]) },
+            // A minute's grace for clock skew against Fly's verifier.
+            { type: "ValidityWindow", notBefore: now - 60, notAfter: now + 3600 },
+          ]);
+    if (Option.isSome(narrowed)) {
+      const accepted = yield* machines.getCurrentToken({}).pipe(
+        Effect.provideService(
+          Credentials,
+          Effect.succeed({ ...credentials, apiKey: narrowed.value }),
+        ),
+        Effect.as(true),
+        Effect.catchTag("Unauthorized", () => Effect.succeed(false)),
+      );
+      if (accepted) return { server: FLY_REGISTRY, username: "x", password: narrowed.value };
+    }
+    const minted = yield* machines.createAppDeployToken({ app_name: appName });
+    const token =
+      minted.token === undefined || Redacted.isRedacted(minted.token)
+        ? minted.token
+        : Redacted.make(minted.token);
+    if (token === undefined || Redacted.value(token).length === 0) {
+      return yield* new DeployTokenMissing({ appName });
+    }
+    return { server: FLY_REGISTRY, username: "x", password: token };
+  });
+
+  /**
    * Bundle `main`, content-hash the image, build it when missing, and
-   * push to `registry.fly.io/{appName}:{logicalId}-{hash}` using an
-   * app deploy token. When `previousHash` matches, skip build and push.
+   * push to `registry.fly.io/{appName}:{logicalId}-{hash}`. When
+   * `previousHash` matches, skip build and push.
    *
    * Fly's registry is app-scoped (`/v2/{app}/...`). A nested
    * `{app}/{image}` repository 404s on blob upload.
@@ -526,15 +574,7 @@ export const createFlyHostedSupport = ({
       return { imageRef, codeHash };
     }
 
-    const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
-    const token =
-      minted.token === undefined || Redacted.isRedacted(minted.token)
-        ? minted.token
-        : Redacted.make(minted.token);
-    if (token === undefined || Redacted.value(token).length === 0) {
-      return yield* new DeployTokenMissing({ appName: input.appName });
-    }
-    const registry = { server: FLY_REGISTRY, username: "x", password: token };
+    const registry = yield* registryCredentials(input.appName);
 
     const materialize = Effect.gen(function* () {
       const realMain = yield* resolveMainPath(input.props.main);
@@ -634,15 +674,7 @@ export const createFlyHostedSupport = ({
     const imageRef = `${FLY_REGISTRY}/${input.appName}:${sanitizeImageRepo(input.id)}-${codeHash}`;
     if (input.previousHash === codeHash) return { imageRef, codeHash };
 
-    const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
-    const token =
-      minted.token === undefined || Redacted.isRedacted(minted.token)
-        ? minted.token
-        : Redacted.make(minted.token);
-    if (token === undefined || Redacted.value(token).length === 0) {
-      return yield* new DeployTokenMissing({ appName: input.appName });
-    }
-    const registry = { server: FLY_REGISTRY, username: "x", password: token };
+    const registry = yield* registryCredentials(input.appName);
 
     if (input.remote !== false) {
       yield* note(`Building ${imageRef} on a Fly remote builder...`);

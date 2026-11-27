@@ -57,6 +57,16 @@ Many stages can share a development organization, each with its own Apps.
 
 With `CI=true`, Alchemy skips the profile and reads `FLY_API_TOKEN` from the environment. Use a separate token for CI, so you can revoke it without touching yours. See [CI](/environments/ci).
 
+A CI token restricted to specific Apps (an `Apps` caveat, as `fly tokens attenuate` adds) can deploy Services into Apps that already exist. Fly won't let it manage the organization's remote builders, so build those images locally:
+
+```typescript
+const api = yield* Fly.Service("Api", {
+  app, // an existing App the token is restricted to
+  main: import.meta.url,
+  build: { remote: false },
+});
+```
+
 ## Next
 
 Values your Services read at run time, like a third-party API key, are covered in [Secrets](/fly/data/secrets).
