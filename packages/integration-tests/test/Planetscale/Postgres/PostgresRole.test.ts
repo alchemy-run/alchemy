@@ -661,7 +661,9 @@ describe
 
       // #2996: a token that can't read a role must fail the drift check, not
       // report the role as missing (which `drift --repair` would recreate).
-      test.provider(
+      // Minting the restricted token needs a deploy identity that can manage
+      // service tokens, which OAuth logins can't, so the case is opt-in.
+      test.provider.skipIf(!process.env.PLANETSCALE_TEST_SERVICE_TOKENS)(
         "a role the drift token can't read fails the check instead of reading as missing",
         (stack) =>
           Effect.gen(function* () {
