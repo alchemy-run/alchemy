@@ -949,6 +949,9 @@ export const LocalWorkerProvider = () =>
                       },
                       compatibilityDate: worker.compatibility.date,
                       compatibilityFlags: worker.compatibility.flags,
+                      // A prebuilt Worker's flags are already exactly what deploy
+                      // uploads; the runtime must not add its defaults again.
+                      bundle: !worker.prebuilt,
                       // `dev.access` populates the Worker's native `ctx.access`.
                       access: worker.dev.access,
                       // Stream preview and Images variant URLs use the stable URL
