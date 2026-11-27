@@ -23,6 +23,7 @@ import {
   CapabilityGraph,
   CurrentPolicy,
   framed,
+  hosted,
   makeCapabilityGraph,
   observeLayerBuilds,
   observeLookups,
@@ -30,6 +31,7 @@ import {
   policyOf,
   reach,
   recordAcquisition,
+  standsFor,
 } from "@/CapabilityGraph.ts";
 import { Platform } from "@/Platform.ts";
 import * as Provider from "@/Provider.ts";
@@ -429,6 +431,60 @@ describe("CapabilityGraph", { tags: ["unit"] }, () => {
         },
       ]);
     }),
+  );
+
+  it.effect("a term built by a host that is named once it is built is hosted by it", () =>
+    Effect.gen(function* () {
+      const graph = makeCapabilityGraph();
+      yield* observed(
+        graph,
+        Effect.all([
+          hosted(framed("Tool", "inside")(Effect.succeed("JobsObject")), (made) => made),
+          hosted(framed("Tool", "nowhere")(Effect.void), () => undefined),
+        ]),
+      );
+      expect(graph.describe().map(({ id, host }) => ({ id, host }))).toEqual([
+        { id: "Tool:inside", host: "JobsObject" },
+        { id: "Tool:nowhere", host: undefined },
+      ]);
+    }),
+  );
+
+  it.effect(
+    "a lookup that receives a client to a term uses the term, not what is behind the client",
+    () =>
+      Effect.gen(function* () {
+        const graph = makeCapabilityGraph();
+        const client = { run: Effect.void };
+        // The Layer that gives the client out binds a store of its own, and builds the term.
+        const ClientLive = Layer.effect(
+          Jobs,
+          Effect.gen(function* () {
+            yield* Send("behind");
+            yield* framed("Process", "jobs")(Store("own"));
+            yield* standsFor("Process", "jobs", client);
+            return client;
+          }),
+        );
+        yield* observed(
+          graph,
+          framed("Policy", "holder")(Effect.asVoid(Jobs)).pipe(Effect.provide(ClientLive)),
+        );
+        expect(
+          graph.describe().map(({ id, bindings, references }) => ({
+            id,
+            bindings: bindings.map((each) => each.binding),
+            references,
+          })),
+        ).toEqual([
+          {
+            id: "Policy:holder",
+            bindings: [],
+            references: [{ relation: "uses", to: "Process:jobs" }],
+          },
+          { id: "Process:jobs", bindings: ["Test.Store"], references: [] },
+        ]);
+      }).pipe(Effect.provide(Layer.mergeAll(StoreLive, SendLive))),
   );
 
   it.effect("without a graph in context every recorder does nothing", () =>
