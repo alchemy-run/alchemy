@@ -56,6 +56,33 @@ export default {
       }
       return Response.json({ dropped: tables.results.map((t) => t.name) });
     }
+    if (url.pathname === "/concurrent") {
+      // Many writes at once, as two Workers sharing a database make them
+      // (#1872, #3758): every one must land, none may report SQLITE_BUSY.
+      const who = url.searchParams.get("who") ?? "worker";
+      const count = Number(url.searchParams.get("count") ?? "100");
+      await env.DB.exec(
+        "CREATE TABLE IF NOT EXISTS writes (who TEXT NOT NULL, n INTEGER NOT NULL)",
+      );
+      const errors: string[] = [];
+      await Promise.all(
+        Array.from({ length: count }, (_, n) =>
+          env.DB.prepare("INSERT INTO writes (who, n) VALUES (?, ?)")
+            .bind(who, n)
+            .run()
+            .catch((error: unknown) => {
+              errors.push(String(error));
+            }),
+        ),
+      );
+      return Response.json({ errors });
+    }
+    if (url.pathname === "/writes") {
+      const rows = await env.DB.prepare(
+        "SELECT who, COUNT(*) AS n FROM writes GROUP BY who ORDER BY who",
+      ).all<{ who: string; n: number }>();
+      return Response.json({ writes: rows.results });
+    }
     if (url.pathname === "/users") {
       const rows = await env.DB.prepare("SELECT name FROM users ORDER BY name").all<{
         name: string;

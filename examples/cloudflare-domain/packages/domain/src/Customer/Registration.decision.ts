@@ -32,4 +32,14 @@ export class Registration extends Domain.Decision(RegisterCustomer, {
       claim.record(new UsernameClaimed({ customerId: customer.id })),
     ];
   }),
+  transitions: {
+    /** The username goes to the customer who registered under it, and to nobody else. */
+    TheNameGoesToWhoRegistered: ({ after, command }) =>
+      after.customer._tag === "Registered" &&
+      after.customer.username === command.username &&
+      after.claim._tag === "Claimed" &&
+      after.claim.customerId === command.customerId,
+    /** A name is only given while nobody holds it. */
+    OnlyAFreeNameIsClaimed: ({ before }) => before.claim._tag === "Free",
+  },
 }) {}

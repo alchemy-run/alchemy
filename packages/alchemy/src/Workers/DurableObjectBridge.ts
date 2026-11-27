@@ -32,6 +32,7 @@ import {
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
 import { EventLifetime, makeEventLifetime } from "./EventLifetime.ts";
 import { gateCall, InstanceInputGate, makeInputGate } from "./InputGate.ts";
+import { InstanceSetup } from "./InstanceSetup.ts";
 import { handleRpcExit, type Pin, type WorkerBuild } from "./Worker.ts";
 import { withEventContext } from "./WorkerBridge.ts";
 
@@ -183,15 +184,20 @@ export const makeDurableObjectInstance = ({
       // gated like any call's.
       return Effect.gen(function* () {
         const instanceTelemetry = yield* buildInstanceTelemetry(context, instanceScope);
+        // Setup the outer Effect registers for this instance (InstanceSetup),
+        // run where the inner Effect runs: with callback registration open.
+        const setups: Array<Effect.Effect<void, never, RuntimeContext>> = [];
         const built = yield* gateCall(
           constructor.pipe(
+            Effect.provideService(InstanceSetup, { add: (effect) => void setups.push(effect) }),
             Effect.flatMap((inner) =>
               Effect.suspend(() => {
                 const seal = initialize?.();
                 const instanceContext = Layer.succeed(RuntimeContext, instanceRuntimeContext).pipe(
                   Layer.provideMerge(doContext),
                 );
-                return inner.pipe(
+                return Effect.forEach(setups, (setup) => setup, { discard: true }).pipe(
+                  Effect.andThen(inner),
                   Effect.provide(instanceContext),
                   Effect.ensuring(Effect.sync(() => seal?.())),
                 );

@@ -120,6 +120,35 @@ export interface RepositoryProps {
   allowAutoMerge?: boolean;
 
   /**
+   * Default title of a squash merge commit:
+   * - `PR_TITLE` — the pull request's title.
+   * - `COMMIT_OR_PR_TITLE` — the commit's title when the pull request has
+   *   one commit, otherwise the pull request's title.
+   *
+   * GitHub requires this prop whenever `squashMergeCommitMessage` is set, and
+   * accepts only these combinations:
+   * - `PR_TITLE` with `PR_BODY`, `COMMIT_MESSAGES`, or `BLANK`.
+   * - `COMMIT_OR_PR_TITLE` with `COMMIT_MESSAGES`.
+   *
+   * GitHub rejects any other combination, and the deploy fails with
+   * `UnprocessableEntity`.
+   * @default "COMMIT_OR_PR_TITLE"
+   */
+  squashMergeCommitTitle?: "PR_TITLE" | "COMMIT_OR_PR_TITLE";
+
+  /**
+   * Default message (body) of a squash merge commit:
+   * - `PR_BODY` — the pull request's body.
+   * - `COMMIT_MESSAGES` — the branch's commit messages.
+   * - `BLANK` — an empty message.
+   *
+   * Set `squashMergeCommitTitle` too: GitHub rejects this prop on its own.
+   * See `squashMergeCommitTitle` for the accepted combinations.
+   * @default "COMMIT_MESSAGES"
+   */
+  squashMergeCommitMessage?: "PR_BODY" | "COMMIT_MESSAGES" | "BLANK";
+
+  /**
    * Whether head branches are automatically deleted after a pull request is
    * merged.
    * @default false
@@ -302,6 +331,23 @@ export interface RepositoryLookup {
  * });
  * ```
  *
+ * **Example:** Squash-Only with the PR Title as the Commit
+ * Each squash merge on the default branch gets the pull request's title as
+ * its subject and an empty body, so a conventional-commit PR title becomes
+ * the commit. GitHub requires `squashMergeCommitTitle` whenever
+ * `squashMergeCommitMessage` is set.
+ * ```typescript
+ * const repo = yield* GitHub.Repository("app", {
+ *   owner: "my-org",
+ *   name: "app",
+ *   allowMergeCommit: false,
+ *   allowRebaseMerge: false,
+ *   allowSquashMerge: true,
+ *   squashMergeCommitTitle: "PR_TITLE",
+ *   squashMergeCommitMessage: "BLANK",
+ * });
+ * ```
+ *
  * ### Renaming a Repository
  * **Example:** Rename in Place
  * Keep the same logical ID and change `name` to rename the live repository
@@ -469,6 +515,10 @@ export const RepositoryProvider = () =>
             allow_rebase_merge: news.allowRebaseMerge,
             allow_auto_merge: news.allowAutoMerge,
             delete_branch_on_merge: news.deleteBranchOnMerge,
+            // The squash commit title/message are set by the sync PATCH below:
+            // an invalid pair 422s here, and the create-race handler would
+            // swallow it and fail with "Failed to create or locate" instead
+            // of the validation error.
           };
 
           observed = yield* (
@@ -523,6 +573,8 @@ export const RepositoryProvider = () =>
           allow_merge_commit: news.allowMergeCommit,
           allow_rebase_merge: news.allowRebaseMerge,
           allow_auto_merge: news.allowAutoMerge,
+          squash_merge_commit_title: news.squashMergeCommitTitle,
+          squash_merge_commit_message: news.squashMergeCommitMessage,
           delete_branch_on_merge: news.deleteBranchOnMerge,
           // Only set the default branch when it actually differs from the
           // observed branch. GitHub returns 422 if the branch does not yet

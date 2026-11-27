@@ -1,9 +1,9 @@
+import { createServer } from "node:http";
 import type { AsyncApiEnv } from "./async-server.ts";
 
 const env = process.env as unknown as AsyncApiEnv;
 
-Bun.serve({
-  port: Number(process.env.PORT),
-  hostname: "0.0.0.0",
-  fetch: () => Response.json({ kind: "async-server", greeting: env.GREETING }),
-});
+createServer((_request, response) => {
+  response.setHeader("content-type", "application/json");
+  response.end(JSON.stringify({ kind: "async-server", greeting: env.GREETING }));
+}).listen(Number(process.env.PORT), "0.0.0.0");

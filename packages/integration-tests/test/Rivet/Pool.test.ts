@@ -4,6 +4,7 @@ import * as RivetDocker from "@alchemy.run/rivet/Docker";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as RivetApi from "@distilled.cloud/rivet";
+import * as Pools from "@distilled.cloud/rivet/pools";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -14,9 +15,9 @@ const { test } = Test.make({
   providers: Layer.mergeAll(Docker.providers(), Rivet.providers()),
 });
 
-// One local control plane per suite, on a port of its own.
-const PORT = 16430;
-const Cluster = RivetDocker.SwarmControlPlane("Rivet", { port: PORT });
+// One local control plane per suite, on a free port, so the suite runs
+// beside itself in other worktrees.
+const Cluster = RivetDocker.SwarmControlPlane("Rivet", { port: 0 });
 
 const deployPool = (props: { drainOnVersionUpgrade?: boolean; actorEvictionPeriod?: number }) =>
   Effect.gen(function* () {
@@ -31,20 +32,21 @@ const deployPool = (props: { drainOnVersionUpgrade?: boolean; actorEvictionPerio
       name: pool.name,
       namespace: pool.namespace,
       drainOnVersionUpgrade: pool.drainOnVersionUpgrade,
+      endpoint: pool.endpoint,
       token: cluster.token,
       pool,
     };
   }).pipe(Effect.provide(Cluster));
 
 /** Read the pool straight from the control plane. */
-const observe = (deployed: { name: string; namespace: string; token: unknown }) =>
-  RivetApi.pools.getPool({ pool: deployed.name, namespace: deployed.namespace }).pipe(
+const observe = (deployed: { name: string; namespace: string; endpoint: string; token: unknown }) =>
+  Pools.getPool({ pool: deployed.name, namespace: deployed.namespace }).pipe(
     Effect.map((res) => res.pool),
     Effect.catchTag("PoolNotFound", () => Effect.undefined),
     Effect.provide(
       RivetApi.credentials({
         token: deployed.token as Redacted.Redacted<string>,
-        endpoint: `http://localhost:${PORT}`,
+        endpoint: deployed.endpoint,
       }),
     ),
   );

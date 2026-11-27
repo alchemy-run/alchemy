@@ -145,7 +145,14 @@ const log = yield* ChatLog;
 yield* log.append("lobby", { user: "sam", text: "hello" });
 ```
 
-See [Durable Streams](/rivet/durable-streams).
+An agentOS VM is a sandbox addressed by a key, created from a base on its first call:
+
+```typescript
+const sandboxes = yield* Rivet.CreateSandbox(base);
+const result = yield* sandboxes.getOrCreate("task-42").exec("git --version");
+```
+
+See [Durable Streams](/rivet/durable-streams) and [agentOS Sandboxes](/rivet/sandboxes).
 
 ## Your control plane, or Rivet Cloud
 

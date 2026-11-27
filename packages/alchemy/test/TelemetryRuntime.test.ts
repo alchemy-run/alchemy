@@ -8,15 +8,17 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Metric from "effect/Metric";
 import * as Redacted from "effect/Redacted";
+import { runtimeConfigProvider } from "@/Runtime.ts";
 import { packEnvValue } from "@/RuntimeContext.ts";
-import { buildEventTelemetry, EXPORTERS_KEY } from "@/TelemetryRuntime.ts";
+import { buildEventTelemetry, EXPORTERS_KEY, SERVICE_NAME_KEY } from "@/TelemetryRuntime.ts";
 
 const runEvent = (
   provider: ConfigProvider.ConfigProvider,
   client: HttpClient.HttpClient,
   override?: Layer.Layer<never>,
 ) => {
-  const context = Context.make(ConfigProvider.ConfigProvider, provider).pipe(
+  // Every runtime host wraps its env provider this way.
+  const context = Context.make(ConfigProvider.ConfigProvider, runtimeConfigProvider(provider)).pipe(
     Context.add(HttpClient.HttpClient, client),
   );
   return Effect.scoped(
@@ -109,6 +111,47 @@ describe("event telemetry configuration", { tags: ["unit", "local"] }, () => {
       expect(requests).toHaveLength(2);
       expect(requests[1].url).toBe("https://second.example/v1/traces");
       expect(requests[1].headers.authorization).toBe("fallback");
+    }),
+  );
+
+  it.effect("reads a JSON-looking service name unchanged, set by the user or bound", () =>
+    Effect.gen(function* () {
+      const marker = packEnvValue(Redacted.make("x"));
+      const cases: Array<[Record<string, string>, string]> = [
+        // a user's own OTEL_SERVICE_NAME is read verbatim
+        [{ OTEL_SERVICE_NAME: "1.0" }, "1.0"],
+        [{ OTEL_SERVICE_NAME: '{ "a": 1 }' }, '{ "a": 1 }'],
+        // `layerOtlp({ serviceName })` binds through `rc.set`, which packs
+        [{ [SERVICE_NAME_KEY]: packEnvValue("1.0") }, "1.0"],
+        [{ [SERVICE_NAME_KEY]: packEnvValue(marker) }, marker],
+        // and wins over the user's variable
+        [{ [SERVICE_NAME_KEY]: packEnvValue("bound"), OTEL_SERVICE_NAME: "env" }, "bound"],
+      ];
+      for (const [env, expected] of cases) {
+        const values = new Map<string, ConfigProvider.Node>([
+          ["OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ConfigProvider.makeValue("https://t.example")],
+          ...Object.entries(env).map(
+            ([key, value]) => [key, ConfigProvider.makeValue(value)] as const,
+          ),
+        ]);
+        const provider = ConfigProvider.make((path) =>
+          Effect.sync(() => values.get(path.join("_"))),
+        );
+        const requests: HttpClientRequest.HttpClientRequest[] = [];
+        yield* runEvent(provider, recordingClient(requests));
+        const body = requests[0]?.body;
+        const json = JSON.parse(
+          new TextDecoder().decode(body?._tag === "Uint8Array" ? body.body : undefined),
+        ) as {
+          resourceSpans: Array<{
+            resource: { attributes: Array<{ key: string; value: { stringValue?: string } }> };
+          }>;
+        };
+        expect(
+          json.resourceSpans[0]!.resource.attributes.find((a) => a.key === "service.name")!.value
+            .stringValue,
+        ).toBe(expected);
+      }
     }),
   );
 

@@ -40,9 +40,17 @@ NodeRuntime.runMain(
         }),
       );
     const result = yield* trace(input.seeds, true);
-    const stateFiles = [...result.fileList].filter((file) =>
-      file.split(/[\\/]/).includes(".alchemy"),
-    );
+    // `.alchemy`, or the directory `ALCHEMY_DIR` moved it to.
+    const runtimeDirs = input.runtimeDirs ?? [];
+    const isState = (file: string) =>
+      file.split(/[\\/]/).includes(".alchemy") ||
+      runtimeDirs.some((dir) => {
+        const relative = path.relative(dir, path.resolve(input.base, file));
+        return (
+          relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+        );
+      });
+    const stateFiles = [...result.fileList].filter(isState);
     if (stateFiles.length > 0) {
       // NFT's asset globs can sweep up unrelated build/state directories.
       // Trace without globs to retain explicit state dependencies: packaging
@@ -54,9 +62,7 @@ NodeRuntime.runMain(
           ...new Set([
             ...input.seeds,
             ...[...result.fileList]
-              .filter(
-                (file) => /\.[cm]?[jt]sx?$/.test(file) && !file.split(/[\\/]/).includes(".alchemy"),
-              )
+              .filter((file) => /\.[cm]?[jt]sx?$/.test(file) && !isState(file))
               .map((file) => path.resolve(input.base, file)),
           ]),
         ],

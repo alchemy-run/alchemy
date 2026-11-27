@@ -4,13 +4,16 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { ensureDockerSwarm, publishedUrl } from "../Docker/Runtime.ts";
 import { conformanceTests, get, waitForReady } from "./conformance.ts";
-import { FRONT_PORT as URL_FRONT_PORT, Postgres } from "./fixtures/docker-url/cluster.ts";
+import { Postgres } from "./fixtures/docker-url/cluster.ts";
 import UrlFront from "./fixtures/docker-url/front.ts";
-import { FRONT_PORT } from "./fixtures/docker/cluster.ts";
 import Front from "./fixtures/docker/front.ts";
 import { Lives } from "./fixtures/docker/index.ts";
 import { scheduledConformanceTests } from "./scheduled-conformance.ts";
@@ -21,7 +24,8 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "ClusterDocker", import.meta.url);
 const urlStack = Core.scratchStack(testOptions, "ClusterDockerUrl", import.meta.url);
 
-const baseUrl = `http://localhost:${FRONT_PORT}`;
+// The front's port is one Swarm picks, read from the deploy.
+let baseUrl = "";
 
 // The Effect Cluster conformance cases, against entities on two local Docker
 // runners coordinating through Postgres, called from a Docker service through
@@ -37,10 +41,11 @@ describe.skipIf(!!process.env.FAST)(
         const outputs = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const front = yield* Front;
-            return { front: front.name };
+            return { front: front.name, ports: front.ports };
           }).pipe(Effect.provide(Lives)),
         );
         expect(outputs.front).toBeTruthy();
+        baseUrl = publishedUrl(outputs.ports);
         yield* waitForReady(baseUrl);
       }),
       { timeout: 600_000 },
@@ -58,6 +63,48 @@ describe.skipIf(!!process.env.FAST)(
         expect((yield* get(`${baseUrl}/echo/hi`)).value).toBe("echo hi");
       }),
       { timeout: 120_000 },
+    );
+
+    // Last: it redeploys the stack. Each deploy bundles each pool's program
+    // once, however many of its resources read it, in the plan and in apply.
+    test(
+      "a pool redeployed again and again bundles its program once per deploy",
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = path.resolve(".alchemy", "cluster");
+        for (let i = 0; i < 3; i++) {
+          // Every bundle writes its pool's directory anew: count the
+          // directories each pool's path held during the deploy.
+          const seen = new Map<string, Set<bigint>>();
+          const sampler = yield* Effect.gen(function* () {
+            for (const entry of yield* fs.readDirectory(root)) {
+              const info = yield* fs.stat(path.join(root, entry)).pipe(Effect.option);
+              if (Option.isSome(info) && Option.isSome(info.value.ino)) {
+                const inodes = seen.get(entry) ?? new Set<bigint>();
+                inodes.add(info.value.ino.value);
+                seen.set(entry, inodes);
+              }
+            }
+          }).pipe(Effect.repeat(Schedule.spaced("10 millis")), Effect.forkChild);
+          yield* Effect.sleep("100 millis");
+          const before = new Map([...seen].map(([entry, inodes]) => [entry, inodes.size]));
+          yield* sharedStack.deploy(
+            Effect.gen(function* () {
+              const front = yield* Front;
+              return { front: front.name };
+            }).pipe(Effect.provide(Lives)),
+          );
+          yield* Fiber.interrupt(sampler);
+          const bundles = [...seen].map(
+            ([entry, inodes]) => inodes.size - (before.get(entry) ?? 0),
+          );
+          expect(bundles.length).toBeGreaterThan(0);
+          for (const count of bundles) expect(count).toBeLessThanOrEqual(1);
+        }
+        expect((yield* get(`${baseUrl}/echo/again`)).value).toBe("echo again");
+      }),
+      { timeout: 600_000, exclusive: true },
     );
 
     test(
@@ -81,14 +128,14 @@ describe.skipIf(!!process.env.FAST)(
       Effect.gen(function* () {
         yield* ensureDockerSwarm;
         yield* urlStack.destroy();
-        yield* urlStack.deploy(
+        const { ports } = yield* urlStack.deploy(
           Effect.gen(function* () {
             yield* Postgres;
             const front = yield* UrlFront;
-            return { front: front.name };
+            return { front: front.name, ports: front.ports };
           }),
         );
-        const response = yield* get(`http://localhost:${URL_FRONT_PORT}/echo/hi`).pipe(
+        const response = yield* get(`${publishedUrl(ports)}/echo/hi`).pipe(
           Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
         );
         expect(response.value).toBe("echo hi");

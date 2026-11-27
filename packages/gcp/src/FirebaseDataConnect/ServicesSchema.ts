@@ -459,11 +459,7 @@ export const ServicesSchemaProvider = () =>
 
       if (current === undefined) {
         const created = yield* firebasedataconnect
-          .createProjectsLocationsServicesSchemas({
-            parent: service,
-            schemaId,
-            body,
-          })
+          .createProjectsLocationsServicesSchemas({ ...body, parent: service, schemaId })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -491,11 +487,7 @@ export const ServicesSchemaProvider = () =>
         const patchName = current.name ?? name;
         yield* retryStaleEtag(
           firebasedataconnect
-            .patchProjectsLocationsServicesSchemas({
-              name: patchName,
-              updateMask: mask,
-              body,
-            })
+            .patchProjectsLocationsServicesSchemas({ ...body, name: patchName, updateMask: mask })
             .pipe(Effect.flatMap((operation) => waitForOperation(operation))),
         );
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

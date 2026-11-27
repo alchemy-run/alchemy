@@ -91,13 +91,11 @@ const ensureCollector = () =>
     if (healthCheck === undefined) {
       yield* compute
         .insertHealthChecks({
+          name: names.healthCheck,
+          type: "TCP",
+          tcpHealthCheck: { port: 80 },
+          description: "alchemy packet-mirroring collector",
           project,
-          body: {
-            name: names.healthCheck,
-            type: "TCP",
-            tcpHealthCheck: { port: 80 },
-            description: "alchemy packet-mirroring collector",
-          },
         })
         .pipe(
           Effect.flatMap((operation) => waitOp(operation, "global")),
@@ -115,13 +113,11 @@ const ensureCollector = () =>
     if (instanceGroup === undefined) {
       yield* compute
         .insertInstanceGroups({
+          name: names.instanceGroup,
+          network: network.selfLink,
+          description: "alchemy packet-mirroring collector",
           project,
           zone,
-          body: {
-            name: names.instanceGroup,
-            network: network.selfLink,
-            description: "alchemy packet-mirroring collector",
-          },
         })
         .pipe(
           Effect.flatMap((operation) => waitOp(operation, "zone")),
@@ -148,17 +144,15 @@ const ensureCollector = () =>
       });
       yield* compute
         .insertRegionBackendServices({
+          name: names.backend,
+          protocol: "TCP",
+          loadBalancingScheme: "INTERNAL",
+          healthChecks: hc.selfLink ? [hc.selfLink] : undefined,
+          backends: group.selfLink ? [{ group: group.selfLink }] : undefined,
+          network: network.selfLink,
+          description: "alchemy packet-mirroring collector",
           project,
           region,
-          body: {
-            name: names.backend,
-            protocol: "TCP",
-            loadBalancingScheme: "INTERNAL",
-            healthChecks: hc.selfLink ? [hc.selfLink] : undefined,
-            backends: group.selfLink ? [{ group: group.selfLink }] : undefined,
-            network: network.selfLink,
-            description: "alchemy packet-mirroring collector",
-          },
         })
         .pipe(
           Effect.flatMap((operation) => waitOp(operation, "region")),
@@ -181,19 +175,17 @@ const ensureCollector = () =>
       });
       yield* compute
         .insertForwardingRules({
+          name: names.forwardingRule,
+          loadBalancingScheme: "INTERNAL",
+          isMirroringCollector: true,
+          IPProtocol: "TCP",
+          allPorts: true,
+          backendService: backendService.selfLink,
+          network: network.selfLink,
+          subnetwork: subnet.selfLink,
+          description: "alchemy packet-mirroring collector",
           project,
           region,
-          body: {
-            name: names.forwardingRule,
-            loadBalancingScheme: "INTERNAL",
-            isMirroringCollector: true,
-            IPProtocol: "TCP",
-            allPorts: true,
-            backendService: backendService.selfLink,
-            network: network.selfLink,
-            subnetwork: subnet.selfLink,
-            description: "alchemy packet-mirroring collector",
-          },
         })
         .pipe(
           Effect.flatMap((operation) => waitOp(operation, "region")),

@@ -46,6 +46,26 @@ export const makeBucketBinding = <Client>(options: {
   });
 
 /**
+ * Map an error thrown by the R2 runtime binding to an {@link R2Error}.
+ *
+ * The Workers runtime throws a plain `Error` whose message ends in R2's code,
+ * e.g. `get: We encountered an internal error. Please try again. (10001)`.
+ * The code is read from `error.code` when the runtime sets one, otherwise from
+ * that trailing `(NNNNN)`.
+ */
+export const fromRuntimeError = (error: unknown): R2Error => {
+  const thrown = (typeof error === "object" && error !== null ? error : {}) as {
+    message?: unknown;
+    code?: unknown;
+  };
+  const cause = (typeof thrown.message === "string" ? error : new Error(String(error))) as Error;
+  const message = cause.message || "Unknown error";
+  const match = /\((\d+)\)\s*$/.exec(message);
+  const code = typeof thrown.code === "number" ? thrown.code : match ? Number(match[1]) : undefined;
+  return new R2Error({ message, cause, code });
+};
+
+/**
  * Helpers shared by both the read and write halves of the binding client.
  *
  * Read-only (`wrapR2Objects`) and write-only (`wrapR2MultipartUpload`) wrappers
@@ -59,11 +79,7 @@ export const makeHelpers = (env: Record<string, any>, bucket: Bucket, binding?: 
   const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, R2Error> =>
     Effect.tryPromise({
       try: fn,
-      catch: (error: any) =>
-        new R2Error({
-          message: error.message ?? "Unknown error",
-          cause: error,
-        }),
+      catch: fromRuntimeError,
     });
 
   const use = <T>(fn: (raw: runtime.R2Bucket) => Promise<T>): Effect.Effect<T, R2Error> =>
@@ -100,11 +116,7 @@ export const makeR2ObjectWrappers = (
     body: Object.assign(
       Stream.fromReadableStream({
         evaluate: () => object.body as any as ReadableStream<Uint8Array<ArrayBufferLike>>,
-        onError: (error: any) =>
-          new R2Error({
-            message: error.message ?? "Unknown error",
-            cause: error,
-          }),
+        onError: fromRuntimeError,
       }),
       nativeStreams ? { raw: object.body } : {},
     ),

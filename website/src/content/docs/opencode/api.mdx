@@ -1,0 +1,52 @@
+---
+title: OpenCode's own API
+description: Call OpenCode's own typed client from the Durable Object it runs in, and pass OpenCode configuration through the harness.
+---
+
+A harness covers prompting a session and reading its transcript. OpenCode does more: diffs, reverts, forks, its own agents. The harness lets you reach all of it.
+
+## Call OpenCode's client
+
+`harness.use` hands your function OpenCode's own typed client, the one `@opencode/sdk` gives:
+
+```typescript
+const session = harness.session("pr-142");
+const sessionID = yield* session.id;
+const diff = yield* harness.use((client) => client.session.diff({ sessionID }));
+```
+
+`session.id` is OpenCode's own id for the session. The call stays in the isolate: OpenCode opens no port.
+
+`use` starts OpenCode in this instance when it is not running.
+
+## OpenCode's configuration
+
+`config` is OpenCode's own configuration, the contents of an `opencode.json`. It is merged under what the harness sets:
+
+```typescript
+const harness = yield* OpenCode.Harness({
+  models: [Fast],
+  tools: [AI.CodingTools],
+  config: {
+    agent: { review: { prompt: "You review diffs. You never edit files." } },
+  },
+});
+```
+
+A prompt then picks that agent:
+
+```typescript
+const reply = yield* session.prompt("Review the last commit.", { agent: "review" });
+```
+
+The harness always sets the model provider, and it turns off OpenCode's auto-update and session sharing.
+
+## Where OpenCode runs
+
+`OpenCode.Storage` is where a harness keeps its sessions, and so where OpenCode runs. `OpenCodeCloudflare.DurableObjectStorage` is the one Layer for it today: OpenCode in a Durable Object, on the object's SQLite. OpenCode names its tables plainly (`event`, `job`, `kv`), so the Layer puts every one under `opencode_`, apart from your own tables in the same object.
+
+OpenCode is closed when it has been idle for thirty seconds, so the object can leave memory, and started again by the next call.
+
+## The version of OpenCode
+
+OpenCode is a dependency of `@alchemy.run/opencode`, pinned to the version it was tested with, and bundled into your Worker. A newer OpenCode arrives with a newer `@alchemy.run/opencode`.

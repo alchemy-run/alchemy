@@ -1,0 +1,176 @@
+import * as Docker from "@alchemy.run/docker";
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as RivetNode from "@alchemy.run/rivet/Node";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import NodeEcho from "./fixtures/node-echo.ts";
+import NodeSleepy, { slept } from "./fixtures/node-sleepy.ts";
+
+const POOL = "node-test";
+
+const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "RivetNode", import.meta.url);
+
+// On a free port, so the suite runs beside itself in other worktrees.
+const Cluster = RivetDocker.SwarmControlPlane("RivetNode", { port: 0 });
+
+let connection: Required<RivetNode.NodeConnection>;
+
+/** Host `classes` in this process until the test's scope closes. */
+const serving = (
+  options: RivetNode.ServeOptions,
+  classes: Parameters<typeof RivetNode.serve>[0] = [NodeEcho],
+) =>
+  Effect.gen(function* () {
+    const connected = yield* Deferred.make<void>();
+    const node = yield* RivetNode.serve(classes, {
+      ...options,
+      connected: Deferred.succeed(connected, undefined).pipe(Effect.asVoid),
+    }).pipe(Effect.forkScoped);
+    yield* Effect.raceFirst(Deferred.await(connected), Fiber.join(node));
+  });
+
+/** The connection as the environment of a node Alchemy built carries it. */
+const fromEnvironment = () =>
+  ConfigProvider.fromUnknown({
+    RIVET_ENDPOINT: connection.endpoint,
+    RIVET_TOKEN: Redacted.value(connection.token),
+    RIVET_NAMESPACE: connection.namespace,
+    RIVET_POOL: connection.pool,
+  });
+
+// Retried while the control plane routes the first call to the new node.
+const settled = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }));
+
+// A process Alchemy didn't build joins a pool as its node with Node.serve,
+// and reaches the classes it hosts with Node.connect. Either one reads each
+// connection field it isn't given from the environment.
+describe.skipIf(!!process.env.FAST)(
+  "Rivet Node",
+  { tags: ["provider:rivet", "provider:rivet:durable-object", "local"] },
+  () => {
+    beforeAll(
+      Effect.gen(function* () {
+        yield* ensureDockerSwarm;
+        if (!process.env.NO_DESTROY) yield* sharedStack.destroy();
+        const out = (yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            const cluster = yield* Rivet.Cluster;
+            return {
+              endpoint: cluster.endpoint,
+              token: cluster.token,
+              namespace: cluster.namespace,
+            };
+          }).pipe(Effect.provide(Cluster)),
+        )) as { endpoint: string; token: Redacted.Redacted<string>; namespace: string };
+        connection = {
+          endpoint: out.endpoint,
+          token: out.token,
+          namespace: out.namespace,
+          pool: POOL,
+        };
+      }),
+      { timeout: 400_000 },
+    );
+
+    afterAll.skipIf(!!process.env.NO_DESTROY)(sharedStack.destroy(), { timeout: 300_000 });
+
+    test(
+      "serve hosts a class in this process, and connect calls its instances, both reading the connection from the environment",
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* serving({});
+          const echoes = yield* RivetNode.connect(NodeEcho);
+          const first = yield* settled(echoes.getByName("a").increment());
+          expect(yield* echoes.getByName("a").increment()).toBe(first + 1);
+          expect(yield* echoes.getByName("b").increment()).toBe(1);
+        }).pipe(
+          Effect.provideServiceEffect(ConfigProvider.ConfigProvider, Effect.sync(fromEnvironment)),
+        ),
+      ),
+      // serve sets the process-wide runtime flag while the class phase runs.
+      { timeout: 120_000, exclusive: true },
+    );
+
+    test(
+      "connect adds its headers to every call, and a caller's own header wins",
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* serving(connection);
+          const traced = (yield* RivetNode.connect(NodeEcho, {
+            ...connection,
+            headers: () => [["x-trace", "from-connection"]],
+          })).getByName("traced");
+          // The stub's `fetch` asks for the RuntimeContext of an Alchemy
+          // runtime, which a gateway call never reads.
+          const read = (request: Request) =>
+            settled(
+              (
+                traced.fetch(HttpServerRequest.fromWeb(request)) as Effect.Effect<
+                  HttpServerResponse.HttpServerResponse,
+                  unknown
+                >
+              ).pipe(
+                Effect.flatMap((response) =>
+                  Effect.promise(() => HttpServerResponse.toWeb(response).json()),
+                ),
+              ),
+            );
+          expect(yield* read(new Request("http://node/"))).toEqual({
+            name: "traced",
+            trace: "from-connection",
+          });
+          expect(
+            yield* read(new Request("http://node/", { headers: { "x-trace": "from-caller" } })),
+          ).toEqual({ name: "traced", trace: "from-caller" });
+        }),
+      ),
+      { timeout: 120_000, exclusive: true },
+    );
+
+    test(
+      "a class runs with the sleepTimeout it sets, and serve's options win over it",
+      Effect.scoped(
+        Effect.gen(function* () {
+          const asleep = (name: string) =>
+            Effect.suspend(() =>
+              slept.includes(name) ? Effect.void : Effect.fail("still awake"),
+            ).pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }));
+          // The class sets a sleepTimeout of 1 second, so it sleeps long
+          // before RivetKit's default of 30 seconds.
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              yield* serving(connection, [NodeSleepy]);
+              const sleepy = (yield* RivetNode.connect(NodeSleepy, connection)).getByName("idle");
+              expect(yield* settled(sleepy.ping())).toBe("pong");
+              yield* asleep("idle");
+            }),
+          );
+          // serve's options for the class win over the 1 second it sets.
+          yield* serving({ ...connection, options: { NodeSleepy: { sleepTimeout: 60_000 } } }, [
+            NodeSleepy,
+          ]);
+          const awake = (yield* RivetNode.connect(NodeSleepy, connection)).getByName("awake");
+          expect(yield* settled(awake.ping())).toBe("pong");
+          yield* Effect.sleep("5 seconds");
+          expect(slept).not.toContain("awake");
+        }),
+      ),
+      { timeout: 120_000, exclusive: true },
+    );
+  },
+);

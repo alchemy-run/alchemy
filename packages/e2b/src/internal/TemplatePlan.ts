@@ -15,6 +15,7 @@
  * Deploy-time only: `BuildPlan` bundles and reads the filesystem.
  */
 import * as BuildPlan from "@alchemy.run/docker/BuildPlan";
+import type { ContainerRuntimeSettings } from "@alchemy.run/docker/ContainerRuntime";
 import type { ImageSourceProps } from "@alchemy.run/docker/ImageSource";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -208,6 +209,7 @@ export interface PlanSourceOptions {
   readonly port?: number;
   /** Bootstrap wrapped around an Effect-native `main`. */
   readonly bootstrap?: (importPath: string) => string;
+  readonly runtime?: ContainerRuntimeSettings;
   /** `ARG` values. */
   readonly args?: Readonly<Record<string, string>>;
   /** Install lines from the program's mount capabilities (`alchemy/Mount`). */
@@ -219,6 +221,7 @@ export const planSource = (source: ImageSourceProps, options: PlanSourceOptions 
   Effect.gen(function* () {
     const plan = yield* BuildPlan.plan(source, {
       capabilities: E2BCapabilities,
+      runtime: options.runtime,
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.bootstrap !== undefined ? { bootstrap: options.bootstrap } : {}),
       ...(options.install !== undefined && options.install.length > 0

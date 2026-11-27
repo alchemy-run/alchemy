@@ -208,11 +208,9 @@ export const LakesEntitiesPartitionProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsLakesZonesEntitiesPartitions({
+            values: news.values,
+            location: news.location,
             parent: entity,
-            body: {
-              values: news.values,
-              location: news.location,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

@@ -3,9 +3,10 @@ import * as Output from "alchemy/Output";
 import { Platform } from "alchemy/Platform";
 import { serveRpc } from "alchemy/Rpc";
 import type { ProcessContext } from "alchemy/Runtime/Process";
-import { packEnvValueKeepRedacted, unpackEnvValue } from "alchemy/RuntimeContext";
+import { envStrings, packEnvValueKeepRedacted, unpackEnvValue } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import { DurableObject } from "../Workers/DurableObject.ts";
 import { Worker } from "../Workers/Worker.ts";
 import { ContainerTypeId, type Container } from "./Container.ts";
@@ -14,6 +15,7 @@ import type {
   ContainerServices,
   ContainerShape,
 } from "./ContainerApplication.ts";
+import { containerEnvBindingName } from "./ContainerClient.ts";
 import {
   containerApplicationSettings,
   durableObjectContainerBinding,
@@ -21,6 +23,15 @@ import {
   workerContainerBinding,
 } from "./ContainerConfiguration.ts";
 import { declareDurableObjectApplication } from "./DurableObjectApplication.ts";
+
+/**
+ * A Durable Object-managed Container's env as the one `secret_text` its
+ * handle parses at `start()`. Redacted values ship unwrapped inside it, as
+ * a fleet application's environment variables do.
+ */
+const containerEnvSecret = (env: Record<string, unknown> | undefined) =>
+  // The same strings a fleet deployment's environment carries.
+  env === undefined ? undefined : Redacted.make(JSON.stringify(envStrings(env)));
 
 const toHttpUrl = (url: string) =>
   url.startsWith("https:") ? `http:${url.slice("https:".length)}` : url;
@@ -75,6 +86,11 @@ const bindContainer = Effect.fn(function* <Shape, Req = never>(
     });
     yield* worker.bind`${namespace.name}:${container.LogicalId}`({
       containers: [durableObjectContainerBinding(namespace.name, application, container)],
+      env: {
+        [containerEnvBindingName(container.LogicalId)]: container.runtimeEnv.pipe(
+          Output.map(containerEnvSecret),
+        ),
+      },
     });
     return;
   }

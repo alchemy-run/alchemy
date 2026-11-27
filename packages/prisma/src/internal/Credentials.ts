@@ -54,7 +54,11 @@ export const fromAuthProvider = () =>
         deferUntilFirstUse,
         Effect.flatMap(Effect.cached),
       );
-      return Effect.all({ apiToken: credentials, apiBaseUrl: baseUrl });
+      // `Credentials` has no error channel: a failed resolution dies, and the
+      // engine reports it as `CredentialsRequired`.
+      return Effect.all({ apiToken: credentials, apiBaseUrl: baseUrl }).pipe(
+        orDieCredentialsUnavailable(PRISMA_AUTH_PROVIDER_NAME),
+      );
     }),
   );
 

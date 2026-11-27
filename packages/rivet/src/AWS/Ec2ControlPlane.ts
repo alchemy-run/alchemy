@@ -1,10 +1,12 @@
 import * as EC2 from "@alchemy.run/aws/EC2";
 import {
+  ADMIN_TOKEN_ENV,
   DATA_PATH,
   engineEnvironment,
   makeControlPlane,
   mountDataDisk,
   PEER_PORT,
+  readAdminToken,
   type ControlPlaneProps,
 } from "./internal/ControlPlane.ts";
 
@@ -56,11 +58,13 @@ set -euo pipefail
 dnf install -y docker
 systemctl enable --now docker
 ${mountDataDisk(boot.volumeId)}
+${readAdminToken(boot)}
 IMDS_TOKEN="$(curl -sf -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 300' http://169.254.169.254/latest/api/token)"
 PRIVATE_IP="$(curl -sf -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)"
 
 docker run -d --name rivet-engine --restart always --network host \\
   -v ${DATA_PATH}:${DATA_PATH} \\
+  -e ${ADMIN_TOKEN_ENV} \\
 ${environment}
   '${boot.image}'
 `;

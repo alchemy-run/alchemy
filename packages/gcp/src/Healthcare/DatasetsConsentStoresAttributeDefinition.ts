@@ -266,15 +266,13 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsConsentStoresAttributeDefinitions({
+            category: news.category,
+            allowedValues: news.allowedValues,
+            description,
+            consentDefaultValues: news.consentDefaultValues,
+            dataMappingDefaultValue: news.dataMappingDefaultValue,
             parent: consentStore,
             attributeDefinitionId,
-            body: {
-              category: news.category,
-              allowedValues: news.allowedValues,
-              description,
-              consentDefaultValues: news.consentDefaultValues,
-              dataMappingDefaultValue: news.dataMappingDefaultValue,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -301,6 +299,10 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
       if (descriptionChanged || allowedChanged || consentDefaultChanged || mappingDefaultChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsConsentStoresAttributeDefinitions({
+            description,
+            allowedValues: news.allowedValues,
+            consentDefaultValues: news.consentDefaultValues,
+            dataMappingDefaultValue: news.dataMappingDefaultValue,
             name: currentName,
             updateMask: updateMaskOf(
               descriptionChanged ? "description" : undefined,
@@ -308,12 +310,6 @@ export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
               consentDefaultChanged ? "consentDefaultValues" : undefined,
               mappingDefaultChanged ? "dataMappingDefaultValue" : undefined,
             ),
-            body: {
-              description,
-              allowedValues: news.allowedValues,
-              consentDefaultValues: news.consentDefaultValues,
-              dataMappingDefaultValue: news.dataMappingDefaultValue,
-            },
           }),
         );
       }

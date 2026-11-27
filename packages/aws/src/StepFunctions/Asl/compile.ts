@@ -169,7 +169,10 @@ export const compileNode = (ctx: Ctx, node: AslNode, v: string): Fragment => {
         states: {
           [name]: {
             Type: "Task",
-            Resource: "arn:aws:states:::lambda:invoke",
+            Resource: Output.map(
+              Output.interpolate`${node.fn.functionArn}`,
+              (arn) => `arn:${arn.split(":")[1]}:states:::lambda:invoke`,
+            ),
             Arguments: {
               FunctionName: node.fn.functionArn,
               Payload: renderValue(node.payload),

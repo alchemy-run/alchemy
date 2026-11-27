@@ -61,6 +61,40 @@ Group commands and reads into Apis by audience (`CustomerApi`, `SupportApi`). Mi
 
 More: [Views as security boundaries](https://alchemy.run/domain/view-security).
 
+## Patterns for history that grows or has to change
+
+Pick by what the record is. None of these is the default: an instance that stays small needs nothing.
+
+**Keeping history small**
+
+- **A book per period (closing the books).** The record has periods the business names. Put the period in the aggregate's id (`a-1.2026-01`). The closing event carries the balance and the next id (`BookClosed { balance, next }`), and a policy opens the next instance with it (`OpenBook { broughtForward }`, which adds to what the book holds, so order doesn't matter). A view keyed by the book is that period's statement. Callers work out the current id from the date.
+- **Remove a closed period** once it no longer has to be kept: `Domain.Rewrite(name, { of: Book, delete: true })`. Later periods are untouched.
+- **Roll up one instance.** No periods, and the state is worth keeping: a `Domain.Compaction` with `{ after: { events: n } }` on its Layer, or `compact` called from a policy at a moment that means something (a book closing).
+- **Archive or discard.** The compaction's Layer is given the replaced events: write them to a bucket or a warehouse, or do nothing and let them go.
+
+More: [Closing the books](https://alchemy.run/domain/closing-the-books), [Compaction](https://alchemy.run/domain/compaction).
+
+**Correcting mistakes**
+
+- **Record the fact that reverses it.** A bug or a wrong command recorded events that shouldn't stand: a command per correction (`ReverseDeposit`) records an event naming what it reverses (`DepositReversed { depositSeq, amount, balanceAfter, reason }`). It never rejects. Views and projections follow it like any event.
+- **Each reaction undoes what it did.** A policy or saga that acted on the mistake lists the correcting event in its `on` and puts right its own effect (a correction email, a refund, a saga's compensations).
+- **Correct many instances** by sending one command each, with a command id derived from what it corrects (`reverse-${accountId}-${seq}`), so a rerun decides nothing twice. A run that must survive restarts is a saga.
+- **Not a rewrite.** A rewrite reaches state, views and projections, never what policies and sagas already did. Keep it for data the record must not hold.
+- **Not a storage restore.** A restored aggregate reuses sequence numbers its consumers have seen, and they drop its next events.
+
+More: [Correcting mistakes](https://alchemy.run/domain/correcting-mistakes).
+
+**Erasing personal data**
+
+- **Keep it out of the events.** Record an id, and keep what it identifies in a store of your own. Erasing is one delete there. Prefer this while the events are still being designed.
+- **Rewrite.** The data is already in the events: a `Domain.Rewrite` per aggregate that holds it, each projection it reaches with a `rewrite` handler, and a saga that runs them and waits on `rewritten`.
+- **Remove the instance.** Nothing in it has to stay: a rewrite with `delete: true`.
+- **Encrypt before recording.** The record must never change, or copies leave the model: the server encrypts the field with a per-person key from its own store before sending the command, reads decrypt, and deleting the key erases. Only for data the model carries and never decides on.
+
+A rewrite of an aggregate that compacts needs a handler for the roll-up event too. It also runs over the copies views kept of the removed events. Projection rows written from removed events, and the archive, are yours to change.
+
+More: [Erasing personal data](https://alchemy.run/domain/erasing-personal-data), [Erasing personal data: Erase an aggregate you compact](https://alchemy.run/domain/erasing-personal-data#erase-an-aggregate-you-compact), [Rewrite](https://alchemy.run/domain/rewrite).
+
 ## Smells
 
 - A command that touches two aggregates. Split it, and connect the parts with a policy or a saga.

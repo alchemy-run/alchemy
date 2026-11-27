@@ -59,6 +59,25 @@ const usesS3 = (options: StateOptions) =>
  * const stateStore = AWS.state({ name: "team-a" }); // table alchemy-state-team-a
  * ```
  *
+ * ### Encryption
+ * The store has its own KMS key, `alias/alchemy-state`, created with the
+ * table. The table and overflow bucket are encrypted at rest with it, and
+ * every secret in state (a `Redacted` value) is encrypted with a data key
+ * from it before it is written. A deploy asks KMS for one data key per
+ * stage. A store created before encryption moves to the key on its first
+ * use outside CI.
+ *
+ * Provide `AWS.stateEncryption()` to choose the key, which then encrypts the
+ * table and buckets too, or any other `StateEncryption` layer to encrypt the
+ * secrets with it instead.
+ *
+ * **Example:** Your own KMS key
+ * ```typescript
+ * const stateStore = AWS.state().pipe(
+ *   Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/my-state-key" })),
+ * );
+ * ```
+ *
  * ### Migrating from the S3 State Store
  * Earlier versions kept state in an S3 bucket,
  * `alchemy-state-<accountId>-<region>-an`. A stage still there is refused

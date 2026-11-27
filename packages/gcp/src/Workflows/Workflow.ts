@@ -477,11 +477,7 @@ export const WorkflowProvider = () =>
 
       if (current === undefined) {
         const created = yield* workflows
-          .createProjectsLocationsWorkflows({
-            parent,
-            workflowId,
-            body: desiredBody,
-          })
+          .createProjectsLocationsWorkflows({ ...desiredBody, parent, workflowId })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -528,18 +524,14 @@ export const WorkflowProvider = () =>
       if (updateMask.length > 0) {
         const operation = yield* workflows
           .patchProjectsLocationsWorkflows({
+            ...desiredBody,
             name,
             updateMask: updateMask.join(","),
-            body: desiredBody,
           })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* workflows
-            .createProjectsLocationsWorkflows({
-              parent,
-              workflowId,
-              body: desiredBody,
-            })
+            .createProjectsLocationsWorkflows({ ...desiredBody, parent, workflowId })
             .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(created);

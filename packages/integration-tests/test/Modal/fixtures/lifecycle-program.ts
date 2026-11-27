@@ -1,6 +1,7 @@
 // A program for lifecycle tests: answers every call with its VERSION.
-Bun.serve({
-  port: Number(process.env.PORT),
-  hostname: "0.0.0.0",
-  fetch: () => Response.json({ version: process.env.VERSION }),
-});
+import { createServer } from "node:http";
+
+createServer((_request, response) => {
+  response.setHeader("content-type", "application/json");
+  response.end(JSON.stringify({ version: process.env.VERSION }));
+}).listen(Number(process.env.PORT), "0.0.0.0");

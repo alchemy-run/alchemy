@@ -36,6 +36,7 @@ import {
   type WireProcessOutput,
   type WireSignal,
 } from "./SandboxAgentClient.ts";
+import { Terminals } from "./Terminal.ts";
 
 /**
  * The server half of the sandbox agent. A program that serves it answers the
@@ -147,6 +148,7 @@ const makeSandboxAgent = Effect.fn(function* (activity: { streams: number }) {
     yield* Effect.serviceOption(ChildProcessSpawner.ChildProcessSpawner),
   );
   const fs = Option.getOrUndefined(yield* Effect.serviceOption(FileSystem.FileSystem));
+  const terminalHost = Option.getOrUndefined(yield* Effect.serviceOption(Terminals));
   const scope = Scope.makeUnsafe();
 
   const processes = new Map<string, RunningProcess>();
@@ -312,46 +314,33 @@ const makeSandboxAgent = Effect.fn(function* (activity: { streams: number }) {
   });
 
   const openTerminal = Effect.fn(function* (options: Sandbox.PtyOptions) {
-    if (typeof Bun === "undefined") {
+    if (terminalHost === undefined) {
       return yield* new SandboxPtyUnavailable({
-        message: "Terminals need a sandbox whose program runs on Bun.",
+        message: "This sandbox's runtime can't open terminals.",
       });
     }
     const hasBash =
       fs !== undefined && (yield* fs.exists("/bin/bash").pipe(Effect.orElseSucceed(() => false)));
-    const argv =
+    const argv: [string, ...string[]] =
       options.command !== undefined
         ? ["/bin/sh", "-c", options.command]
         : [hasBash ? "/bin/bash" : "/bin/sh"];
     const id = `t${++nextId}`;
     const output = makeReplay<Uint8Array>();
-    const subprocess = yield* Effect.try({
-      try: () =>
-        Bun.spawn(argv, {
-          cwd: options.cwd,
-          env: { ...process.env, TERM: "xterm-256color", ...options.env },
-          terminal: {
-            cols: options.cols,
-            rows: options.rows,
-            // Bun reuses the buffer it hands over, so keep a copy.
-            data: (_terminal, data) => publish(output, data.slice(), data.byteLength),
-          },
-        }),
-      catch: (cause) =>
-        new SandboxPtyUnavailable({
-          message: `The terminal could not be opened: ${String(cause)}`,
-        }),
+    const terminal = yield* terminalHost.spawn({
+      argv,
+      cwd: options.cwd,
+      env: { ...process.env, TERM: "xterm-256color", ...options.env },
+      cols: options.cols,
+      rows: options.rows,
+      onData: (data) => publish(output, data, data.byteLength),
     });
     terminals.set(id, {
       output,
-      write: (data) => {
-        subprocess.terminal?.write(data);
-      },
-      resize: (cols, rows) => {
-        subprocess.terminal?.resize(cols, rows);
-      },
+      write: (data) => terminal.write(data),
+      resize: (cols, rows) => terminal.resize(cols, rows),
     });
-    yield* Effect.promise(() => subprocess.exited).pipe(
+    yield* terminal.exited.pipe(
       Effect.andThen(
         Effect.sync(() => {
           finish(output);

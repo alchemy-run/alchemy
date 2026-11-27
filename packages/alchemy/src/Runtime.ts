@@ -9,7 +9,7 @@
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { isRedactedMarker, sanitizeKey } from "./RuntimeContext.ts";
+import { sanitizeKey, unwrapRedactedMarker } from "./RuntimeContext.ts";
 import { asEffect } from "./Util/types.ts";
 
 /**
@@ -34,88 +34,53 @@ export const makeEntrypointLayer = (tag: any, entrypoint: any): Layer.Layer<any>
 };
 
 /**
- * Unwrap the `{"_tag":"Redacted","value":...}` marker that the deploy-time
- * `Config` interceptor (see `Platform.ts`) and `RuntimeContext.set` use to
- * preserve `Redacted`-ness across the env-var boundary. Returns the inner
- * source value as a string, or `undefined` when `raw` is not a marker.
- */
-const parseRedactedMarker = (raw: string): string | undefined => {
-  if (!raw.startsWith("{")) {
-    return undefined;
-  }
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (isRedactedMarker(parsed)) {
-      return typeof parsed.value === "string" ? parsed.value : JSON.stringify(parsed.value);
-    }
-  } catch {
-    // not JSON — plain env value, fall through
-  }
-  return undefined;
-};
-
-/**
- * Reify an env-var string the way `RuntimeContext.get` does: unwrap the
- * `Redacted` marker, unquote a JSON-stringified string, and pass anything
- * else through verbatim.
- */
-const reifyEnvString = (raw: string): string => {
-  const marker = parseRedactedMarker(raw);
-  if (marker !== undefined) {
-    return marker;
-  }
-  if (raw.startsWith('"')) {
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (typeof parsed === "string") {
-        return parsed;
-      }
-    } catch {
-      // not JSON — plain env value, fall through
-    }
-  }
-  return raw;
-};
-
-/**
- * Wrap a runtime's env-backed `ConfigProvider` so values that were
- * auto-bound by the deploy-time `Config` interceptor decode transparently.
+ * The `ConfigProvider` every deployed runtime uses for `Config` reads.
  *
- * The engine can't know which config values are sensitive, so the
- * interceptor binds every `Config` read during Init onto the deploy target
- * as a secret, serialized as a `{"_tag":"Redacted","value":<source>}`
- * marker. The interceptor's runtime branch reifies those markers for reads
- * during Init, but effects that run later (request handlers, nested
- * layers) resolve `Config` against the raw env-backed provider — without
- * this wrapper, `Config.Number("PORT")` inside a handler sees the marker
- * JSON instead of the source value and fails with a schema error.
+ * It reads `source` (the host's environment) and returns each string exactly
+ * as set, even one that parses as JSON (`"false"`, `"1.0"`, a long number),
+ * with two exceptions:
  *
- * Two behaviors:
- * - Leaf values that carry the marker are unwrapped to the raw source
- *   string before `Config` schemas decode them; everything else passes
- *   through untouched.
- * - On a miss, falls back to the flat `sanitizeKey`-canonicalized key
- *   (`my.key` → `my_key`) that the interceptor bound the value under, so
- *   config names with non-alphanumeric characters resolve at runtime too.
+ * - **Values Alchemy bound.** During Init, every `Config` read is bound onto
+ *   the deploy target as a secret, so it arrives as a
+ *   `{"_tag":"Redacted","value":...}` marker. It is unwrapped back to the
+ *   original string ({@link unwrapRedactedMarker}).
+ * - **Renamed keys.** A name like `my.key` is bound as `my_key`
+ *   ({@link sanitizeKey}), so a miss retries under that name.
+ *
+ * `ALCHEMY_PHASE` always reads `"runtime"`.
+ *
+ * Process hosts provide {@link RuntimeConfigProviderLive}. A host whose env is
+ * an object of bindings (a Worker) passes `ConfigProvider.fromUnknown(env,
+ * { preserveEmptyStrings: true })`. Keep `preserveEmptyStrings`: `""` is a
+ * value someone set, not a missing one.
  */
-export const reifyBoundConfigProvider = (
-  base: ConfigProvider.ConfigProvider,
-  env: Record<string, unknown>,
+export const runtimeConfigProvider = (
+  source: ConfigProvider.ConfigProvider = ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
 ): ConfigProvider.ConfigProvider =>
-  ConfigProvider.make((path) =>
-    base.load(path).pipe(
-      Effect.map((node) => {
-        if (node?._tag === "Value") {
-          const value = parseRedactedMarker(node.value);
-          return value === undefined ? node : ConfigProvider.makeValue(value);
-        }
-        if (node === undefined) {
-          const raw = env[sanitizeKey(path.map((p) => p.toString()).join("_"))];
-          if (typeof raw === "string") {
-            return ConfigProvider.makeValue(reifyEnvString(raw));
-          }
-        }
-        return node;
-      }),
-    ),
-  );
+  ConfigProvider.make((path) => {
+    const key = sanitizeKey(path.join("_"));
+    if (key === "ALCHEMY_PHASE") {
+      return Effect.succeed(ConfigProvider.makeValue("runtime"));
+    }
+    return source.load(path).pipe(
+      Effect.flatMap((node) =>
+        node === undefined && !(path.length === 1 && path[0] === key)
+          ? source.load([key])
+          : Effect.succeed(node),
+      ),
+      Effect.map((node) =>
+        // Record and Array nodes carry a value too (`PORT` beside `PORT_X`).
+        node?.value === undefined ? node : { ...node, value: unwrapRedactedMarker(node.value) },
+      ),
+    );
+  });
+
+/**
+ * {@link runtimeConfigProvider} over `process.env`. Every process-based
+ * runtime host (Lambda, containers, VMs, sandboxes) provides this Layer.
+ * `process.env` is snapshotted when the Layer builds (the first event);
+ * variables set after that are not seen.
+ */
+export const RuntimeConfigProviderLive = ConfigProvider.layer(
+  Effect.sync(() => runtimeConfigProvider()),
+);

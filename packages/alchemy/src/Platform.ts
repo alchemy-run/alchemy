@@ -24,6 +24,7 @@ import { CurrentNamespace } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
+import { omitRenamePolicy } from "./Rename.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
 import { ServerHost, type ProcessContext } from "./Runtime/Process.ts";
@@ -439,7 +440,9 @@ export const Platform = <
                     // the plain props object — the second call site (in
                     // `cls.make`) already does this.
                     Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
-                    (resolved) => hooks.onCreate!(resource as R, resolved),
+                    // Resources the hook declares are not the renamed
+                    // resource (#2219).
+                    (resolved) => omitRenamePolicy(hooks.onCreate!(resource as R, resolved)),
                   )
                 : Effect.void,
             ),
@@ -522,14 +525,17 @@ export const Platform = <
                 yield* resource(id, props as any).pipe(
                   Effect.flatMap(
                     (resource) =>
-                      hooks.onCreate?.(resource, props).pipe(Effect.map(() => resource)) ??
-                      Effect.succeed(resource),
+                      hooks.onCreate?.(resource, props).pipe(
+                        omitRenamePolicy,
+                        Effect.map(() => resource),
+                      ) ?? Effect.succeed(resource),
                   ),
                 ),
                 runtimeContext,
               );
 
-              yield* impl.pipe(
+              // Resources init declares are not the renamed resource (#2219).
+              yield* omitRenamePolicy(impl).pipe(
                 Effect.flatMap((impl) => {
                   // An `alwaysServe` runtime serves routes of its own, so it
                   // boots even when the program returns nothing.
@@ -570,36 +576,23 @@ export const Platform = <
                       const configProvider = yield* ConfigProvider.ConfigProvider;
                       const phase = yield* ALCHEMY_PHASE;
 
+                      // At runtime the ambient provider is `runtimeConfigProvider`;
+                      // reads pass straight through.
+                      if (phase !== "plan") {
+                        return configProvider;
+                      }
                       return ConfigProvider.make(
                         Effect.fnUntraced(function* (path) {
                           const ctx = yield* CurrentRuntimeContext;
                           // `set`/`get` store keys verbatim, so canonicalize the
                           // logical config path here (the caller's job) before
                           // handing it to the RuntimeContext.
-                          const key = sanitizeKey(path.map((p) => p.toString()).join("_"));
+                          const key = sanitizeKey(path.join("_"));
                           const node = yield* configProvider.load(path);
-                          if (phase === "plan" && node) {
-                            // bind it to the RuntimeContext if running in plan phase
+                          if (node) {
                             const output = Output.literal(Redacted.make(node.value));
                             yield* ctx?.set(key, output) ?? Effect.void;
-                            return node;
-                          } else if (phase === "runtime" && ctx) {
-                            // retrieve from the RuntimeContext if running in runtime phase
-                            const value = yield* ctx.get<unknown>(key);
-                            if (value) {
-                              // `get` JSON-decodes unbound env values (`"true"` →
-                              // `true`), but a `Value` node holds the raw string the
-                              // `Config` schema parses.
-                              return ConfigProvider.makeValue(
-                                Redacted.isRedacted(value)
-                                  ? String(Redacted.value(value))
-                                  : typeof value === "string"
-                                    ? value
-                                    : JSON.stringify(value),
-                              );
-                            }
                           }
-                          // fallback to the config provider otherwise
                           return node;
                         }),
                       );

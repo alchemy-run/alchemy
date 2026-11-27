@@ -247,7 +247,7 @@ For its history, or to follow it live, read a [view](/domain/view) of it instead
 
 ## Read your own write
 
-A projection writes its store after the command commits, so a plain read can be a moment behind. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads:
+A projection writes its store after the command commits, often in batches, so a plain read can be a moment behind. Even a [strong](/domain/command#choose-when-it-answers) command doesn't wait for it. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads:
 
 ```typescript
 const receipt = yield* bank.WithdrawMoney({ accountId, amount: 30 }, mfa);

@@ -257,14 +257,12 @@ export const ProductProvider = () =>
       if (current === undefined) {
         const created = yield* vision
           .createProjectsLocationsProducts({
+            displayName,
+            description,
+            productCategory,
+            productLabels,
             parent: locationParent(env.project, location),
             productId,
-            body: {
-              displayName,
-              description,
-              productCategory,
-              productLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getProduct(name)));
         current = created ?? undefined;
@@ -286,14 +284,11 @@ export const ProductProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* vision.patchProjectsLocationsProducts({
+          displayName,
+          description,
+          productLabels,
           name: currentName,
           updateMask,
-          body: {
-            name: currentName,
-            displayName,
-            description,
-            productLabels,
-          },
         });
       }
 

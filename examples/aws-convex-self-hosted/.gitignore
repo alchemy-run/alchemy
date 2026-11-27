@@ -1,0 +1,4 @@
+dist/
+.tanstack/
+.nitro/
+convex/_generated

@@ -354,10 +354,10 @@ export const AdminSubscriptionProvider = () =>
         if (exportConfig !== undefined) body.exportConfig = exportConfig;
         const created = yield* pubsublite
           .createAdminProjectsLocationsSubscriptions({
+            ...body,
             parent: parentOf(env.project, location),
             subscriptionId,
             skipBacklog: news.skipBacklog,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getSubscription(name)));
         current = created ?? undefined;
@@ -394,9 +394,9 @@ export const AdminSubscriptionProvider = () =>
         if (deliveryConfig !== undefined) body.deliveryConfig = deliveryConfig;
         if (exportConfig !== undefined) body.exportConfig = exportConfig;
         current = yield* pubsublite.patchAdminProjectsLocationsSubscriptions({
+          ...body,
           name: observedName,
           updateMask: mask,
-          body,
         });
       }
 

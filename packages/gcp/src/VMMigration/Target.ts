@@ -235,12 +235,10 @@ export const TargetProvider = () =>
       if (current === undefined) {
         const created = yield* vm
           .createProjectsLocationsTargetProjects({
+            project,
+            description,
             parent: globalParent(env.project),
             targetProjectId,
-            body: {
-              project,
-              description,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -264,13 +262,10 @@ export const TargetProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* vm.patchProjectsLocationsTargetProjects({
+          project,
+          description,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            project,
-            description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
