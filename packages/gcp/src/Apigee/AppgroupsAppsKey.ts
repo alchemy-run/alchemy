@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 import {
   attributesToRecord,
@@ -187,7 +188,7 @@ const toAttrs = (
   return {
     name: resourceName(organization, appGroup, app, consumerKey),
     consumerKey,
-    consumerSecret: key.consumerSecret,
+    consumerSecret: revealOptional(key.consumerSecret),
     appGroup: appGroupIdOf(appGroup),
     app: appNameOf(app),
     organization: orgIdOf(organization),
@@ -315,7 +316,7 @@ export const AppgroupsAppsKeyProvider = () =>
                   toAttrs(
                     {
                       consumerKey: credential.consumerKey,
-                      consumerSecret: credential.consumerSecret,
+                      consumerSecret: revealOptional(credential.consumerSecret),
                       scopes: credential.scopes,
                       status: credential.status,
                       attributes: credential.attributes,
@@ -356,13 +357,11 @@ export const AppgroupsAppsKeyProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsAppgroupsAppsKeys({
+            consumerKey,
+            consumerSecret,
+            expiresInSeconds: news.expiresInSeconds,
+            attributes: recordToAttributes(attributes),
             parent,
-            body: {
-              consumerKey,
-              consumerSecret,
-              expiresInSeconds: news.expiresInSeconds,
-              attributes: recordToAttributes(attributes),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -383,16 +382,14 @@ export const AppgroupsAppsKeyProvider = () =>
 
       if (scopesChanged || productsChanged || statusChanged || attributesChanged) {
         current = yield* apigee.updateAppGroupAppKeyOrganizationsAppgroupsAppsKeys({
-          name,
-          body: {
-            action: statusChanged ? status : undefined,
-            apiProducts: news.apiProducts,
-            appGroupAppKey: {
-              consumerKey,
-              scopes: news.scopes,
-              attributes: recordToAttributes(attributes),
-            },
+          action: statusChanged ? status : undefined,
+          apiProducts: news.apiProducts,
+          appGroupAppKey: {
+            consumerKey,
+            scopes: news.scopes,
+            attributes: recordToAttributes(attributes),
           },
+          name,
         });
       }
 

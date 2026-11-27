@@ -677,9 +677,9 @@ export const SingleTenantHsmInstanceProposalProvider = () =>
       if (current === undefined) {
         const created = yield* kms
           .createProjectsLocationsSingleTenantHsmInstancesProposals({
+            ...toBody(news),
             parent: parent.parent,
             singleTenantHsmInstanceProposalId: proposalId,
-            body: toBody(news),
           })
           .pipe(
             Effect.flatMap((operation) =>

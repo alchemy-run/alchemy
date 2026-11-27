@@ -1,16 +1,18 @@
 import * as Axiom from "@distilled.cloud/axiom";
+import * as AxiomPreview from "@distilled.cloud/axiom/unstable/v2";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "./Providers.ts";
 
-export type MonitorProps = Axiom.CreateMonitorRequest;
+export type MonitorProps = AxiomPreview.CreateMonitorRequest;
 
 export type Monitor = Resource<
   "Axiom.Monitor",
   MonitorProps,
-  Axiom.CreateMonitorResponse,
+  // The stable read type: its open enums also hold what the preview create returns.
+  Axiom.GetMonitorResponse,
   never,
   Providers,
   MonitorLookup
@@ -108,11 +110,11 @@ export const MonitorProvider = () =>
   Provider.effect(
     Monitor,
     Effect.gen(function* () {
-      const create = yield* Axiom.createMonitor;
-      const update = yield* Axiom.updateMonitor;
+      const create = yield* AxiomPreview.createMonitor;
+      const update = yield* AxiomPreview.updateMonitor;
       const get = yield* Axiom.getMonitor;
-      const list = yield* Axiom.getMonitors;
-      const del = yield* Axiom.deleteMonitor;
+      const list = yield* AxiomPreview.getMonitors;
+      const del = yield* AxiomPreview.deleteMonitor;
 
       return {
         stables: ["id"],

@@ -113,6 +113,37 @@ A [decision](/domain/decision) records on every instance it reads, or on none. T
 
 Every event reaches the views, projections and policies that consume it, at least once and in order for each source, even if a node restarts in between. Scheduled commands fire on the actor's alarm when they're due.
 
+## Keep dedupe rows for a while
+
+Some rows exist only to drop repeats: the receipt of each accepted command and committed decision, the mark that a policy ran a delivery, and a cancelled scheduled command. Each actor deletes a few of its rows that are older than `retention` every time it commits:
+
+```typescript
+import * as DomainRivet from "@alchemy.run/domain/Rivet";
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+import { Bank, BankHandlers } from "./Bank.ts";
+
+const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
+const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
+
+export default Bank.layer(BankHandlers).pipe(
+  Layer.provide(
+    DomainRivet.layerDurableObjects({
+      name: "Bank",
+      main: import.meta.url,
+      pool: Default,
+      retention: {
+        receipts: "30 days", // a command or decision sent again after this is decided again
+        deliveries: "7 days", // a delivery that arrives again after this runs again
+        cancelled: "7 days", // after this, `unschedule` answers `NotScheduled`
+      },
+    }),
+  ),
+);
+```
+
+These are the defaults. `"forever"` keeps a kind of row. Events, state and the views' entries are never deleted. Rows written before an upgrade start their window at the actor's first commit after it.
+
 ## Watch without polling
 
 Give the client `Domain.protocolWebSocket` (see [Api](/domain/api#choose-a-protocol)). Each `watch` or `events` read opens a WebSocket, which the Api carries through the control plane's gateway to the actor that owns the key. The actor pushes every commit down it as it happens.

@@ -297,15 +297,13 @@ export const RepositoriesWorkflowConfigProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           dataform.createProjectsLocationsRepositoriesWorkflowConfigs({
+            releaseConfig: resolvedRelease,
+            cronSchedule: news.cronSchedule,
+            timeZone: news.timeZone,
+            disabled,
+            invocationConfig,
             parent: repository,
             workflowConfigId,
-            body: {
-              releaseConfig: resolvedRelease,
-              cronSchedule: news.cronSchedule,
-              timeZone: news.timeZone,
-              disabled,
-              invocationConfig,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -327,6 +325,10 @@ export const RepositoriesWorkflowConfigProvider = () =>
       if (releaseChanged || cronChanged || zoneChanged || disabledChanged) {
         current = yield* retryTransient(
           dataform.patchProjectsLocationsRepositoriesWorkflowConfigs({
+            releaseConfig: resolvedRelease,
+            cronSchedule: news.cronSchedule,
+            timeZone: news.timeZone,
+            disabled,
             name: currentName,
             updateMask: updateMaskOf(
               releaseChanged ? "releaseConfig" : undefined,
@@ -334,12 +336,6 @@ export const RepositoriesWorkflowConfigProvider = () =>
               zoneChanged ? "timeZone" : undefined,
               disabledChanged ? "disabled" : undefined,
             ),
-            body: {
-              releaseConfig: resolvedRelease,
-              cronSchedule: news.cronSchedule,
-              timeZone: news.timeZone,
-              disabled,
-            },
           }),
         );
       }

@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as sasportal from "@distilled.cloud/gcp/sasportal_v1alpha1";
+import * as sasportal from "@distilled.cloud/gcp/unstable/sasportal_v1alpha1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { firstCustomerName, logLevel, runLifecycle } from "./common.ts";
@@ -45,8 +45,8 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         sasportal.createCustomersNodes({
+          displayName: "alchemy-sasportal-probe",
           parent: "customers/missing",
-          body: { displayName: "alchemy-sasportal-probe" },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

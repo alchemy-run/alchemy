@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import { reveal } from "../internal/SdkSecret.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -583,7 +584,7 @@ const toSecret = (
   secret: bigqueryconnection.ConnectorConfigurationSecret | undefined,
 ): ConnectorSecret | undefined => {
   if (secret === undefined) return undefined;
-  return secret.plaintext !== undefined ? { plaintext: secret.plaintext } : undefined;
+  return secret.plaintext !== undefined ? { plaintext: reveal(secret.plaintext) } : undefined;
 };
 
 const toParameterMap = (
@@ -889,9 +890,9 @@ export const ConnectionProvider = () =>
       if (current === undefined) {
         const created = yield* bigqueryconnection
           .createProjectsLocationsConnections({
+            ...toCreateBody(news, ownership),
             parent,
             connectionId,
-            body: toCreateBody(news, ownership),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -989,18 +990,14 @@ export const ConnectionProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* bigqueryconnection
-          .patchProjectsLocationsConnections({
-            name,
-            updateMask: updateMask.join(","),
-            body,
-          })
+          .patchProjectsLocationsConnections({ ...body, name, updateMask: updateMask.join(",") })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched === undefined) {
           const created = yield* bigqueryconnection
             .createProjectsLocationsConnections({
+              ...toCreateBody(news, ownership),
               parent,
               connectionId,
-              body: toCreateBody(news, ownership),
             })
             .pipe(Effect.catchTag("Conflict", () => getByName(name)));
           current = created ?? undefined;

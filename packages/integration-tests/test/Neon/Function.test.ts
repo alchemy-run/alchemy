@@ -4,6 +4,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as NeonApi from "@distilled.cloud/neon";
+import * as NeonApiUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -97,7 +98,7 @@ test.provider.skipIf(!!process.env.FAST)(
         hasDatabase: true,
         hasAccountKey: false,
       });
-      const observed = yield* NeonApi.getProjectBranchFunction({
+      const observed = yield* NeonApiUnstable.getProjectBranchFunction({
         project_id: first.api.projectId,
         branch_id: first.api.branchId,
         slug: first.api.slug,
@@ -149,14 +150,14 @@ test.provider.skipIf(!!process.env.FAST)(
         expect(body).toMatchObject({ value: "two" });
         expect(body).not.toHaveProperty("removed");
       }
-      const state = yield* NeonApi.getProjectBranchFunction({
+      const state = yield* NeonApiUnstable.getProjectBranchFunction({
         project_id: updated.api.projectId,
         branch_id: updated.api.branchId,
         slug: updated.api.slug,
       });
       expect(state.function.active_deployment?.environment).not.toContain("FUNCTION_TEST_REMOVED");
       yield* stack.deploy(Project("FunctionProject", { region: "aws-us-east-2" }));
-      const absent = yield* NeonApi.getProjectBranchFunction({
+      const absent = yield* NeonApiUnstable.getProjectBranchFunction({
         project_id: updated.api.projectId,
         branch_id: updated.api.branchId,
         slug: updated.api.slug,
@@ -202,7 +203,7 @@ test.provider.skipIf(!!process.env.FAST)(
       );
       expect(code.codeHash).not.toBe(configured.codeHash);
       expect(code.activeDeploymentId).not.toBe(configured.activeDeploymentId);
-      const observed = yield* NeonApi.getProjectBranchFunction({
+      const observed = yield* NeonApiUnstable.getProjectBranchFunction({
         project_id: code.projectId,
         branch_id: code.branchId,
         slug: code.slug,

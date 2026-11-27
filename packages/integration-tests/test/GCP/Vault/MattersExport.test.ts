@@ -52,12 +52,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_VAULT)(
 
       const error = yield* Effect.flip(
         vault.createMattersExports({
+          name: "Alchemy Vault Export Probe",
+          query: sampleMailQuery("probe@example.com"),
+          exportOptions: sampleMailExportOptions(),
           matterId: "alchemy-missing-matter",
-          body: {
-            name: "Alchemy Vault Export Probe",
-            query: sampleMailQuery("probe@example.com"),
-            exportOptions: sampleMailExportOptions(),
-          },
         }),
       );
       expect(error._tag).toEqual("VaultScopeInsufficient");

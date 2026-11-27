@@ -1,4 +1,7 @@
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import path from "node:path";
+import { cloudflare as officialCloudflare } from "@cloudflare/vite-plugin";
 import * as vite from "vite";
 import { describe, expect, it, vi } from "vitest";
 import cloudflareVitePlugin, {
@@ -115,6 +118,79 @@ describe("alchemy Cloudflare Vite plugin name", () => {
     expect(customizer).toHaveBeenCalledTimes(1);
     await expect((failing.config as () => Promise<void>)()).resolves.toBeUndefined();
   });
+
+  // The installed release, not a stand-in: v2 loads `cloudflare.config.ts`
+  // (absent here) before it calls `config`, and Flue's `flueWorkerConfig()`
+  // only edits the config it is given and returns nothing.
+  it.each(["serve", "build"] as const)(
+    "runs a real official cloudflare()'s customizer and keeps Alchemy's build (%s)",
+    async (command) => {
+      const customizer = vi.fn((_config: unknown) => undefined);
+      const resolved = await vite.resolveConfig(
+        {
+          configFile: false,
+          root,
+          logLevel: "silent",
+          plugins: [
+            officialCloudflare({
+              inspectorPort: false,
+              persistState: false,
+              config: customizer as never,
+            }),
+            cloudflareVitePlugin({ main: "./worker-entry.ts" }),
+          ],
+        },
+        command,
+      );
+      expect(customizer).toHaveBeenCalledTimes(1);
+      expect(customizer.mock.calls[0]![0]).toMatchObject({ worker: expect.any(Object) });
+      expect(resolved.environments.ssr!.build.outDir).toBe(path.join("dist", "ssr"));
+    },
+  );
+
+  // Templates that still ship `wrangler.jsonc` (the Website fixtures): v2
+  // refuses a Wrangler config without `cloudflare.config.ts` before it calls
+  // `config`, with or without Alchemy. The project must still resolve, with
+  // Alchemy's build.
+  it.each(["serve", "build"] as const)(
+    "keeps Alchemy's build when a real official cloudflare() rejects a leftover wrangler.jsonc (%s)",
+    async (command) => {
+      const customizer = vi.fn((_config: unknown) => undefined);
+      const project = await fs.mkdtemp(path.join(os.tmpdir(), "alchemy-official-wrangler-"));
+      try {
+        await fs.writeFile(
+          path.join(project, "wrangler.jsonc"),
+          JSON.stringify({ name: "worker", main: "./worker-entry.ts" }),
+        );
+        await fs.copyFile(
+          path.join(root, "worker-entry.ts"),
+          path.join(project, "worker-entry.ts"),
+        );
+        const resolved = await vite.resolveConfig(
+          {
+            configFile: false,
+            root: project,
+            logLevel: "silent",
+            plugins: [
+              officialCloudflare({
+                inspectorPort: false,
+                persistState: false,
+                config: customizer as never,
+              }),
+              cloudflareVitePlugin({ main: "./worker-entry.ts" }),
+            ],
+          },
+          command,
+        );
+        expect(resolved.environments.ssr!.build.outDir).toBe(path.join("dist", "ssr"));
+        // PARITY.md documents this; a release that stops rejecting the file
+        // fails here so the row gets updated.
+        expect(customizer).not.toHaveBeenCalled();
+      } finally {
+        await fs.rm(project, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("disables official plugins an async plugin factory resolves to", async () => {
     const configureServer = vi.fn();

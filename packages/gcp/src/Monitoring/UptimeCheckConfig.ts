@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -435,7 +436,10 @@ const toHttpCheck = (check: monitoring.HttpCheck | undefined): HttpCheck | undef
         : undefined,
     headers: Object.keys(headers).length > 0 ? headers : undefined,
     maskHeaders: check.maskHeaders === true ? true : undefined,
-    authInfo: check.authInfo,
+    authInfo: check.authInfo && {
+      ...check.authInfo,
+      password: revealOptional(check.authInfo.password),
+    },
     serviceAgentAuthentication: check.serviceAgentAuthentication,
     contentType:
       check.contentType && check.contentType !== "TYPE_UNSPECIFIED" ? check.contentType : undefined,
@@ -541,7 +545,10 @@ const toApiHttpCheck = (check: HttpCheck | undefined): monitoring.HttpCheck | un
     requestMethod: check.requestMethod,
     headers: check.headers,
     maskHeaders: check.maskHeaders,
-    authInfo: check.authInfo,
+    authInfo: check.authInfo && {
+      ...check.authInfo,
+      password: revealOptional(check.authInfo.password),
+    },
     serviceAgentAuthentication: check.serviceAgentAuthentication,
     contentType: check.contentType,
     customContentType: check.customContentType,
@@ -614,10 +621,7 @@ export const UptimeCheckConfigProvider = () =>
 
       if (current === undefined) {
         const created = yield* monitoring
-          .createProjectsUptimeCheckConfigs({
-            parent: parentOf(env.project),
-            body,
-          })
+          .createProjectsUptimeCheckConfigs({ ...body, parent: parentOf(env.project) })
           .pipe(Effect.catchTag("Conflict", () => findOwned(env.project, id)));
         current = created ?? undefined;
       }
@@ -677,9 +681,9 @@ export const UptimeCheckConfigProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* monitoring.patchProjectsUptimeCheckConfigs({
+          ...body,
           name,
           updateMask: updateMask.join(","),
-          body: { ...body, name },
         });
       }
 

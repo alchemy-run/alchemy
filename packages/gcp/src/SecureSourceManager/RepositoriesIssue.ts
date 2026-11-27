@@ -259,10 +259,8 @@ export const RepositoriesIssueProvider = () =>
         const created = yield* ssm
           .createProjectsLocationsRepositoriesIssues({
             parent: repository,
-            body: {
-              title: news.title,
-              body,
-            },
+            title: news.title,
+            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -294,11 +292,9 @@ export const RepositoriesIssueProvider = () =>
         const operation = yield* ssm.patchProjectsLocationsRepositoriesIssues({
           name: currentName,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            title: news.title,
-            body,
-          },
+          etag: current.etag,
+          title: news.title,
+          body,
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(currentName), currentName);

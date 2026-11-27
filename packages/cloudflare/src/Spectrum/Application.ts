@@ -16,9 +16,10 @@ type TypeId = typeof TypeId;
 /**
  * How data travels from Cloudflare's edge to the origin. `direct` sends
  * traffic straight to the origin; `http`/`https` apply HTTP(S) processing
- * (Enterprise only).
+ * (Enterprise only); `worker` hands each TCP connection to the `connect`
+ * handler of the Worker named by `originWorkerId`.
  */
-export type TrafficType = "direct" | "http" | "https";
+export type TrafficType = "direct" | "http" | "https" | "worker";
 
 /**
  * The type of TLS termination at the edge for a Spectrum application.
@@ -108,9 +109,19 @@ export interface ApplicationProps {
   protocol: string;
   /**
    * How traffic travels to the origin. `http`/`https` are Enterprise only.
+   * `worker` sends each TCP connection to the `connect` handler of the
+   * Worker in `originWorkerId` (TCP only; without Spectrum Enterprise a
+   * zone gets one Worker-origin application on one port).
    * @default "direct"
    */
   trafficType?: TrafficType;
+  /**
+   * The ID (script tag) of the Worker that receives connections when
+   * `trafficType` is `worker` — a Worker's `workerId` attribute. Excludes
+   * `originDirect`, `originDns`, `originPort`, `proxyProtocol` and
+   * `argoSmartRouting`; `tls` may only be `off` or `flexible`.
+   */
+  originWorkerId?: string;
   /**
    * Fixed origin addresses, e.g. `["tcp://203.0.113.1:22"]`. Provide
    * either `originDirect` or `originDns` + `originPort`.
@@ -171,6 +182,10 @@ export interface ApplicationAttributes {
   protocol: string;
   /** How traffic travels to the origin. */
   trafficType: TrafficType;
+  /** The ID of the origin Worker, for a `worker` application. */
+  originWorkerId: string | undefined;
+  /** The script name of the origin Worker, when Cloudflare resolves it. */
+  originWorkerName: string | undefined;
   /** Fixed origin addresses, if configured. */
   originDirect: string[] | undefined;
   /** Origin DNS lookup configuration, if configured. */
@@ -213,7 +228,8 @@ export type Application = Resource<
  * (`tcp/25565`), Business adds RDP, and Enterprise unlocks arbitrary
  * ports/ranges, UDP, static edge IPs, and PROXY Protocol. On unentitled
  * zones every create fails with the typed `SpectrumProtocolNotAvailable`
- * error.
+ * error. A Worker origin (`trafficType: "worker"`) hands each TCP
+ * connection to a Worker's `connect` handler instead of an address.
  *
  * Safety: Spectrum applications carry no ownership markers. When there is
  * no prior state, `read` scans the zone for an application with the same
@@ -239,6 +255,21 @@ export type Application = Resource<
  *   protocol: "tcp/25565",
  *   originDns: { name: "origin.example.com" },
  *   originPort: 25565,
+ * });
+ * ```
+ *
+ * ### Worker origin
+ * **Example:** Send TCP connections to a Worker's `connect` handler
+ * ```typescript
+ * // Without Spectrum Enterprise, a zone gets one Worker-origin
+ * // application on one port.
+ * const echo = yield* Echo;
+ * yield* Cloudflare.Spectrum.Application("EchoTcp", {
+ *   zoneId: zone.zoneId,
+ *   dns: { type: "CNAME", name: "tcp.example.com" },
+ *   protocol: "tcp/9000",
+ *   trafficType: "worker",
+ *   originWorkerId: echo.workerId,
  * });
  * ```
  *
@@ -402,7 +433,9 @@ type ObservedApp = spectrum.GetAppResponse;
  */
 type FullApp = Extract<ObservedApp, { trafficType: unknown }>;
 type AnyApp = ObservedApp | spectrum.CreateAppResponse | spectrum.UpdateAppResponse;
-const asFull = (app: AnyApp): Partial<FullApp> & AnyApp => app;
+// The pay-as-you-go variant types `trafficType` as any string, so it is left
+// to the union rather than narrowed to the full variant's literals.
+const asFull = (app: AnyApp): Partial<Omit<FullApp, "trafficType">> & AnyApp => app;
 
 /**
  * Read an application by id, mapping "gone" (`SpectrumAppNotFound`,
@@ -436,6 +469,7 @@ const toRequestBody = (news: ApplicationProps) => ({
   protocol: news.protocol,
   trafficType: news.trafficType,
   originDirect: news.originDirect,
+  originWorkerId: news.originWorkerId,
   originDns: news.originDns,
   originPort: news.originPort,
   tls: news.tls,
@@ -459,6 +493,7 @@ const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
     o.protocol !== news.protocol ||
     (o.trafficType ?? "direct") !== (news.trafficType ?? "direct") ||
     !sameList(o.originDirect ?? [], news.originDirect ?? []) ||
+    (o.originWorkerId ?? undefined) !== news.originWorkerId ||
     (o.originDns?.name ?? undefined) !== news.originDns?.name ||
     (o.originPort ?? undefined) !== news.originPort ||
     (news.tls !== undefined && o.tls !== news.tls) ||
@@ -471,7 +506,7 @@ const isDirty = (observed: ObservedApp, news: ApplicationProps): boolean => {
   );
 };
 
-const edgeIpsDirty = (o: Partial<FullApp>, desired: EdgeIps): boolean => {
+const edgeIpsDirty = (o: Pick<Partial<FullApp>, "edgeIps">, desired: EdgeIps): boolean => {
   const observed = o.edgeIps ?? {};
   const observedIps = "ips" in observed ? ((observed.ips ?? []) as readonly string[]) : [];
   const observedConnectivity =
@@ -501,6 +536,8 @@ const toAttributes = (
     dnsType: (a.dns.type ?? "CNAME") as "CNAME" | "ADDRESS",
     protocol: a.protocol,
     trafficType: (a.trafficType ?? "direct") as TrafficType,
+    originWorkerId: a.originWorkerId ?? undefined,
+    originWorkerName: a.originWorkerName ?? undefined,
     originDirect: a.originDirect ? [...a.originDirect] : undefined,
     originDns: a.originDns
       ? {

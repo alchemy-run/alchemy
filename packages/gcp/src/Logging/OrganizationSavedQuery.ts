@@ -409,9 +409,9 @@ export const OrganizationSavedQueryProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createOrganizationsLocationsSavedQueries({
+            ...toCreateBody(news, savedQueryId, desiredDescription),
             parent: `${organization}/locations/${location}`,
             savedQueryId,
-            body: toCreateBody(news, savedQueryId, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -438,16 +438,14 @@ export const OrganizationSavedQueryProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchOrganizationsLocationsSavedQueries({
+          description: desiredDescription,
+          displayName: desiredDisplayName,
+          visibility: desiredVisibility,
+          loggingQuery: fromLoggingQuery(desiredLogging),
+          opsAnalyticsQuery:
+            news.sqlQueryText !== undefined ? { sqlQueryText: news.sqlQueryText } : undefined,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            description: desiredDescription,
-            displayName: desiredDisplayName,
-            visibility: desiredVisibility,
-            loggingQuery: fromLoggingQuery(desiredLogging),
-            opsAnalyticsQuery:
-              news.sqlQueryText !== undefined ? { sqlQueryText: news.sqlQueryText } : undefined,
-          },
         });
       }
 

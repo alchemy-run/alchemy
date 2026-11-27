@@ -1,4 +1,6 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as ZoneRrsetActions from "@distilled.cloud/hetzner/zone_rrset_actions";
+import * as ZoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
+import * as Zones from "@distilled.cloud/hetzner/zones";
 import type { DnsRecord, DnsRecordType } from "alchemy/DNS/Adapter";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
@@ -128,7 +130,7 @@ const retryLocked = <A, E extends { readonly _tag: string }, R>(effect: Effect.E
   );
 
 const getZone = (idOrName: string) =>
-  Hetzner.zones.getZone({ id_or_name: idOrName }).pipe(
+  Zones.getZone({ id_or_name: idOrName }).pipe(
     Effect.map(({ zone }) => zone),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
@@ -157,24 +159,22 @@ const relativeName = (hostname: string, zoneName: string) => {
 };
 
 const getRrsetValues = (entry: Omit<RecordListEntry, "value">) =>
-  Hetzner.zoneRrsets
-    .getZoneRrset({
-      id_or_name: String(entry.zoneId),
-      rr_name: entry.name,
-      rr_type: entry.type,
-    })
-    .pipe(
-      Effect.map(({ rrset }) =>
-        rrset.records.map((record) => normalizeValue(entry.type, record.value)),
-      ),
-      Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
-    );
+  ZoneRrsets.getZoneRrset({
+    id_or_name: String(entry.zoneId),
+    rr_name: entry.name,
+    rr_type: entry.type,
+  }).pipe(
+    Effect.map(({ rrset }) =>
+      rrset.records.map((record) => normalizeValue(entry.type, record.value)),
+    ),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as string[])),
+  );
 
 const addValues = (entry: Omit<RecordListEntry, "value">, values: string[]) =>
   Effect.gen(function* () {
     if (values.length === 0) return;
     const { action } = yield* retryLocked(
-      Hetzner.zoneRrsetActions.addZoneRrsetRecords({
+      ZoneRrsetActions.addZoneRrsetRecords({
         id_or_name: String(entry.zoneId),
         rr_name: entry.name,
         rr_type: entry.type,
@@ -190,7 +190,7 @@ const removeValues = (entry: Omit<RecordListEntry, "value">, values: string[]) =
     const present = values.filter((value) => live.has(value));
     if (present.length === 0) return;
     const { action } = yield* retryLocked(
-      Hetzner.zoneRrsetActions.removeZoneRrsetRecords({
+      ZoneRrsetActions.removeZoneRrsetRecords({
         id_or_name: String(entry.zoneId),
         rr_name: entry.name,
         rr_type: entry.type,

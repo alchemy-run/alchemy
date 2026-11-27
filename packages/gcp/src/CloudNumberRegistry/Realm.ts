@@ -1,4 +1,4 @@
-import * as cnr from "@distilled.cloud/gcp/cloudnumberregistry_v1alpha";
+import * as cnr from "@distilled.cloud/gcp/unstable/cloudnumberregistry_v1alpha";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -347,15 +347,13 @@ export const RealmProvider = () =>
       if (current === undefined) {
         const created = yield* cnr
           .createProjectsLocationsRealms({
+            registryBook,
+            trafficType,
+            managementType,
+            ipVersion,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             realmId,
-            body: {
-              registryBook,
-              trafficType,
-              managementType,
-              ipVersion,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -374,12 +372,9 @@ export const RealmProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* cnr.patchProjectsLocationsRealms({
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

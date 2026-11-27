@@ -70,7 +70,7 @@ Each published call becomes one endpoint, by one rule:
 
 | Call                           | Endpoint                    | Input                                                    |
 | ------------------------------ | --------------------------- | -------------------------------------------------------- |
-| A command                      | `POST /<Command>`           | A JSON body: an optional `commandId`, and the input      |
+| A command                      | `POST /<Command>`           | A JSON body: an optional `commandId`, the `input`, and an optional `consistency` |
 | A query                        | `QUERY /<Query>`            | A JSON body: the `input`, and an optional `atLeast`, `after` and `take` |
 | A view's or aggregate's `get`, a stream's `peek` | `GET /<Name>/{key}`        | `?stream=&version=` (from a receipt) waits for that write |
 | A view's `snapshot`            | `GET /<Name>/{key}/snapshot` | `?stream=&version=` waits for that write               |

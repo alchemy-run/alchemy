@@ -275,8 +275,8 @@ export const EventThreatDetectionSettingsCustomModuleProvider = () =>
 
       if (current === undefined) {
         const created = yield* scc.createProjectsEventThreatDetectionSettingsCustomModules({
+          ...body,
           parent,
-          body,
         });
         current = created;
       }
@@ -301,14 +301,12 @@ export const EventThreatDetectionSettingsCustomModuleProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchProjectsEventThreatDetectionSettingsCustomModules({
+          displayName,
+          description,
+          enablementState,
+          config: news.config,
           name: currentName,
           updateMask,
-          body: {
-            displayName,
-            description,
-            enablementState,
-            config: news.config,
-          },
         });
       }
 

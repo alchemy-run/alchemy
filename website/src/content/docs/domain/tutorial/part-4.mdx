@@ -1,6 +1,6 @@
 ---
 title: "Part 4: Expose an Api"
-description: Authenticate requests, let customers act only on their own accounts, and expose the bank through a typed Api.
+description: Authenticate requests, let customers act only on their own accounts, expose the bank through a typed Api, and verify the whole bank.
 sidebar:
   order: 4
 ---
@@ -79,7 +79,7 @@ export class NotOwner extends Domain.Rejection("NotOwner") {}
 
 ```diff lang="typescript"
 // src/DepositMoney.command.ts
-import { AccountId } from "./Account.id.ts";
+import { Amount } from "./Amount.ts";
 import { NotOpen } from "./NotOpen.rejection.ts";
 +import { NotOwner } from "./NotOwner.rejection.ts";
 +import { Session } from "./Session.middleware.ts";
@@ -90,7 +90,7 @@ export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
 
 export class DepositMoney extends Domain.Command("DepositMoney", {
 +  middleware: [Session],
-  input: { accountId: AccountId, amount: Schema.Int },
+  input: { accountId: AccountId, amount: Amount },
   events: [MoneyDeposited],
 -  rejects: [NotOpen],
 +  rejects: [NotOpen, NotOwner],
@@ -100,7 +100,7 @@ export class DepositMoney extends Domain.Command("DepositMoney", {
 
 ```diff lang="typescript"
 // src/WithdrawMoney.command.ts
-import { AccountId } from "./Account.id.ts";
+import { Amount } from "./Amount.ts";
 import { NotOpen } from "./NotOpen.rejection.ts";
 +import { NotOwner } from "./NotOwner.rejection.ts";
 +import { Session } from "./Session.middleware.ts";
@@ -111,7 +111,7 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 +  middleware: [Session],
-  input: { accountId: AccountId, amount: Schema.Int },
+  input: { accountId: AccountId, amount: Amount },
   events: [MoneyWithdrawn],
 -  rejects: [NotOpen, InsufficientFunds],
 +  rejects: [NotOpen, NotOwner, InsufficientFunds],
@@ -491,8 +491,108 @@ it.live("a customer registers, deposits, and reads only their own balance", () =
 bun vitest run
 ```
 
-Every request now has a customer, every command and read checks it, and clients reach the bank through one typed Api.
+## Say what holds across the bank
+
+```diff lang="typescript"
+// src/Bank.model.ts
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Account, Customer],
+  views: [AccountSummary, Statement],
+  policies: [MainAccountProvisioning],
++  invariants: {
++    EveryCustomerHasAnAccount: (bank) =>
++      bank.Customer.every(
++        (customer) =>
++          customer.state.name === null ||
++          bank.Account.some(
++            (account) => account.state._tag === "Open" && account.state.owner === customer.id,
++          ),
++      ),
++  },
+}) {}
+```
+
+The account's rules are about one account. A model's invariant is given every instance of every aggregate, so it can say what the policy promises: a registered customer has an account. It is false for a moment after a registration, until the policy has opened the account, so it is checked whenever nothing is left to react.
+
+## Relate an account to its customer
+
+```diff lang="typescript"
+// src/Bank.model.ts
+            (account) => account.state._tag === "Open" && account.state.owner === customer.id,
+          ),
+      ),
+  },
++  relations: {
++    AnAccountBelongsToACustomer: Domain.Relation({
++      over: { account: Account, customer: Customer },
++      holds: ({ account, customer }) =>
++        account.state._tag !== "Open" ||
++        account.state.owner !== customer.id ||
++        customer.state.name !== null,
++    }),
++  },
+}) {}
+```
+
+A relation is about a fixed few instances, here one account and one customer. It is claimed of every pair, so it starts by saying which pairs it is about: an open account this customer owns.
+
+## Verify the bank
+
+```diff lang="typescript"
+// test/verify.test.ts
+import { it } from "@effect/vitest";
++import { Story } from "@alchemy.run/domain/Story";
+import * as Verify from "@alchemy.run/domain/Verify";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import { Account } from "../src/Account.aggregate.ts";
++import { Bank, BankHandlers } from "../src/Bank.model.ts";
++import { BankApi } from "../src/BankApi.api.ts";
++
++const story = Story.make(Bank, { layer: BankHandlers });
+
+it.effect("the account keeps its rules", () =>
+  Verify.aggregate(Account).pipe(Effect.provide(NodeServices.layer)),
+);
++
++it.effect("the bank keeps its rules", () =>
++  Verify.model(Bank, { apis: [BankApi], story }).pipe(Effect.provide(NodeServices.layer)),
++);
+```
+
+`Verify.model` proves what it can, then runs every sequence of two commands a client can send through the Api, with the policy reacting, and 200 longer ones picked at random. Given the story runner, it also runs each sequence it finds on the real model.
+
+```sh
+bun vitest run
+```
+
+```text
+Bank: 12 outcomes, 1 policy
+
+Proved: for every state and every input, after any number of commands
+  ✓ Account.NeverNegative
+  ✓ Account.AWithdrawalNeverAddsMoney
+
+Checked: in every sequence of up to 2 commands through BankApi, with each event delivered twice, each reaction also run behind the others that wait
+8,452 sequences, 1,335 states
+  ✓ Bank.EveryCustomerHasAnAccount
+  ✓ Bank.AnAccountBelongsToACustomer
+      not proved: OpenAccount { accountId: "", owner: "" } breaks it from { account: { id: "", state: { _tag: "Unopened" } }, customer: { id: "", state: { name: null } } }, states the rules allow
+      No sequence that was run reaches those states. If none can, say so in another relation or an invariant, and this one is proved.
+
+Sampled: 200 longer sequences, of up to 12 commands picked at random (seed 1)
+  ✓ none breaks a rule
+
+Run on the real model: 11 sequences the explorer found and 82 walks of commands picked at random, as stories
+  ✓ the model does what the explorer read in each
+```
+
+The report says how far each rule holds. The account's rules are proved. The two rules about the whole bank are checked: no sequence that was run breaks them, with the policy's events delivered twice and out of order.
+
+The relation is checked and not proved, and the report says why. `OpenAccount` on its own opens an account for any owner, registered or not. Only the policy sends it, after a registration, so no sequence through the Api gets there. A proof is about one command at a time and can't use that. A relation is proved when one step writes both sides, which is what a [decision](/domain/decision) does.
+
+Every request now has a customer, every command and read checks it, clients reach the bank through one typed Api, and one test verifies the whole bank.
 
 :::note
-Next, [deploy the bank to Cloudflare](/domain/tutorial/part-5). For browser sessions and second factors, see [Sessions and middleware](/domain/sessions).
+Next, [deploy the bank to Cloudflare](/domain/tutorial/part-5). For browser sessions and second factors, see [Sessions and middleware](/domain/sessions). Every kind of rule, and how to read the report, is in [Verifying a model](/domain/verifying-models).
 :::

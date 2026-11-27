@@ -466,13 +466,11 @@ const syncNamedPorts = (
       project,
       zone,
       compute.setNamedPortsInstanceGroups({
+        namedPorts,
+        fingerprint: group.fingerprint,
         project,
         zone,
         instanceGroup,
-        body: {
-          namedPorts,
-          fingerprint: group.fingerprint,
-        },
       }),
     ).pipe(
       Effect.retry({
@@ -585,26 +583,24 @@ export const InstanceGroupManagerProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertInstanceGroupManagers({
+            name: managerName,
+            description,
+            instanceTemplate,
+            baseInstanceName,
+            targetSize,
+            namedPorts: namedPorts.length > 0 ? namedPorts : undefined,
+            autoHealingPolicies:
+              news.autoHealingPolicies !== undefined
+                ? toHealing(env.project, news.autoHealingPolicies)
+                : undefined,
+            updatePolicy: news.updatePolicy,
+            targetPools:
+              news.targetPools !== undefined
+                ? news.targetPools.map((pool) => toTargetPoolUrl(env.project, zone, pool))
+                : undefined,
+            instanceLifecyclePolicy: news.instanceLifecyclePolicy,
             project: env.project,
             zone,
-            body: {
-              name: managerName,
-              description,
-              instanceTemplate,
-              baseInstanceName,
-              targetSize,
-              namedPorts: namedPorts.length > 0 ? namedPorts : undefined,
-              autoHealingPolicies:
-                news.autoHealingPolicies !== undefined
-                  ? toHealing(env.project, news.autoHealingPolicies)
-                  : undefined,
-              updatePolicy: news.updatePolicy,
-              targetPools:
-                news.targetPools !== undefined
-                  ? news.targetPools.map((pool) => toTargetPoolUrl(env.project, zone, pool))
-                  : undefined,
-              instanceLifecyclePolicy: news.instanceLifecyclePolicy,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
@@ -685,10 +681,10 @@ export const InstanceGroupManagerProvider = () =>
           env.project,
           zone,
           compute.patchInstanceGroupManagers({
+            ...patch,
             project: env.project,
             zone,
             instanceGroupManager: managerName,
-            body: patch,
           }),
         ).pipe(
           Effect.retry({

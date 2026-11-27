@@ -9,8 +9,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
-export const FRONT_PORT = 18640;
-
 const DB_HOST = "url-db";
 
 export const Network = Docker.Network("UrlNetwork", { driver: "overlay" });

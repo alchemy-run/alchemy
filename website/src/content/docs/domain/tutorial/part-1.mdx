@@ -1,6 +1,6 @@
 ---
 title: "Part 1: Model an account"
-description: Declare events, commands and rejections, decide them in an aggregate, and check it with stories.
+description: Declare events, commands and rejections, decide them in an aggregate, check it with stories, and prove a rule about it.
 sidebar:
   order: 1
 ---
@@ -12,7 +12,7 @@ If commands, aggregates and events are new to you, read [What is Domain-Driven D
 
 ## Install
 
-<PackageManagers add="alchemy @alchemy.run/domain effect" dev="vitest @effect/vitest" />
+<PackageManagers add="alchemy @alchemy.run/domain effect" dev="vitest @effect/vitest @effect/platform-node" />
 
 ## Give your coding agent the skill
 
@@ -387,8 +387,133 @@ const story = Story.make(Bank);
 bun vitest run
 ```
 
-All five stories pass. You have an account that opens once, takes deposits, and never goes below zero.
+All five stories pass.
+
+## Say what must never happen
+
+```diff lang="typescript"
+// src/Account.aggregate.ts
+export class Account extends Domain.Aggregate("Account", {
+  id: AccountId,
+  state: State,
+  initial: { _tag: "Unopened" },
++  invariants: {
++    NeverNegative: (account) => account._tag !== "Open" || account.balance >= 0,
++  },
+  commands: [OpenAccount, DepositMoney, WithdrawMoney],
+```
+
+A story checks one example. An invariant says what is true of every state the account can be in: `true` while the rule holds. Nothing runs it when a command arrives. It is there to be verified.
+
+## Verify the account
+
+```typescript
+// test/verify.test.ts
+import { it } from "@effect/vitest";
+import * as Verify from "@alchemy.run/domain/Verify";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import { Account } from "../src/Account.aggregate.ts";
+
+it.effect("the account keeps its rules", () =>
+  Verify.aggregate(Account).pipe(Effect.provide(NodeServices.layer)),
+);
+```
+
+`Verify.aggregate` reads `decide` and `evolve` as logic and asks a solver whether any state and any input break a rule. It picks every value itself.
+
+```sh
+bun vitest run
+```
+
+The stories pass, and this test fails:
+
+```text
+✗ NeverNegative
+    ✓ holds on the initial state
+    ✓ proved for OpenAccount, WithdrawMoney
+    ✗ DepositMoney: violated
+        state    { _tag: "Open", owner: "", balance: 0 }
+        command  DepositMoney { accountId: "", amount: -1 }
+        events   MoneyDeposited { amount: -1, balanceAfter: -1 }
+        after    { _tag: "Open", owner: "", balance: -1 }
+```
+
+Nobody wrote a story that deposits a negative amount, so nothing caught it. The solver found the input, and the real `decide` and `evolve` were run on it to confirm the balance goes below zero.
+
+## Name an amount of money
+
+```typescript
+// src/Amount.ts
+import * as Schema from "effect/Schema";
+
+export const Amount = Schema.Int.check(Schema.isGreaterThan(0));
+```
+
+An amount is a whole number above zero. A command whose input fails its schema is refused before the account sees it.
+
+## Take only positive amounts
+
+```diff lang="typescript"
+// src/DepositMoney.command.ts
+import { AccountId } from "./Account.id.ts";
++import { Amount } from "./Amount.ts";
+import { NotOpen } from "./NotOpen.rejection.ts";
+// ...
+export class DepositMoney extends Domain.Command("DepositMoney", {
+-  input: { accountId: AccountId, amount: Schema.Int },
++  input: { accountId: AccountId, amount: Amount },
+  events: [MoneyDeposited],
+```
+
+```diff lang="typescript"
+// src/WithdrawMoney.command.ts
+import { AccountId } from "./Account.id.ts";
++import { Amount } from "./Amount.ts";
+import { NotOpen } from "./NotOpen.rejection.ts";
+// ...
+export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
+-  input: { accountId: AccountId, amount: Schema.Int },
++  input: { accountId: AccountId, amount: Amount },
+  events: [MoneyWithdrawn],
+```
+
+Run `bun vitest run` again and the rule is proved:
+
+```text
+Account: 1 rules, 3 commands
+
+Proved: for every state and every input, after any number of commands
+  ✓ NeverNegative
+```
+
+Proved is stronger than tested. No state the rule allows and no input a command accepts lead to a negative balance, after any number of commands.
+
+## Say what a command must never do
+
+```diff lang="typescript"
+// src/Account.aggregate.ts
+  invariants: {
+    NeverNegative: (account) => account._tag !== "Open" || account.balance >= 0,
+  },
++  transitions: {
++    AWithdrawalNeverAddsMoney: ({ before, after, command }) =>
++      command._tag !== "WithdrawMoney" ||
++      before._tag !== "Open" ||
++      after._tag !== "Open" ||
++      after.balance <= before.balance,
++  },
+  commands: [OpenAccount, DepositMoney, WithdrawMoney],
+```
+
+An invariant looks at one state. A transition looks at one step: the state before, the state after, the command and the events it recorded. The same test proves it. Before amounts had to be positive it failed too, on a withdrawal of `-1`.
+
+```sh
+bun vitest run
+```
+
+You have an account that opens once, takes deposits, and is proved never to go below zero.
 
 :::note
-Next, show the balance and a statement with [views](/domain/tutorial/part-2). The full design of aggregates is in [Aggregate](/domain/aggregate).
+Next, show the balance and a statement with [views](/domain/tutorial/part-2). The full design of aggregates is in [Aggregate](/domain/aggregate), and every kind of rule is in [Verifying a model](/domain/verifying-models).
 :::

@@ -1,3 +1,7 @@
+import {
+  type ContainerRuntimeSettings,
+  resolveContainerRuntime,
+} from "@alchemy.run/docker/ContainerRuntime";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { validateDockerfileBuild } from "@alchemy.run/docker/ImageSource";
@@ -210,25 +214,22 @@ export const containerEnvPreamble = (
   return Effect.undefined;
 };
 
-/**
- * Build the final Dockerfile used for a generated (Effect-native) container
- * image. Starts from the environment preamble (see
- * {@link containerEnvPreamble}) — or a runtime-appropriate default base —
- * then appends the statements that copy the bundled program and set the
- * entrypoint.
- */
+/** Build the Dockerfile for a bundled program with Cloudflare's image layout. */
 export const buildFinalDockerfile = (
   envPreamble: string | undefined,
-  runtime: "bun" | "node",
+  runtime: ContainerRuntimeSettings,
   external: string[] = [],
   autoInstallExternals = true,
   install: ReadonlyArray<string> = [],
 ): string => {
-  const base = envPreamble ?? (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
-  const runtimeBin = runtime === "bun" ? "bun" : "node";
-  const installCmd = runtime === "bun" ? "bun add" : "npm install";
+  const base = envPreamble ?? `FROM ${runtime.baseImage}`;
   const installStep =
-    autoInstallExternals && external.length > 0 ? `RUN ${installCmd} ${external.join(" ")}` : "";
+    autoInstallExternals && external.length > 0
+      ? `RUN ${[...runtime.installPackages, ...external].join(" ")}`
+      : "";
+  const command = [...runtime.command, "/app/index.mjs"]
+    .map((argument) => JSON.stringify(argument))
+    .join(", ");
   return [
     base,
     "",
@@ -246,7 +247,7 @@ export const buildFinalDockerfile = (
     // bundles emit none and the COPY no-ops.
     "COPY --link *.js /app/",
     "EXPOSE 3000",
-    `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
+    `ENTRYPOINT [${command}]`,
     "",
   ].join("\n");
 };
@@ -289,7 +290,7 @@ export const bundleContainerProgram = Effect.fn(function* ({
 }: {
   id: string;
   main: string;
-  runtime: "bun" | "node";
+  runtime: ContainerRuntimeSettings;
   handler?: string | undefined;
   isExternal?: boolean;
   external?: string[];
@@ -311,14 +312,13 @@ export const bundleContainerProgram = Effect.fn(function* ({
         external: [
           "cloudflare:workers",
           "cloudflare:workflows",
-          ...(runtime === "bun" ? ["bun", "bun:*"] : []),
+          ...(runtime.external ?? []),
           ...external,
           ...((build?.input?.external as string[] | undefined) ?? []),
         ],
         platform: "node",
         resolve: {
-          conditionNames:
-            runtime === "bun" ? [...Bundle.BUN_CONDITION_NAMES] : [...Bundle.NODE_CONDITION_NAMES],
+          conditionNames: [...runtime.conditions],
           ...build?.input?.resolve,
         },
         plugins: [build?.input?.plugins, plugins],
@@ -336,17 +336,17 @@ export const bundleContainerProgram = Effect.fn(function* ({
     );
   });
 
+  const bootstrapModule =
+    runtime.preset === "node"
+      ? "@alchemy.run/cloudflare/Bootstrap/ContainerNode"
+      : "@alchemy.run/cloudflare/Bootstrap/ContainerBun";
   const bundleOutput = isExternal
     ? yield* buildBundle(realMain)
     : yield* buildBundle(
         realMain,
         virtualEntryPlugin(
           (importPath) => `
-import { bootstrap } from ${JSON.stringify(
-            runtime === "bun"
-              ? "@alchemy.run/cloudflare/Bootstrap/ContainerBun"
-              : "@alchemy.run/cloudflare/Bootstrap/ContainerNode",
-          )};
+import { bootstrap } from ${JSON.stringify(bootstrapModule)};
 import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
 
 await bootstrap(entrypoint, ${JSON.stringify({
@@ -368,6 +368,34 @@ await bootstrap(entrypoint, ${JSON.stringify({
   }));
 
   return { files, hash: bundleOutput.hash };
+});
+
+/** Resolve the runtime and generate the artifacts used for both hashing and building. */
+export const planContainerProgram = Effect.fn(function* (
+  id: string,
+  main: string,
+  props: AnyContainerApplicationProps,
+  outdir?: string,
+) {
+  const runtime = yield* resolveContainerRuntime(props.runtime);
+  const dockerfile = buildFinalDockerfile(
+    yield* containerEnvPreamble(props),
+    runtime,
+    props.external,
+    props.autoInstallExternals,
+    props.imageInstall,
+  );
+  const { files, hash: bundleHash } = yield* bundleContainerProgram({
+    id,
+    main,
+    runtime,
+    handler: props.handler,
+    isExternal: props.isExternal,
+    external: props.external,
+    outdir,
+    build: props.build,
+  });
+  return { files, bundleHash, dockerfile };
 });
 
 /**
@@ -400,40 +428,19 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     return yield* Effect.die(new Error("Container requires a `main` entrypoint."));
   }
   yield* validateContainerImageProps(id, news);
-  const runtime = news.runtime ?? "bun";
   const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-container`);
-  const dockerfileContent = buildFinalDockerfile(
-    yield* containerEnvPreamble(news),
-    runtime,
-    news.external,
-    news.autoInstallExternals,
-    news.imageInstall,
+  const { dockerfile: dockerfileContent, bundleHash } = yield* planContainerProgram(
+    id,
+    main,
+    news,
+    context,
   );
-  const [bundle] = yield* Effect.all(
-    [
-      bundleContainerProgram({
-        id,
-        main,
-        runtime,
-        handler: news.handler,
-        isExternal: news.isExternal,
-        external: news.external,
-        outdir: context,
-        build: news.build,
-      }),
-      docker.materialize({
-        context,
-        dockerfile: dockerfileContent,
-        files: [],
-      }),
-    ],
-    { concurrency: "unbounded" },
-  );
+  yield* docker.materialize({ context, dockerfile: dockerfileContent, files: [] });
   return {
     context,
     dockerfile: path.join(context, "Dockerfile"),
     hash: yield* sha256Object({
-      bundle: bundle.hash,
+      bundle: bundleHash,
       dockerfileContent,
     }),
   };

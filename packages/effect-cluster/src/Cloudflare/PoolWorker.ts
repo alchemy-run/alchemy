@@ -11,7 +11,9 @@
  */
 import * as Cloudflare from "@alchemy.run/cloudflare/Workers";
 import type { InputProps } from "alchemy/Input";
+import { runtimeConfigProvider } from "alchemy/Runtime";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
@@ -88,7 +90,15 @@ const serve = Effect.fn(function* (
 ) {
   // The classes' own environment, which the deploy packs into one secret.
   const packed = yield* Config.String("CLUSTER_ENV").pipe(Config.withDefault(""));
-  if (packed) yield* Effect.sync(() => Object.assign(globalThis.process.env, JSON.parse(packed)));
+  const env = (packed ? JSON.parse(packed) : {}) as Record<string, string>;
+  yield* Effect.sync(() => Object.assign(globalThis.process.env, env));
+  // A Worker's runtime Config reads its bindings, which don't hold these:
+  // the classes read them through a provider of their own.
+  const ambient = yield* ConfigProvider.ConfigProvider;
+  const provider = ConfigProvider.orElse(
+    runtimeConfigProvider(ConfigProvider.fromUnknown(env, { preserveEmptyStrings: true })),
+    ambient,
+  );
   // Built in the isolate's own scope: once, and never closed (workerd has
   // no teardown hook). Workflows run on the Durable Object engine.
   const hosted = yield* hostClasses({
@@ -96,7 +106,7 @@ const serve = Effect.fn(function* (
     scope: Scope.makeUnsafe(),
     sharding: makeObjectSharding(() => entities as never, host),
     engine: workflowEngine(() => workflows as never),
-  });
+  }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, provider));
 
   const token = Redacted.value(yield* Config.Redacted("CLUSTER_GATEWAY_TOKEN"));
   const { group, handlers } = gatewayServer(

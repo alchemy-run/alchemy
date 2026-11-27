@@ -11,6 +11,7 @@ import { DEFAULT_COMPATIBILITY_DATE } from "../../internal/constants.ts";
 import { formatInternalWorkerModules } from "../../internal/internal-modules.ts";
 import * as Plugin from "../../Plugin.ts";
 import type { BindingHook } from "../../PluginContext.ts";
+import * as SharedStorage from "../../registry/SharedStorage.ts";
 import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import { ConfigError } from "../../RuntimeError.shared.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
@@ -85,7 +86,9 @@ export const D1Live = Layer.effect(
               }),
           },
           defer: Effect.gen(function* () {
-            if (!used) return {};
+            // A candidate storage owner hosts the simulator even unbound, so
+            // it can serve other runtimes' databases (see `SharedStorage`).
+            if (!used && !(yield* SharedStorage.hosting)) return {};
             const storageService = yield* makeStorageService;
             const d1Service: WorkerdConfig.Service = {
               name: SERVICE_D1,
@@ -125,19 +128,33 @@ export const D1Live = Layer.effect(
  * a fetcher to the local simulator. Data lives in Durable Object SQLite,
  * persisted under `{storage}/d1` and keyed by the database id, so bindings
  * with the same `id` share data (including across workers and restarts when
- * disk-backed storage is configured).
+ * disk-backed storage is configured). Runtimes sharing a storage directory
+ * reach the simulator through one owner (see `SharedStorage`).
  */
 export const local = (props: D1Props): BindingHook<D1> =>
   Plugin.use(D1, (d1) =>
-    Effect.map(
-      d1.api.register({ databaseId: props.id ?? props.binding }),
-      (service): WorkerdConfig.Worker_Binding => ({
+    d1.api.register({ databaseId: props.id ?? props.binding }).pipe(
+      Effect.flatMap((service) => SharedStorage.route(service)),
+      Effect.map((service): WorkerdConfig.Worker_Binding => ({
         name: props.binding,
         wrapped: {
           moduleName: "cloudflare-internal:d1-api",
           innerBindings: [{ name: "fetcher", service }],
         },
-      }),
+      })),
+    ),
+  );
+
+/**
+ * Bind the local D1 simulator for one database as a plain service: the
+ * simulator's own HTTP protocol (`POST /query` with a D1 query or an array
+ * of them), as used by deploy-time tooling such as the migrations gateway.
+ */
+export const raw = (props: D1Props): BindingHook<D1> =>
+  Plugin.use(D1, (d1) =>
+    d1.api.register({ databaseId: props.id ?? props.binding }).pipe(
+      Effect.flatMap((service) => SharedStorage.route(service)),
+      Effect.map((service): WorkerdConfig.Worker_Binding => ({ name: props.binding, service })),
     ),
   );
 

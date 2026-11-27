@@ -66,6 +66,7 @@ import {
   type RunningActionState,
   type UpdatedResourceState,
   type UpdatingReourceState,
+  isStoredInOldForm,
   State,
   StateStoreError,
 } from "./State/index.ts";
@@ -743,9 +744,17 @@ const executeNode = (
       //    persisted `downstream` of the resource being deleted, so without
       //    this commit a later destroy deletes B concurrently with the
       //    dependent that still references it (and needlessly waits on A).
+      // 4. Its stored form — the store read it with a secret in plaintext
+      //    while encrypting, or sealed while turning encryption off, and
+      //    holds no lock to write it back from the read.
       const policyChanged = node.state.removalPolicy !== node.resource.RemovalPolicy;
       const downstreamChanged = !sameSet(node.state.downstream ?? [], node.downstream);
-      if (node.state.resourceType !== node.resource.Type || policyChanged || downstreamChanged) {
+      if (
+        node.state.resourceType !== node.resource.Type ||
+        policyChanged ||
+        downstreamChanged ||
+        isStoredInOldForm(node.state)
+      ) {
         yield* commit({
           ...node.state,
           resourceType: node.resource.Type,
@@ -992,6 +1001,7 @@ const executeNode = (
           session: scopedSession,
           olds: undefined,
           output: attr,
+          protected: node.resource.RemovalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 
@@ -1116,6 +1126,7 @@ const executeNode = (
           session: scopedSession,
           olds: previousProps,
           output: node.state.attr,
+          protected: node.resource.RemovalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
 
@@ -1436,6 +1447,7 @@ const executeNode = (
           session: scopedSession,
           olds: undefined,
           output: attr,
+          protected: node.resource.RemovalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("create", fqn, node.resource.Type, logicalId, instanceId));
 
@@ -1609,7 +1621,7 @@ const executeActionNode = (
 
     const skip = (state: RanActionState) =>
       Effect.gen(function* () {
-        if (!sameSet(state.downstream ?? [], node.downstream)) {
+        if (!sameSet(state.downstream ?? [], node.downstream) || isStoredInOldForm(state)) {
           yield* commit<RanActionState>({ ...state, downstream: node.downstream });
         }
         track(tracker, outputs, fqn, {
@@ -1811,6 +1823,7 @@ const converge = Effect.fn(function* (
           session: scopedSession,
           olds: oldProps,
           output: tracker[fqn].output,
+          protected: node.resource.RemovalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("update", fqn, node.resource.Type, logicalId, instanceId));
 

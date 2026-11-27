@@ -1,4 +1,4 @@
-import * as apim from "@distilled.cloud/gcp/apim_v1alpha";
+import * as apim from "@distilled.cloud/gcp/unstable/apim_v1alpha";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -233,11 +233,9 @@ export const ObservationJobProvider = () =>
       if (current === undefined) {
         const created = yield* apim
           .createProjectsLocationsObservationJobs({
+            sources: sources.length > 0 ? sources : undefined,
             parent: parentOf(env.project, location),
             observationJobId,
-            body: {
-              sources: sources.length > 0 ? sources : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

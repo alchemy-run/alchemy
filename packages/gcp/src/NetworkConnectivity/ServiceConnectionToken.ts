@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -138,7 +139,7 @@ const toAttrs = (
     project: parsed.project || project,
     location: parsed.location || region,
     network: token.network,
-    token: token.token,
+    token: revealOptional(token.token),
     expireTime: token.expireTime,
     description: token.description,
     labels: userLabels(token.labels),
@@ -233,13 +234,11 @@ export const ServiceConnectionTokenProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsServiceConnectionTokens({
+            network,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             serviceConnectionTokenId,
-            body: {
-              network,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({

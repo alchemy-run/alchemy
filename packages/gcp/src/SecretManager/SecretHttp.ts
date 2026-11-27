@@ -2,6 +2,7 @@ import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor, type BindingIam } from "../HttpBinding.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { SecretBindingTarget } from "./BindingHttp.ts";
 import type { ReadSecretClient } from "./ReadSecret.ts";
 import type { WriteSecretClient } from "./WriteSecret.ts";
@@ -41,7 +42,7 @@ export const makeSecretHelpers = Effect.gen(function* () {
         const response = yield* access({
           name: versionName(yield* secretName, version ?? "latest"),
         });
-        const data = response.payload?.data ?? "";
+        const data = revealOptional(response.payload?.data) ?? "";
         return yield* Effect.sync(() => new Uint8Array(Buffer.from(data, "base64")));
       }).pipe(
         // Missing, disabled, and destroyed versions have no readable payload.
@@ -67,10 +68,7 @@ export const makeSecretHelpers = Effect.gen(function* () {
             : Buffer.from(value.buffer, value.byteOffset, value.byteLength)
           ).toString("base64"),
         );
-        const version = yield* addVersion({
-          parent: yield* secretName,
-          body: { payload: { data } },
-        });
+        const version = yield* addVersion({ payload: { data }, parent: yield* secretName });
         return version.name ?? "";
       }),
     disableVersion: (version) =>

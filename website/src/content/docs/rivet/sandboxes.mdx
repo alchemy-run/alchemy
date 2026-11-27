@@ -1,0 +1,164 @@
+---
+title: agentOS Sandboxes
+description: agentOS VMs on Rivet Services as sandboxes — declare a base with its software and environment, get a VM by key, and run commands, read and write files, stream processes, open a terminal and reach servers inside it from any runtime.
+---
+
+An **agentOS VM** is a small Linux-compatible computer for one agent or one task. It runs a shell, coreutils and other compiled tools as WebAssembly, and JavaScript and Python in V8 isolates, so it starts in milliseconds with no hypervisor. [agentOS](https://rivet.dev/docs/agent-os) is Rivet's, and **Rivet Services** runs it: each VM is its own Actor, addressed by a key, with its files kept by the control plane like any other Actor's data. A VM sleeps when it's idle, unless a process is running, and wakes on its next call with its files where it left them.
+
+Take a coding agent that works on one task at a time. Each task gets a VM, keyed by the task's id. The agent writes files into it, runs commands, and reads the results, and the next call for the same task finds the same VM.
+
+## Run Rivet Services
+
+VMs run on a Services pool next to your own pools. Give it the same control plane:
+
+```typescript title="src/cluster.ts"
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+
+export const Services = RivetDocker.ServicesPool("Services").pipe(Layer.provide(Cluster));
+```
+
+Every cloud has one: `RivetAWS.ServicesPool`, `RivetGCP.ServicesPool`, `RivetHetzner.ServicesPool` and the rest. Nothing else is deployed for VMs: agentOS is part of the Services node, and a VM is created by its first call.
+
+## Declare a base
+
+Every VM starts from a base: the software it installs and the environment its processes start with.
+
+```typescript
+import * as Rivet from "@alchemy.run/rivet";
+import * as Registry from "@alchemy.run/rivet/Registry";
+
+const base = yield* Rivet.SandboxTemplate("Agent", {
+  software: [Registry.Git, Registry.Ripgrep, Registry.Jq],
+  environment: { NODE_ENV: "production" },
+});
+```
+
+`Registry` holds the packages agentOS publishes, such as `Registry.Git`, `Registry.Curl` and `Registry.Sqlite3`. A registry package installs the build listed for the agentOS release the Services node runs, pinned to its digest when the VM is created. A package agentOS doesn't publish comes from a URL:
+
+```typescript
+Registry.Url({
+  url: "https://example.com/tools/mytool.aospkg",
+  digest: "sha256:5452e415e456cb0bcb6ef1e89c4521713b6ebfe3472ef0a0488d6c8e741a98de",
+});
+```
+
+agentOS installs its default software first (coreutils, sed, grep, gawk, findutils, diffutils, tar, gzip). `defaultSoftware: false` leaves it out. JavaScript and Python are part of every VM and need no package.
+
+A VM keeps the base it was created with. A changed base applies to VMs created after it.
+
+## Get a VM by key
+
+`Rivet.CreateSandbox` binds VMs from a base into a runtime. Provide the Services pool with it:
+
+```typescript title="src/api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Rivet from "@alchemy.run/rivet";
+import * as Registry from "@alchemy.run/rivet/Registry";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Cluster, Services } from "./cluster.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  Effect.gen(function* () {
+    const cluster = yield* Rivet.Cluster;
+    return {
+      main: import.meta.url,
+      port: 3000,
+      networks: cluster.network?.kind === "docker" ? [{ name: cluster.network.name }] : [],
+    };
+  }).pipe(Effect.provide(Cluster)),
+  Effect.gen(function* () {
+    const base = yield* Rivet.SandboxTemplate("Agent", { software: [Registry.Jq] });
+    const sandboxes = yield* Rivet.CreateSandbox(base);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const task = new URL(request.url, "http://api").searchParams.get("task") ?? "default";
+        const sandbox = sandboxes.getOrCreate(task);
+        const result = yield* sandbox.exec("echo '{\"a\":41}' | jq '.a + 1'");
+        return HttpServerResponse.text(result.stdout);
+      }),
+    };
+  }).pipe(Effect.provide(Services)),
+) {}
+```
+
+`getOrCreate(key)` is the VM for that key: created from the base on its first call, and the same VM, with its files, on every call after. Calls go to the VM over HTTP through the control plane's gateway, with the token, so a Docker service, a Lambda or a Worker can make them without RivetKit.
+
+## Run commands
+
+`exec` runs a command to completion and returns its exit code and output:
+
+```typescript
+const result = yield* sandbox.exec("npm test", { cwd: "/home/agentos/app" });
+const version = yield* sandbox.exec(["node", "--version"]);
+const sorted = yield* sandbox.exec("sort", { stdin: "b\na\n" });
+```
+
+A string runs in `sh -c`; an array runs its program directly. A non-zero exit is returned in `exitCode`, not failed.
+
+## Read and write files
+
+`files` reads and writes the VM's filesystem:
+
+```typescript
+yield* sandbox.files.makeDir("/home/agentos/app");
+yield* sandbox.files.write("/home/agentos/app/main.py", "print(21 * 2)");
+const source = yield* sandbox.files.readText("/home/agentos/app/main.py");
+const entries = yield* sandbox.files.list("/home/agentos/app");
+```
+
+`read` returns bytes, `stat` an entry's type and size, and `remove` deletes a file or a whole directory. A missing file fails with `Rivet.SandboxActionError`, whose `group` and `code` are agentOS's (`user`, `not_found`).
+
+## Stream a process
+
+`start` runs a command in the background. Its `output` is a `Stream` of stdout and stderr chunks as they're written:
+
+```typescript
+const build = yield* sandbox.start("npm run build", { cwd: "/home/agentos/app" });
+yield* build.output.pipe(
+  Stream.runForEach((chunk) => Console.log(chunk.fd, new TextDecoder().decode(chunk.data))),
+);
+const { exitCode } = yield* build.wait;
+```
+
+`write` sends it stdin and `kill` signals it. A process still running when its Scope closes is killed.
+
+## Open a terminal
+
+`pty.open` starts an interactive shell. Its `output` is the terminal's bytes, and `write` types into it:
+
+```typescript
+const terminal = yield* sandbox.pty.open({ cols: 120, rows: 40 });
+yield* terminal.write("ls -la\n");
+yield* terminal.resize({ cols: 160, rows: 48 });
+```
+
+The terminal closes with its Scope.
+
+## Reach a server in the VM
+
+A server listening inside the VM is reached through its port:
+
+```typescript
+const server = yield* sandbox.start(["node", "server.js"], { cwd: "/home/agentos/app" });
+const port = yield* sandbox.getTcpPort(3000);
+const response = yield* port.fetch(HttpClientRequest.get("/health"));
+```
+
+The request travels to the VM through the gateway and agentOS's own network, so the server needs no public address. `fetch` also takes an `HttpServerRequest`, to forward an incoming request as it came.
+
+## Destroy a VM
+
+`destroy` deletes the VM's Actor and its files:
+
+```typescript
+yield* sandbox.destroy();
+```
+
+The next `getOrCreate` of the same key starts an empty VM from the base. A VM that was never created has nothing to destroy.

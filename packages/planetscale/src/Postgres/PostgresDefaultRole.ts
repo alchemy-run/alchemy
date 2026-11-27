@@ -70,8 +70,11 @@ export interface PostgresDefaultRoleAttributes {
    * this DNS zone.
    */
   privateHost: string;
-  /** Service name for this branch supplied by PlanetScale to establish a private connection. */
-  privateConnectionServiceName: string;
+  /**
+   * Service name for this branch supplied by PlanetScale to establish a
+   * private connection. `null` when PlanetScale supplies none.
+   */
+  privateConnectionServiceName: string | null;
   /** Inherited roles. */
   inheritedRoles: InheritedRole[];
   /** Resolved organization slug. */

@@ -10,8 +10,8 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as batch from "@distilled.cloud/aws/batch";
 import * as lambda from "@distilled.cloud/aws/lambda";
+import * as iam from "@distilled.cloud/gcp/iam_v1";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
-import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -217,10 +217,7 @@ describe(
           expect(published.messageIds?.length).toBe(1);
 
           const pulled = yield* pubsub
-            .pullProjectsSubscriptions({
-              subscription: out.subscription,
-              body: { maxMessages: 1 },
-            })
+            .pullProjectsSubscriptions({ maxMessages: 1, subscription: out.subscription })
             .pipe(
               Effect.repeat({
                 until: (response) => (response.receivedMessages ?? []).length > 0,
@@ -328,10 +325,7 @@ describe(
           expect(published.messageIds?.length).toBe(1);
 
           const pulled = yield* pubsub
-            .pullProjectsSubscriptions({
-              subscription: out.subscription,
-              body: { maxMessages: 1 },
-            })
+            .pullProjectsSubscriptions({ maxMessages: 1, subscription: out.subscription })
             .pipe(
               Effect.repeat({
                 until: (response) => (response.receivedMessages ?? []).length > 0,
@@ -415,10 +409,7 @@ describe(
           expect(`${job?.status}: ${job?.statusReason ?? ""}`).toMatch(/^SUCCEEDED:/);
 
           const pulled = yield* pubsub
-            .pullProjectsSubscriptions({
-              subscription: out.subscription,
-              body: { maxMessages: 1 },
-            })
+            .pullProjectsSubscriptions({ maxMessages: 1, subscription: out.subscription })
             .pipe(
               Effect.repeat({
                 until: (response) => (response.receivedMessages ?? []).length > 0,

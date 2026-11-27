@@ -1,4 +1,4 @@
-import * as apim from "@distilled.cloud/gcp/apim_v1alpha";
+import * as apim from "@distilled.cloud/gcp/unstable/apim_v1alpha";
 import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -237,11 +237,9 @@ export const ObservationSourceProvider = () =>
       if (current === undefined) {
         const created = yield* apim
           .createProjectsLocationsObservationSources({
+            gclbObservationSource,
             parent: parentOf(env.project, location),
             observationSourceId,
-            body: {
-              gclbObservationSource,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

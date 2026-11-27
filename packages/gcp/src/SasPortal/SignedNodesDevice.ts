@@ -1,4 +1,4 @@
-import * as sasportal from "@distilled.cloud/gcp/sasportal_v1alpha1";
+import * as sasportal from "@distilled.cloud/gcp/unstable/sasportal_v1alpha1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -279,11 +279,11 @@ export const SignedNodesDeviceProvider = () =>
       if (current === undefined) {
         const created = yield* sasportal
           .createSignedNodesDevices({
-            parent,
-            body: signedDeviceBody({
+            ...signedDeviceBody({
               encodedDevice: news.encodedDevice,
               installerId: news.installerId,
             }),
+            parent,
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -318,6 +318,7 @@ export const SignedNodesDeviceProvider = () =>
         !sameJson(deviceMetadataOf(current.deviceMetadata), news.deviceMetadata);
       if (nameChanged || allowlistsChanged || configChanged || metadataChanged) {
         current = yield* sasportal.patchNodesDevices({
+          ...desired,
           name,
           updateMask: updateMaskOf(
             "displayName",
@@ -325,7 +326,6 @@ export const SignedNodesDeviceProvider = () =>
             news.preloadedConfig !== undefined ? "preloadedConfig" : undefined,
             news.deviceMetadata !== undefined ? "deviceMetadata" : undefined,
           ),
-          body: desired,
         });
       }
 

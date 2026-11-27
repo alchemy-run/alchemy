@@ -6,7 +6,7 @@ import {
   getEnvironmentVariable,
   updateEnvironmentVariable,
   createEnvironmentVariable,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";

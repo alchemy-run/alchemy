@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -385,7 +386,7 @@ export const PipelineProvider = () =>
 
           const arn =
             observed?.metadata?.pipelineArn ??
-            `arn:aws:codepipeline:${region}:${accountId}:${name}`;
+            `arn:${partitionOf(region)}:codepipeline:${region}:${accountId}:${name}`;
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.
           yield* syncTags(arn, desiredTags);
@@ -417,7 +418,7 @@ export const PipelineProvider = () =>
                       ? [
                           {
                             pipelineName: p.name,
-                            pipelineArn: `arn:aws:codepipeline:${region}:${accountId}:${p.name}`,
+                            pipelineArn: `arn:${partitionOf(region)}:codepipeline:${region}:${accountId}:${p.name}`,
                             pipelineVersion: p.version ?? 1,
                           },
                         ]
