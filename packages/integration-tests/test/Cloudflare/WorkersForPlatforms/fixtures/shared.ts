@@ -11,6 +11,20 @@ export const DispatchNs = Cloudflare.WorkersForPlatforms.DispatchNamespace("WfpB
 });
 
 /**
+ * The values a dispatcher passes the outbound Worker on each dispatch.
+ * Cloudflare requires every declared value, so "no tenant" is `null`.
+ */
+export type OutboundParams = { tenant: string | null };
+
+/**
+ * The outbound values of a test request: `?tenant=acme` is `{ tenant: "acme" }`
+ * and no query is `{ tenant: null }`. `?probe=omit` leaves `tenant` out,
+ * bypassing the type, to show that Cloudflare refuses it.
+ */
+export const outboundValues = (query: URLSearchParams): OutboundParams =>
+  query.get("probe") === "omit" ? ({} as OutboundParams) : { tenant: query.get("tenant") };
+
+/**
  * The outbound Worker every `fetch()` from a user Worker dispatched through
  * {@link OutboundDispatch} goes to.
  */
@@ -36,7 +50,7 @@ export const RefOutboundWorker = Cloudflare.Worker("WfpRefOutboundWorker", {
  * bound on the async platform Worker's `env` and yielded by the Effect-native
  * one.
  */
-export const OutboundDispatch = Cloudflare.WorkersForPlatforms.Get(DispatchNs, {
+export const OutboundDispatch = Cloudflare.WorkersForPlatforms.Get<OutboundParams>(DispatchNs, {
   outbound: OutboundWorker,
   parameters: ["tenant"],
 });

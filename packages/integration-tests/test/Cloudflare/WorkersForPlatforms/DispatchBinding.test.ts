@@ -241,3 +241,35 @@ test.skipIf(!WFP_ENABLED)(
   }),
   OUTBOUND_OPTIONS,
 );
+
+// Cloudflare requires every declared outbound value on each dispatch, which
+// is why the types require them. `?probe=omit` bypasses the type.
+test.skipIf(!WFP_ENABLED)(
+  "a dispatch that leaves a declared outbound value out is refused; null passes",
+  Effect.gen(function* () {
+    const { asyncPlatformUrl, platformUrl, userWorkerName } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+    for (const base of [asyncPlatformUrl, platformUrl]) {
+      const none = yield* untilOk(client.get(`${base}/outbound/${userWorkerName}`));
+      expect(yield* none.json).toMatchObject({ tenant: null });
+
+      const omitted = yield* client.get(`${base}/outbound/${userWorkerName}?probe=omit`);
+      expect(omitted.status).toBe(500);
+      expect(((yield* omitted.json) as { error: string }).error).toContain(
+        "Missing one or more required arguments to worker",
+      );
+    }
+  }).pipe(logLevel),
+  OUTBOUND_OPTIONS,
+);
+
+test.skipIf(!WFP_ENABLED)(
+  "an Effect HttpClient calls a dispatched user Worker through its Fetcher",
+  Effect.gen(function* () {
+    const { platformUrl, userWorkerName } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* untilOk(client.get(`${platformUrl}/client/${userWorkerName}`));
+    expect(yield* res.json).toMatchObject({ handledBy: "user-worker", path: "/via-client" });
+  }).pipe(logLevel),
+  OUTBOUND_OPTIONS,
+);

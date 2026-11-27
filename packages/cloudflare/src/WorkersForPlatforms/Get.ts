@@ -9,23 +9,74 @@ import type * as Effect from "effect/Effect";
 import type { Worker } from "../Workers/Worker.ts";
 import type { DispatchNamespace as DispatchNamespaceResource } from "./DispatchNamespace.ts";
 
-/** Options of a {@link Get} dispatch binding. */
-export interface GetOptions {
+/** A dispatch binding's outbound Worker, or the declaration that yields it. */
+export type OutboundWorker = Worker | Effect.Effect<Worker, never, any>;
+
+/**
+ * Options of a {@link Get} dispatch binding. `P` is the type of the values
+ * each dispatch passes the outbound Worker.
+ */
+export type GetOptions<P extends object = {}> = {
   /**
    * The Worker that receives every `fetch()` a dispatched user Worker makes,
    * in place of the internet: a `Cloudflare.Worker`, or a
    * `Cloudflare.Worker.ref(...)` to one another stack deploys. Cloudflare
    * calls its default export.
    */
-  readonly outbound?: Worker | Effect.Effect<Worker, never, any>;
-  /**
-   * The names of the values the dispatcher passes the outbound Worker on each
-   * dispatch, as `get(name, args, { outbound: { … } })`. Each arrives on the
-   * outbound Worker as `env.<name>`. Cloudflare requires every listed value
-   * on each dispatch; pass `null` for none.
-   */
-  readonly parameters?: ReadonlyArray<string>;
-}
+  readonly outbound?: OutboundWorker;
+} & ([keyof P] extends [never]
+  ? {
+      /**
+       * The names of the values the dispatcher passes the outbound Worker on
+       * each dispatch, as `get(name, args, { outbound: { … } })`. Each
+       * arrives on the outbound Worker as `env.<name>`.
+       */
+      readonly parameters?: ReadonlyArray<string>;
+    }
+  : {
+      /**
+       * The names of the values the dispatcher passes the outbound Worker on
+       * each dispatch: the keys of `P`. Each arrives on the outbound Worker
+       * as `env.<name>`.
+       */
+      readonly parameters: ReadonlyArray<keyof P & string>;
+    });
+
+/** {@link Get}'s options: required, with `outbound`, once `P` declares a value. */
+type GetArgs<P extends object> = [keyof P] extends [never]
+  ? [options?: GetOptions]
+  : [options: GetOptions<P> & { readonly outbound: OutboundWorker }];
+
+/**
+ * The options of one dispatch. Cloudflare requires every declared value on
+ * each dispatch: `get()` throws `Missing one or more required arguments to
+ * worker` when one is left out, and an `undefined` value fails the request.
+ * So every key of `P` is required here, and `null` stands for "no value".
+ */
+type DispatchArgs<P extends object> = [keyof P] extends [never]
+  ? [options?: DynamicDispatchOptions]
+  : [
+      options: Omit<DynamicDispatchOptions, "outbound"> & {
+        /** The values for the outbound Worker, which reads each as `env.<name>`. */
+        readonly outbound: { readonly [K in keyof P]-?: Exclude<P[K], undefined> };
+      },
+    ];
+
+/**
+ * The runtime binding of a {@link Get} on an async Worker's `env`:
+ * Cloudflare's `DispatchNamespace`, whose `get` requires the values `P`
+ * declares.
+ */
+export type DispatchNamespaceFor<P extends object> = [keyof P] extends [never]
+  ? DispatchNamespace
+  : {
+      /**
+       * @param name Name of the user Worker script.
+       * @param args Arguments to the user Worker script.
+       * @param options Limits for the invocation, and the outbound values.
+       */
+      get(name: string, args?: { [key: string]: any }, ...options: DispatchArgs<P>): Fetcher;
+    };
 
 /**
  * A dispatch binding, as {@link Get} returns it: an Effect that binds the
@@ -33,14 +84,27 @@ export interface GetOptions {
  * {@link DispatchNamespaceClient}, and an entry an async Worker's `env`
  * accepts.
  */
-export interface DispatchBinding extends Effect.Effect<DispatchNamespaceClient, never, Get> {
+export interface DispatchBinding<P extends object = {}> extends Effect.Effect<
+  DispatchNamespaceClient<P>,
+  never,
+  Get
+> {
   readonly "~alchemy/Kind": "Cloudflare.WorkersForPlatforms.Get";
   /** The bound namespace, or the declaration that yields it. */
   readonly namespace:
     | DispatchNamespaceResource
     | Effect.Effect<DispatchNamespaceResource, never, any>;
-  readonly options: GetOptions | undefined;
+  readonly options: GetOptions<any> | undefined;
+  /** @internal phantom */
+  readonly "~params"?: P;
 }
+
+/**
+ * Any {@link DispatchBinding}, as an async Worker's `env` accepts one. It
+ * carries no `P`: with `DispatchBinding<any>` here, a {@link Get} written
+ * inline in an `env` would infer its `P` as `any` from this one.
+ */
+export type AnyDispatchBinding = Pick<DispatchBinding, "~alchemy/Kind" | "namespace" | "options">;
 
 /**
  * Bind a {@link DispatchNamespace} to a Worker and obtain the Effect-native
@@ -74,25 +138,29 @@ export interface DispatchBinding extends Effect.Effect<DispatchNamespaceClient, 
  * ### Routing user Workers' requests through an outbound Worker
  * **Example:** Declare an outbound Worker and its values
  * Every `fetch()` a dispatched user Worker makes goes to the outbound Worker
- * instead of the internet. `parameters` names the values each dispatch passes
- * it. In `alchemy dev` the binding has no outbound Worker, because
+ * instead of the internet. The type parameter declares the values each
+ * dispatch passes it, and `parameters` lists their names. Every dispatch must
+ * pass every value (`null` for none): Cloudflare refuses one that leaves a
+ * value out. In `alchemy dev` the binding has no outbound Worker, because
  * Cloudflare's preview refuses one: dispatches work, and user Workers reach
  * the internet directly.
  * ```typescript
  * const Egress = Cloudflare.Worker("Egress", { main: "./src/egress.ts" });
  *
- * export const Dispatch = Cloudflare.WorkersForPlatforms.Get(Namespace, {
+ * export const Dispatch = Cloudflare.WorkersForPlatforms.Get<{ tenant: string }>(Namespace, {
  *   outbound: Egress,
  *   parameters: ["tenant"],
  * });
  * ```
  *
  * **Example:** Dispatch from an async Worker
+ * `InferEnv` types `get`, so a missing or mistyped value is a compile error.
  * ```typescript
  * export const Dispatcher = Cloudflare.Worker("Dispatcher", {
  *   main: "./src/dispatcher.ts",
  *   env: { NS: Dispatch },
  * });
+ * export type DispatcherEnv = Cloudflare.InferEnv<typeof Dispatcher>;
  *
  * // src/dispatcher.ts
  * const userWorker = env.NS.get(script, {}, { outbound: { tenant: script } });
@@ -128,19 +196,22 @@ export interface Get
       Get,
       (
         namespace: DispatchNamespaceResource,
-        options?: GetOptions,
-      ) => Effect.Effect<DispatchNamespaceClient>
+        options?: GetOptions<any>,
+      ) => Effect.Effect<DispatchNamespaceClient<any>>
     >,
     Binding.ServiceLike {
   readonly key: "Cloudflare.WorkersForPlatforms.Get";
-  (namespace: DispatchBinding["namespace"], options?: GetOptions): DispatchBinding;
+  <P extends object = {}>(
+    namespace: DispatchBinding["namespace"],
+    ...options: GetArgs<P>
+  ): DispatchBinding<P>;
 }
 
 const GetService = Binding.Service<Get>("Cloudflare.WorkersForPlatforms.Get");
 
 export const Get: Get = taggedFunction(
   GetService as never,
-  (namespace: DispatchBinding["namespace"], options?: GetOptions) =>
+  (namespace: DispatchBinding["namespace"], options?: GetOptions<any>) =>
     // An async Worker's `env` reads the namespace and options off the value;
     // an Effect-native Worker runs it, which hands both to `GetBinding`.
     Object.assign((GetService as any)(namespace, options), {
@@ -151,7 +222,7 @@ export const Get: Get = taggedFunction(
 ) as unknown as Get;
 
 /** Structural guard for a {@link DispatchBinding} on an async Worker's `env`. */
-export const isDispatchBinding = (value: unknown): value is DispatchBinding =>
+export const isDispatchBinding = (value: unknown): value is DispatchBinding<any> =>
   (typeof value === "object" || typeof value === "function") &&
   value !== null &&
   (value as { "~alchemy/Kind"?: unknown })["~alchemy/Kind"] === GetService.key;
@@ -173,7 +244,7 @@ export class DispatchNamespaceError extends Data.TaggedError("DispatchNamespaceE
  * `Cloudflare.WorkersForPlatforms.Get(namespace)` inside a Worker's init
  * phase.
  */
-export interface DispatchNamespaceClient {
+export interface DispatchNamespaceClient<P extends object = {}> {
   /** Effect resolving to the raw dispatch-namespace runtime binding. */
   raw: Effect.Effect<DispatchNamespace, never, RuntimeContext>;
   /**
@@ -182,11 +253,12 @@ export interface DispatchNamespaceClient {
    *
    * @param name Name of the user Worker script.
    * @param args Arguments passed to the user Worker script.
-   * @param options Options for the dynamic-dispatch invocation.
+   * @param options Options for the dynamic-dispatch invocation. On a binding
+   *   whose `P` declares values, `outbound` is required.
    */
   get(
     name: string,
     args?: { [key: string]: any },
-    options?: DynamicDispatchOptions,
+    ...options: DispatchArgs<P>
   ): Effect.Effect<Fetcher, DispatchNamespaceError, RuntimeContext>;
 }

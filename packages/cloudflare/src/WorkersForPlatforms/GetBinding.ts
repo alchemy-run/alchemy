@@ -23,7 +23,7 @@ export const GetBinding = Layer.effect(
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
 
-    return Effect.fn(function* (namespace: DispatchNamespaceResource, options?: GetOptions) {
+    return Effect.fn(function* (namespace: DispatchNamespaceResource, options?: GetOptions<any>) {
       const outbound = yield* resolveOutboundWorker(options);
       // A binding with an outbound Worker is named after it, apart from a
       // plain binding on the same namespace. A `Worker.ref(...)` has no
@@ -43,7 +43,7 @@ export const GetBinding = Layer.effect(
         () => (env as Record<string, DispatchNamespace>)[name]!,
       );
 
-      const self: DispatchNamespaceClient = {
+      const self: DispatchNamespaceClient<any> = {
         raw,
         get: (name, args, options) =>
           raw.pipe(

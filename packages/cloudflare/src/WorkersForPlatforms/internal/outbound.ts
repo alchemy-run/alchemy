@@ -9,7 +9,7 @@ import type { GetOptions } from "../Get.ts";
  * given, a declaration by yielding it.
  */
 export const resolveOutboundWorker = (
-  options: GetOptions | undefined,
+  options: GetOptions<any> | undefined,
 ): Effect.Effect<Worker | undefined> => {
   const target = options?.outbound;
   // A `Worker.ref(...)` is typed as a Worker but isn't a declaration.
@@ -26,7 +26,7 @@ export const dispatchNamespaceBinding = (
   name: string,
   namespace: DispatchNamespace,
   outbound: Worker | undefined,
-  options: GetOptions | undefined,
+  options: GetOptions<any> | undefined,
 ) => ({
   type: "dispatch_namespace" as const,
   name,
