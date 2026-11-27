@@ -14,6 +14,7 @@ import { deviceOAuth } from "alchemy/Auth/BrowserOAuth";
 import { CredentialsStore, displayRedacted } from "alchemy/Auth/Credentials";
 import { getEnvRedacted, getEnvRequired, mapPromptCancellation } from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
+import { refreshAndSave } from "alchemy/Auth/Refresh";
 import {
   storedSecret,
   storedValueText,
@@ -432,15 +433,12 @@ export const CloudflareAuth = AuthProviderLayer<
               }
               // Refresh proactively if the token has expired (or is within
               // 10s of expiring). Persist the refreshed creds so subsequent
-              // resolves don't repeat the round-trip. Cloudflare rotates the
-              // refresh token, so the request and the save are one
-              // uninterruptible step: an interrupt between them would leave
-              // the profile with a spent token (#2843).
+              // resolves don't repeat the round-trip.
               const now = yield* Clock.currentTimeMillis;
               const fresh =
                 creds.expires > now + 10_000
                   ? creds
-                  : yield* Effect.uninterruptible(
+                  : yield* refreshAndSave(
                       client.refresh(creds).pipe(
                         Effect.mapError((e) =>
                           NeedsReauth.make({
@@ -450,19 +448,17 @@ export const CloudflareAuth = AuthProviderLayer<
                             cause: e,
                           }),
                         ),
-                        Effect.tap(
-                          (fresh) =>
-                            updateConfig?.({
-                              method: "oauth",
-                              accountId,
-                              clientId: fresh.clientId,
-                              access: Redacted.value(fresh.access),
-                              refresh: Redacted.value(fresh.refresh),
-                              expires: fresh.expires,
-                              scopes: fresh.scopes,
-                            }) ?? Effect.void,
-                        ),
                       ),
+                      (fresh) =>
+                        updateConfig?.({
+                          method: "oauth",
+                          accountId,
+                          clientId: fresh.clientId,
+                          access: Redacted.value(fresh.access),
+                          refresh: Redacted.value(fresh.refresh),
+                          expires: fresh.expires,
+                          scopes: fresh.scopes,
+                        }) ?? Effect.void,
                     );
               return {
                 type: "oauth" as const,
@@ -616,38 +612,27 @@ export const CloudflareAuth = AuthProviderLayer<
                           return yield* Interaction.info(
                             "Cloudflare: refreshing OAuth credentials...",
                           ).pipe(
-                            // Request and save in one uninterruptible step (#2843).
                             Effect.andThen(
-                              Effect.uninterruptible(
+                              refreshAndSave(
                                 OAuthClient.refresh(currentCredentials).pipe(
-                                  Effect.flatMap((credentials) => {
-                                    const config = {
-                                      ...current,
-                                      clientId: credentials.clientId,
-                                      access: Redacted.value(credentials.access),
-                                      refresh: Redacted.value(credentials.refresh),
-                                      expires: credentials.expires,
-                                      scopes: credentials.scopes,
-                                    };
-                                    // Saved here, under the lock, when the caller can
-                                    // take it; otherwise handed back for the caller to save.
-                                    const unsaved: Effect.Effect<
-                                      typeof config | undefined,
-                                      AuthError
-                                    > =
-                                      updateConfig === undefined
-                                        ? Effect.succeed(config)
-                                        : Effect.as(updateConfig(config), undefined);
-                                    return unsaved.pipe(
-                                      Effect.map((config) => ({
-                                        type: "refreshed" as const,
-                                        config,
-                                      })),
-                                    );
-                                  }),
+                                  Effect.map((credentials) => ({
+                                    ...current,
+                                    clientId: credentials.clientId,
+                                    access: Redacted.value(credentials.access),
+                                    refresh: Redacted.value(credentials.refresh),
+                                    expires: credentials.expires,
+                                    scopes: credentials.scopes,
+                                  })),
                                 ),
+                                (config) => updateConfig?.(config) ?? Effect.void,
                               ),
                             ),
+                            // Saved above, under the lock, when the caller can take
+                            // it; otherwise handed back for the caller to save.
+                            Effect.map((config) => ({
+                              type: "refreshed" as const,
+                              config: updateConfig === undefined ? config : undefined,
+                            })),
                             Effect.tap(() =>
                               Interaction.success("Cloudflare: OAuth credentials refreshed."),
                             ),

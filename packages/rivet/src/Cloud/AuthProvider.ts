@@ -14,6 +14,7 @@ import {
   mapPromptCancellation,
 } from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
+import { refreshAndSave } from "alchemy/Auth/Refresh";
 import { storedValueText, validateFieldValues } from "alchemy/Auth/StoredAuthProvider";
 import * as Interaction from "alchemy/Interaction";
 import * as Clock from "effect/Clock";
@@ -291,26 +292,24 @@ export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloud
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
         if (config.expires > now + 60_000) return config;
-        // The refresh spends the stored token: request and save in one
-        // uninterruptible step (#2843), with a timeout so it can't hang.
-        return yield* Effect.uninterruptible(
-          Effect.gen(function* () {
-            const session = yield* refreshDeviceSession(Redacted.make(config.refresh)).pipe(
-              Effect.provide(FetchHttpClient.layer),
-              Effect.timeout("30 seconds"),
-              Effect.mapError((cause) =>
-                NeedsReauth.make({
-                  provider: RIVET_CLOUD_AUTH_PROVIDER_NAME,
-                  profile: profileName,
-                  message: `Rivet Cloud sign-in expired. ${refreshHint(RIVET_CLOUD_AUTH_PROVIDER_NAME, profileName)}`,
-                  cause,
-                }),
-              ),
-            );
-            const next = yield* sessionConfig(config.cluster, config.organization, session);
-            yield* updateConfig?.(next) ?? Effect.void;
-            return next;
-          }),
+        return yield* refreshAndSave(
+          refreshDeviceSession(Redacted.make(config.refresh)).pipe(
+            Effect.provide(FetchHttpClient.layer),
+            // refreshAndSave waits on the request, so it must end on its own.
+            Effect.timeout("30 seconds"),
+            Effect.mapError((cause) =>
+              NeedsReauth.make({
+                provider: RIVET_CLOUD_AUTH_PROVIDER_NAME,
+                profile: profileName,
+                message: `Rivet Cloud sign-in expired. ${refreshHint(RIVET_CLOUD_AUTH_PROVIDER_NAME, profileName)}`,
+                cause,
+              }),
+            ),
+            Effect.flatMap((session) =>
+              sessionConfig(config.cluster, config.organization, session),
+            ),
+          ),
+          (next) => updateConfig?.(next) ?? Effect.void,
         );
       });
 

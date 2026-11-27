@@ -12,6 +12,7 @@ import { browserOAuth } from "alchemy/Auth/BrowserOAuth";
 import { displayRedacted } from "alchemy/Auth/Credentials";
 import { getEnv, getEnvRedacted, mapPromptCancellation } from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
+import { refreshAndSave } from "alchemy/Auth/Refresh";
 import {
   collectFieldValues,
   storedSecret,
@@ -318,14 +319,8 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
         ),
         Match.when({ method: "oauth" }, (oauth) =>
           Effect.gen(function* () {
-            // Refresh tokens may rotate: request and save in one
-            // uninterruptible step (#2843).
-            const fresh = yield* Effect.uninterruptible(
-              freshGrant(profileName, oauth).pipe(
-                Effect.tap((fresh) =>
-                  fresh === oauth ? Effect.void : (updateConfig?.(fresh) ?? Effect.void),
-                ),
-              ),
+            const fresh = yield* refreshAndSave(freshGrant(profileName, oauth), (fresh) =>
+              fresh === oauth ? Effect.void : (updateConfig?.(fresh) ?? Effect.void),
             );
             return {
               apiKey: undefined,
@@ -356,17 +351,13 @@ export const E2BAuth = AuthProviderLayer<E2BAuthConfig, E2BResolvedCredentials>(
             Effect.gen(function* () {
               const current = yield* reload ?? Effect.succeed(oauth);
               if (current.method !== "oauth") return current;
-              // Request and save in one uninterruptible step (#2843).
-              return yield* Effect.uninterruptible(
+              const refreshed = yield* refreshAndSave(
                 refreshGrant(grantOf(current)).pipe(
-                  Effect.flatMap((grant) => {
-                    const refreshed = withGrant(current, grant);
-                    return updateConfig === undefined
-                      ? Effect.succeed<E2BAuthConfig | undefined>(refreshed)
-                      : Effect.as(updateConfig(refreshed), undefined);
-                  }),
+                  Effect.map((grant) => withGrant(current, grant)),
                 ),
+                (refreshed) => updateConfig?.(refreshed) ?? Effect.void,
               );
+              return updateConfig === undefined ? refreshed : undefined;
             }),
           ).pipe(
             Effect.catchTag("E2BLoginError", () =>

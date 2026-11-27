@@ -311,9 +311,8 @@ export interface OAuthClient {
   /**
    * Refresh expired OAuth credentials with the stored refresh token. Most
    * servers rotate the refresh token, so the old one is spent once the request
-   * is sent: save the result in the same uninterruptible step, e.g.
-   * `Effect.uninterruptible(refresh(creds).pipe(Effect.tap(save)))`. Fails
-   * with `OAuthNetworkError` when the server doesn't answer in time.
+   * is sent: save the result with `refreshAndSave` from `alchemy/Auth/Refresh`.
+   * Fails with `OAuthNetworkError` when the server doesn't answer in time.
    */
   readonly refresh: (
     credentials: OAuthCredentials,
@@ -603,8 +602,8 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
       },
       credentials,
     ).pipe(
-      // Callers save the rotated token in an uninterruptible step (#2843), so
-      // the request must end on its own.
+      // Callers save the rotated token through refreshAndSave, which waits on
+      // this request, so it must end on its own.
       Effect.timeoutOrElse({
         duration: REFRESH_TIMEOUT,
         orElse: () =>

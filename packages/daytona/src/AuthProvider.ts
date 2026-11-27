@@ -13,6 +13,7 @@ import { deviceOAuth } from "alchemy/Auth/BrowserOAuth";
 import { displayRedacted } from "alchemy/Auth/Credentials";
 import { getEnv, getEnvRedacted, mapPromptCancellation } from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
+import { refreshAndSave } from "alchemy/Auth/Refresh";
 import {
   collectFieldValues,
   storedSecret,
@@ -244,13 +245,12 @@ export const DaytonaAuth = AuthProviderLayer<DaytonaAuthConfig, DaytonaResolvedC
               });
             }
             // Refresh within a minute of expiry and persist it: WorkOS
-            // refresh tokens are single-use, so the request and the save are
-            // one uninterruptible step (#2843).
+            // refresh tokens are single-use.
             const now = yield* Clock.currentTimeMillis;
             const fresh =
               session.expires > now + 60_000
                 ? session
-                : yield* Effect.uninterruptible(
+                : yield* refreshAndSave(
                     OAuthClient.refresh(session).pipe(
                       Effect.mapError((e) =>
                         NeedsReauth.make({
@@ -260,12 +260,9 @@ export const DaytonaAuth = AuthProviderLayer<DaytonaAuthConfig, DaytonaResolvedC
                           cause: e,
                         }),
                       ),
-                      Effect.tap(
-                        (fresh) =>
-                          updateConfig?.({ ...oauth, ...fromOAuthCredentials(fresh) }) ??
-                          Effect.void,
-                      ),
                     ),
+                    (fresh) =>
+                      updateConfig?.({ ...oauth, ...fromOAuthCredentials(fresh) }) ?? Effect.void,
                   );
             return {
               type: "oauth" as const,
@@ -301,27 +298,16 @@ export const DaytonaAuth = AuthProviderLayer<DaytonaAuthConfig, DaytonaResolvedC
                 if (current.method !== "oauth") return { type: "signIn" as const };
                 const session = toOAuthCredentials(current);
                 if (!OAuthClient.usesCurrentClient(session)) return { type: "signIn" as const };
-                // Request and save in one uninterruptible step (#2843).
-                return yield* Effect.uninterruptible(
+                const config = yield* refreshAndSave(
                   OAuthClient.refresh(session).pipe(
-                    Effect.flatMap((fresh) => {
-                      const config: DaytonaAuthConfig = {
-                        ...current,
-                        ...fromOAuthCredentials(fresh),
-                      };
-                      // Saved here, under the lock, when the caller can take
-                      // it; otherwise handed back for the caller to save.
-                      const unsaved: Effect.Effect<DaytonaAuthConfig | undefined, AuthError> =
-                        updateConfig === undefined
-                          ? Effect.succeed(config)
-                          : Effect.as(updateConfig(config), undefined);
-                      return Effect.map(unsaved, (config) => ({
-                        type: "refreshed" as const,
-                        config,
-                      }));
-                    }),
+                    Effect.map((fresh) => ({ ...current, ...fromOAuthCredentials(fresh) })),
                   ),
+                  (config) => updateConfig?.(config) ?? Effect.void,
                 );
+                return {
+                  type: "refreshed" as const,
+                  config: updateConfig === undefined ? config : undefined,
+                };
               }),
             ).pipe(
               Effect.catchTag(
