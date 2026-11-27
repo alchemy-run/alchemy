@@ -416,6 +416,10 @@ export const makeDevWatchProvider = <
             ) as Effect.Effect<Attrs, unknown>,
         };
         const fiber = yield* spec.startWatch(ctx).pipe(
+          // A loop with nothing to watch (a registry image, a `task:` ref)
+          // returns at once. Keep it alive until interrupted so `diff` only
+          // counts a loop that failed as dead.
+          Effect.andThen(Effect.never),
           Effect.provide(services),
           Effect.catchCause((cause) => Effect.logWarning(`watch loop exited`, cause)),
           Effect.forkDetach,

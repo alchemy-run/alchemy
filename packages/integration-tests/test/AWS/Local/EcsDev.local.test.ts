@@ -356,6 +356,38 @@ describe.sequential("EcsDev", { tags: ["provider:aws", "provider:aws:ecs", "loca
   );
 
   test.provider(
+    "dev mode plans no update for an unchanged registry-image task (#3565)",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        // A registry image has nothing local to watch, so its watch loop
+        // returns at once. That must not count as a dead watcher.
+        const program = Effect.gen(function* () {
+          return yield* AWS.ECS.Task("EcsDevRegistryTask", {
+            image: "busybox:stable",
+            command: ["true"],
+            cpu: 256,
+            memory: 512,
+            networkMode: "bridge",
+            requiresCompatibilities: ["EC2"],
+            runtimePlatform: hostRuntimePlatform,
+          });
+        });
+
+        yield* stack.deploy(program);
+        const plan = yield* stack.plan(program);
+        const action = (Object.values(plan.resources) as any[]).find(
+          (node: any) => node.resource.LogicalId === "EcsDevRegistryTask",
+        )?.action;
+        expect(action).toBe("noop");
+
+        yield* stack.destroy();
+      }),
+    { timeout: 300_000 },
+  );
+
+  test.provider(
     "dev mode applies logging.retention to the task's log group",
     (stack) =>
       Effect.gen(function* () {

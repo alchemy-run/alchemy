@@ -104,6 +104,15 @@ describe("Diff", { tags: ["unit", "local"] }, () => {
     test("distinguishes Redacted values nested in objects", () => {
       expect(deepEqual({ secret: Redacted.make("a") }, { secret: Redacted.make("b") })).toBe(false);
     });
+
+    test("compares a Redacted record regardless of key order", () => {
+      expect(deepEqual(Redacted.make({ A: "1", B: "2" }), Redacted.make({ B: "2", A: "1" }))).toBe(
+        true,
+      );
+      expect(deepEqual(Redacted.make({ A: "1", B: "2" }), Redacted.make({ B: "3", A: "1" }))).toBe(
+        false,
+      );
+    });
   });
 
   // effect ≥4.0.0-beta.103's Context is self-referential; every deep walker
