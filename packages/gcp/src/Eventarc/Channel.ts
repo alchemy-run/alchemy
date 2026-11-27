@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { inLookupProject } from "../internal/Lookup.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -281,7 +282,7 @@ const toAttrs = (channel: eventarc.Channel, project: string, region: string) => 
     labels: userLabels(channel.labels),
     pubsubTopic: channel.pubsubTopic,
     state: channel.state,
-    activationToken: channel.activationToken,
+    activationToken: revealOptional(channel.activationToken),
     uid: channel.uid,
     createTime: channel.createTime,
     updateTime: channel.updateTime,

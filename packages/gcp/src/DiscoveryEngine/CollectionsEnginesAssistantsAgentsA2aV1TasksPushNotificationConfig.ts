@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, parentBefore, parseResourceName, toResourceId } from "./internal.ts";
 
@@ -129,7 +130,7 @@ const toAttrs = (
     parent: parentBefore(name, "pushNotificationConfigs"),
     project: parsed.project || project,
     url: config.pushNotificationConfig?.url,
-    token: config.pushNotificationConfig?.token,
+    token: revealOptional(config.pushNotificationConfig?.token),
   };
 };
 
