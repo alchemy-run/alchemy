@@ -17,6 +17,7 @@ import { copyTree, hashExtraFiles } from "alchemy/Util/extraFiles";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import { sha256 } from "alchemy/Util/sha256";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -43,8 +44,9 @@ const inWorkerLifecycle =
           bindings: {},
           actions: {},
         }),
+        // The standalone fallback, pinned so an `ALCHEMY_DIR` in the shell can't change it.
         dotAlchemy === undefined
-          ? Layer.empty
+          ? ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} }))
           : Layer.succeed(AlchemyContext, { dotAlchemy, dev: false, adopt: false }),
       ]),
     );
@@ -72,7 +74,15 @@ layer(PlatformServices)("runtime directory", (it) => {
     "preserves the relative fallback and configured roots",
     () =>
       Effect.gen(function* () {
-        expect(yield* dotAlchemyDirectory).toBe(".alchemy");
+        // Pinned so an `ALCHEMY_DIR` in the shell can't change the fallback.
+        expect(
+          yield* dotAlchemyDirectory.pipe(
+            Effect.provideService(
+              ConfigProvider.ConfigProvider,
+              ConfigProvider.fromEnv({ env: {} }),
+            ),
+          ),
+        ).toBe(".alchemy");
         expect(
           yield* dotAlchemyDirectory.pipe(
             Effect.provideService(AlchemyContext, {

@@ -402,17 +402,15 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsGatewaySecurityPoliciesRules({
+            basicProfile: news.basicProfile,
+            priority: news.priority,
+            enabled,
+            sessionMatcher: news.sessionMatcher,
+            applicationMatcher: news.applicationMatcher,
+            tlsInspectionEnabled,
+            description: desiredDescription,
             parent,
             gatewaySecurityPolicyRuleId: ruleId,
-            body: {
-              basicProfile: news.basicProfile,
-              priority: news.priority,
-              enabled,
-              sessionMatcher: news.sessionMatcher,
-              applicationMatcher: news.applicationMatcher,
-              tlsInspectionEnabled,
-              description: desiredDescription,
-            },
           })
           .pipe(
             Effect.retry({
@@ -453,18 +451,15 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
       if (updateMask.length > 0) {
         const operation = yield* networksecurity.patchProjectsLocationsGatewaySecurityPoliciesRules(
           {
+            description: desiredDescription,
+            basicProfile: news.basicProfile,
+            priority: news.priority,
+            enabled,
+            sessionMatcher: news.sessionMatcher,
+            applicationMatcher: news.applicationMatcher,
+            tlsInspectionEnabled,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              description: desiredDescription,
-              basicProfile: news.basicProfile,
-              priority: news.priority,
-              enabled,
-              sessionMatcher: news.sessionMatcher,
-              applicationMatcher: news.applicationMatcher,
-              tlsInspectionEnabled,
-            },
           },
         );
         yield* waitForOperation(operation);

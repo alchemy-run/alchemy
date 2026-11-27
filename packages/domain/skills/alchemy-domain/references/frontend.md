@@ -51,8 +51,7 @@ import * as Option from "effect/Option";
 const BankClient = DomainFoldkit.make(CustomerApi);
 
 const send = BankClient.DepositMoney({
-  target: model.accountId,
-  input: { amount: 1_000 },
+  input: { accountId: model.accountId, amount: 1_000 },
   commandId: allocation.commandId,
 });
 const command = Command.mapMessage(send, (result) => Message.ReceivedBankResult({ result }));
@@ -119,6 +118,18 @@ Decode snapshot Flags with `BankClient.AccountSummary.decodeSnapshotFlags`. Use 
 
 More: [Integrate with Foldkit: Follow a View's state](https://alchemy.run/domain/foldkit#follow-a-views-state), [Seed the first paint](https://alchemy.run/domain/foldkit#seed-the-first-paint), [Optimistic updates: Resume the feed](https://alchemy.run/domain/optimistic-updates#resume-the-feed).
 
+## Several keys in one page
+
+`toMessage` and `onCaughtUp` receive the key they are for as a second argument. A page that keeps what it read of several keys (a list on the left, the open one on the right) files each snapshot under its key, so a snapshot that arrives after the person opened another is not shown as that one's. An entry of `events` carries its key in `envelope.id`.
+
+```ts
+toMessage: ({ state }, issueId): Message => Message.ReceivedIssue({ issueId, detail: state }),
+```
+
+An app whose pages show AI agent sessions records them into the model first: see the `alchemy-ai` skill's `references/front-end.md`.
+
+More: [Integrate with Foldkit: Follow a View's state](https://alchemy.run/domain/foldkit#follow-a-views-state), [Connect a front end](https://alchemy.run/ai/front-end).
+
 ## Tracing from the browser
 
 Foldkit wraps every Command in a span, and Api calls carry the trace to the server (live reads too). Put a tracer in `resources` that exports to the app's own origin, and collect it in the server Worker with `Telemetry.relay`, which forwards it with the server's credentials:
@@ -149,7 +160,7 @@ More: [Observability: Trace the browser](https://alchemy.run/domain/observabilit
 - **Optimistic UI.** Send each command with a `commandId` the app chooses, and show it as pending. The view event carrying that `commandId` confirms it, and a typed rejection marks it rejected. Show the server's balance plus every unacknowledged line, so nothing is ever rolled back.
 - **Offline intents.** Record what the user asked for, never facts the server owns. Queue unreachable sends in order and persist them to `localStorage`. Deliver them when back online, deduplicated by `commandId`. A conflict is just a typed rejection.
 
-- **Predicted outcome.** `MyAggregate.predict(state, command, { id, now, context })` runs the aggregate's own `decide` and `evolve`: `Accepted` (events, envelopes, next state), `Rejected` (the same rejection the server returns), or `Unpredictable` (only the server can tell: `decide` suspended, died, or broke its declaration). `MyView.evolve(state, { name, event, source, envelope })` folds a predicted event like the server's view. `context` is required, by type, for whatever the command's middleware provides: build it from a client-side Layer of the same services (`yield* Layer.build(ClientSession)`). Still confirm from the stream.
+- **Predicted outcome.** `MyAggregate.predict(state, command, { now, context })` runs the aggregate's own `decide` and `evolve`: `Accepted` (events, envelopes, next state), `Rejected` (the same rejection the server returns), or `Unpredictable` (only the server can tell: `decide` suspended, died, or broke its declaration). `MyView.evolve(state, { name, event, source, envelope })` folds a predicted event like the server's view. `context` is required, by type, for whatever the command's middleware provides: build it from a client-side Layer of the same services (`yield* Layer.build(ClientSession)`). Still confirm from the stream.
 
 A local mirror of server aggregates, or local-authority sync, isn't supported. It needs a sync engine or CRDTs.
 

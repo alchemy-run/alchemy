@@ -74,9 +74,9 @@ test.provider.skipIf(!!process.env.GCP_TEST_ORG_NETWORKSECURITY)(
         : "0";
       const error = yield* Effect.flip(
         networksecurity.createOrganizationsLocationsFirewallEndpoints({
+          billingProjectId: project,
           parent: `organizations/${organization}/locations/us-central1-a`,
           firewallEndpointId: "alchemy-org-fwep-probe",
-          body: { billingProjectId: project },
         }),
       );
       expect(error._tag).toBe("Forbidden");

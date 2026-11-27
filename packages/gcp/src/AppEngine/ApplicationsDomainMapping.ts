@@ -354,14 +354,12 @@ export const ApplicationsDomainMappingProvider = () =>
       if (current === undefined) {
         const operation = yield* appengine
           .createProjectsLocationsApplicationsDomainMappings({
+            id: domain,
+            sslSettings,
             projectsId: project,
             locationsId: location,
             applicationsId,
             overrideStrategy: news.overrideStrategy,
-            body: {
-              id: domain,
-              sslSettings,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.succeed<appengine.Operation>({ done: true })),
@@ -383,12 +381,12 @@ export const ApplicationsDomainMappingProvider = () =>
       const certChanged = !sameText(observedSsl?.certificateId, sslSettings.certificateId);
       if ((typeChanged || certChanged) && !jsonEqual(observedSsl, sslSettings)) {
         const operation = yield* appengine.patchProjectsLocationsApplicationsDomainMappings({
+          sslSettings,
           projectsId: project,
           locationsId: location,
           applicationsId,
           domainMappingsId: domain,
           updateMask: updateMaskOf("sslSettings"),
-          body: { sslSettings },
         });
         yield* waitForOperation(operation, { appsId: applicationsId });
         current = (yield* getByDomain(project, location, applicationsId, domain)) ?? current;

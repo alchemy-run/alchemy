@@ -430,20 +430,18 @@ export const AutomatedDnsRecordProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsAutomatedDnsRecords({
+            serviceClass: news.serviceClass,
+            creationMode: news.creationMode,
+            recordType: news.recordType,
+            hostname: news.hostname,
+            dnsSuffix: news.dnsSuffix,
+            originalConfig,
+            consumerNetwork,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             automatedDnsRecordId,
             insertMode: news.insertMode,
-            body: {
-              serviceClass: news.serviceClass,
-              creationMode: news.creationMode,
-              recordType: news.recordType,
-              hostname: news.hostname,
-              dnsSuffix: news.dnsSuffix,
-              originalConfig,
-              consumerNetwork,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({

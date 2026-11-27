@@ -22,10 +22,10 @@ it.live("retries only the unknown intent with its original id and queues the res
       Effect.provideService(CustomerApi.Client, {
         ...client,
         // The server applies each send; every reply is lost on the way back.
-        DepositMoney: (target, input, options) =>
+        DepositMoney: (input, options) =>
           Effect.suspend(() => {
             ids.push(options?.commandId);
-            return client.DepositMoney(target, input, options);
+            return client.DepositMoney(input, options);
           }).pipe(
             Effect.exit,
             Effect.andThen(

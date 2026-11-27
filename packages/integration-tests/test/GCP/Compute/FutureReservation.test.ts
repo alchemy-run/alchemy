@@ -51,15 +51,12 @@ test.provider.skipIf(runLifecycle)(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertFutureReservations({
+          name: "alchemy-fr-probe",
+          description: "alchemy entitlement probe",
+          autoDeleteAutoCreatedReservations: false,
+          ...draftProps,
           project,
           zone,
-          body: {
-            name: "alchemy-fr-probe",
-            description: "alchemy entitlement probe",
-            autoDeleteAutoCreatedReservations: false,
-            ...draftProps,
-            zone: undefined,
-          },
         }),
       );
       expect(error._tag).toEqual("FutureReservationsNotEligible");

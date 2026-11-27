@@ -117,7 +117,7 @@ export interface RunnerPool extends Resource<
  * const pool = yield* RivetCloud.RunnerPool("Default", {
  *   cluster: "acme",
  *   main: "./dist/node.mjs",
- *   rivetkitVersion: "3.0.0",
+ *   rivetkitVersion: "3.1.1",
  *   env: { RIVET_NAMESPACE: "acme-prod", RIVET_POOL: "acme-prod-default" },
  * });
  * ```
@@ -246,7 +246,7 @@ export const RunnerPoolProvider = () =>
           };
         } else {
           files = {
-            Dockerfile: dockerfile(props.rivetkitVersion ?? "3.0.0"),
+            Dockerfile: dockerfile(props.rivetkitVersion ?? "3.1.1"),
             "node.mjs": yield* fs.readFileString(props.main ?? ""),
             "env.json": JSON.stringify(props.env, Object.keys(props.env).sort()),
             "start.mjs": START,

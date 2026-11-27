@@ -1,0 +1,226 @@
+---
+title: Sealed Value
+description: How a sealed value keeps a field encrypted under one subject's key, what the model sees of it, how a handler opens it, and what opening returns once the key is shredded.
+---
+
+A sealed value is a field encrypted under a key that belongs to one subject, such as a customer. The model stores it and carries it, and can't read it. Deleting the subject's key makes every copy of the value unreadable.
+
+Use one for data that identifies a person and that no rule of the model needs to read: an address, a name, a phone number.
+
+## Declare one
+
+`Domain.Sealed` takes the schema of the value inside.
+
+```typescript title="src/Name.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+
+/** A member's name, sealed under the member's own key. */
+export const Name = Domain.Sealed(Schema.String);
+```
+
+## Put it in a command and an event
+
+A sealed value is a field like any other: in a [command](/domain/command)'s input, and in the [event](/domain/event) it records.
+
+```typescript title="src/Join.command.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Name } from "./Name.ts";
+
+/** A member may only join under a name sealed with their own key. */
+export class NotYourName extends Domain.Rejection("NotYourName") {}
+
+export class Joined extends Domain.Event("Joined", { name: Name }) {}
+
+/** Join the club. */
+export class Join extends Domain.Command("Join", {
+  input: { memberId: Schema.String, name: Name },
+  events: [Joined],
+  rejects: [NotYourName],
+}) {}
+```
+
+## Know what the model sees
+
+Inside the model a sealed value is two strings: `subject`, whose key it is sealed under, and `box`, the ciphertext. `decide`, `evolve`, [views](/domain/view) and [streams](/domain/stream) read the subject and pass the value on.
+
+```typescript title="src/Member.aggregate.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Join, Joined, NotYourName } from "./Join.command.ts";
+import { Name } from "./Name.ts";
+
+/** A member of the club. It keeps the name sealed, and can't read it. */
+export class Member extends Domain.Aggregate("Member", {
+  id: Schema.String,
+  state: Schema.Struct({ name: Schema.NullOr(Name) }),
+  initial: { name: null },
+  commands: [Join],
+  keyOf: (command) => command.memberId,
+  decide: {
+    Join: (_, command) => {
+      // The subject names whose key seals the name: it must be this member's.
+      if (command.name.subject !== command.memberId) return new NotYourName();
+      return [new Joined({ name: command.name })];
+    },
+  },
+  evolve: {
+    Joined: (_, event) => ({ name: event.name }),
+  },
+}) {}
+```
+
+A client chooses the subject, so `decide` checks it. A name sealed under another member's key would still open after this member's key is deleted.
+
+## Send a value to be sealed
+
+A caller makes the value with `plain`, naming the subject. The model seals it when the command arrives, before the command is stored or decided.
+
+```typescript title="src/join.ts"
+import * as Effect from "effect/Effect";
+import { Join } from "./Join.command.ts";
+import { Member } from "./Member.aggregate.ts";
+import { Name } from "./Name.ts";
+
+/** Join the club under a name only the member's key opens. */
+export const join = Effect.fn(function* (memberId: string, name: string) {
+  const members = yield* Member;
+  yield* members.send(new Join({ memberId, name: Name.plain(memberId, name) }));
+});
+```
+
+A value made with `plain` is never stored. Code that builds an event itself seals the value first, with `vault.seal(Name, memberId, "Sam")`.
+
+## Open it
+
+A [query](/domain/query), a [policy](/domain/policy), a [saga](/domain/saga) step or a [projection](/domain/projection) opens a sealed value with `Domain.Vault`.
+
+```typescript title="src/MemberName.query.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { Member } from "./Member.aggregate.ts";
+import { Name } from "./Name.ts";
+
+/** A member's name, opened. It is `null` before they join, and once their key is shredded. */
+export class MemberName extends Domain.Query("MemberName", {
+  input: { memberId: Schema.String },
+  success: Schema.Struct({ name: Schema.NullOr(Schema.String) }),
+}) {}
+
+export const MemberNameLive = MemberName.toLayer(
+  Effect.gen(function* () {
+    const vault = yield* Domain.Vault;
+    const members = yield* Member;
+    return Effect.fn(function* ({ memberId }) {
+      const { name } = yield* members.get(memberId);
+      if (name === null) return { name: null };
+      const opened = yield* vault.open(Name, name).pipe(Effect.orDie);
+      return { name: Option.getOrNull(opened) };
+    });
+  }),
+);
+```
+
+`vault.open` returns an `Option`. It fails with `VaultError` only when something is wrong: the key store can't be reached, or the box was changed or sealed for another subject.
+
+## Shred a subject's key
+
+`vault.shred` deletes the subject's key.
+
+```typescript title="src/forget.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+
+/** Forget a member: nothing sealed under their key opens again. */
+export const forget = Effect.fn(function* (memberId: string) {
+  const vault = yield* Domain.Vault;
+  yield* vault.shred(memberId);
+});
+```
+
+No event changes and no view folds again. `Joined` still holds the sealed name, and so does the member's state.
+
+## Handle a value that no longer opens
+
+After a shred, `vault.open` succeeds with `None`. The handler decides what that means. `MemberName` returns `null`, the same answer it gives for a member who never joined.
+
+Every handler that opens a value handles `None`, because any subject may be shredded later.
+
+## Give the model a Vault
+
+`Domain.VaultLive` encrypts with AES-256-GCM. It needs a `KeyStore`, where each subject's key is kept, and a `KeyWrap`, which decides what is stored of a key. Provide it where the model's Layer is built.
+
+```typescript title="src/Roster.model.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Layer from "effect/Layer";
+import { Member } from "./Member.aggregate.ts";
+import { MemberName, MemberNameLive } from "./MemberName.query.ts";
+
+export class Roster extends Domain.Model("Roster", {
+  aggregates: [Member],
+  queries: [MemberName],
+}) {}
+
+/** A Vault that encrypts with AES-256-GCM and keeps its keys in memory. */
+const Sealing = Domain.VaultLive.pipe(
+  Layer.provide(Layer.merge(Domain.MemoryKeyStore, Domain.NoKeyWrap)),
+);
+
+/** The club in one process. */
+export const RosterInMemory = Roster.layer(MemberNameLive).pipe(
+  Layer.provide(Domain.InMemory),
+  Layer.provideMerge(Sealing),
+);
+```
+
+A model with no Vault refuses a command that carries a value to be sealed, with `VaultMissing`. [Crypto-shredding](/domain/crypto-shredding#choose-where-the-keys-are-kept) covers the stores and wraps for Cloudflare, AWS, Google Cloud and Postgres.
+
+## Test it
+
+A [story](/domain/story) seals with a test Vault that encrypts nothing. `Domain.sealedInTest` builds the value a step expects, and `Story.shred` shreds a subject's key.
+
+```typescript title="test/Member.test.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Story } from "@alchemy.run/domain/Story";
+import { it } from "@effect/vitest";
+import { Join, Joined, NotYourName } from "../src/Join.command.ts";
+import { Member } from "../src/Member.aggregate.ts";
+import { MemberName, MemberNameLive } from "../src/MemberName.query.ts";
+import { Name } from "../src/Name.ts";
+import { Roster } from "../src/Roster.model.ts";
+
+const story = Story.make(Roster, { layer: MemberNameLive });
+const sam = Member.ref("m-1");
+
+it.effect("a name is recorded sealed, and stops opening once its key is shredded", () =>
+  story(
+    Story.when(new Join({ memberId: "m-1", name: Name.plain("m-1", "Sam") })),
+    Story.then(sam, new Joined({ name: Domain.sealedInTest(Name, "m-1", "Sam") })),
+    Story.query(MemberName, { memberId: "m-1" }, { name: "Sam" }),
+    Story.shred("m-1"),
+    Story.query(MemberName, { memberId: "m-1" }, { name: null }),
+  ),
+);
+
+it.effect("a name sealed under someone else's key is refused", () =>
+  story(
+    Story.when(new Join({ memberId: "m-1", name: Name.plain("m-2", "Alex") })),
+    Story.rejected(new NotYourName()),
+  ),
+);
+```
+
+## Know what stays plain
+
+Nothing in the model can depend on a value it can't read. An id, a value a rule compares, and a value that must be [unique](/domain/unique-values) stay plain, and are removed with a [rewrite](/domain/rewrite).
+
+A handler that opens a value and writes it somewhere holds a plain copy: a projection's table, an email, a log line. Shredding the key does not reach those.
+
+A subject sealed for again after a shred gets a new key, and the new value opens. What was sealed before stays unreadable.
+
+## Where to go next
+
+[Crypto-shredding](/domain/crypto-shredding) follows the bank example through sealing a customer's address, choosing where the keys are kept, and shredding a key as a step of the saga that [erases a customer](/domain/erasing-personal-data).

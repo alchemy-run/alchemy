@@ -18,7 +18,6 @@ export class RestartContainer extends Cloudflare.Container<
 export default RestartContainer.make(
   {
     main: import.meta.filename,
-    image: "oven/bun:latest",
   },
   Effect.gen(function* () {
     return {

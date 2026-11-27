@@ -421,10 +421,7 @@ export const BiddersPretargetingConfigProvider = () =>
 
       if (current === undefined) {
         const created = yield* rtb
-          .createBiddersPretargetingConfigs({
-            parent,
-            body: toConfigBody(stamped, desired),
-          })
+          .createBiddersPretargetingConfigs({ ...toConfigBody(stamped, desired), parent })
           .pipe(Effect.catchTag("Conflict", () => findOwnedConfig(id, parent, name, stamped)));
         current = created ?? undefined;
       }
@@ -440,9 +437,9 @@ export const BiddersPretargetingConfigProvider = () =>
       const updateMask = updateMaskOf(current, desired, stamped);
       if (updateMask.length > 0) {
         current = yield* rtb.patchBiddersPretargetingConfigs({
+          ...toConfigBody(stamped, desired),
           name: currentName,
           updateMask,
-          body: toConfigBody(stamped, desired),
         });
       }
 

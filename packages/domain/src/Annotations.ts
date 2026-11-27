@@ -14,12 +14,11 @@
  * }
  *
  * export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
- *   target: AccountId,
- *   input: { amount: Schema.Int },
+ *   input: { accountId: AccountId, amount: Schema.Int },
  *   events: [MoneyWithdrawn],
  * }, {
  *   description: "Take money out of an account. The amount is in cents.",
- *   examples: [{ target: "a-1", input: { amount: 2_000 } }],
+ *   examples: [{ input: { accountId: "a-1", amount: 2_000 } }],
  * }) {}
  *
  * WithdrawMoney.annotations.examples;

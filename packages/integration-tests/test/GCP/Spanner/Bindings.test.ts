@@ -26,16 +26,16 @@ const rolesOf = (policy: Policy) =>
 const databaseRoles = (database: string) =>
   spanner
     .getIamPolicyProjectsInstancesDatabases({
+      options: { requestedPolicyVersion: 3 },
       resource: database,
-      body: { options: { requestedPolicyVersion: 3 } },
     })
     .pipe(Effect.map(rolesOf));
 
 const instanceRoles = Effect.suspend(() =>
   spanner
     .getIamPolicyProjectsInstances({
+      options: { requestedPolicyVersion: 3 },
       resource: names.instance,
-      body: { options: { requestedPolicyVersion: 3 } },
     })
     .pipe(Effect.map(rolesOf)),
 );

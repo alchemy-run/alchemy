@@ -31,6 +31,7 @@ import * as Access from "../Access.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import * as Cloudflare from "../Providers.ts";
+import type { WorkerObservability } from "../Workers/Worker.ts";
 import { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
 import {
   deleteStoreCredentials,
@@ -74,6 +75,11 @@ export type CloudflareStateOptions = {
    * @default "alchemy-state-store"
    */
   readonly workerName?: string;
+  /**
+   * The store Worker's observability settings.
+   * @default { enabled: true, logs: { enabled: true, invocationLogs: true } }
+   */
+  readonly observability?: WorkerObservability;
 };
 
 export const state = (options: CloudflareStateOptions = {}) =>
@@ -81,7 +87,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
     State,
     Effect.gen(function* () {
       const isCI = yield* CI;
-      const { workerName, domain } = options;
+      const { workerName, domain, observability } = options;
       const scriptName = workerName ?? STATE_STORE_SCRIPT_NAME;
       const profileName = yield* currentProfileName;
       const credStore = yield* CredentialsStore;
@@ -98,7 +104,13 @@ export const state = (options: CloudflareStateOptions = {}) =>
         const accountId = yield* resolveAccountId(options.accountId);
         const deployMissing = Provisioning.deployMissing(
           store,
-          bootstrap({ workerName: scriptName, profile: profileName, accountId, domain }),
+          bootstrap({
+            workerName: scriptName,
+            profile: profileName,
+            accountId,
+            domain,
+            observability,
+          }),
         );
 
         const ensureLatest = ({ url, authToken }: { url: string; authToken: string }) =>
@@ -123,6 +135,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
                   accountId,
                   scriptName,
                   domain,
+                  observability,
                   profileName,
                   isCI,
                   force: false,
@@ -132,12 +145,30 @@ export const state = (options: CloudflareStateOptions = {}) =>
             return yield* Provisioning.upgradeOutdated({ ...store, observed, expected }, upgrade);
           });
 
+        // Whether the cached credentials are accepted at their URL. Renaming
+        // the account's workers.dev subdomain leaves the cached URL on a host
+        // that no longer resolves, so a first failed attempt checks where the
+        // store serves now before spending the retry budget on the old host.
+        const authorized = (credentials: HttpStateStoreCredentials) =>
+          checkHttpStateStoreAuth(credentials, { retry: false }).pipe(
+            Effect.catch(() =>
+              Effect.gen(function* () {
+                const current = yield* stateStoreUrl({ accountId, scriptName, domain }).pipe(
+                  Effect.catchTag("SubdomainNotFound", () => Effect.undefined),
+                );
+                // A moved store needs its credentials minted again.
+                if (current !== undefined && current !== credentials.url) return false;
+                return yield* checkHttpStateStoreAuth(credentials);
+              }),
+            ),
+          );
+
         const ensureAccess = (credentials: HttpStateStoreCredentials) =>
           Effect.gen(function* () {
-            if (yield* checkHttpStateStoreAuth(credentials)) {
+            if (yield* authorized(credentials)) {
               return yield* makeCloudflareStateStore(credentials);
             }
-            // our token is wrong, force a refresh
+            // our token is wrong, or the store moved: force a refresh
             const refreshed = yield* loginWithCloudflare(
               profileName,
               true,
@@ -204,6 +235,8 @@ export interface BootstrapOptions {
   accountId?: string;
   /** A hostname to serve the store on, attached as a custom domain. */
   domain?: string;
+  /** The store Worker's observability settings. See {@link CloudflareStateOptions.observability}. */
+  observability?: WorkerObservability;
   /** @default false */
   force?: boolean;
   /** @default "default" */
@@ -271,9 +304,15 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         {
           label: `${serving ? "Updating" : "Deploying"} Cloudflare State Store '${scriptName}'`,
         },
-        deployStateStore({ accountId, scriptName, domain, profileName, isCI, force }).pipe(
-          Effect.flatMap(makeCloudflareStateStore),
-        ),
+        deployStateStore({
+          accountId,
+          scriptName,
+          domain,
+          observability: options.observability,
+          profileName,
+          isCI,
+          force,
+        }).pipe(Effect.flatMap(makeCloudflareStateStore)),
       );
     }).pipe(
       Effect.withSpan("state_store.bootstrap", {
@@ -423,6 +462,7 @@ const deployStateStore = ({
   accountId,
   scriptName,
   domain,
+  observability,
   profileName,
   isCI,
   force,
@@ -430,6 +470,7 @@ const deployStateStore = ({
   accountId: string;
   scriptName: string;
   domain: string | undefined;
+  observability: WorkerObservability | undefined;
   profileName: string;
   isCI: boolean;
   /** Approves replacing a lost encryption key without asking. */
@@ -448,7 +489,12 @@ const deployStateStore = ({
           `terminal and confirm, or pass --force with --backend.`,
       });
     }
-    const { url, authToken } = yield* deployStateStoreWorker({ accountId, scriptName, domain });
+    const { url, authToken } = yield* deployStateStoreWorker({
+      accountId,
+      scriptName,
+      domain,
+      observability,
+    });
     // Cloudflare's worker upload is eventually consistent: the edge can keep
     // serving the previous version for several seconds. Wait until `/version`
     // reports the version this CLI was built against before using it.

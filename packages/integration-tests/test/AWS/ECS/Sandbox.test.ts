@@ -220,9 +220,9 @@ describe.sequential.skipIf(!!process.env.FAST)(
         expect(result.failed).toEqual({ exitCode: 3, stdout: "", stderr: "oops\n" });
         // `create`'s env and the call's env both reach the command.
         expect(result.env).toBe("from the host/per call\n");
-        expect(result.readBack).toBe(`console.log("hi " + Bun.argv[2])`);
+        expect(result.readBack).toBe(`console.log("hi " + process.argv[2])`);
         expect(result.entries).toEqual([
-          { path: "/work/hello.ts", type: "file", size: result.readBack.length },
+          { path: "/work/hello.mjs", type: "file", size: result.readBack.length },
         ]);
       }).pipe(logLevel),
       { timeout: TEST_TIMEOUT },

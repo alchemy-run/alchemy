@@ -635,6 +635,23 @@ The inner Effect registers this handler again after each hibernation.
 Alchemy invokes it when a persisted job is due, so this example does
 not need a custom `alarm` handler.
 
+## Keep callbacks in the Room's storage
+
+`makeCallback` needs an implementation. Provide
+`Cloudflare.DurableObjectCallbacks` to the inner Effect so jobs live in
+the Room's SQLite and fire from its alarm:
+
+```diff lang="typescript"
+// src/room.ts
+  return {
+    fetch: /* ... */,
+    webSocketMessage: /* ... */,
+    webSocketClose: /* ... */,
+  };
+-});
++}).pipe(Effect.provide(Cloudflare.DurableObjectCallbacks));
+```
+
 ## Schedule a future broadcast (alarms)
 
 Recognise `/remind <seconds> <message>` inside `webSocketMessage`

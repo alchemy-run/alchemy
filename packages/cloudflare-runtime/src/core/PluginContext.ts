@@ -20,7 +20,10 @@ export class PluginContext extends Context.Service<
     readonly get: <Self, Identifier extends Plugin.PluginIdentifier, Api>(
       service: Plugin.PluginService<Self, Identifier, Api>,
     ) => Effect.Effect<Plugin.Plugin<Api>, ConfigError>;
-    readonly start: (ports: Workerd.WorkerdPorts) => Effect.Effect<void, RuntimeError, Scope.Scope>;
+    readonly start: (
+      ports: Workerd.WorkerdPorts,
+      process: Plugin.StartedProcess,
+    ) => Effect.Effect<void, RuntimeError, Scope.Scope>;
     readonly config: Effect.Effect<
       {
         entry: string | undefined;
@@ -28,6 +31,7 @@ export class PluginContext extends Context.Service<
         services: Array<WorkerdConfig.Service>;
         extensions: Array<WorkerdConfig.Extension>;
         userWorker: Partial<WorkerdConfig.Worker>;
+        startupLocks: Array<string>;
       },
       RuntimeError
     >;
@@ -61,12 +65,14 @@ export const make = (
         const services = configs.flatMap((config) => config.services ?? []);
         const sockets = configs.flatMap((config) => config.sockets ?? []);
         const extensions = configs.flatMap((config) => config.extensions ?? []);
+        const startupLocks = configs.flatMap((config) => config.startupLocks ?? []);
         const userWorker = Object.assign({}, ...configs.map((config) => config.userWorker ?? {}));
         const middlewares = configs
           .flatMap((config) => config.middlewares ?? [])
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
         return {
           entry: middlewares[0]?.name,
+          startupLocks,
           sockets,
           extensions,
           userWorker,
@@ -93,8 +99,11 @@ export const make = (
           ],
         };
       }),
-      start: Effect.fn(function* (ports) {
-        yield* Effect.forEach(plugins.values(), (plugin) => plugin.start?.(ports) ?? Effect.void);
+      start: Effect.fn(function* (ports, process) {
+        yield* Effect.forEach(
+          plugins.values(),
+          (plugin) => plugin.start?.(ports, process) ?? Effect.void,
+        );
       }),
       get: Effect.fn(function* (service) {
         const plugin = plugins.get(service.key);

@@ -445,17 +445,15 @@ export const PersistentResourceProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsPersistentResources({
+            displayName,
+            labels: desiredLabels,
+            resourcePools,
+            network: news.network,
+            reservedIpRanges: news.reservedIpRanges,
+            encryptionSpec: news.encryptionSpec,
+            resourceRuntimeSpec,
             parent: locationParent(env.project, location),
             persistentResourceId: resourceId,
-            body: {
-              displayName,
-              labels: desiredLabels,
-              resourcePools,
-              network: news.network,
-              reservedIpRanges: news.reservedIpRanges,
-              encryptionSpec: news.encryptionSpec,
-              resourceRuntimeSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -492,9 +490,9 @@ export const PersistentResourceProvider = () =>
       // Only Ray clusters accept updates; `diff` replaces other resources.
       if (poolsChanged && news.raySpec !== undefined) {
         const patched = yield* aiplatform.patchProjectsLocationsPersistentResources({
+          resourcePools,
           name: observedName,
           updateMask: "resource_pools.replica_count",
-          body: { name: observedName, resourcePools },
         });
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);

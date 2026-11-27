@@ -353,14 +353,12 @@ export const RepositoriesRuleProvider = () =>
       if (current === undefined) {
         const created = yield* artifactregistry
           .createProjectsLocationsRepositoriesRules({
+            action,
+            operation,
+            packageId,
+            condition,
             parent: repository,
             ruleId,
-            body: {
-              action,
-              operation,
-              packageId,
-              condition,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -384,15 +382,12 @@ export const RepositoriesRuleProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* artifactregistry.patchProjectsLocationsRepositoriesRules({
+          action,
+          operation,
+          packageId,
+          condition,
           name: observed,
           updateMask,
-          body: {
-            name: observed,
-            action,
-            operation,
-            packageId,
-            condition,
-          },
         });
       }
 

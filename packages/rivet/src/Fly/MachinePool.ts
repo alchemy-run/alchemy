@@ -4,8 +4,7 @@ import {
   bundleNodes,
   isImageProgram,
   makePoolLayer,
-  nodeEnvironment,
-  RIVETKIT_VERSION,
+  secretNodeEnvironment,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -38,6 +37,10 @@ export interface MachinePoolOptions extends PoolSettings {
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.
  *
+ * The control plane's token, and every secret a class reads as config,
+ * reach the nodes as secrets of the Service's App: Fly encrypts them and
+ * keeps them out of the Machine config.
+ *
  * ### Running Durable Objects on Fly
  * **Example:** Two nodes
  * ```typescript
@@ -55,8 +58,9 @@ export const MachinePool = (id: string, options: MachinePoolOptions = {}) =>
     id,
     settings: options,
     expected: "a reachable control plane",
-    // Fly Machines reach the internet without a network of their own.
-    network: (cluster) => cluster.network ?? { kind: "none" as const },
+    // The nodes join no network of the control plane's, so they connect to its
+    // public endpoint, never a private address they can't reach.
+    network: () => ({ kind: "none" as const }),
     // Every class the pool hosts is bundled into the node program;
     // RivetKit is installed beside it (it loads a native addon).
     nodes: Effect.fn(function* (nodes) {
@@ -66,7 +70,7 @@ export const MachinePool = (id: string, options: MachinePoolOptions = {}) =>
           ? { context: nodes.program.context }
           : {
               main: (yield* bundleNodes("fly", id, nodes.program)) as unknown as string,
-              build: { install: { rivetkit: RIVETKIT_VERSION } },
+              build: { install: { rivetkit: options.rivetkitVersion ?? nodes.rivetkitVersion } },
             }),
         public: false,
         // Nodes only dial out: nothing listens for the proxy to check.
@@ -74,7 +78,10 @@ export const MachinePool = (id: string, options: MachinePoolOptions = {}) =>
         region: options.region ?? "iad",
         count: options.replicas ?? 1,
         guest: options.guest ?? { cpus: 1, memoryMb: 1024 },
-        env: nodeEnvironment(nodes),
+        // The token and every secret a class reads as config stay
+        // `Redacted`: the Service keeps them as secrets of its App, out of
+        // the Machine config.
+        env: secretNodeEnvironment(nodes),
       });
     }),
   });

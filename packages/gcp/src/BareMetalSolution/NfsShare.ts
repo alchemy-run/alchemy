@@ -405,15 +405,13 @@ export const NfsShareProvider = () =>
       if (current === undefined) {
         const created = yield* baremetalsolution
           .createProjectsLocationsNfsShares({
+            name,
+            requestedSizeGib: size,
+            storageType,
+            pod: news.pod,
+            allowedClients: desiredClients,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
-            body: {
-              name,
-              requestedSizeGib: size,
-              storageType,
-              pod: news.pod,
-              allowedClients: desiredClients,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -455,14 +453,11 @@ export const NfsShareProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* baremetalsolution.patchProjectsLocationsNfsShares({
+          labels: desiredLabels,
+          allowedClients: desiredClients,
+          requestedSizeGib: size,
           name: ready.name ?? name,
           updateMask: mask,
-          body: {
-            name: ready.name ?? name,
-            labels: desiredLabels,
-            allowedClients: desiredClients,
-            requestedSizeGib: size,
-          },
         });
         yield* waitForOperation(operation);
         const patched = yield* waitUntilReady(

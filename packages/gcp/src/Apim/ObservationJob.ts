@@ -233,11 +233,9 @@ export const ObservationJobProvider = () =>
       if (current === undefined) {
         const created = yield* apim
           .createProjectsLocationsObservationJobs({
+            sources: sources.length > 0 ? sources : undefined,
             parent: parentOf(env.project, location),
             observationJobId,
-            body: {
-              sources: sources.length > 0 ? sources : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

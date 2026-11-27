@@ -82,8 +82,8 @@ test.provider(
       const email = out.serviceAccount!;
 
       const projectPolicy = yield* resourcemanager.getIamPolicyProjects({
+        options: { requestedPolicyVersion: 3 },
         resource: `projects/${out.project}`,
-        body: { options: { requestedPolicyVersion: 3 } },
       });
       // bigquery.jobs.create is project-only; data access is not.
       expect(rolesOf(projectPolicy.bindings ?? [], `serviceAccount:${email}`)).toEqual(

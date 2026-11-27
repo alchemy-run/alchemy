@@ -1,4 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
+import * as InMemoryPlatform from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
@@ -23,13 +24,11 @@ class Debited extends Domain.Event("Debited", {
 class Insufficient extends Domain.Rejection("Insufficient", { balance: Schema.Number }) {}
 
 class Open extends Domain.Command("Open", {
-  target: Schema.String,
-  input: { balance: Schema.Number },
+  input: { id: Schema.String, balance: Schema.Number },
   events: [Opened],
 }) {}
 class Debit extends Domain.Command("Debit", {
-  target: Schema.String,
-  input: { amount: Schema.Number, note: Schema.Redacted(Schema.String) },
+  input: { id: Schema.String, amount: Schema.Number, note: Schema.Redacted(Schema.String) },
   events: [Debited],
   rejects: [Insufficient],
 }) {}
@@ -39,6 +38,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Open, Debit],
+  keyOf: (command) => command.id,
   decide: {
     Open: (_, cmd) => [new Opened({ balance: cmd.balance })],
     // The handler records what it wants on the engine's span; nothing else from the payload is.
@@ -61,16 +61,19 @@ class Wallet extends Domain.Aggregate("Wallet", {
 class Audited extends Domain.Event("Audited", { wallet: Schema.String }) {}
 class Reminded extends Domain.Event("Reminded") {}
 class Audit extends Domain.Command("Audit", {
-  target: Schema.String,
-  input: { wallet: Schema.String },
+  input: { id: Schema.String, wallet: Schema.String },
   events: [Audited],
 }) {}
-class Remind extends Domain.Command("Remind", { target: Schema.String, events: [Reminded] }) {}
+class Remind extends Domain.Command("Remind", {
+  input: { id: Schema.String },
+  events: [Reminded],
+}) {}
 class Ledger extends Domain.Aggregate("Ledger", {
   id: Schema.String,
   state: Schema.Struct({ audits: Schema.Number }),
   initial: { audits: 0 },
   commands: [Audit, Remind],
+  keyOf: (command) => command.id,
   decide: {
     Audit: (_, cmd) => [new Audited({ wallet: cmd.wallet })],
     Remind: () => [new Reminded()],
@@ -86,8 +89,8 @@ const AuditDebitsLive = AuditDebits.toLayer(
   Effect.gen(function* () {
     const ledgers = yield* Ledger;
     return Effect.fn(function* ({ source }) {
-      yield* ledgers.send("main", new Audit({ wallet: source.id }));
-      yield* ledgers.schedule("main", new Remind(), { after: "1 hour" });
+      yield* ledgers.send(new Audit({ id: "main", wallet: source.id }));
+      yield* ledgers.schedule(new Remind({ id: "main" }), { after: "1 hour" });
     });
   }),
 );
@@ -128,7 +131,7 @@ const ReviewLive = Review.toLayer(
     return Effect.fn(function* ({ key }) {
       yield* Activity.make({
         name: "audit",
-        execute: ledgers.send("main", new Audit({ wallet: key })).pipe(Effect.orDie),
+        execute: ledgers.send(new Audit({ id: "main", wallet: key })).pipe(Effect.orDie),
       });
     });
   }),
@@ -165,6 +168,24 @@ const reviewStory = Story.make(Reviewed, {
   stub: [Scorer],
 });
 
+// A projection that folds every wallet into one key, so one batch can hold many flows.
+class Openings extends Domain.Projection("Openings", {
+  from: [Wallet],
+  key: Schema.String,
+  keyOf: { Opened: () => "all" },
+  on: [Opened],
+}) {}
+class Opens extends Domain.Model("TelemetryOpens", {
+  aggregates: [Wallet],
+  projections: [Openings],
+}) {}
+const opens = Opens.layer(
+  Openings.toLayer(
+    Effect.succeed(() => Effect.void),
+    { batch: { size: 100 } },
+  ),
+);
+
 const story = Story.make(Bank, { layer: Layer.mergeAll(AuditDebitsLive) });
 const alice = Wallet.ref("alice");
 const ledger = Ledger.ref("main");
@@ -196,7 +217,7 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
       const { tracer, one, spans } = recording();
       yield* story(
         Story.given(alice, new Opened({ balance: 100 })),
-        Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.when(new Debit({ id: alice.id, amount: 40, note: Redacted.make("rent") })),
         Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.then(ledger, new Audited({ wallet: "alice" })),
       ).pipe(Effect.withTracer(tracer));
@@ -228,7 +249,7 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
       const { tracer, one } = recording();
       yield* story(
         Story.given(alice, new Opened({ balance: 100 })),
-        Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.when(new Debit({ id: alice.id, amount: 40, note: Redacted.make("rent") })),
         Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.then(ledger, new Audited({ wallet: "alice" })),
       ).pipe(Effect.withTracer(tracer));
@@ -258,7 +279,7 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
       const { tracer, one } = recording();
       yield* story(
         Story.given(alice, new Opened({ balance: 10 })),
-        Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.when(new Debit({ id: alice.id, amount: 40, note: Redacted.make("rent") })),
         Story.rejected(new Insufficient({ balance: 10 })),
       ).pipe(Effect.withTracer(tracer));
 
@@ -278,7 +299,7 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
       yield* story(
         Story.clock("2026-01-01T00:00:00Z"),
         Story.given(alice, new Opened({ balance: 100 })),
-        Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.when(new Debit({ id: alice.id, amount: 40, note: Redacted.make("rent") })),
         Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.then(ledger, new Audited({ wallet: "alice" })),
         Story.clock("2026-01-01T01:00:00Z"),
@@ -301,7 +322,7 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
       const { tracer, one, named } = recording();
       yield* reviewStory(
         Story.given(alice, new Opened({ balance: 100 })),
-        Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.when(new Debit({ id: alice.id, amount: 40, note: Redacted.make("rent") })),
         Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.call(Scorer.score, { wallet: "alice" }),
         Story.succeed(Scorer.score, { risk: 0.9 }),
@@ -336,7 +357,7 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
       const { tracer, one } = recording();
       yield* reviewStory(
         Story.given(alice, new Opened({ balance: 100 })),
-        Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.when(new Debit({ id: alice.id, amount: 40, note: Redacted.make("rent") })),
         Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.call(Scorer.score, { wallet: "alice" }),
         Story.succeed(Scorer.score, { risk: 0.1 }),
@@ -347,6 +368,61 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
       expect(batch.traceId).not.toBe(debit.traceId);
       expect(batch.links.map((l) => l.span.spanId)).toEqual([debit.spanId]);
       expect(batch.attributes.get("domain.batch")).toBe(1);
+    }),
+  );
+
+  it.live("a batch that merges flows names each flow, on the span and on its links", () => {
+    const hosted = InMemoryPlatform.make({ manual: true });
+    const settle: Effect.Effect<void> = Effect.gen(function* () {
+      while (true) {
+        yield* hosted.control.drain;
+        if (yield* hosted.control.idle) return;
+        yield* Effect.sleep("1 millis");
+      }
+    });
+    const { tracer, named, one } = recording();
+    return Effect.gen(function* () {
+      const wallets = yield* Wallet;
+      // Two commands, two flows, both queued before the projection runs.
+      yield* wallets.send(new Open({ id: "alice", balance: 1 }));
+      yield* wallets.send(new Open({ id: "bob", balance: 2 }));
+      yield* settle;
+
+      const flows = named("Domain.decide Wallet.Open").map(
+        (span) => span.attributes.get("domain.correlation_id") as string,
+      );
+      expect(flows).toHaveLength(2);
+      const batch = one("Domain.projection Openings");
+      expect(batch.attributes.get("domain.batch")).toBe(2);
+      // Several flows: no single correlation id, but every one in the list.
+      expect(batch.attributes.get("domain.correlation_id")).toBeUndefined();
+      expect(batch.attributes.get("domain.correlation_ids")).toEqual(flows);
+      // Each link says which flow and event it stands for.
+      expect(batch.links.map((link) => link.attributes)).toEqual([
+        { "domain.correlation_id": flows[0], "domain.stream": "Wallet/alice", "domain.seq": 1 },
+        { "domain.correlation_id": flows[1], "domain.stream": "Wallet/bob", "domain.seq": 1 },
+      ]);
+    }).pipe(
+      Effect.provide(opens.pipe(Layer.provideMerge(hosted.layer))),
+      Effect.withTracer(tracer),
+    );
+  });
+
+  it.effect("a single-flow batch keeps its correlation id and lists it", () =>
+    Effect.gen(function* () {
+      const { tracer, one } = recording();
+      yield* reviewStory(
+        Story.given(alice, new Opened({ balance: 100 })),
+        Story.when(new Debit({ id: alice.id, amount: 40, note: Redacted.make("rent") })),
+        Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
+        Story.call(Scorer.score, { wallet: "alice" }),
+        Story.succeed(Scorer.score, { risk: 0.1 }),
+      ).pipe(Effect.withTracer(tracer));
+
+      const flow = one("Domain.decide Wallet.Debit").attributes.get("domain.correlation_id");
+      const batch = one("Domain.projection Movements");
+      expect(batch.attributes.get("domain.correlation_id")).toBe(flow);
+      expect(batch.attributes.get("domain.correlation_ids")).toEqual([flow]);
     }),
   );
 
@@ -400,7 +476,7 @@ describe("Domain telemetry", { tags: ["unit", "local"] }, () => {
       const before = (yield* Metric.value(rejected)).count;
       yield* story(
         Story.given(alice, new Opened({ balance: 10 })),
-        Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.when(new Debit({ id: alice.id, amount: 40, note: Redacted.make("rent") })),
         Story.rejected(new Insufficient({ balance: 10 })),
       );
       expect((yield* Metric.value(rejected)).count).toBe(before + 1);

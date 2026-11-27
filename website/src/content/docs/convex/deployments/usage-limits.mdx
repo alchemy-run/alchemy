@@ -1,0 +1,64 @@
+---
+title: Usage limits
+description: Get warned, or pause a deployment, when it uses too much.
+---
+
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+A **usage limit** watches one metric of a deployment, such as function calls, over a day or a month. A `warning` limit tells your team when usage reaches it. A `disable` limit pauses the deployment, so its function calls fail.
+
+<Timeline
+  end={10}
+  lanes={[{ id: "backend", label: "prod", type: "deployment" }]}
+  bars={[
+    { lane: "backend", start: 0, end: 7, label: "serving calls", tone: "accent" },
+    { lane: "backend", start: 7, end: 10, label: "paused", tone: "muted" },
+  ]}
+  marks={[
+    { at: 4, label: "1M calls: warning" },
+    { at: 7, label: "5M calls: disable" },
+  ]}
+  ticks={[{ at: 0, label: "month starts" }, { at: 10, label: "month ends" }]}
+  caption="The warning limit only notifies. The disable limit pauses the deployment when usage reaches it."
+/>
+
+## Warn at a limit
+
+```typescript
+yield* Convex.UsageLimit("Calls", {
+  deployment,
+  metric: "functionCalls",
+  window: "month",
+  limitType: "warning",
+  limit: 1_000_000,
+});
+```
+
+`window` is `day` or `month`. A deployment has one limit per metric, window and type.
+
+## Stop at a limit
+
+```typescript
+yield* Convex.UsageLimit("Stop", {
+  deployment,
+  metric: "functionCalls",
+  window: "month",
+  limitType: "disable",
+  limit: 5_000_000,
+});
+```
+
+`disable` pauses the deployment when it reaches the limit.
+
+## Turn a limit off
+
+```typescript
+yield* Convex.UsageLimit("Calls", {
+  deployment,
+  metric: "functionCalls",
+  window: "month",
+  limitType: "warning",
+  limit: 1_000_000,
+  enabled: false,
+});
+```

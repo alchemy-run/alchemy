@@ -44,13 +44,11 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertRegionHealthCheckServices({
+          name: "alchemy-hcss-probe",
+          description: "alchemy entitlement probe",
+          healthChecks: [`projects/${project}/regions/${region}/healthChecks/does-not-exist`],
           project,
           region,
-          body: {
-            name: "alchemy-hcss-probe",
-            description: "alchemy entitlement probe",
-            healthChecks: [`projects/${project}/regions/${region}/healthChecks/does-not-exist`],
-          },
         }),
       );
       expect(error._tag).toEqual("HealthCheckServiceNotAvailable");

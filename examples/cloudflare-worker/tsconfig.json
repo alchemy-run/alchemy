@@ -15,6 +15,7 @@
     { "path": "../../packages/cloudflare/tsconfig.json" },
     {
       "path": "../../packages/better-auth/tsconfig.json"
-    }
+    },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }

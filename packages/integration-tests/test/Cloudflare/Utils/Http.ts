@@ -113,6 +113,53 @@ export const waitForDns = Effect.fn(function* (
   );
 });
 
+/** The authoritative nameserver addresses of the zone `hostname` is in. */
+const authoritativeServers = async (hostname: string): Promise<string[]> => {
+  const labels = hostname.split(".");
+  for (let i = 1; i < labels.length - 1; i++) {
+    const ns = await dns.resolveNs(labels.slice(i).join(".")).catch(() => []);
+    if (ns.length > 0) return (await Promise.all(ns.map((host) => dns.resolve4(host)))).flat();
+  }
+  throw new Error(`no zone found for ${hostname}`);
+};
+
+/**
+ * Resolve `hostname` to an IPv4 address through authoritative nameservers
+ * only, following CNAMEs hop by hop (each target asked of its own zone's
+ * nameservers). For a hostname the test just created whose record is a
+ * CNAME (a Spectrum application's edge record): `waitForDns` asks the
+ * zone's nameservers for A records, which they do not chase across zones.
+ * Connect to the returned address, so no caching resolver ever sees the
+ * name before it exists. See `waitForDns` for why.
+ */
+export const resolveAuthoritativeIpv4 = Effect.fn(function* (hostname: string) {
+  return yield* Effect.tryPromise({
+    try: async () => {
+      let name = hostname;
+      for (let hop = 0; hop < 8; hop++) {
+        const resolver = new dns.Resolver();
+        resolver.setServers(await authoritativeServers(name));
+        const cname = await resolver.resolveCname(name).catch(() => []);
+        if (cname.length > 0) {
+          name = cname[0]!;
+          continue;
+        }
+        const addresses = await resolver.resolve4(name);
+        if (addresses.length === 0) throw new Error("no answer");
+        return addresses[0]!;
+      }
+      throw new Error("CNAME chain too long");
+    },
+    catch: (cause) => new DnsNotReady({ hostname, type: "A", detail: String(cause) }),
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "DnsNotReady",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 45,
+    }),
+  );
+});
+
 export interface ExpectUrlContainsOptions {
   /** Request headers, e.g. an explicit HTML Accept header for content negotiation. */
   headers?: Record<string, string>;

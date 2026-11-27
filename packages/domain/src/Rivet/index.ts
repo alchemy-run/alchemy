@@ -12,11 +12,13 @@ import {
 import { NodeHost, type PoolHost } from "@alchemy.run/rivet/Host";
 import type { Providers } from "@alchemy.run/rivet/Providers";
 import { upgrade } from "@alchemy.run/rivet/WebSocket";
+import type { Callbacks } from "alchemy/Callback";
 import type { HttpEffect } from "alchemy/Http";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
 import { gateExclusive, InputGate } from "alchemy/Workers/InputGate";
+import { storageCallbacks } from "alchemy/Workers/StorageCallbacks";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -34,28 +36,31 @@ import type { WorkflowEngine } from "effect/workflow";
  * @module
  */
 import {
-  alarmCallbacks,
   type Attachment,
   className,
   type Host,
   type ListOptions,
   makePlatform,
   type Namespace,
+  type Retention,
   type ObjectImpl,
   ObjectState,
   type ObjectStateShape,
   type ObjectStorage,
   parseMultiplexedName,
+  runtimeClaim,
   type Stub,
   SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
 import type { Platform, Subscription } from "../Platform.ts";
 
+export type { Retention } from "../DurableObjects.ts";
+
 /** Built for one instance: an object's methods. */
 type InstanceBuild = Effect.Effect<
   Record<string, unknown>,
   never,
-  EngineState | ObjectState | RuntimeContext | Scope.Scope
+  EngineState | ObjectState | RuntimeContext | Callbacks | Scope.Scope
 >;
 
 /** Domain's storage over a Rivet Durable Object's. */
@@ -188,14 +193,6 @@ export class DomainClassNotHosted extends Data.TaggedError("Rivet.DomainClassNot
   readonly message: string;
 }> {}
 
-/** The class names this host class claims, keyed by its id. */
-const claims = new Map<string, object>();
-const claimOf = (name: string) => {
-  let claim = claims.get(name);
-  if (claim === undefined) claims.set(name, (claim = {}));
-  return claim;
-};
-
 /**
  * Every class of a model on one Rivet class: the object `Bank.AccountAggregate`
  * named `a-1` is the instance `Bank.AccountAggregate/a-1`. `declare` hands the
@@ -205,6 +202,7 @@ const multiplexed = (
   name: string,
   namespace: DurableObjectNamespace<any>,
   onDeclare: (className: string, build: InstanceBuild) => void,
+  retention: Retention | undefined,
 ) => {
   const remote = (cls: string): Namespace => ({
     getByName: (key: string) => namespace.getByName(`${cls}/${key}`) as unknown as Stub,
@@ -217,7 +215,7 @@ const multiplexed = (
       }),
     lookup: ({ modelName }, cls) => remote(className(modelName, cls)),
     connect: connectTo,
-    claimKey: Effect.succeed(claimOf(name)),
+    claimKey: runtimeClaim(name),
   };
   // Sagas run on the workflow engine over the same class: each execution
   // is the instance `<Workflow>/<executionId>`, its journal in that
@@ -232,7 +230,7 @@ const multiplexed = (
     // The engine reads only `toArray` from its cursors, which Rivet's have.
     state: EngineState as never,
   });
-  return Layer.merge(makePlatform(host), engine).pipe(
+  return Layer.merge(makePlatform(host, { retention: retention ?? {} }), engine).pipe(
     // The model's Layer needs it too.
     Layer.provideMerge(SecureRandom.layerWebCrypto),
   );
@@ -255,6 +253,16 @@ export interface DurableObjectsOptions<PoolReq> {
   readonly handler?: string;
   /** The pool whose nodes run the model, e.g. `RivetDocker.SwarmPool("Default")`. */
   readonly pool: Layer.Layer<PoolHost, never, PoolReq>;
+  /**
+   * How long each actor keeps the rows that only dedupe needs: command and
+   * decision receipts, policy delivery marks, and cancelled scheduled
+   * commands. An actor deletes a few rows past their window each time it
+   * commits, so an instance stops growing with its traffic. `"forever"`
+   * keeps a kind of row.
+   *
+   * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days" }
+   */
+  readonly retention?: Retention;
 }
 
 /**
@@ -279,15 +287,14 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
         );
       }
       const storage = objectStorage(state.storage);
-      const callbacks = alarmCallbacks(storage, {
+      const callbacks = storageCallbacks(storage, {
         set: (at) => state.storage.setAlarm(at),
         get: state.storage.getAlarm(),
       });
-      const runtime = yield* RuntimeContext;
       const record = yield* build.pipe(
         Effect.provideService(ObjectState, objectState(state, storage)),
         Effect.provideService(EngineState, engineState(state)),
-        Effect.provideService(RuntimeContext, { ...runtime, makeCallback: callbacks.makeCallback }),
+        Effect.provide(callbacks.callbacks),
       );
       return { ...record, alarm: () => callbacks.fire } satisfies DomainShape;
     });
@@ -349,6 +356,34 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
  * ) {}
  * ```
  *
+ * ### Keeping dedupe rows for a while
+ * Receipts, policy delivery marks and cancelled scheduled commands exist only
+ * to drop repeats. Each actor deletes a few that are past their window every
+ * time it commits.
+ *
+ * **Example:** Receipts for a year, delivery marks forever
+ * ```typescript
+ * import * as RivetDocker from "@alchemy.run/rivet/Docker";
+ * import * as DomainRivet from "@alchemy.run/domain/Rivet";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankHandlers } from "./Bank.model.ts";
+ *
+ * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
+ * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
+ *
+ * export const BankLive = Bank.layer(BankHandlers).pipe(
+ *   Layer.provide(
+ *     DomainRivet.layerDurableObjects({
+ *       name: "Bank",
+ *       main: import.meta.url,
+ *       handler: "BankLive",
+ *       pool: Default,
+ *       retention: { receipts: "365 days", deliveries: "forever" },
+ *     }),
+ *   ),
+ * );
+ * ```
+ *
  * @layer
  * @provides Domain.Platform
  * @provides WorkflowEngine
@@ -389,11 +424,16 @@ export const layerDurableObjects = <PoolReq>(
             pool: Config.String("RIVET_POOL").pipe(Config.withDefault("")),
           }).pipe(Effect.orDie),
         );
-        return multiplexed(options.name, self, (cls, build) => classes.set(cls, build));
+        return multiplexed(
+          options.name,
+          self,
+          (cls, build) => classes.set(cls, build),
+          options.retention,
+        );
       }
       // A caller: deploy the class, and reach it through the gateway.
       const namespace = (yield* Objects) as DurableObjectNamespace<any>;
-      return multiplexed(options.name, namespace, () => undefined);
+      return multiplexed(options.name, namespace, () => undefined, options.retention);
     }),
   ) as Layer.Layer<
     Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,

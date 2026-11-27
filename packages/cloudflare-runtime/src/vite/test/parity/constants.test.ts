@@ -46,15 +46,29 @@ describe("ported constants match @cloudflare/vite-plugin", () => {
     expect([...CLOUDFLARE_BUILT_IN_MODULES].sort()).toEqual([...upstream, ...ahead].sort());
   });
 
+  // v2 takes its default rules from `@cloudflare/config`, as globs
+  // (`**/*.txt`), where v1 had regular expressions. Each glob's file type
+  // must resolve to the same module type here, and every type must exist on
+  // both sides.
   it("imports the same additional module types", async () => {
     const plugin = await read("index.mjs");
-    const block = plugin.match(/const moduleRules = \[([\s\S]*?)\n\];/)?.[1];
+    const block = plugin.match(/var DEFAULT_MODULE_RULES = \[([\s\S]*?)\n\];/)?.[1];
     expect(block).toBeDefined();
-    const rules = [...block!.matchAll(/type: "(\w+)",\s*pattern: \/(.*?)\/\s*\n/g)].map(
-      ([, type, pattern]) => ({ type, pattern }),
+    const upstream = [...block!.matchAll(/type: "(\w+)",\s*globs: \[([^\]]*)\]/g)].flatMap(
+      ([, type, globs]) =>
+        [...globs!.matchAll(/"\*\*\/\*([^"]+)"/g)].map(([, suffix]) => ({
+          type,
+          file: `file${suffix}`,
+        })),
     );
-    expect(MODULE_RULES.map((rule) => ({ type: rule.type, pattern: rule.pattern.source }))).toEqual(
-      rules,
+    expect(upstream.length).toBeGreaterThan(0);
+    const typeOf = (file: string) =>
+      MODULE_RULES.filter((rule) => rule.pattern.test(file)).map((rule) => rule.type);
+    expect(upstream.map(({ file }) => ({ file, types: typeOf(file) }))).toEqual(
+      upstream.map(({ type, file }) => ({ file, types: [type] })),
+    );
+    expect(new Set(MODULE_RULES.map((rule) => rule.type))).toEqual(
+      new Set(upstream.map(({ type }) => type)),
     );
   });
 

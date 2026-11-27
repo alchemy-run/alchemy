@@ -1,4 +1,4 @@
-import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { AWS_REGION, AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Role } from "@alchemy.run/aws/IAM/Role";
 import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as SecurityLake from "@alchemy.run/aws/SecurityLake";
@@ -20,7 +20,12 @@ export default SecurityLakeBindingsFunction.make(
     functionUrl: true,
   },
   Effect.gen(function* () {
-    const { region } = yield* AWSEnvironment.current;
+    // The deploy resolves the Region from the stack's AWS environment; inside the
+    // deployed Lambda, which has no AWS environment service, it is the
+    // function's own AWS_REGION.
+    const region = globalThis.__ALCHEMY_RUNTIME__
+      ? yield* AWS_REGION
+      : (yield* AWSEnvironment.current).region;
 
     const metastoreRole = yield* Role("BindingsMetastoreRole", {
       assumeRolePolicyDocument: {

@@ -294,16 +294,14 @@ export const ExternalApiProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsExternalApis({
+            displayName,
+            description,
+            documentation: news.documentation,
+            endpoints: news.endpoints,
+            paths: news.paths,
+            attributes: news.attributes,
             parent,
             externalApiId,
-            body: {
-              displayName,
-              description,
-              documentation: news.documentation,
-              endpoints: news.endpoints,
-              paths: news.paths,
-              attributes: news.attributes,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? (yield* getByName(name));
@@ -331,16 +329,13 @@ export const ExternalApiProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* apihub.patchProjectsLocationsExternalApis({
+          displayName,
+          description,
+          documentation: news.documentation,
+          endpoints: news.endpoints,
+          paths: news.paths,
           name: currentName,
           updateMask,
-          body: {
-            name: currentName,
-            displayName,
-            description,
-            documentation: news.documentation,
-            endpoints: news.endpoints,
-            paths: news.paths,
-          },
         });
       }
 
