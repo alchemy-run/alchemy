@@ -388,16 +388,14 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
       if (current === undefined) {
         const created = yield* workstations
           .createProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations({
+            displayName: news.displayName,
+            labels: desiredLabels,
+            annotations: desiredAnnotations,
+            env: desiredEnv,
+            persistentDirectories: news.persistentDirectories,
+            sourceWorkstation: news.sourceWorkstation,
             parent: config,
             workstationId,
-            body: {
-              displayName: news.displayName,
-              labels: desiredLabels,
-              annotations: desiredAnnotations,
-              env: desiredEnv,
-              persistentDirectories: news.persistentDirectories,
-              sourceWorkstation: news.sourceWorkstation,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -432,16 +430,14 @@ export const WorkstationClustersWorkstationConfigsWorkstationProvider = () =>
       if (mask.length > 0) {
         const operation = yield* workstations
           .patchProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations({
+            etag: current.etag,
+            labels: desiredLabels,
+            displayName: news.displayName,
+            annotations: desiredAnnotations,
+            env: desiredEnv,
+            persistentDirectories: news.persistentDirectories,
             name: current.name ?? name,
             updateMask: mask,
-            body: {
-              etag: current.etag,
-              labels: desiredLabels,
-              displayName: news.displayName,
-              annotations: desiredAnnotations,
-              env: desiredEnv,
-              persistentDirectories: news.persistentDirectories,
-            },
           })
           .pipe(
             Effect.retry({

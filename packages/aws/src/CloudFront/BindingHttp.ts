@@ -1,7 +1,6 @@
-import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
-import { KVS_REGION, withKvsRegion } from "./common.ts";
+import { withKvsRegion } from "./common.ts";
 import type { Distribution } from "./Distribution.ts";
 import type { KeyValueStore } from "./KeyValueStore.ts";
 
@@ -66,10 +65,8 @@ export const makeDistributionScopedHttpBinding = <
  * (`cloudfront-keyvaluestore`). The runtime callable injects the bound
  * {@link KeyValueStore}'s ARN as the request's `KvsARN`; the deploy-time half
  * grants `actions` on the store's ARN. The data-plane endpoint is global
- * (derived from the ARN), but distilled signs with plain SigV4 against the
- * context region and the service only accepts `us-east-1` signatures — so
- * the operation is resolved with the Region pinned to {@link KVS_REGION},
- * exactly like the resource providers in `common.ts`.
+ * (derived from the ARN); the operation is resolved with
+ * {@link withKvsRegion}, exactly like the resource providers in `common.ts`.
  */
 export const makeKeyValueStoreScopedHttpBinding = <I extends { KvsARN: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.CloudFront.GetKey`. */
@@ -81,11 +78,7 @@ export const makeKeyValueStoreScopedHttpBinding = <I extends { KvsARN: string },
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
-    // The distilled Region service value is `Effect<RegionName>`, not a raw
-    // string (see `withKvsRegion` in common.ts).
-    const op = yield* AWSBindings.withCredentials(options.operation).pipe(
-      Effect.provideService(AwsRegion, Effect.succeed(KVS_REGION)),
-    );
+    const op = yield* AWSBindings.withCredentials(options.operation).pipe(withKvsRegion);
 
     return Effect.fn(function* (store: KeyValueStore) {
       const KvsARN = yield* store.keyValueStoreArn;

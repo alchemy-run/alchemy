@@ -270,13 +270,11 @@ export const EnvironmentsReferenceProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsEnvironmentsReferences({
+            name: referenceId,
+            refers: news.refers,
+            resourceType: desiredType,
+            description: desiredDescription,
             parent,
-            body: {
-              name: referenceId,
-              refers: news.refers,
-              resourceType: desiredType,
-              description: desiredDescription,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -292,13 +290,10 @@ export const EnvironmentsReferenceProvider = () =>
         !sameText(current.description, desiredDescription)
       ) {
         current = yield* apigee.updateOrganizationsEnvironmentsReferences({
+          refers: news.refers,
+          resourceType: desiredType,
+          description: desiredDescription,
           name,
-          body: {
-            name: referenceId,
-            refers: news.refers,
-            resourceType: desiredType,
-            description: desiredDescription,
-          },
         });
       }
 

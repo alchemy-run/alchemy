@@ -2050,13 +2050,16 @@ body.alc-root,
 /* On phones the hero canvas takes up a much larger fraction of the
    viewport than on desktop, so the same brightness multiplier plus
    wide mask makes the mandala bloom over the headline / subtitle and
-   reads as harsher than the dark-mode desktop view. Pull the brightness
-   back, drop opacity, and tighten the mask so strokes feather out well
-   before they reach the type. */
+   reads as harsher than the desktop view. Pull the brightness back,
+   drop opacity well below desktop in both themes, and tighten the mask
+   so strokes stay faint behind the type. */
 @media (max-width: 640px) {
+  .alc-hero__bg-graph {
+    opacity: 0.45;
+  }
   [data-theme="dark"] .alc-hero__bg-graph {
-    filter: brightness(2.2);
-    opacity: 0.75;
+    filter: brightness(1.6);
+    opacity: 0.45;
     -webkit-mask-image: radial-gradient(
       ellipse 80% 70% at var(--alc-bg-cx) var(--alc-bg-cy),
       #000 35%,

@@ -339,13 +339,11 @@ export const MulticloudDataTransferConfigProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsMulticloudDataTransferConfigs({
+            description: news.description,
+            labels: desiredLabels,
+            services: desiredServices,
             parent: parentOf(env.project, location),
             multicloudDataTransferConfigId: configId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              services: desiredServices,
-            },
           })
           .pipe(
             Effect.retry({
@@ -379,15 +377,12 @@ export const MulticloudDataTransferConfigProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* networkconnectivity.patchProjectsLocationsMulticloudDataTransferConfigs({
+            labels: desiredLabels,
+            description: news.description,
+            services: desiredServices,
+            etag: current.etag,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              services: desiredServices,
-              etag: current.etag,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

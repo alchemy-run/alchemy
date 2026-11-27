@@ -64,10 +64,10 @@ test.provider(
 
       const error = yield* Effect.flip(
         firestore.createDocumentProjectsDatabasesDocuments({
+          fields: { env: { stringValue: "probe" } },
           parent: `projects/${project}/databases/(default)/documents`,
           collectionId: "_alchemy",
           documentId: "alchemy-probe",
-          body: { fields: { env: { stringValue: "probe" } } },
         }),
       );
       expect(error._tag).toEqual("DatastoreModeDatabase");

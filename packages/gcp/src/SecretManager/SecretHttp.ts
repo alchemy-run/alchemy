@@ -67,10 +67,7 @@ export const makeSecretHelpers = Effect.gen(function* () {
             : Buffer.from(value.buffer, value.byteOffset, value.byteLength)
           ).toString("base64"),
         );
-        const version = yield* addVersion({
-          parent: yield* secretName,
-          body: { payload: { data } },
-        });
+        const version = yield* addVersion({ payload: { data }, parent: yield* secretName });
         return version.name ?? "";
       }),
     disableVersion: (version) =>

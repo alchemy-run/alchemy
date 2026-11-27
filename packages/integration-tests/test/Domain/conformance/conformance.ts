@@ -5,19 +5,27 @@
  */
 import { expect } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import { ConformanceApi, SECRET } from "./model.ts";
+import { caseNames } from "../vault/cases.ts";
+import { ConformanceApi, RECEIPT_RETENTION, SECRET } from "./model.ts";
 
 type TestFn = (
   name: string,
   effect: Effect.Effect<void, any, any>,
-  options?: { readonly timeout?: number; readonly tags?: ReadonlyArray<string> },
+  options?: {
+    readonly timeout?: number;
+    readonly tags?: ReadonlyArray<string>;
+    readonly exclusive?: boolean;
+  },
 ) => void;
 
 export interface ConformanceOptions {
@@ -82,6 +90,9 @@ export const liveFrame = (
     Effect.provide(Socket.layerWebSocketConstructorGlobal),
   );
 
+/** Inputs in the backlog case, each a second's work for one projection key. */
+const BACKLOG_INPUTS = 150;
+
 /** How long a refused read may take: well under a read's wait for `atLeast`. */
 const AT_ONCE = "5 seconds";
 
@@ -97,6 +108,81 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
         times: Math.ceil(within / 500),
       }),
     );
+
+  test(
+    "a Vault keeps each subject's key on the host: values open, and stop opening once shredded",
+    Effect.gen(function* () {
+      expect(yield* call(`/vault/${fresh("vault")}`)).toEqual(
+        Object.fromEntries(caseNames.map((name) => [name, true])),
+      );
+    }),
+    options,
+  );
+
+  test(
+    "a rewrite changes an instance's events, its state and its view, once per id",
+    Effect.gen(function* () {
+      const id = fresh("rewrite");
+      yield* call(`/write/${id}?text=${encodeURIComponent("sam was here")}`);
+      expect(yield* call(`/write/${id}?text=hello`)).toEqual({ version: 2 });
+      expect(yield* call(`/redact/${id}?word=sam&id=r-1`)).toEqual({
+        changed: 1,
+        lines: ["", "hello"],
+        // The view folded its inputs again: a blank first line joins as none.
+        text: "hello",
+      });
+      // The same run again answers as it did, and a new one finds nothing left to change.
+      expect(yield* call(`/redact/${id}?word=sam&id=r-1`)).toMatchObject({ changed: 1 });
+      expect(yield* call(`/redact/${id}?word=sam&id=r-2`)).toMatchObject({ changed: 0 });
+      // The instance takes commands again, at the version it had.
+      expect(yield* call(`/write/${id}?text=again`)).toEqual({ version: 3 });
+    }),
+    options,
+  );
+
+  test(
+    "a compaction leaves the roll-up, the same state, and an instance that goes on",
+    Effect.gen(function* () {
+      const id = fresh("compact");
+      yield* call(`/write/${id}?text=a`);
+      yield* call(`/write/${id}?text=b`);
+      expect(yield* call(`/squash/${id}`)).toMatchObject({
+        version: 3,
+        compacted: 2,
+        events: ["MemoBroughtForward"],
+        lines: ["a", "b"],
+      });
+      expect(yield* call(`/write/${id}?text=c`)).toEqual({ version: 4 });
+      // The view kept what it built, without folding the roll-up, and follows what comes after.
+      yield* eventually<{ readonly text: string | null }>(
+        `/redact/${id}?word=nothing-has-this`,
+        ({ text }) => text === "a|b|c",
+      );
+    }),
+    options,
+  );
+
+  test(
+    "a rewrite after a compaction reaches the events the view kept",
+    Effect.gen(function* () {
+      const id = fresh("compact-rewrite");
+      yield* call(`/write/${id}?text=${encodeURIComponent("sam was here")}`);
+      yield* call(`/write/${id}?text=hello`);
+      yield* call(`/squash/${id}`);
+      // The instance holds the roll-up alone; the view holds its copy of both lines.
+      expect(yield* call(`/redact/${id}?word=sam`)).toEqual({
+        changed: 1,
+        lines: ["", "hello"],
+        text: "hello",
+      });
+      expect(yield* call(`/write/${id}?text=again`)).toEqual({ version: 4 });
+      yield* eventually<{ readonly text: string | null }>(
+        `/redact/${id}?word=nothing-has-this`,
+        ({ text }) => text === "hello|again",
+      );
+    }),
+    options,
+  );
 
   test(
     "a command commits and replies with the new state",
@@ -188,11 +274,60 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
+    "a live read is judged again when its middleware's verdict runs out, with no commit",
+    Effect.gen(function* () {
+      const id = fresh("ticket");
+      yield* call(`/increment/${id}?by=1`);
+      const base = yield* url;
+      /** A client whose live reads send `ticket` (see `Ticket`): Bun's WebSocket takes headers. */
+      const clientWith = (ticket: string) =>
+        ConformanceApi.clientWebSocket(`${base}/api`).pipe(
+          Effect.provideService(Socket.WebSocketConstructor, (socketUrl, protocols) => {
+            const init = { protocols, headers: { "x-ticket": ticket } };
+            return new WebSocket(socketUrl, init as unknown as string[]);
+          }),
+        );
+      const watch = (api: Effect.Success<ReturnType<typeof clientWith>>, first: number) =>
+        Effect.gen(function* () {
+          const seen = yield* Queue.unbounded<number | undefined>();
+          const read = yield* api.TicketedTotal.watch(id).pipe(
+            Stream.runForEach((frame) => Queue.offer(seen, frame.state?.total)),
+            Effect.flip,
+            Effect.forkScoped,
+          );
+          // The view folds the increment eventually: frames before it carry less.
+          const next = Queue.take(seen).pipe(Effect.timeout(within));
+          let total = yield* next;
+          while (total !== first) total = yield* next;
+          return { seen, read };
+        });
+
+      // Still signed in: each verdict holds 2 seconds, and the read rides over every close.
+      const signedIn = yield* watch(yield* clientWith("for:2000"), 1);
+      yield* Effect.sleep("6 seconds");
+      expect(yield* Queue.size(signedIn.seen)).toBe(0);
+      yield* call(`/increment/${id}?by=2`);
+      expect(yield* Queue.take(signedIn.seen).pipe(Effect.timeout(within))).toBe(3);
+
+      // A ticket that expires: once it has, the read ends with the middleware's rejection.
+      const expiring = yield* watch(
+        yield* clientWith(`until:${(yield* Clock.currentTimeMillis) + 5_000}`),
+        3,
+      );
+      const ended = yield* Fiber.join(expiring.read).pipe(Effect.timeout(within));
+      expect(ended._tag).toBe("Expired");
+      expect(yield* Queue.size(expiring.seen)).toBe(0);
+      expect(yield* Queue.size(signedIn.seen)).toBe(0);
+    }).pipe(Effect.scoped),
+    options,
+  );
+
+  test(
     "a defect reaches the client as a generic error",
     Effect.gen(function* () {
       const base = yield* url;
       const api = yield* ConformanceApi.clientWebSocket(`${base}/api`);
-      const exit = yield* api.Explode(fresh("explode")).pipe(Effect.exit);
+      const exit = yield* api.Explode({ id: fresh("explode") }).pipe(Effect.exit);
       if (!Exit.isFailure(exit)) return yield* Effect.die("Explode committed");
       expect(Cause.hasDies(exit.cause)).toBe(true);
       expect(String((Cause.squash(exit.cause) as { message?: unknown }).message)).toBe(
@@ -209,6 +344,22 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       const id = fresh("reject");
       expect(yield* call(`/increment/${id}?by=11`)).toEqual({ rejected: "TooBig" });
       expect(yield* call(`/counter/${id}`)).toEqual({ total: 0 });
+    }),
+    options,
+  );
+
+  test(
+    "a command sent again once its receipt is past retention is decided again",
+    Effect.gen(function* () {
+      const id = fresh("retained");
+      expect(yield* call(`/increment/${id}?command=first`)).toEqual({ accepted: 1, version: 1 });
+      expect(yield* call(`/increment/${id}?command=first`)).toEqual({ accepted: 1, version: 1 });
+      yield* Effect.sleep(
+        Duration.sum(Duration.fromInputUnsafe(RECEIPT_RETENTION), Duration.seconds(5)),
+      );
+      // The commit deletes receipts past their window (a runner's sweep may have already).
+      expect(yield* call(`/increment/${id}`)).toEqual({ accepted: 2, version: 2 });
+      expect(yield* call(`/increment/${id}?command=first`)).toEqual({ accepted: 3, version: 3 });
     }),
     options,
   );
@@ -270,6 +421,98 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
+    "a decision commits to every instance it reads",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("give-from"), fresh("give-to")];
+      yield* call(`/increment/${from}?by=5`);
+      expect(yield* call(`/give/${from}?to=${to}&by=3`)).toEqual({
+        accepted: 2,
+        commits: [
+          { stream: `Counter/${from}`, version: 2 },
+          { stream: `Counter/${to}`, version: 1 },
+        ],
+      });
+      expect(yield* call(`/counter/${from}`)).toEqual({ total: 2 });
+      expect(yield* call(`/counter/${to}`)).toEqual({ total: 3 });
+      // Each instance takes its own commands again, and its view follows.
+      expect(yield* call(`/increment/${to}?by=1`)).toMatchObject({ accepted: 4 });
+      const view = yield* eventually<{ total: number }>(`/total/${to}`, (v) => v.total === 4);
+      expect(view).toMatchObject({ total: 4 });
+    }),
+    options,
+  );
+
+  test(
+    "a rejected decision commits nothing",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("short-from"), fresh("short-to")];
+      yield* call(`/increment/${from}?by=2`);
+      expect(yield* call(`/give/${from}?to=${to}&by=3`)).toEqual({ rejected: "Short" });
+      expect(yield* call(`/counter/${from}`)).toEqual({ total: 2 });
+      expect(yield* call(`/counter/${to}`)).toEqual({ total: 0 });
+    }),
+    options,
+  );
+
+  test(
+    "a decision sent twice under one id commits once",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("once-from"), fresh("once-to")];
+      yield* call(`/increment/${from}?by=5`);
+      const first = yield* call(`/give/${from}?to=${to}&by=2&id=give-${from}`);
+      expect(yield* call(`/give/${from}?to=${to}&by=2&id=give-${from}`)).toEqual(first);
+      expect(yield* call(`/counter/${from}`)).toEqual({ total: 3 });
+      expect(yield* call(`/counter/${to}`)).toEqual({ total: 2 });
+    }),
+    options,
+  );
+
+  test(
+    "decisions that share instances commit one at a time, in both directions",
+    Effect.gen(function* () {
+      const [left, right] = [fresh("swap-left"), fresh("swap-right")];
+      yield* call(`/increment/${left}?by=10`);
+      yield* call(`/increment/${right}?by=10`);
+      type Given = { accepted?: number; rejected?: string };
+      const results = yield* Effect.forEach(
+        Array.from({ length: 12 }, (_, i) => i),
+        (i) =>
+          call<Given>(
+            i % 2 === 0 ? `/give/${left}?to=${right}&by=4` : `/give/${right}?to=${left}&by=4`,
+          ),
+        { concurrency: "unbounded" },
+      );
+      const totals = [
+        (yield* call<{ total: number }>(`/counter/${left}`)).total,
+        (yield* call<{ total: number }>(`/counter/${right}`)).total,
+      ];
+      // Nothing is lost or made up, and nobody goes below zero.
+      expect(totals[0]! + totals[1]!).toBe(20);
+      expect(Math.min(...totals)).toBeGreaterThanOrEqual(0);
+      expect(results.filter((result) => result.accepted !== undefined).length).toBeGreaterThan(0);
+    }),
+    options,
+  );
+
+  test(
+    "a decision's command is served by an Api, with no target",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("api-from"), fresh("api-to")];
+      const base = yield* url;
+      yield* call(`/increment/${from}?by=5`);
+      const api = yield* ConformanceApi.clientHttp(`${base}/api`);
+      const receipt = yield* api.Give({ from, to, by: 3 });
+      expect(receipt.reply).toEqual({ total: 2 });
+      expect(receipt.commits.map((commit) => commit.stream)).toEqual([
+        `Counter/${from}`,
+        `Counter/${to}`,
+      ]);
+      expect(yield* Effect.flip(api.Give({ from, to, by: 30 }))).toMatchObject({ _tag: "Short" });
+    }).pipe(Effect.scoped),
+    options,
+  );
+
+  test(
     "a view applies every event once, in order",
     Effect.gen(function* () {
       const id = fresh("view");
@@ -296,8 +539,34 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     options,
   );
 
+  // A backlog of BACKLOG_INPUTS seconds: longer than a host keeps background
+  // work alive with nothing else arriving. Minutes long, so not with --fast.
+  if (!process.env.FAST) {
+    test(
+      "a projection's backlog drains to the end with nothing else arriving",
+      Effect.gen(function* () {
+        const run = fresh("backlog");
+        const counters = Array.from({ length: BACKLOG_INPUTS }, (_, n) => `${run}.${n}`);
+        yield* Effect.forEach(counters, (counter) => call(`/increment/${counter}`), {
+          concurrency: 10,
+          discard: true,
+        });
+        // Nothing else is sent: the key must finish on its own.
+        const handled = yield* call<ReadonlyArray<string>>(`/drained/${run}`).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (handled) => new Set(handled).size === BACKLOG_INPUTS,
+            times: 48,
+          }),
+        );
+        expect(new Set(handled).size).toBe(BACKLOG_INPUTS);
+      }),
+      { ...options, timeout: 360_000 },
+    );
+  }
+
   test(
-    "a policy starts a saga, and the saga's step commits",
+    "a policy starts a saga, and its step commits once when it runs again",
     Effect.gen(function* () {
       const id = fresh("saga");
       yield* call(`/increment/${id}?by=7`);
@@ -305,6 +574,61 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       yield* call(`/increment/${id}?by=1`);
       const echo = yield* eventually<{ total: number }>(`/echo/${id}`, (e) => e.total > 0);
       expect(echo).toEqual({ total: 7 });
+      // The step's second attempt sent the same command: it never commits again.
+      yield* Effect.sleep("3 seconds");
+      expect(yield* call(`/echo/${id}`)).toEqual({ total: 7 });
+    }),
+    options,
+  );
+
+  test(
+    "an import appends history once, which views and projections apply and policies ignore",
+    Effect.gen(function* () {
+      const id = fresh("import");
+      // History from another system, committed at its own times.
+      const at = Date.parse("2020-01-01T00:00:00Z");
+      type Imported = { version: number; rejected?: string; index?: number };
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=a&at=${at}`)).toEqual({ version: 3 });
+      // A retried import commits nothing and answers its first receipt.
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=a&at=${at}`)).toEqual({ version: 3 });
+      // Another import into an instance with events is refused.
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=b`)).toEqual({
+        rejected: "UnexpectedVersion",
+        version: 3,
+      });
+      // The next batch continues from the last.
+      expect(yield* call<Imported>(`/import/${id}?n=2&id=c&expected=3&at=${at + 3}`)).toEqual({
+        version: 5,
+      });
+      // Times only go forward: from the instance's latest event, within a batch, up to now.
+      const refused = (index: number) => ({ rejected: "ImportOutOfOrder", index });
+      expect(yield* call(`/import/${id}?n=2&id=d&expected=5&at=${at}`)).toEqual(refused(0));
+      expect(yield* call(`/import/${id}?n=2&id=e&expected=5&at=${at + 9}&step=-1`)).toEqual(
+        refused(1),
+      );
+      const future = Date.parse("2100-01-01T00:00:00Z");
+      expect(yield* call(`/import/${id}?n=1&id=f&expected=5&at=${future}`)).toEqual(refused(0));
+      expect(yield* call(`/counter/${id}`)).toEqual({ total: 5 });
+      const times = yield* eventually<{ first: number; last: number }>(
+        `/times/${id}`,
+        (view) => view.last === at + 4,
+      );
+      expect(times).toEqual({ first: at, last: at + 4 });
+      // A live command after it: the projection has every imported total, then the new one.
+      expect(yield* call(`/record/${id}?by=7`)).toEqual([1, 2, 3, 4, 5, 12]);
+      // The policy reacts to the live command alone: the saga mirrors 7, not an imported 1.
+      const echo = yield* eventually<{ total: number }>(`/echo/${id}`, (e) => e.total > 0);
+      expect(echo).toEqual({ total: 7 });
+    }),
+    options,
+  );
+
+  test(
+    "an import of 200 events commits them at once",
+    Effect.gen(function* () {
+      const id = fresh("bulk");
+      expect(yield* call(`/import/${id}?on=echo&n=200`)).toEqual({ version: 200 });
+      expect(yield* call(`/echo/${id}`)).toEqual({ total: 200 });
     }),
     options,
   );
@@ -334,5 +658,95 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       expect(yield* call(`/hold/${id}`)).toEqual({ status: "released" });
     }),
     options,
+  );
+
+  test(
+    "a policy relays a command through 20 aggregate instances",
+    Effect.gen(function* () {
+      // Each hop's event makes a policy send a command to the next instance.
+      // A platform that runs each hop inside the call that delivered the last
+      // one nests deeper every hop, until the host refuses the call (#3627).
+      const chain = fresh("relay");
+      expect(yield* call(`/relay/${chain}?hops=20`)).toEqual({ passed: true });
+      const last = yield* eventually<{ passed: boolean }>(`/hop/${chain}-0`, (hop) => hop.passed);
+      expect(last).toEqual({ passed: true });
+    }),
+    options,
+  );
+};
+
+export interface RebuildOptions extends Omit<ConformanceOptions, "within"> {
+  /**
+   * Deploy the front over `ConformanceLive` (0) or `ConformanceLiveV1` (1),
+   * and wait until it serves.
+   */
+  readonly deploy: (version: 0 | 1) => Effect.Effect<void, any, any>;
+}
+
+/**
+ * A projection rebuilt by a version bump, writing a stream it wrote before:
+ * every entry is kept, none is appended twice, and what happens after the
+ * bump is appended. A view the bump adds is backfilled from every counter
+ * that recorded events before it. The case redeploys the front, so it runs
+ * alone and last.
+ */
+export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
+  const call = <T>(path: string) => Effect.flatMap(url, (base) => get<T>(base, path));
+  /** Increment a counter of the run, and read the run's tallies once they have it. */
+  const tally = (counter: string, by: number) =>
+    call<ReadonlyArray<number>>(`/tally/${counter}?by=${by}`);
+
+  type Replay = { readonly total: number; readonly increments: number };
+  /** Read the view version 1 adds for a counter, until it holds `expected` or time is up. */
+  const replay = (counter: string, expected: Replay) =>
+    call<Replay>(`/replay/${counter}`).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (view) => view.total === expected.total && view.increments === expected.increments,
+        times: 90,
+      }),
+    );
+
+  test(
+    "a version bump rebuilds a projection, keeping its stream, and backfills a view it adds",
+    Effect.gen(function* () {
+      yield* deploy(0);
+      const run = fresh("rebuild");
+      // Version 0 tallies increments and what a decision takes: three inputs.
+      expect(yield* call(`/increment/${run}~a?by=5`)).toMatchObject({ accepted: 5 });
+      expect(yield* call(`/give/${run}~a?to=${run}~b&by=2`)).toMatchObject({ accepted: 3 });
+      expect(yield* tally(`${run}~a`, 1)).toEqual([5, -2, 1]);
+
+      // Version 1 tallies increments alone, rebuilt from the history: two inputs replayed.
+      yield* deploy(1);
+      expect(
+        yield* call<number>("/generation").pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (generation) => generation === 1,
+            times: 90,
+          }),
+        ),
+      ).toBe(1);
+      // A counter of the same run that is new to this version.
+      expect(yield* tally(`${run}~c`, 3)).toEqual([5, -2, 1, 3]);
+      // The replay appends nothing again; the increments after the bump are appended.
+      expect(yield* tally(`${run}~c`, 4)).toEqual([5, -2, 1, 3, 4]);
+
+      // The view version 1 adds holds what the counters recorded under version 0.
+      expect(yield* replay(`${run}~a`, { total: 4, increments: 2 })).toEqual({
+        total: 4,
+        increments: 2,
+      });
+      expect(yield* replay(`${run}~b`, { total: 2, increments: 0 })).toEqual({
+        total: 2,
+        increments: 0,
+      });
+      expect(yield* replay(`${run}~c`, { total: 7, increments: 2 })).toEqual({
+        total: 7,
+        increments: 2,
+      });
+    }),
+    { timeout: 900_000, tags: [kind], exclusive: true },
   );
 };

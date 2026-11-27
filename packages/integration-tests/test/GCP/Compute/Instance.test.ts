@@ -7,6 +7,7 @@ import { adopt } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -45,28 +46,26 @@ test.provider.skipIf(!!process.env.FAST)(
         .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
       if (existing === undefined) {
         yield* compute.insertInstances({
+          name: instanceName,
+          machineType: `zones/${zone}/machineTypes/e2-micro`,
+          disks: [
+            {
+              boot: true,
+              autoDelete: true,
+              initializeParams: {
+                sourceImage: "projects/debian-cloud/global/images/family/debian-12",
+              },
+            },
+          ],
+          networkInterfaces: [{ network: "global/networks/default" }],
+          serviceAccounts: [{ email: "default", scopes: [CLOUD_PLATFORM] }],
+          shieldedInstanceConfig: {
+            enableSecureBoot: false,
+            enableVtpm: true,
+            enableIntegrityMonitoring: true,
+          },
           project,
           zone,
-          body: {
-            name: instanceName,
-            machineType: `zones/${zone}/machineTypes/e2-micro`,
-            disks: [
-              {
-                boot: true,
-                autoDelete: true,
-                initializeParams: {
-                  sourceImage: "projects/debian-cloud/global/images/family/debian-12",
-                },
-              },
-            ],
-            networkInterfaces: [{ network: "global/networks/default" }],
-            serviceAccounts: [{ email: "default", scopes: [CLOUD_PLATFORM] }],
-            shieldedInstanceConfig: {
-              enableSecureBoot: false,
-              enableVtpm: true,
-              enableIntegrityMonitoring: true,
-            },
-          },
         });
       }
       const foreign = yield* compute.getInstances({ project, zone, instance: instanceName }).pipe(
@@ -112,6 +111,60 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(yield* waitUntilGone(project, zone, instanceName)).toEqual("gone");
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 300_000 },
+);
+
+test.provider.skipIf(!!process.env.FAST)(
+  "a VM given an account created in the same deploy is replaced onto it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const vm = (serviceAccount?: string) =>
+        GCP.Compute.Instance("Vm", {
+          zone: "us-central1-a",
+          machineType: "e2-micro",
+          associatePublicIp: false,
+          ...(serviceAccount === undefined
+            ? {}
+            : { serviceAccount, oauthScopes: [CLOUD_PLATFORM] }),
+        });
+
+      // Declared without an account, the VM runs with none.
+      const before = yield* stack.deploy(vm());
+      expect(before.serviceAccount).toBeUndefined();
+
+      // The account's email is unknown until it is created, so the plan
+      // can't compare it; an update can't switch a running VM's account.
+      const withAccount = Effect.gen(function* () {
+        const account = yield* GCP.IAM.ServiceAccount("VmAccount", { displayName: "vm" });
+        const instance = yield* vm(account.email as unknown as string);
+        return { instance, email: account.email };
+      });
+      expect((yield* stack.plan(withAccount)).resources.Vm).toMatchObject({
+        action: "replace",
+        deleteFirst: true,
+      });
+      const after = yield* stack.deploy(withAccount);
+      expect(after.instance.instanceId).not.toEqual(before.instanceId);
+      const fetched = yield* compute.getInstances({
+        project: after.instance.project,
+        zone: after.instance.zone,
+        instance: after.instance.instanceName,
+      });
+      expect(fetched.serviceAccounts?.[0]?.email).toEqual(after.email);
+
+      // Redeploying it unchanged keeps it.
+      expect((yield* stack.plan(withAccount)).resources.Vm.action).toBe("noop");
+
+      yield* stack.destroy();
+      expect(
+        yield* waitUntilGone(
+          after.instance.project,
+          after.instance.zone,
+          after.instance.instanceName,
+        ),
+      ).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 600_000 },
 );
 
 test.provider.skipIf(!!process.env.FAST)(
@@ -228,6 +281,65 @@ test.provider.skipIf(!!process.env.FAST)(
       expect(refetched.id).toEqual(created.instanceId);
       expect(refetched.scheduling?.automaticRestart).toEqual(false);
       expect(refetched.description).toEqual("alchemy instance update");
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Compute.Instance("Vm", {
+            instanceName: created.instanceName,
+            zone: "us-central1-a",
+            machineType: "e2-micro",
+            labels: { env: "prod", role: "web" },
+            deletionProtection: true,
+            tags: ["alchemy-prod"],
+            metadata: { role: "prod" },
+            description: "alchemy instance update",
+            associatePublicIp: false,
+            bootDiskType: "pd-balanced",
+            provisioningModel: "STANDARD",
+            onHostMaintenance: "MIGRATE",
+            automaticRestart: false,
+            serviceAccount: "default",
+            oauthScopes: ["https://www.googleapis.com/auth/cloud-platform"],
+            shieldedInstanceConfig: {
+              enableIntegrityMonitoring: true,
+              enableSecureBoot: true,
+              enableVtpm: true,
+            },
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Vm",
+        tag: "GCP.Compute.InstanceDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Compute.Instance("Vm", {
+            instanceName: created.instanceName,
+            zone: "us-central1-a",
+            machineType: "e2-micro",
+            labels: { env: "prod", role: "web" },
+            deletionProtection: false,
+            tags: ["alchemy-prod"],
+            metadata: { role: "prod" },
+            description: "alchemy instance update",
+            associatePublicIp: false,
+            bootDiskType: "pd-balanced",
+            provisioningModel: "STANDARD",
+            onHostMaintenance: "MIGRATE",
+            automaticRestart: false,
+            serviceAccount: "default",
+            oauthScopes: ["https://www.googleapis.com/auth/cloud-platform"],
+            shieldedInstanceConfig: {
+              enableIntegrityMonitoring: true,
+              enableSecureBoot: true,
+              enableVtpm: true,
+            },
+          });
+        }),
+      );
 
       yield* stack.destroy();
 

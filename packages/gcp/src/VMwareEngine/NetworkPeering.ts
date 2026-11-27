@@ -340,20 +340,18 @@ export const NetworkPeeringProvider = () =>
       if (current === undefined) {
         const created = yield* vmwareengine
           .createProjectsLocationsNetworkPeerings({
+            peerNetwork: news.peerNetwork,
+            peerNetworkType: news.peerNetworkType,
+            vmwareEngineNetwork,
+            exportCustomRoutes,
+            importCustomRoutes,
+            exportCustomRoutesWithPublicIp,
+            importCustomRoutesWithPublicIp,
+            exchangeSubnetRoutes,
+            peerMtu: news.peerMtu,
+            description: desiredDescription,
             parent: parentOf(env.project, DEFAULT_GLOBAL),
             networkPeeringId,
-            body: {
-              peerNetwork: news.peerNetwork,
-              peerNetworkType: news.peerNetworkType,
-              vmwareEngineNetwork,
-              exportCustomRoutes,
-              importCustomRoutes,
-              exportCustomRoutesWithPublicIp,
-              importCustomRoutesWithPublicIp,
-              exchangeSubnetRoutes,
-              peerMtu: news.peerMtu,
-              description: desiredDescription,
-            },
           })
           .pipe(
             Effect.retry({
@@ -384,12 +382,9 @@ export const NetworkPeeringProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* vmwareengine.patchProjectsLocationsNetworkPeerings({
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            description: desiredDescription,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

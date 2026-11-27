@@ -1,6 +1,7 @@
 import * as Hetzner from "@alchemy.run/hetzner";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import type { ClusterNetwork } from "../Database.ts";
 import { GATEWAY_PORT } from "../internal/Gateway.ts";
 import { makePoolLayer, type PoolSettings } from "../internal/PoolHost.ts";
 
@@ -15,6 +16,11 @@ export interface ServerPoolOptions extends PoolSettings {
    * @default "cx23"
    */
   serverType?: string;
+  /**
+   * The private Network runners attach to when the database is on none,
+   * such as `Cluster.Database.fromUrl`. Ignored when the database is on one.
+   */
+  network?: Omit<Extract<ClusterNetwork, { kind: "hetzner" }>, "kind">;
 }
 
 /** The label the gateway's Load Balancer finds the pool's Servers by. */
@@ -26,7 +32,8 @@ const POOL_LABEL = "cluster-pool";
  * runners as a `Hetzner.Service`, behind a Load Balancer that serves their
  * gateway to callers anywhere. Runners talk to each other and the database
  * over the Network; their firewall only lets SSH in, which deploys them.
- * Requires a database on a Hetzner Network — `ClusterHetzner.Database`.
+ * With a database on no Network (`Cluster.Database.fromUrl`), give the
+ * pool its `network`.
  *
  * ### Running on Hetzner
  * **Example:** Two runners
@@ -46,6 +53,9 @@ export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
     settings: options,
     expected: "a Hetzner Network (ClusterHetzner.Database)",
     network: (database) => (database.network?.kind === "hetzner" ? database.network : undefined),
+    ownNetwork: Effect.succeed(
+      options.network === undefined ? undefined : { kind: "hetzner" as const, ...options.network },
+    ),
     // The Load Balancer finds the Servers by label, so it needs none of them.
     gateway: (name, network) =>
       Effect.gen(function* () {

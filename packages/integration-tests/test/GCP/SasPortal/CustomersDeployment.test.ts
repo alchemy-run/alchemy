@@ -45,8 +45,8 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         sasportal.createCustomersDeployments({
+          displayName: "alchemy-sasportal-probe",
           parent: "customers/missing",
-          body: { displayName: "alchemy-sasportal-probe" },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

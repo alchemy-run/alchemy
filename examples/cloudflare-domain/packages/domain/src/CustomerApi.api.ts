@@ -10,6 +10,7 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
   model: Bank,
   commands: [
     "RegisterCustomer",
+    "SetAddress",
     "DepositMoney",
     "WithdrawMoney",
     "CloseAccount",
@@ -17,5 +18,5 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
   ],
   views: ["CustomerDashboard", "AccountSummary", "Statement", "AccountTransfers", "TransferStatus"],
   streams: ["AccountCard"],
-  queries: ["AccountLedger"],
+  queries: ["AccountLedger", "CustomerAddress"],
 }) {}

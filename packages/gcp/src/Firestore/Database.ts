@@ -183,6 +183,18 @@ export type Database = Resource<
  * manage by its identifiers, in the ambient project unless `project` names
  * another.
  */
+/**
+ * Deletion was refused because the Firestore database has deletion protection on, set
+ * through `deleteProtectionState` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class DatabaseDeletionProtected extends Data.TaggedError(
+  "GCP.Firestore.DatabaseDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
 export interface DatabaseLookup {
   /**
    * Database id (the `{database}` segment of
@@ -496,25 +508,23 @@ export const DatabaseProvider = () =>
       if (current === undefined) {
         const created = yield* firestore
           .createProjectsDatabases({
+            locationId: location,
+            type,
+            databaseEdition: news.databaseEdition
+              ? normalizeEdition(news.databaseEdition)
+              : undefined,
+            concurrencyMode: news.concurrencyMode,
+            pointInTimeRecoveryEnablement: news.pointInTimeRecoveryEnablement,
+            appEngineIntegrationMode: news.appEngineIntegrationMode ?? DEFAULT_APP_ENGINE,
+            deleteProtectionState: desiredProtection,
+            realtimeUpdatesMode: news.realtimeUpdatesMode,
+            firestoreDataAccessMode: news.firestoreDataAccessMode,
+            mongodbCompatibleDataAccessMode: news.mongodbCompatibleDataAccessMode,
+            cmekConfig: news.cmekConfig?.kmsKeyName
+              ? { kmsKeyName: news.cmekConfig.kmsKeyName }
+              : undefined,
             parent: `projects/${env.project}`,
             databaseId,
-            body: {
-              locationId: location,
-              type,
-              databaseEdition: news.databaseEdition
-                ? normalizeEdition(news.databaseEdition)
-                : undefined,
-              concurrencyMode: news.concurrencyMode,
-              pointInTimeRecoveryEnablement: news.pointInTimeRecoveryEnablement,
-              appEngineIntegrationMode: news.appEngineIntegrationMode ?? DEFAULT_APP_ENGINE,
-              deleteProtectionState: desiredProtection,
-              realtimeUpdatesMode: news.realtimeUpdatesMode,
-              firestoreDataAccessMode: news.firestoreDataAccessMode,
-              mongodbCompatibleDataAccessMode: news.mongodbCompatibleDataAccessMode,
-              cmekConfig: news.cmekConfig?.kmsKeyName
-                ? { kmsKeyName: news.cmekConfig.kmsKeyName }
-                : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -563,11 +573,7 @@ export const DatabaseProvider = () =>
 
       if (mask.length > 0) {
         const patched = yield* retryConcurrentChanges(
-          firestore.patchProjectsDatabases({
-            name,
-            updateMask: mask.join(","),
-            body: patchBody,
-          }),
+          firestore.patchProjectsDatabases({ ...patchBody, name, updateMask: mask.join(",") }),
         );
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);
@@ -576,21 +582,27 @@ export const DatabaseProvider = () =>
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getByName(output.name);
       if (current === undefined) return;
 
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (
         normalizeEnum(current.deleteProtectionState, DEFAULT_DELETE_PROTECTION) ===
         "DELETE_PROTECTION_ENABLED"
       ) {
+        if (force !== true) {
+          return yield* new DatabaseDeletionProtected({
+            resourceName: output.name,
+            message: `Firestore database '${output.name}' has delete protection on. Set \`deleteProtectionState: "DELETE_PROTECTION_DISABLED"\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const patched = yield* retryConcurrentChanges(
           firestore.patchProjectsDatabases({
+            deleteProtectionState: DEFAULT_DELETE_PROTECTION,
             name: output.name,
             updateMask: "deleteProtectionState",
-            body: {
-              deleteProtectionState: DEFAULT_DELETE_PROTECTION,
-            },
           }),
         );
         yield* waitForOperation(patched);

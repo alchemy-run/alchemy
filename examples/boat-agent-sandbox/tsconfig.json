@@ -17,6 +17,7 @@
     },
     {
       "path": "../../packages/boat/tsconfig.json"
-    }
+    },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }

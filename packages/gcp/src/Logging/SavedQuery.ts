@@ -399,15 +399,13 @@ export const SavedQueryProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createProjectsLocationsSavedQueries({
+            displayName: desiredDisplayName,
+            visibility: desiredVisibility,
+            description: desiredDescription,
+            loggingQuery: desiredLogging,
+            opsAnalyticsQuery: desiredOps,
             parent: `projects/${env.project}/locations/${location}`,
             savedQueryId,
-            body: {
-              displayName: desiredDisplayName,
-              visibility: desiredVisibility,
-              description: desiredDescription,
-              loggingQuery: desiredLogging,
-              opsAnalyticsQuery: desiredOps,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -443,9 +441,9 @@ export const SavedQueryProvider = () =>
         if (loggingChanged) body.loggingQuery = desiredLogging;
         if (opsChanged) body.opsAnalyticsQuery = desiredOps;
         current = yield* logging.patchProjectsLocationsSavedQueries({
+          ...body,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body,
         });
       }
 

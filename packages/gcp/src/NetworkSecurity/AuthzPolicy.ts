@@ -429,18 +429,16 @@ export const AuthzPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsAuthzPolicies({
+            action,
+            target: news.target,
+            httpRules: news.httpRules,
+            networkRules: news.networkRules,
+            policyProfile,
+            customProvider,
+            description: news.description,
+            labels: desiredLabels,
             parent: projectParent(env.project, location),
             authzPolicyId,
-            body: {
-              action,
-              target: news.target,
-              httpRules: news.httpRules,
-              networkRules: news.networkRules,
-              policyProfile,
-              customProvider,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -493,18 +491,15 @@ export const AuthzPolicyProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networksecurity.patchProjectsLocationsAuthzPolicies({
+          labels: desiredLabels,
+          description: news.description,
+          action,
+          target: news.target,
+          httpRules: news.httpRules,
+          networkRules: news.networkRules,
+          customProvider,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            action,
-            target: news.target,
-            httpRules: news.httpRules,
-            networkRules: news.networkRules,
-            customProvider,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

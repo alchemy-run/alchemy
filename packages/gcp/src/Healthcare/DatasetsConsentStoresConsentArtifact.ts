@@ -241,15 +241,13 @@ export const DatasetsConsentStoresConsentArtifactProvider = () =>
       if (current === undefined) {
         current = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsConsentStoresConsentArtifacts({
+            userId: news.userId,
+            consentContentVersion: news.consentContentVersion,
+            metadata,
+            userSignature: news.userSignature,
+            guardianSignature: news.guardianSignature,
+            witnessSignature: news.witnessSignature,
             parent: consentStore,
-            body: {
-              userId: news.userId,
-              consentContentVersion: news.consentContentVersion,
-              metadata,
-              userSignature: news.userSignature,
-              guardianSignature: news.guardianSignature,
-              witnessSignature: news.witnessSignature,
-            },
           }),
         );
       }

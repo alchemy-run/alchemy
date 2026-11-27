@@ -250,12 +250,10 @@ export const DatabasesBackupScheduleProvider = () =>
       if (current === undefined) {
         const created = yield* firestore
           .createProjectsDatabasesBackupSchedules({
+            retention,
+            dailyRecurrence: daily && weeklyDay === undefined ? {} : undefined,
+            weeklyRecurrence: weeklyDay !== undefined ? { day: weeklyDay } : undefined,
             parent,
-            body: {
-              retention,
-              dailyRecurrence: daily && weeklyDay === undefined ? {} : undefined,
-              weeklyRecurrence: weeklyDay !== undefined ? { day: weeklyDay } : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created?.name !== undefined) {
@@ -276,9 +274,9 @@ export const DatabasesBackupScheduleProvider = () =>
       if ((current.retention ?? "") !== retention) {
         current = yield* retryConcurrentChanges(
           firestore.patchProjectsDatabasesBackupSchedules({
+            retention,
             name,
             updateMask: "retention",
-            body: { retention },
           }),
         );
       }

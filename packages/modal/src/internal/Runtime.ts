@@ -3,10 +3,10 @@ import * as functions from "@distilled.cloud/modal/functions";
 import * as secret from "@distilled.cloud/modal/secret";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
+import { envString } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import type { ContainerProps, Ref } from "../Container.ts";
 import { gpuConfig } from "../ImageBuild.ts";
 import { envNameOf, objectName, seconds } from "../internal.ts";
@@ -116,12 +116,7 @@ const idOf = (value: unknown, key: string): string | undefined =>
     : undefined;
 
 /** An env value as a string, as the program's `process.env` sees it. */
-const envText = (value: unknown): string =>
-  typeof value === "string"
-    ? value
-    : Redacted.isRedacted(value)
-      ? String(Redacted.value(value))
-      : JSON.stringify(value ?? null);
+const envText = (value: unknown): string => envString(value) ?? "";
 
 /** The function definition fields every kind shares. */
 const baseDefinition = (

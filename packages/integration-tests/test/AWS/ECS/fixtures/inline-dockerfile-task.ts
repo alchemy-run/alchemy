@@ -21,7 +21,7 @@ export default InlineDockerfileTask.make(
   {
     main: import.meta.filename,
     dockerfile: Dockerfile.inline`
-FROM oven/bun:1
+FROM node:26-slim
 RUN echo inline-env-artifact > /inline-artifact.txt
 `,
     cpu: 256,

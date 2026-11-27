@@ -48,16 +48,14 @@ export const ensureDataStore = (
     if (store === undefined) {
       const created = yield* discoveryengine
         .createProjectsLocationsCollectionsDataStores({
+          displayName: dataStoreId,
+          industryVertical: options?.industryVertical ?? "GENERIC",
+          contentConfig: options?.contentConfig ?? "CONTENT_REQUIRED",
+          solutionTypes: ["SOLUTION_TYPE_SEARCH"],
           parent,
           dataStoreId,
           disableCmek: true,
           skipDefaultSchemaCreation: options?.skipDefaultSchemaCreation,
-          body: {
-            displayName: dataStoreId,
-            industryVertical: options?.industryVertical ?? "GENERIC",
-            contentConfig: options?.contentConfig ?? "CONTENT_REQUIRED",
-            solutionTypes: ["SOLUTION_TYPE_SEARCH"],
-          },
         })
         .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
       if (created !== undefined) {
@@ -81,14 +79,12 @@ export const ensureDataStore = (
       if (existingEngine === undefined) {
         const createdEngine = yield* discoveryengine
           .createProjectsLocationsCollectionsEngines({
+            displayName: engineId,
+            solutionType: "SOLUTION_TYPE_SEARCH",
+            dataStoreIds: [dataStoreId],
+            searchEngineConfig: { searchTier: "SEARCH_TIER_STANDARD" },
             parent,
             engineId,
-            body: {
-              displayName: engineId,
-              solutionType: "SOLUTION_TYPE_SEARCH",
-              dataStoreIds: [dataStoreId],
-              searchEngineConfig: { searchTier: "SEARCH_TIER_STANDARD" },
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
         if (createdEngine !== undefined) {

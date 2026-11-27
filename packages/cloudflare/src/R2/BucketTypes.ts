@@ -46,9 +46,21 @@ export type Objects = {
 );
 export type Conditional = runtime.R2Conditional;
 
+/**
+ * A failed R2 operation.
+ *
+ * `code` is R2's error code (see
+ * [R2 error codes](https://developers.cloudflare.com/r2/api/error-codes/)) when
+ * the failure came from R2 through the Worker binding, e.g. `10001` (internal
+ * error), `10043` (service unavailable) or `10058` (too many concurrent reads
+ * of one key). It is absent on failures that are not R2's, and on the HTTP
+ * clients, which retry transient failures themselves.
+ */
 export class R2Error extends Data.TaggedError("R2Error")<{
   message: string;
   cause: Error;
+  /** R2's error code, when the failure came from R2 over the Worker binding. */
+  code?: number;
 }> {}
 
 export interface MultipartUpload {

@@ -52,6 +52,12 @@ export type Secret = Resource<
     createdAt: string | undefined;
     /** RFC3339 last-update timestamp. */
     updatedAt: string | undefined;
+    /**
+     * The App's secrets version after this secret's last write. Pass it as
+     * a Machine's `minSecretsVersion` so the Machine is guaranteed to see the
+     * value, and restarts with a new one.
+     */
+    version: number | undefined;
   },
   never,
   Providers,
@@ -166,6 +172,26 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * });
  * ```
  *
+ * ### Wait for the value on Machines
+ * `version` is the App's secrets version after the secret's last write.
+ * A Machine whose `minSecretsVersion` is `version` is guaranteed to see the
+ * value, and restarts when a rotation raises it.
+ *
+ * **Example:** Machines that see the current token
+ * ```typescript
+ * const token = yield* Fly.Secret("ApiToken", {
+ *   app: Site,
+ *   name: "API_TOKEN",
+ *   value: Redacted.make("sk_live_…"),
+ * });
+ * const web = yield* Fly.Machine("Web", {
+ *   app: Site,
+ *   region: "iad",
+ *   image: "my-image:tag",
+ *   minSecretsVersion: token.version,
+ * });
+ * ```
+ *
  * ### Get a secret at runtime
  * {@link GetSecret} is bound to one Secret. Provide
  * {@link GetSecretHttp}. Fly only returns plaintext from a Machine in
@@ -259,13 +285,19 @@ const toAttrs = (
   appName: string,
   secret: AppSecret,
   fallbackName: string,
+  version?: number,
 ): Secret["Attributes"] => ({
   appName,
   name: secret.name ?? fallbackName,
   digest: secret.digest,
   createdAt: secret.created_at,
   updatedAt: secret.updated_at,
+  version,
 });
+
+/** The secrets version a write reports, under its current or deprecated key. */
+const writtenVersion = (response: { version?: number; Version?: number }) =>
+  response.version ?? response.Version;
 
 const getByName = (appName: string, secretName: string) =>
   machines
@@ -329,7 +361,7 @@ export const SecretProvider = () =>
       const name = yield* resolveName(id, olds?.name, output?.name);
       const found = yield* getByName(appName, name);
       if (found === undefined) return undefined;
-      const attrs = toAttrs(appName, found, name);
+      const attrs = toAttrs(appName, found, name, output?.version);
       if (output !== undefined) return attrs;
       return matchesAlchemyPhysicalName(name) ? attrs : Unowned(attrs);
     }),
@@ -374,15 +406,22 @@ export const SecretProvider = () =>
         current = yield* getByName(appName, name);
       }
 
+      // A write reports the version that holds it; with no write, the one
+      // the last write reported still does.
+      let version =
+        output?.appName === appName && output.name === name ? output.version : undefined;
       let createdThisRun = false;
       if (current === undefined) {
-        yield* machines
+        version = yield* machines
           .createSecret({
             app_name: appName,
             secret_name: name,
             value: desiredPlain,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.void));
+          .pipe(
+            Effect.map(writtenVersion),
+            Effect.catchTag("Conflict", () => Effect.succeed(version)),
+          );
         current = yield* getByName(appName, name);
         createdThisRun = true;
       }
@@ -400,17 +439,20 @@ export const SecretProvider = () =>
         const previousPlain = olds?.value !== undefined ? unwrapSecret(olds.value) : undefined;
         const valueChanged = previousPlain === undefined || previousPlain !== desiredPlain;
         if (!digestMatches && valueChanged) {
-          yield* machines
+          version = yield* machines
             .updateSecrets({
               app_name: appName,
               values: { [name]: desiredPlain },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.void));
+            .pipe(
+              Effect.map(writtenVersion),
+              Effect.catchTag("Conflict", () => Effect.succeed(version)),
+            );
           current = (yield* getByName(appName, name)) ?? current;
         }
       }
 
-      return toAttrs(appName, current, name);
+      return toAttrs(appName, current, name, version);
     }),
 
     delete: Effect.fn(function* ({ output }) {

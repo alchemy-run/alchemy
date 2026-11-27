@@ -162,9 +162,10 @@ export interface ServiceProps extends PlatformProps {
     command: string | null;
   };
   /**
-   * Start command (`pnpm start`).
+   * Start command (`pnpm start`). Pass `null` to clear one the service has,
+   * so it runs its image's own command.
    */
-  startCommand?: string;
+  startCommand?: string | null;
   /**
    * HTTP healthcheck path (`/health`). Synced via
    * `serviceInstanceUpdate.healthcheckPath`. Alias of {@link healthcheck}

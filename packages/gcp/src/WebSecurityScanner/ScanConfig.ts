@@ -477,10 +477,7 @@ export const ScanConfigProvider = () =>
 
       if (current === undefined) {
         const created = yield* websecurityscanner
-          .createProjectsScanConfigs({
-            parent: `projects/${env.project}`,
-            body: desired,
-          })
+          .createProjectsScanConfigs({ ...desired, parent: `projects/${env.project}` })
           .pipe(
             Effect.catchTag("Conflict", () => getScanConfig(lookupName)),
             // A just-reserved static IP can take up to a minute to be visible.
@@ -556,9 +553,9 @@ export const ScanConfigProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* websecurityscanner.patchProjectsScanConfigs({
+          ...desired,
           name,
           updateMask,
-          body: { ...desired, name },
         });
       }
 
