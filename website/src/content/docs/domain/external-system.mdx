@@ -165,8 +165,7 @@ Money arrives from Stripe as webhook events. Each successful payment becomes a `
 
 ```typescript title="packages/domain/src/Account/RecordSettlement.command.ts"
 export class RecordSettlement extends Domain.Command("RecordSettlement", {
-  target: AccountId,
-  input: { settlementId: Schema.String, amount: Cents },
+  input: { accountId: AccountId, settlementId: Schema.String, amount: Cents },
   events: [SettlementReceived, SettlementOnClosedAccount],
 }) {}
 ```
@@ -180,9 +179,7 @@ Effect.fn(function* (event) {
   const intent = event.object;
   const accountId = intent.metadata?.accountId;
   if (!accountId) return;
-  yield* accounts.send(
-    AccountId.make(accountId),
-    new RecordSettlement({ settlementId: intent.id, amount: intent.amount_received }),
+  yield* accounts.send(new RecordSettlement({ accountId: AccountId.make(accountId), settlementId: intent.id, amount: intent.amount_received }),
     { commandId: `settlement:${intent.id}` },
   );
 }),
@@ -202,7 +199,7 @@ it.effect("money that settles on a closed account is refunded", () =>
       new AccountOpened({ customerId: CustomerId.make("c-1"), owner: "sam" }),
       new AccountClosed(),
     ),
-    Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+    Story.when(new RecordSettlement({ accountId: account.id, settlementId: "st_1", amount: 500 })),
     Story.then(account, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
     Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
     Story.succeed(Payments.refund, { refundId: "re_1" }),

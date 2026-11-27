@@ -345,18 +345,16 @@ export const WorkloadIdentityProviderProvider = () =>
       // soft-deleted provider is restored rather than re-created.
       if (current === undefined) {
         const operation = yield* iam.createProjectsLocationsWorkloadIdentityPoolsProviders({
+          displayName: news.displayName,
+          description: desiredDescription,
+          disabled: desiredDisabled,
+          attributeMapping: news.attributeMapping,
+          attributeCondition: news.attributeCondition,
+          oidc: news.oidc,
+          aws: news.aws,
+          saml: news.saml,
           parent: `projects/${project}/locations/global/workloadIdentityPools/${poolId}`,
           workloadIdentityPoolProviderId: providerId,
-          body: {
-            displayName: news.displayName,
-            description: desiredDescription,
-            disabled: desiredDisabled,
-            attributeMapping: news.attributeMapping,
-            attributeCondition: news.attributeCondition,
-            oidc: news.oidc,
-            aws: news.aws,
-            saml: news.saml,
-          },
         });
         yield* waitForProviderOperation(operation);
       } else if (current.state === "DELETED") {
@@ -423,9 +421,9 @@ export const WorkloadIdentityProviderProvider = () =>
       }
       if (updateMask.length > 0) {
         const operation = yield* iam.patchProjectsLocationsWorkloadIdentityPoolsProviders({
+          ...body,
           name,
           updateMask: updateMask.join(","),
-          body,
         });
         yield* waitForProviderOperation(operation);
         current = { ...current, ...body };

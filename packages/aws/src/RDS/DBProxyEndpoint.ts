@@ -174,18 +174,20 @@ export const DBProxyEndpointProvider = () =>
         dbProxyName: string;
         dbProxyEndpointName: string;
       }) {
-        const response = yield* rds
-          .describeDBProxyEndpoints({
-            DBProxyName: dbProxyName,
-            DBProxyEndpointName: dbProxyEndpointName,
-          })
-          // An endpoint whose proxy is gone is gone too.
-          .pipe(
-            Effect.catchTag(
-              ["DBProxyEndpointNotFoundFault", "DBProxyNotFoundFault"],
-              () => Effect.undefined,
-            ),
-          );
+        const response = yield* (
+          rds
+            .describeDBProxyEndpoints({
+              DBProxyName: dbProxyName,
+              DBProxyEndpointName: dbProxyEndpointName,
+            })
+            // An endpoint whose proxy is gone is gone too.
+            .pipe(
+              Effect.catchTag(
+                ["DBProxyEndpointNotFoundFault", "DBProxyNotFoundFault"],
+                () => Effect.undefined,
+              ),
+            )
+        );
         return response?.DBProxyEndpoints?.[0];
       });
 

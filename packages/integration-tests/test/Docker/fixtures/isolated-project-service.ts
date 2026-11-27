@@ -18,7 +18,6 @@ export const project = isolatedProject("docker-service", import.meta.filename, [
  * Fixed host port published through the swarm ingress. Deterministic and
  * distinct from the other Docker suites on the shared local daemon.
  */
-export const SERVICE_EXTERNAL_PORT = 43119;
 
 /**
  * Minimal effectful `Docker.Service` served from an isolated project.
@@ -31,7 +30,7 @@ export default class IsolatedProjectService extends Docker.Service<IsolatedProje
   {
     main: project.main,
     port: 3000,
-    ports: [{ external: SERVICE_EXTERNAL_PORT, internal: 3000 }],
+    ports: [{ internal: 3000 }],
     replicas: 1,
   },
   Effect.gen(function* () {

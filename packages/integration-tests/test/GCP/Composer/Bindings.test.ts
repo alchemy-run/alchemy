@@ -32,8 +32,8 @@ let secretName: string;
 const expectProjectGrants = Effect.gen(function* () {
   const { project } = yield* GcpEnvironment.current;
   const policy = yield* crm.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   const grants = (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
@@ -119,14 +119,11 @@ describe.skipIf(!runLifecycle)(
             // The execution is visible out of band and finishes cleanly.
             const polled = yield* composer
               .pollAirflowCommandProjectsLocationsEnvironments({
+                executionId: started.executionId,
+                pod: started.pod,
+                podNamespace: started.podNamespace,
+                nextLineNumber: 1,
                 environment: environmentName,
-                body: {
-                  executionId: started.executionId,
-                  pod: started.pod,
-                  podNamespace: started.podNamespace,
-                  // The API rejects a missing or zero line number.
-                  nextLineNumber: 1,
-                },
               })
               .pipe(
                 Effect.repeat({

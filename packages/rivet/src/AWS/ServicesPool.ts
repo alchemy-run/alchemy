@@ -1,11 +1,12 @@
 import * as ECS from "@alchemy.run/aws/ECS";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import {
   makeServicesLayer,
-  servicesEnvironment,
+  secretServicesEnvironment,
   type ServicesPoolSettings,
 } from "../internal/ServicesHost.ts";
-import { poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
+import { poolNetworkOf, poolSecrets, resolvePoolNetwork } from "./internal/Pool.ts";
 
 export interface ServicesPoolOptions extends ServicesPoolSettings {
   /**
@@ -37,7 +38,9 @@ export interface ServicesPoolOptions extends ServicesPoolSettings {
  * hosts Durable Streams and agentOS. Nodes run in the control plane's VPC
  * with `RivetAWS.Ec2ControlPlane`, and in a VPC of their own otherwise. They
  * take no inbound traffic: callers reach every stream through the control
- * plane's gateway, with its token.
+ * plane's gateway, with its token. The control plane's token is kept in a
+ * Secrets Manager secret of the pool's own, which the task definition only
+ * names.
  *
  * ### Running Rivet Services on AWS
  * **Example:** Services next to an EC2 control plane
@@ -59,6 +62,10 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
       Effect.gen(function* () {
         const network = yield* resolvePoolNetwork(id, nodes.network, options.cidrBlock);
         const cluster = yield* ECS.Cluster(`${id}Cluster`, {});
+        // The token comes from Secrets Manager, never the task definition.
+        const secrets = yield* poolSecrets(id, {
+          RIVET_TOKEN: { key: "Token", value: nodes.environment.RIVET_TOKEN },
+        });
         yield* ECS.Service(`${id}Nodes`, {
           image: nodes.image,
           cluster,
@@ -70,7 +77,10 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
           subnets: [...network.subnetIds],
           securityGroups: [network.securityGroupId],
           assignPublicIp: true,
-          env: servicesEnvironment(nodes),
+          env: secretServicesEnvironment(nodes).pipe(
+            Output.map(({ RIVET_TOKEN: _, ...env }) => env),
+          ),
+          secrets,
         });
       }),
   });

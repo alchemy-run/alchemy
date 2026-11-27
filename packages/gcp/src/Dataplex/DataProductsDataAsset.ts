@@ -278,13 +278,11 @@ export const DataProductsDataAssetProvider = () =>
       if (current === undefined) {
         const created = yield* retryQuota(
           dataplex.createProjectsLocationsDataProductsDataAssets({
+            labels: desiredLabels,
+            resource: news.resource,
+            accessGroupConfigs: news.accessGroupConfigs,
             parent: news.parent,
             dataAssetId,
-            body: {
-              labels: desiredLabels,
-              resource: news.resource,
-              accessGroupConfigs: news.accessGroupConfigs,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -305,6 +303,9 @@ export const DataProductsDataAssetProvider = () =>
 
       if (labelsChanged || configsChanged) {
         const operation = yield* dataplex.patchProjectsLocationsDataProductsDataAssets({
+          etag: current.etag,
+          labels: desiredLabels,
+          accessGroupConfigs: news.accessGroupConfigs,
           name: current.name ?? name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -312,12 +313,6 @@ export const DataProductsDataAssetProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            etag: current.etag,
-            labels: desiredLabels,
-            accessGroupConfigs: news.accessGroupConfigs,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
@@ -327,20 +322,22 @@ export const DataProductsDataAssetProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* dataplex
-        // No etag: the recorded one goes stale as the server settles an
-        // update ("Provided etag is out of date"), and delete is unconditional.
-        .deleteProjectsLocationsDataProductsDataAssets({
-          name: output.name,
-        })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.undefined),
-        );
+      const operation = yield* (
+        dataplex
+          // No etag: the recorded one goes stale as the server settles an
+          // update ("Provided etag is out of date"), and delete is unconditional.
+          .deleteProjectsLocationsDataProductsDataAssets({
+            name: output.name,
+          })
+          .pipe(
+            Effect.retry({
+              while: (error) => error._tag === "Conflict",
+              times: 8,
+              schedule: Schedule.spaced("2 seconds"),
+            }),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          )
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

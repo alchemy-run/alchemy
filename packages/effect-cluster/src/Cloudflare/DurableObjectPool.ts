@@ -20,11 +20,14 @@ import { HOSTED_TYPES, stackDnsLabel } from "../internal/Naming.ts";
 import { PoolHost } from "../internal/PoolHostService.ts";
 import { Pool as PoolResource, type PoolEntity } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
+import { ENTITY_OBJECT_CLASS } from "./internal/Objects.ts";
 import { poolWorker } from "./PoolWorker.ts";
 
 // A Worker that calls a class this pool hosts gets a service binding to
 // the pool's Worker: Workers can't fetch another Worker's workers.dev URL.
-registerRouteBinder((key, worker) =>
+// For an entity it also gets the namespace of its instances' objects, to
+// open WebSockets to them directly.
+registerRouteBinder((key, worker, objects) =>
   Effect.gen(function* () {
     if (globalThis.__ALCHEMY_RUNTIME__) return;
     const caller = Option.getOrUndefined(
@@ -35,7 +38,19 @@ registerRouteBinder((key, worker) =>
     );
     if (caller === undefined) return;
     yield* caller.bind`${key}`({
-      bindings: [{ type: "service", name: key, service: worker as string }],
+      bindings: [
+        { type: "service", name: key, service: worker as string },
+        ...(objects === undefined
+          ? []
+          : [
+              {
+                type: "durable_object_namespace" as const,
+                name: objects,
+                className: ENTITY_OBJECT_CLASS,
+                scriptName: worker as string,
+              },
+            ]),
+      ],
     });
   }),
 );

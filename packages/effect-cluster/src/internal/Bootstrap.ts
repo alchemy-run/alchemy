@@ -12,7 +12,7 @@ import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
 import { NodeClusterHttp, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   entrypointTag,
@@ -27,7 +27,6 @@ import {
   RunnerAddress,
   Singleton,
 } from "effect/cluster";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -43,14 +42,26 @@ import * as Ref from "effect/Ref";
 import type { Rpc, RpcGroup } from "effect/rpc";
 import type { Workflow as EffectWorkflow } from "effect/workflow";
 import type { HostedCron } from "../Cron.ts";
+import { databaseMaxConnections } from "../Database.ts";
 import { PlatformDeclaration, type HostedEntity } from "../Entity.ts";
 import { RunnerHost } from "../Host.ts";
 import type { HostedSingleton } from "../Singleton.ts";
 import type { HostedWorkflow } from "../Workflow.ts";
 import { GATEWAY_PORT, RUNNER_PORT, gatewayLayer } from "./Gateway.ts";
 import { HasNoPool, type HostedRuntimeContext } from "./HostedRuntime.ts";
+import { loadSecretEnv } from "./SecretEnv.ts";
 
 const env = (name: string) => process.env[name];
+
+/**
+ * The runner's client to the cluster's database: `CLUSTER_DATABASE_URL`,
+ * holding at most the pool's `databaseConnections`.
+ */
+const clusterDatabase = Layer.unwrap(
+  Effect.map(databaseMaxConnections, (maxConnections) =>
+    PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!), maxConnections }),
+  ),
+);
 
 /** Whether an IPv4 address is in a CIDR range (`10.46.0.0/16`). */
 const inIpv4Range = (address: string, range: string) => {
@@ -129,6 +140,7 @@ export const runExternal = (
   runProcess(
     "Effect Cluster runner",
     Effect.gen(function* () {
+      yield* Effect.sync(loadSecretEnv);
       const host = yield* runnerHost;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -167,7 +179,7 @@ export const runExternal = (
         storage: "sql",
         clientOnly: true,
         shardingConfig: shardGroupsConfig(),
-      }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));
+      }).pipe(Layer.provide(clusterDatabase));
       const gateway = gatewayLayer(entities, env("CLUSTER_GATEWAY_TOKEN") ?? "").pipe(
         Layer.provide(NodeHttpServer.layer(createServer, { port: GATEWAY_PORT })),
       );
@@ -207,15 +219,7 @@ export const bootstrap = (
     NodeServices.layer,
     FetchHttpClient.layer,
     Logger.layer([Logger.consolePretty()]),
-  ).pipe(
-    Layer.provideMerge(stackFromEnv),
-    Layer.provideMerge(
-      Layer.succeed(
-        ConfigProvider.ConfigProvider,
-        reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-      ),
-    ),
-  );
+  ).pipe(Layer.provideMerge(stackFromEnv), Layer.provideMerge(RuntimeConfigProviderLive));
 
   const program = Effect.gen(function* () {
     type Hosted = HostedEntity | HostedWorkflow | HostedSingleton | HostedCron;
@@ -309,7 +313,7 @@ export const bootstrap = (
         ),
         ...shardGroupsConfig(),
       },
-    }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));
+    }).pipe(Layer.provide(clusterDatabase));
     // Singletons and crons run in this pool's shard group too, each with
     // the services its Construction phase had.
     const scheduled = hosted.flatMap((entry) =>
@@ -364,5 +368,8 @@ export const bootstrap = (
     );
   }).pipe(Effect.provide(platform), Effect.scoped);
 
-  return runProcess("Effect Cluster runner", program as Effect.Effect<never, unknown, never>);
+  return runProcess(
+    "Effect Cluster runner",
+    Effect.andThen(Effect.sync(loadSecretEnv), program) as Effect.Effect<never, unknown, never>,
+  );
 };

@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, tagRecord } from "alchemy/Tags";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -12,12 +13,24 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type LogGroupName = string;
-export type LogGroupArn = `arn:aws:logs:${RegionID}:${AccountID}:log-group:${LogGroupName}`;
+export type LogGroupArn =
+  `arn:${Partition}:logs:${RegionID}:${AccountID}:log-group:${LogGroupName}`;
 export type LogGroupClass = logs.LogGroupClass;
+
+/**
+ * Deletion was refused because the log group has deletion protection on, set
+ * through `deletionProtectionEnabled` or outside the stack. Turn it off and
+ * deploy (or turn it off in the console) before deleting it.
+ */
+export class LogGroupDeletionProtected extends Data.TaggedError("LogGroupDeletionProtected")<{
+  readonly logGroupName: string;
+  readonly message: string;
+}> {}
 
 export interface LogGroupProps {
   /**
@@ -220,7 +233,7 @@ export const LogGroupProvider = () =>
               (group) =>
                 Effect.gen(function* () {
                   const tagArn =
-                    `arn:aws:logs:${region}:${accountId}:log-group:${group.logGroupName}` as LogGroupArn;
+                    `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${group.logGroupName}` as LogGroupArn;
                   const tags = yield* logs.listTagsForResource({ resourceArn: tagArn }).pipe(
                     Effect.map((r): Record<string, string> =>
                       Object.fromEntries(
@@ -309,7 +322,7 @@ export const LogGroupProvider = () =>
           // APIs, which reject that suffix with "Invalid resourceArn".
           const arn = normalizeLogGroupArn(
             (output?.logGroupArn ??
-              `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`) as LogGroupArn,
+              `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${logGroupName}`) as LogGroupArn,
           );
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -421,22 +434,34 @@ export const LogGroupProvider = () =>
             tags: desiredTags,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* logs
-            .putLogGroupDeletionProtection({
-              logGroupIdentifier: output.logGroupName,
-              deletionProtectionEnabled: false,
-            })
-            .pipe(
-              Effect.retry({
-                while: (error) =>
-                  error._tag === "OperationAbortedException" ||
-                  error._tag === "ServiceUnavailableException",
-                schedule: Schedule.exponential(100),
-                times: 8,
-              }),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
+        delete: Effect.fn(function* ({ output, force }) {
+          const observed = yield* observe(output.logGroupName);
+          if (observed === undefined) return;
+          // Deletion protection, set by this stack or outside it, refuses the
+          // delete. Only an account-wide nuke (`force`) lifts it.
+          if (observed.deletionProtectionEnabled === true) {
+            if (force !== true) {
+              return yield* new LogGroupDeletionProtected({
+                logGroupName: output.logGroupName,
+                message: `Log group '${output.logGroupName}' has deletion protection on. Set \`deletionProtectionEnabled: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
+            yield* logs
+              .putLogGroupDeletionProtection({
+                logGroupIdentifier: output.logGroupName,
+                deletionProtectionEnabled: false,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "OperationAbortedException" ||
+                    error._tag === "ServiceUnavailableException",
+                  schedule: Schedule.exponential(100),
+                  times: 8,
+                }),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              );
+          }
           yield* logs
             .deleteLogGroup({
               logGroupName: output.logGroupName,

@@ -276,13 +276,11 @@ export const ServiceProvider = () =>
       if (current === undefined) {
         const created = yield* firebasedataconnect
           .createProjectsLocationsServices({
+            displayName: news.displayName,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             serviceId,
-            body: {
-              displayName: news.displayName,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -312,14 +310,12 @@ export const ServiceProvider = () =>
           Effect.gen(function* () {
             const latest = yield* getByName(serviceName);
             const operation = yield* firebasedataconnect.patchProjectsLocationsServices({
+              etag: latest?.etag,
+              displayName: news.displayName,
+              annotations: desiredAnnotations,
+              labels: desiredLabels,
               name: serviceName,
               updateMask: mask,
-              body: {
-                etag: latest?.etag,
-                displayName: news.displayName,
-                annotations: desiredAnnotations,
-                labels: desiredLabels,
-              },
             });
             yield* waitForOperation(operation);
           }),

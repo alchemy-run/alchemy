@@ -16,7 +16,7 @@ import { CustomerApi } from "@bank/domain/CustomerApi.api";
 export const Bank = DomainFoldkit.make(CustomerApi);
 ```
 
-`Bank` has one Command per Api command, one Command per Api query (see [Ask a query](#ask-a-query)), and a read namespace for each View, Aggregate, and Stream. Each read namespace has `watch` and `events`. View namespaces also have `SnapshotFlags` and `decodeSnapshotFlags`. The name `Message` is reserved: `make` does not compile for an Api with an entry named `Message`. Each Command takes `{ target, input, commandId }`. Its result is `Bank.Message.Succeeded<Name>` or `Bank.Message.Failed<Name>`.
+`Bank` has one Command per Api command, one Command per Api query (see [Ask a query](#ask-a-query)), and a read namespace for each View, Aggregate, and Stream. Each read namespace has `watch` and `events`. View namespaces also have `SnapshotFlags` and `decodeSnapshotFlags`. The name `Message` is reserved: `make` does not compile for an Api with an entry named `Message`. Each Command takes `{ input, commandId }`. Its result is `Bank.Message.Succeeded<Name>` or `Bank.Message.Failed<Name>`.
 
 A success carries `reply` and `receipt: { stream, version }`. Pass the receipt to a read's `atLeast` option when that read must include the write.
 
@@ -60,8 +60,7 @@ const deposit = (model: Model): Update.Return<Model, Message, typeof CustomerApi
     model: modifyFields(model, { commandIds: () => allocation.commandIds }),
     commands: [Command.mapMessage(
       Bank.DepositMoney({
-        target: model.accountId,
-        input: { amount: 1_000 },
+        input: { accountId: model.accountId, amount: 1_000 },
         commandId: allocation.commandId,
       }),
       (result) => Message.ReceivedBankResult({ result }),
@@ -119,6 +118,12 @@ The adapter converts absent state to `Option.none()`. Store the state and cursor
 Use `isEnabled: (model) => model.online` to stop the stream while offline. A return to online restarts it with a fresh snapshot.
 
 Use `watch` for state. A View can change its state without an output event, so `events` cannot replace the state watch.
+
+`toMessage` also receives the key the snapshot is of, as its second argument. A Model that keeps several keys files each snapshot under its own:
+
+```typescript
+toMessage: (snapshot, accountId) => Message.ReceivedSummary({ accountId, snapshot }),
+```
 
 ## Ask a query
 

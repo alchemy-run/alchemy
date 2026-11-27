@@ -402,11 +402,7 @@ export const AppsServicesVersionProvider = () =>
 
       if (current === undefined) {
         const operation = yield* appengine
-          .createAppsServicesVersions({
-            appsId,
-            servicesId: serviceId,
-            body,
-          })
+          .createAppsServicesVersions({ ...body, appsId, servicesId: serviceId })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.succeed<appengine.Operation>({ done: true })),
           );
@@ -443,17 +439,15 @@ export const AppsServicesVersionProvider = () =>
       );
       if (updateMask.length > 0) {
         const operation = yield* appengine.patchAppsServicesVersions({
+          servingStatus: news.servingStatus,
+          instanceClass: news.instanceClass,
+          automaticScaling: news.automaticScaling,
+          basicScaling: news.basicScaling,
+          manualScaling: news.manualScaling,
           appsId,
           servicesId: serviceId,
           versionsId: observedId,
           updateMask,
-          body: {
-            servingStatus: news.servingStatus,
-            instanceClass: news.instanceClass,
-            automaticScaling: news.automaticScaling,
-            basicScaling: news.basicScaling,
-            manualScaling: news.manualScaling,
-          },
         });
         yield* waitForOperation(operation, { appsId });
         current = (yield* getById(appsId, serviceId, observedId)) ?? current;

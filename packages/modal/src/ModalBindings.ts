@@ -166,7 +166,10 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
         // The host talks to the deployer's Modal control plane.
         const resolve = Option.isSome(ambient)
           ? ambient.value
-          : yield* Credentials.pipe(Effect.provide(CredentialsFromEnv));
+          : yield* Credentials.pipe(
+              Effect.provide(CredentialsFromEnv),
+              orDieCredentialsUnavailable("Modal"),
+            );
         // Binding initialization can't fail; the engine reports this defect as
         // `CredentialsRequired`.
         const creds = yield* resolve.pipe(orDieCredentialsUnavailable("Modal"));
@@ -248,7 +251,12 @@ const operationContext = Effect.gen(function* () {
     Credentials,
     Option.isSome(ambientCredentials)
       ? ambientCredentials.value
-      : yield* Credentials.pipe(Effect.provide(withAuthTokens(CredentialsFromEnv))),
+      : yield* Credentials.pipe(
+          Effect.provide(withAuthTokens(CredentialsFromEnv)),
+          // Without the token pair the env layer fails when it is built; this
+          // context is typed as never failing, so that dies.
+          orDieCredentialsUnavailable("Modal"),
+        ),
   ).pipe(
     Context.add(
       HttpClient.HttpClient,

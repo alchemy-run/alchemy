@@ -97,13 +97,14 @@ export type GatewayStripe = {
 };
 
 /**
- * A single spend-limit rule. Caps cumulative spend (in cents) routed through
- * the gateway over a rolling `window` (in seconds), optionally scoped to a set
- * of models or providers.
+ * A single spend-limit rule. Caps cumulative spend (in US dollars) routed
+ * through the gateway over a rolling `window`, optionally scoped to a set of
+ * models or providers.
  */
 export type GatewaySpendLimitRule = {
   /**
-   * Spend cap for this rule. The amount is in cents (`limitType: "cost"`).
+   * Spend cap for this rule, in US dollars (`limitType: "cost"`): `500` caps
+   * spend at $500 per `window`, `0.5` at 50 cents.
    */
   limit: number;
   /**
@@ -264,7 +265,16 @@ export type GatewayProps = {
    * Whether Zero Data Retention is enabled.
    */
   zdr?: boolean;
+  /**
+   * How Workers AI inference routed through this gateway is billed.
+   * `"postpaid"` (Standard billing) bills the account directly through
+   * Workers AI; `"unified"` deducts Unified Billing credits through AI
+   * Gateway. When omitted, the gateway keeps its current setting.
+   */
+  workersAiBillingMode?: GatewayWorkersAiBillingMode;
 };
+
+export type GatewayWorkersAiBillingMode = "postpaid" | "unified";
 
 export type Gateway = Resource<
   "Cloudflare.AI.Gateway",
@@ -292,6 +302,7 @@ export type Gateway = Resource<
     stripe: GatewayStripe | undefined;
     spendLimits: GatewaySpendLimits | undefined;
     zdr: boolean;
+    workersAiBillingMode: GatewayWorkersAiBillingMode | undefined;
   },
   never,
   Providers,
@@ -465,14 +476,14 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * ### Spend Limits
  * **Example:** Cap cost per rolling window
  * Per-gateway spend limits replace the deprecated account-level spending
- * limit. Each rule caps cumulative cost (in cents) over a rolling `window`
- * (in seconds), optionally scoped to specific models or providers.
+ * limit. Each rule caps cumulative cost (in US dollars) over a rolling
+ * `window`, optionally scoped to specific models or providers.
  * ```typescript
  * const gateway = yield* Cloudflare.AI.Gateway("Gateway", {
  *   spendLimits: {
  *     enabled: true,
  *     rules: [
- *       { limitType: "cost", limit: 500_00, window: "1 day" }, // $500/day
+ *       { limitType: "cost", limit: 500, window: "1 day" }, // $500/day
  *     ],
  *   },
  * });
@@ -488,6 +499,16 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * const gateway = yield* Cloudflare.AI.QueryGateway(
  *   Cloudflare.AI.Gateway.lookup({ id: "prod-gateway" }),
  * );
+ * ```
+ *
+ * ### Workers AI Billing
+ * **Example:** Bill Workers AI on Standard billing
+ * `workersAiBillingMode` only affects Workers AI models; third-party
+ * providers keep using Unified Billing or your own provider keys.
+ * ```typescript
+ * const gateway = yield* Cloudflare.AI.Gateway("Gateway", {
+ *   workersAiBillingMode: "postpaid",
+ * });
  * ```
  *
  * @resource
@@ -519,6 +540,7 @@ export const GatewayResourceProvider = () =>
       const nextMutable = mutable({
         ...next,
         authentication: next.authentication ?? oldMutable.authentication,
+        workersAiBillingMode: next.workersAiBillingMode ?? oldMutable.workersAiBillingMode,
       } as Gateway["Attributes"]);
       if (!deepEqual(oldMutable, nextMutable)) {
         return { action: "update" } as const;
@@ -648,6 +670,8 @@ const desired = (id: string, props: GatewayProps | undefined) =>
       stripe: props?.stripe ?? undefined,
       spendLimits: resolveSpendLimits(props?.spendLimits),
       zdr: props?.zdr ?? false,
+      // Unmanaged when omitted: an existing gateway keeps its current mode.
+      workersAiBillingMode: props?.workersAiBillingMode,
     };
   });
 
@@ -706,6 +730,9 @@ const mapGateway = (
   stripe: gateway.stripe ?? undefined,
   spendLimits: normalizeSpendLimits(gateway.spendLimits),
   zdr: gateway.zdr ?? false,
+  workersAiBillingMode: (gateway.workersAiBillingMode ?? undefined) as
+    | GatewayWorkersAiBillingMode
+    | undefined,
 });
 
 // Normalize spend limits into the user-facing shape and drop server-managed
@@ -774,6 +801,7 @@ const mutable = (gateway: Gateway["Attributes"]) => ({
   stripe: gateway.stripe,
   spendLimits: spendLimitsForDiff(gateway.spendLimits),
   zdr: gateway.zdr,
+  workersAiBillingMode: gateway.workersAiBillingMode,
 });
 
 // Compare spend limits by their user-meaningful shape: drop the
@@ -818,6 +846,7 @@ const createRequest = Effect.fn(function* (id: string, props: GatewayProps | und
     logpush: next.logpush,
     logpushPublicKey: next.logpushPublicKey,
     zdr: next.zdr,
+    workersAiBillingMode: next.workersAiBillingMode,
   } satisfies aiGateway.CreateAiGatewayRequest;
 });
 
@@ -849,5 +878,6 @@ const updateRequest = Effect.fn(function* (
     stripe: next.stripe,
     spendLimits: next.spendLimits,
     zdr: next.zdr,
+    workersAiBillingMode: next.workersAiBillingMode,
   } satisfies aiGateway.UpdateAiGatewayRequest;
 });

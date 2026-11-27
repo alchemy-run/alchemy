@@ -365,12 +365,7 @@ export const AppProfileProvider = () =>
 
       if (current === undefined) {
         const created = yield* bigtable
-          .createProjectsInstancesAppProfiles({
-            parent,
-            appProfileId,
-            ignoreWarnings,
-            body: desired,
-          })
+          .createProjectsInstancesAppProfiles({ ...desired, parent, appProfileId, ignoreWarnings })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -397,10 +392,11 @@ export const AppProfileProvider = () =>
         ].filter((field): field is string => field !== undefined);
         const patched = yield* bigtable
           .patchProjectsInstancesAppProfiles({
+            ...desired,
+            etag: current.etag,
             name,
             updateMask: mask.join(","),
             ignoreWarnings,
-            body: { ...desired, etag: current.etag },
           })
           .pipe(
             Effect.retry({

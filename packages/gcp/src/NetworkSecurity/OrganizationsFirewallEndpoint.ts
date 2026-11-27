@@ -390,14 +390,12 @@ export const OrganizationsFirewallEndpointProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createOrganizationsLocationsFirewallEndpoints({
+            billingProjectId,
+            description: news.description,
+            labels: desiredLabels,
+            endpointSettings: { jumboFramesEnabled },
             parent: organizationParent(organization, location),
             firewallEndpointId,
-            body: {
-              billingProjectId,
-              description: news.description,
-              labels: desiredLabels,
-              endpointSettings: { jumboFramesEnabled },
-            },
           })
           .pipe(
             Effect.retry({
@@ -429,13 +427,10 @@ export const OrganizationsFirewallEndpointProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networksecurity.patchOrganizationsLocationsFirewallEndpoints({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

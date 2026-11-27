@@ -240,13 +240,11 @@ export const IssueModelProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsIssueModels({
+            displayName,
+            languageCode: news.languageCode,
+            modelType: news.modelType,
+            inputDataConfig: news.inputDataConfig,
             parent,
-            body: {
-              displayName,
-              languageCode: news.languageCode,
-              modelType: news.modelType,
-              inputDataConfig: news.inputDataConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -283,6 +281,10 @@ export const IssueModelProvider = () =>
 
       if (displayChanged || languageChanged || typeChanged || inputChanged) {
         current = yield* cci.patchProjectsLocationsIssueModels({
+          displayName,
+          languageCode: news.languageCode,
+          modelType: news.modelType,
+          inputDataConfig: news.inputDataConfig,
           name,
           updateMask: [
             displayChanged ? "display_name" : undefined,
@@ -292,13 +294,6 @@ export const IssueModelProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            languageCode: news.languageCode,
-            modelType: news.modelType,
-            inputDataConfig: news.inputDataConfig,
-          },
         });
       }
 
@@ -310,10 +305,7 @@ export const IssueModelProvider = () =>
       if (existing === undefined) return;
       if (existing.state === "DEPLOYED" || existing.state === "DEPLOYING") {
         const undeploy = yield* cci
-          .undeployProjectsLocationsIssueModels({
-            name: output.name,
-            body: { name: output.name },
-          })
+          .undeployProjectsLocationsIssueModels({ name: output.name })
           .pipe(
             Effect.catchTags({
               NotFound: () => Effect.undefined,

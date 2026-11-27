@@ -404,19 +404,17 @@ export const BackendProvider = () =>
       if (current === undefined) {
         const created = yield* firebaseapphosting
           .createProjectsLocationsBackends({
+            servingLocality: desiredServing as firebaseapphosting.BackendServingLocalityEnum,
+            serviceAccount: desiredServiceAccount,
+            displayName: news.displayName,
+            codebase: news.codebase,
+            appId: news.appId,
+            environment: news.environment,
+            requestLogsDisabled: desiredLogsDisabled,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             backendId,
-            body: {
-              servingLocality: desiredServing as firebaseapphosting.BackendServingLocalityEnum,
-              serviceAccount: desiredServiceAccount,
-              displayName: news.displayName,
-              codebase: news.codebase,
-              appId: news.appId,
-              environment: news.environment,
-              requestLogsDisabled: desiredLogsDisabled,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -445,19 +443,17 @@ export const BackendProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* firebaseapphosting.patchProjectsLocationsBackends({
+          etag: current.etag,
+          displayName: news.displayName,
+          serviceAccount: desiredServiceAccount,
+          codebase: news.codebase,
+          appId: news.appId,
+          environment: news.environment,
+          requestLogsDisabled: desiredLogsDisabled,
+          annotations: desiredAnnotations,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            displayName: news.displayName,
-            serviceAccount: desiredServiceAccount,
-            codebase: news.codebase,
-            appId: news.appId,
-            environment: news.environment,
-            requestLogsDisabled: desiredLogsDisabled,
-            annotations: desiredAnnotations,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

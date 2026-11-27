@@ -21,7 +21,7 @@ import { serviceAccountHostBundle } from "../GCPBindings.ts";
  */
 
 export const FUNCTION_ENTRY_POINT = "handler";
-export const DEFAULT_NODE_RUNTIME = "nodejs22";
+export const DEFAULT_NODE_RUNTIME = "nodejs26";
 
 export class FunctionSourceUploadFailed extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionSourceUploadFailed",
@@ -117,11 +117,9 @@ export const makeFunctionSource = Effect.gen(function* () {
   }) {
     const archive = yield* zipFiles(options.files);
     const target = yield* cloudfunctions.generateUploadUrlProjectsLocationsFunctions({
+      environment: "GEN_2",
+      ...(options.kmsKeyName ? { kmsKeyName: options.kmsKeyName } : {}),
       parent: options.parent,
-      body: {
-        environment: "GEN_2",
-        ...(options.kmsKeyName ? { kmsKeyName: options.kmsKeyName } : {}),
-      },
     });
     if (target.uploadUrl === undefined || target.storageSource === undefined) {
       return yield* new FunctionSourceUploadFailed({

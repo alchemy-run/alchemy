@@ -5,6 +5,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
+import { partitionOf } from "../Partition.ts";
 
 /**
  * API Gateway serializes mutations to a single RestApi at the control-plane
@@ -129,22 +130,22 @@ export const deleteRestApiAndWait = Effect.fn(function* (restApiId: string) {
 });
 
 export const restApiArn = (region: string, restApiId: string) =>
-  `arn:aws:apigateway:${region}::/restapis/${restApiId}`;
+  `arn:${partitionOf(region)}:apigateway:${region}::/restapis/${restApiId}`;
 
 export const stageArn = (region: string, restApiId: string, stageName: string) =>
-  `arn:aws:apigateway:${region}::/restapis/${restApiId}/stages/${stageName}`;
+  `arn:${partitionOf(region)}:apigateway:${region}::/restapis/${restApiId}/stages/${stageName}`;
 
 export const apiKeyArn = (region: string, apiKeyId: string) =>
-  `arn:aws:apigateway:${region}::/apikeys/${apiKeyId}`;
+  `arn:${partitionOf(region)}:apigateway:${region}::/apikeys/${apiKeyId}`;
 
 export const usagePlanArn = (region: string, usagePlanId: string) =>
-  `arn:aws:apigateway:${region}::/usageplans/${usagePlanId}`;
+  `arn:${partitionOf(region)}:apigateway:${region}::/usageplans/${usagePlanId}`;
 
 export const domainNameArn = (region: string, domainName: string) =>
-  `arn:aws:apigateway:${region}::/domainnames/${domainName}`;
+  `arn:${partitionOf(region)}:apigateway:${region}::/domainnames/${domainName}`;
 
 export const vpcLinkArn = (region: string, vpcLinkId: string) =>
-  `arn:aws:apigateway:${region}::/vpclinks/${vpcLinkId}`;
+  `arn:${partitionOf(region)}:apigateway:${region}::/vpclinks/${vpcLinkId}`;
 
 export const syncTags = Effect.fn(function* ({
   resourceArn,

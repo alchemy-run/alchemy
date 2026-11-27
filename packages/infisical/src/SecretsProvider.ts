@@ -153,11 +153,11 @@ const downloadSecrets = Effect.fn("downloadInfisicalSecrets")(function* (
   const env: Record<string, string> = {};
   for (const imported of response.imports ?? []) {
     for (const secret of imported.secrets) {
-      env[text(secret.secretKey)] = secret.secretValue;
+      env[text(secret.secretKey)] = text(secret.secretValue);
     }
   }
   for (const secret of response.secrets) {
-    env[text(secret.secretKey)] = secret.secretValue;
+    env[text(secret.secretKey)] = text(secret.secretValue);
   }
   return env;
 });

@@ -11,8 +11,11 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as Provider from "alchemy/Provider";
 import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 import { driftActions, repairDrift, waitForDrift } from "../drift.ts";
 import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
@@ -813,4 +816,73 @@ test.provider(
       expect(roleGone).toBe(true);
     }),
   { tags: ["provider:aws", "provider:aws:ecs", "provider:aws:iam", "live"], timeout: 240_000 },
+);
+
+// An Effect-native service carries its runtime `exports` as an unevaluated
+// Effect. The diff must still reach the image hash, so an edit to a module
+// the entrypoint imports plans an update even though no prop changed. Dev
+// mode (`ALCHEMY_TEST_DEV=1`) rebuilds from its file watcher instead.
+test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
+  "Effect-native service updates when an imported module changes",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+
+      // Work on a temp copy so editing the source never touches the
+      // checked-in fixture. The copy lives under packages/integration-tests/.tmp
+      // so its imports resolve exactly like the original's.
+      const fixtureDir = yield* cloneFixture(
+        yield* path.fromFileUrl(new URL("./fixtures/source-change", import.meta.url)),
+        {
+          prefix: "alchemy-ecs-service-source-change-",
+          tempRoot: yield* path.fromFileUrl(new URL("../../../.tmp", import.meta.url)),
+        },
+      );
+      const marker = path.join(fixtureDir, "marker.ts");
+      const entry = path.join(fixtureDir, "service.ts");
+      const fixture = yield* Effect.promise(
+        () => import(entry) as Promise<typeof import("./fixtures/source-change/service.ts")>,
+      );
+      const declaration = Effect.gen(function* () {
+        yield* fixture.SourceChangeCluster;
+        return yield* fixture.SourceChangeService;
+      }).pipe(Effect.provide(fixture.default));
+
+      yield* Effect.gen(function* () {
+        const created = yield* stack.deploy(declaration);
+
+        expect((yield* stack.plan(declaration)).resources.SourceChangeService?.action).toBe("noop");
+
+        yield* fs.writeFileString(marker, 'export const sourceChangeMarker = "source-v2";\n');
+        expect((yield* stack.plan(declaration)).resources.SourceChangeService?.action).toBe(
+          "update",
+        );
+
+        const updated = yield* stack.deploy(declaration);
+        expect(updated.serviceArn).toBe(created.serviceArn);
+        expect(updated.code?.hash).not.toBe(created.code?.hash);
+        expect(updated.taskDefinitionArn).not.toBe(created.taskDefinitionArn);
+
+        // Out-of-band: the service points at the new revision, which runs
+        // the rebuilt image.
+        const services = yield* ecs.describeServices({
+          cluster: updated.clusterArn,
+          services: [updated.serviceName],
+        });
+        expect(services.services?.[0]?.taskDefinition).toBe(updated.taskDefinitionArn);
+        const described = yield* ecs.describeTaskDefinition({
+          taskDefinition: updated.taskDefinitionArn,
+        });
+        expect(described.taskDefinition?.containerDefinitions?.[0]?.image).toBe(updated.imageUri);
+        expect(updated.imageUri).not.toBe(created.imageUri);
+      }).pipe(Effect.ensuring(fs.remove(fixtureDir, { recursive: true }).pipe(Effect.ignore)));
+
+      yield* stack.destroy();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:ecs", "provider:docker", "live"],
+    timeout: 600_000,
+  },
 );
