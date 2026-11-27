@@ -19,6 +19,7 @@ import type { ProfileStore } from "./Auth/Profile.ts";
 import type { Interaction } from "./Interaction.ts";
 import type { State } from "./State/State.ts";
 import { UserFacingError } from "./UserFacingError.ts";
+import { findDependencyManifest, packageExport } from "./Util/internal/PackageResolve.ts";
 import type { PlatformServices } from "./Util/PlatformServices.ts";
 
 /**
@@ -61,12 +62,16 @@ export interface Contributions {
    */
   readonly testServices?: Lazy<TestServices>;
   /**
-   * Environment variables `alchemy dev` sets on itself before it starts, so
-   * its sidecars and the processes they launch inherit them, e.g. a local
-   * emulator's CA bundle. A variable that is already set wins.
+   * PEM files of certificate authorities `alchemy dev` trusts, e.g. a local
+   * emulator's CA. Local Workers and the processes `Command.Dev` starts trust
+   * every provider's files together, plus the caller's `NODE_EXTRA_CA_CERTS`.
+   *
+   * A file may not exist yet, since a provider can create its CA during the
+   * first apply. It is read each time a Worker's runtime starts and each time
+   * `Command.Dev` spawns a process.
    */
-  readonly devEnv?: Lazy<
-    Effect.Effect<Readonly<Record<string, string>>, never, FileSystem.FileSystem | Path.Path>
+  readonly devTrust?: Lazy<
+    Effect.Effect<ReadonlyArray<string>, never, FileSystem.FileSystem | Path.Path>
   >;
 }
 
@@ -320,20 +325,6 @@ const readManifest = Effect.fn(function* (file: string) {
   );
 });
 
-/** Find `node_modules/<name>/package.json` from `dir` upwards. */
-const findDependencyManifest = Effect.fn(function* (dir: string, name: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  let current = dir;
-  while (true) {
-    const candidate = path.join(current, "node_modules", name, "package.json");
-    if (yield* fs.exists(candidate)) return candidate;
-    const parent = path.dirname(current);
-    if (parent === current) return undefined;
-    current = parent;
-  }
-});
-
 /**
  * The packages a project in `dir` can contribute providers from: the direct
  * dependencies of every `package.json` from `dir` up (a workspace package and
@@ -399,58 +390,6 @@ interface Declared {
     readonly exports: unknown;
   };
 }
-
-/**
- * The conditions an ESM `import` matches. Node picks the first matching key in
- * the `exports` object's own order, so only membership matters here.
- */
-const importConditions = new Set(
-  typeof Bun !== "undefined" ? ["bun", "import", "node", "default"] : ["import", "node", "default"],
-);
-
-/** An `exports` target under {@link importConditions}, with `*` filled in. */
-const exportTarget = (target: unknown, star: string): string | undefined => {
-  if (typeof target === "string") return target.replaceAll("*", star);
-  if (Array.isArray(target)) {
-    for (const candidate of target) {
-      const resolved = exportTarget(candidate, star);
-      if (resolved !== undefined) return resolved;
-    }
-    return undefined;
-  }
-  if (typeof target === "object" && target !== null) {
-    for (const [condition, value] of Object.entries(target)) {
-      if (!importConditions.has(condition)) continue;
-      const resolved = exportTarget(value, star);
-      if (resolved !== undefined) return resolved;
-    }
-  }
-  return undefined;
-};
-
-/** A package's own subpath (`"."`, `"./Contributions"`) through its `exports` map. */
-const packageExport = (exports: unknown, main: string | undefined, subpath: string) => {
-  if (exports === undefined) return subpath === "." ? (main ?? "./index.js") : subpath;
-  const entries =
-    typeof exports === "object" && exports !== null && !Array.isArray(exports)
-      ? Object.entries(exports)
-      : [];
-  // Subpath keys, or the package's one export ("exports": "./index.js").
-  const map = new Map<string, unknown>(
-    entries.some(([key]) => key.startsWith(".")) ? entries : [[".", exports]],
-  );
-  if (map.has(subpath)) return exportTarget(map.get(subpath), "");
-  for (const [pattern, target] of map) {
-    const star = pattern.indexOf("*");
-    if (star === -1) continue;
-    const prefix = pattern.slice(0, star);
-    const suffix = pattern.slice(star + 1);
-    if (subpath.startsWith(prefix) && subpath.endsWith(suffix)) {
-      return exportTarget(target, subpath.slice(prefix.length, subpath.length - suffix.length));
-    }
-  }
-  return undefined;
-};
 
 /**
  * Resolve a dependency's provider from the dependency itself, through its own
@@ -592,15 +531,18 @@ export const load = Effect.fn("Contributions.load")(function* (cwd?: string) {
   return yield* cached;
 });
 
-/** The environment every provider contributes to `alchemy dev` (see {@link Contributions.devEnv}). */
-export const devEnv = Effect.fn("Contributions.devEnv")(function* () {
-  const env: Record<string, string> = {};
+/**
+ * The PEM files every provider contributes to `alchemy dev` (see
+ * {@link Contributions.devTrust}), each listed once.
+ */
+export const devTrust = Effect.fn("Contributions.devTrust")(function* () {
+  const files = new Set<string>();
   for (const provider of yield* load()) {
-    if (provider.devEnv === undefined) continue;
-    const contribute = yield* resolve(provider, "devEnv", provider.devEnv);
-    Object.assign(env, yield* contribute);
+    if (provider.devTrust === undefined) continue;
+    const contribute = yield* resolve(provider, "devTrust", provider.devTrust);
+    for (const file of yield* contribute) files.add(file);
   }
-  return env;
+  return [...files];
 });
 
 /** Every provider's state stores, by `--backend` name, with their provider. */
