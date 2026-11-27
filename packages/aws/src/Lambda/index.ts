@@ -17,6 +17,7 @@ export * from "./EventInvokeConfig.ts";
 export * from "./EventSourceMapping.ts";
 export * from "./FlociFunctionProvider.ts";
 export * from "./FlociMicrovmImageProvider.ts";
+export * from "./FlociWebFunctionProvider.ts";
 export * from "./Function.ts";
 export * from "./GetAccountSettings.ts";
 export * from "./GetAccountSettingsHttp.ts";
