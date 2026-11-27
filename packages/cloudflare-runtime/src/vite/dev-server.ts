@@ -14,6 +14,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import type * as vite from "vite";
+import { isFileLoadingAllowed } from "vite";
 import * as DurableObjectNamespace from "../core/bindings/DurableObjectNamespace.ts";
 import * as Loopback from "../core/bindings/Loopback.ts";
 import * as UnsafeEval from "../core/bindings/UnsafeEval.ts";
@@ -112,34 +113,33 @@ const closeScope = async (scope: Scope.Closeable) => {
 };
 
 /**
- * Whether `target` resolves inside one of `allow` (Vite's `server.fs.allow`
- * roots). Both sides are canonicalized with `realpath` so a symlink can't
- * point out of the allowed tree. A path that doesn't exist (or can't be
- * resolved) is not allowed.
+ * Resolve `target` to a canonical path that Vite's own module-loading policy
+ * permits (`server.fs.allow` + `server.fs.deny` + explicitly-resolved
+ * `safeModulePaths`), or `null`.
+ *
+ * `realpath` is applied first and the SAME canonical path is both checked and
+ * returned for reading, which closes two holes a lexical check leaves open: a
+ * symlink inside the tree pointing out of it (its real path is then denied),
+ * and a `../`-with-symlink where validation and the later read would otherwise
+ * disagree. Delegating to `isFileLoadingAllowed` also honours Vite's deny list
+ * — `.env`, `*.pem`, `.alchemy`, `.npmrc`, `.git` — which a plain allow-root
+ * check does not, so those (plaintext local state, keys) stay unreadable over
+ * the loopback port. A path that can't be resolved is not allowed.
  */
-const isWithinAllowedRoots = async (
+const resolveAllowedModulePath = async (
   target: string,
-  allow: ReadonlyArray<string>,
-): Promise<boolean> => {
+  config: vite.ResolvedConfig,
+): Promise<string | null> => {
   let real: string;
   try {
     real = await NodeFs.realpath(NodePath.resolve(target));
   } catch {
-    return false;
+    return null;
   }
-  for (const root of allow) {
-    let base: string;
-    try {
-      base = await NodeFs.realpath(NodePath.resolve(root));
-    } catch {
-      continue;
-    }
-    if (real === base || real.startsWith(base + NodePath.sep)) return true;
-  }
-  return false;
+  return isFileLoadingAllowed(config, real) ? real : null;
 };
 
-const makeModuleFallbackService = (allow: ReadonlyArray<string>) =>
+const makeModuleFallbackService = (config: vite.ResolvedConfig) =>
   Effect.gen(function* () {
     const server = NodeHttp.createServer(async (req, res) => {
       try {
@@ -167,10 +167,12 @@ const makeModuleFallbackService = (allow: ReadonlyArray<string>) =>
 
         // The specifier is attacker-controllable (the fallback server binds a
         // loopback port any local process — or a browser page via
-        // DNS-rebinding — can reach), and it is read straight off disk. Confine
-        // it to Vite's own filesystem allowlist so it can't exfiltrate
-        // arbitrary files like /etc/passwd or a user's SSH key.
-        if (!(await isWithinAllowedRoots(modulePath, allow))) {
+        // DNS-rebinding — can reach) and is read straight off disk. Confine it
+        // to what Vite would itself serve, and read the exact canonical path we
+        // validated, so it can't exfiltrate /etc/passwd, an SSH key, a .env, or
+        // the plaintext local state under .alchemy/.
+        const allowedPath = await resolveAllowedModulePath(modulePath, config);
+        if (allowedPath === null) {
           res.writeHead(403, { "Content-Type": "text/plain" });
           res.end(`Module path not allowed: ${modulePath}`);
           return;
@@ -178,7 +180,7 @@ const makeModuleFallbackService = (allow: ReadonlyArray<string>) =>
 
         let content: Buffer;
         try {
-          content = await NodeFs.readFile(modulePath);
+          content = await NodeFs.readFile(allowedPath);
         } catch {
           res.writeHead(404, { "Content-Type": "text/plain" });
           res.end(`Module not found: ${modulePath}`);
@@ -248,10 +250,9 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   onRestart?: () => void,
 ) {
   const runtime = yield* Runtime.Runtime;
-  // Vite's own filesystem allowlist (workspace root + configured extras) is the
-  // boundary the module fallback server may read from.
-  const fsAllow = server.config.server.fs?.allow ?? [server.config.root];
-  const moduleFallback = yield* makeModuleFallbackService(fsAllow);
+  // The module fallback server reads only what Vite's own file-loading policy
+  // (fs.allow + fs.deny + resolved safeModulePaths) permits.
+  const moduleFallback = yield* makeModuleFallbackService(server.config);
 
   const name =
     options.worker?.name ??

@@ -1,5 +1,4 @@
 import * as crypto from "node:crypto";
-import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import type { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
@@ -192,7 +191,14 @@ export const makeGcsState = (options: GcsStateOptions = {}) =>
       const { project, region } = yield* GcpEnvironment.current;
       if (options.name !== undefined) yield* Provisioning.storeName(options.name);
       const bucketName = options.bucketName ?? createStateBucketName(project, options.name);
-      const ensure = ensureStateBucket(bucketName, project, options.location ?? region);
+      const ensure = ensureStateBucket(
+        bucketName,
+        project,
+        options.location ?? region,
+        // Only guard the engine-derived name against global-namespace squatting;
+        // an explicitly-configured bucketName is the user's own choice.
+        options.bucketName === undefined,
+      );
       yield* (yield* stateBucketExists(bucketName))
         ? ensure
         : Provisioning.deployMissing(
@@ -352,11 +358,36 @@ const syncStateBucketAccess = (bucket: string, project: string) =>
     }),
   );
 
-/** The last `/`-separated segment of a resource name (`projects/42` → `42`). */
-const lastSegment = (value: string): string => {
-  const parts = value.split("/");
-  return parts[parts.length - 1] || value;
-};
+/**
+ * Our own project's number, resolved from the Google Cloud Storage service
+ * account (`service-<NUMBER>@gs-project-accounts.iam.gserviceaccount.com`).
+ * Unlike Resource Manager's `projects.get`, the Storage API is necessarily
+ * enabled wherever the state store runs, so a failure here is anomalous — the
+ * caller fails closed rather than adopt a bucket it cannot verify.
+ */
+const ownProjectNumber = (project: string) =>
+  Effect.gen(function* () {
+    const account = yield* storage.getProjectsServiceAccount({ projectId: project }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new StateStoreError({
+            message:
+              `Cloud Storage state store: could not resolve the project number for ${project} ` +
+              `to verify state-bucket ownership (${cause._tag}). Grant the deploy identity Storage ` +
+              `access, or use a different state bucket name.`,
+          }),
+      ),
+    );
+    const number = /^service-(\d+)@/.exec(account.email_address ?? "")?.[1];
+    if (number === undefined) {
+      return yield* new StateStoreError({
+        message:
+          `Cloud Storage state store: unexpected GCS service account "${account.email_address ?? ""}" ` +
+          `for ${project}; cannot verify state-bucket ownership.`,
+      });
+    }
+    return number;
+  });
 
 /**
  * Refuse to adopt a state bucket owned by a different project. Cloud Storage
@@ -364,31 +395,21 @@ const lastSegment = (value: string): string => {
  * `alchemy-state-<project>` in their own project and grant the victim access;
  * the victim would then observe the bucket, adopt it, and write their state
  * where the attacker can read it. The bucket's `projectNumber` is the owning
- * project, so compare it against ours and fail closed on a mismatch.
+ * project: resolve ours and fail closed unless they match (or either side
+ * can't be verified). Only applied to the engine-derived bucket name; an
+ * explicitly-configured `bucketName` is the user's own choice and may point at
+ * another project.
  */
 const assertBucketOwnership = (bucket: string, project: string, ownerNumber: string | undefined) =>
   Effect.gen(function* () {
+    const ours = yield* ownProjectNumber(project);
     if (ownerNumber === undefined || ownerNumber === "") {
-      // Cloud Storage reliably returns `projectNumber` on a bucket GET; if it
-      // is somehow absent we cannot verify, so warn rather than silently adopt.
-      yield* Effect.logWarning(
-        `Cloud Storage state store: bucket ${bucket} returned no owning project; cannot verify it belongs to ${project}.`,
-      );
-      return;
-    }
-    const ours = yield* resourcemanager.getProjects({ name: `projects/${project}` }).pipe(
-      Effect.map((resource): string | undefined => lastSegment(resource.name ?? "")),
-      // Without Resource Manager access we can't resolve our own number.
-      // Don't brick the store — warn and proceed on the common (self-owned)
-      // path; the hard refusal below still fires whenever we *can* confirm a
-      // foreign owner.
-      Effect.catch(() => Effect.succeed(undefined)),
-    );
-    if (ours === undefined) {
-      yield* Effect.logWarning(
-        `Cloud Storage state store: could not resolve project number for ${project}; skipping bucket-ownership check for ${bucket}.`,
-      );
-      return;
+      return yield* new StateStoreError({
+        message:
+          `Refusing to use Cloud Storage bucket "${bucket}": it reports no owning project, so ` +
+          `ownership by ${project} (${ours}) cannot be verified. Use a different state bucket name, ` +
+          `or remove the bucket.`,
+      });
     }
     if (ours !== ownerNumber) {
       return yield* new StateStoreError({
@@ -405,14 +426,19 @@ const assertBucketOwnership = (bucket: string, project: string, ownerNumber: str
  * create races), then converge uniform access, public access prevention,
  * versioning, and object access for project owners and editors.
  */
-const ensureStateBucket = (bucket: string, project: string, location: string) =>
+const ensureStateBucket = (
+  bucket: string,
+  project: string,
+  location: string,
+  enforceOwnership: boolean,
+) =>
   Effect.gen(function* () {
     const observed = yield* storage
       .getBuckets({ bucket })
       .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (observed === undefined) {
       yield* Effect.logInfo(`Cloud Storage state store: creating bucket ${bucket} in ${location}`);
-      yield* storage
+      const created = yield* storage
         .insertBuckets({
           name: bucket,
           location,
@@ -421,12 +447,27 @@ const ensureStateBucket = (bucket: string, project: string, location: string) =>
           project,
         })
         .pipe(
+          Effect.as(true),
           // A concurrent first use created it first.
-          Effect.catchTag("Conflict", () => Effect.void),
+          Effect.catchTag("Conflict", () => Effect.succeed(false)),
         );
+      // Lost the create race: someone created the name between our GET and
+      // insert. If we derived the name, re-observe and prove the winner is us
+      // before writing state there.
+      if (!created && enforceOwnership) {
+        const winner = yield* storage
+          .getBuckets({ bucket })
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+        if (winner !== undefined) {
+          yield* assertBucketOwnership(bucket, project, winner.projectNumber);
+        }
+      }
     } else {
-      // Adopting an existing bucket: prove it is ours before writing state.
-      yield* assertBucketOwnership(bucket, project, observed.projectNumber);
+      // Adopting an existing bucket: prove it is ours before writing state
+      // (only for the engine-derived name; an explicit bucketName is trusted).
+      if (enforceOwnership) {
+        yield* assertBucketOwnership(bucket, project, observed.projectNumber);
+      }
       const drifted =
         observed.iamConfiguration?.uniformBucketLevelAccess?.enabled !== true ||
         observed.iamConfiguration?.publicAccessPrevention !== "enforced" ||
@@ -466,7 +507,9 @@ export const provisionStateBucket = (
   project: string,
   location: string,
 ): Effect.Effect<void, StateStoreError, GcsDeps> =>
-  ensureStateBucket(bucket, project, location).pipe(
+  // `bootstrapStateBucket` always passes the engine-derived name, so enforce
+  // the ownership guard here too.
+  ensureStateBucket(bucket, project, location, true).pipe(
     Effect.mapError(
       (cause) =>
         new StateStoreError({

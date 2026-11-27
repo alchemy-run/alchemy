@@ -185,7 +185,19 @@ for (const port of ports) {
 
 const writeForwarderScript = (dir: string) => {
   const file = NodePath.join(dir, "forward.mjs");
-  NodeFs.writeFileSync(file, FORWARDER_SOURCE);
+  // Write a fresh inode. If `forward.mjs` was pre-planted (or hard-linked)
+  // while the dir was briefly writable, someone may still hold a handle to that
+  // inode; truncating it in place would let them mutate the script the dev
+  // container then executes. Unlink first, then create exclusively (0600), so
+  // the mounted file is an inode only we have ever written. The enclosing dir
+  // is already 0700 and owned by us (see `ensureSecureLoopbackDir`), so no one
+  // else can re-create the entry afterwards.
+  try {
+    NodeFs.unlinkSync(file);
+  } catch {
+    // not there yet
+  }
+  NodeFs.writeFileSync(file, FORWARDER_SOURCE, { flag: "wx", mode: 0o600 });
   return file;
 };
 
