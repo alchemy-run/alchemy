@@ -203,14 +203,20 @@ export type Status<A, E> =
 /**
  * How a finished run ended, from its stored exit.
  *
+ * A defect wins over a failure: a run that failed and whose compensation then
+ * died keeps both in its cause, and the dead compensation is what needs
+ * attention.
+ *
  * @internal
  */
 export const statusOf = <A, E>(exit: Exit.Exit<A, E>): Ended<A, E> => {
   if (Exit.isSuccess(exit)) return { _tag: "Completed", result: exit.value };
-  const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
-  if (failure?._tag === "Fail") return { _tag: "Failed", error: failure.error };
   const defect = exit.cause.reasons.find((reason) => reason._tag === "Die");
-  return defect?._tag === "Die" ? { _tag: "Died", defect: defect.defect } : { _tag: "Interrupted" };
+  if (defect?._tag === "Die") return { _tag: "Died", defect: defect.defect };
+  const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
+  return failure?._tag === "Fail"
+    ? { _tag: "Failed", error: failure.error }
+    : { _tag: "Interrupted" };
 };
 
 /** Where a finished run ended. */
