@@ -906,6 +906,7 @@ const observeInstanceRequests = Effect.gen(function* () {
   const requests: Array<{
     action: string;
     port: string | null;
+    engineVersion: string | null;
     parameterGroup: string | null;
     securityGroups: string[];
     iamAuthentication: string | null;
@@ -935,6 +936,7 @@ const observeInstanceRequests = Effect.gen(function* () {
         ) {
           requests.push({
             action,
+            engineVersion: parameters.get("EngineVersion"),
             iamAuthentication: parameters.get("EnableIAMDatabaseAuthentication"),
             publiclyAccessible: parameters.get("PubliclyAccessible"),
             deletionProtection: parameters.get("DeletionProtection"),
@@ -968,7 +970,7 @@ const observeInstanceRequests = Effect.gen(function* () {
   return { client: observedClient, requests };
 });
 
-const portProgram = (port?: number, round = "ports", identifier?: string) =>
+const portProgram = (port?: number, round = "ports", identifier?: string, engineVersion?: string) =>
   Effect.gen(function* () {
     const network = yield* Network("PortNet", { cidrBlock: "10.45.0.0/16" });
     const subnetGroup = yield* DBSubnetGroup("PortSubnetGroup", {
@@ -987,6 +989,7 @@ const portProgram = (port?: number, round = "ports", identifier?: string) =>
       skipFinalSnapshot: true,
       publiclyAccessible: false,
       ...(port === undefined ? {} : { port }),
+      ...(engineVersion === undefined ? {} : { engineVersion }),
       tags: { round },
     });
   });
@@ -1051,6 +1054,19 @@ lifecycle(4, process.env.RDS_TEST_LIFECYCLE)(
       yield* deploy(5432, "same-port");
       expect(requests.some((request) => request.action === "DescribeDBInstances")).toBe(true);
       expect(writes()).toEqual([]);
+
+      // A major version is met by the minor RDS runs, so an update never resends it.
+      const major = created.engineVersion!.split(".")[0]!;
+      requests.length = 0;
+      const versioned = yield* stack
+        .deploy(portProgram(5432, "major-version", undefined, major))
+        .pipe(Effect.provideService(HttpClient.HttpClient, client));
+      expect(versioned.engineVersion).toBe(created.engineVersion);
+      expect(
+        requests
+          .filter((request) => request.action === "ModifyDBInstance")
+          .map((request) => request.engineVersion),
+      ).not.toContain(major);
 
       requests.length = 0;
       const changed = yield* deploy(5433);
