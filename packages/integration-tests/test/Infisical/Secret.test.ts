@@ -39,7 +39,7 @@ describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJE
             comment: "",
             version: created.version,
           });
-          expect(created.secretValue).toBe(props.value);
+          expect(valueOf(created)).toBe("Authorization=initial");
           expect(metadata(created)).toEqual({
             "alchemy::stack": stack.name,
             "alchemy::stage": stack.stage,
@@ -56,7 +56,7 @@ describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJE
           );
           expect(rotated.id).toBe(first.id);
           const rotatedRow = yield* get(props);
-          expect(rotatedRow.secretValue).toBe("rotated");
+          expect(valueOf(rotatedRow)).toBe("rotated");
           expect(rotatedRow.secretComment).toBe("Token");
 
           // A value changed outside the stack is written again on the next deploy.
@@ -67,13 +67,15 @@ describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJE
             type: "shared",
             secretValue: "drifted",
           });
-          yield* stack.deploy(program({ value: "rotated", comment: "Token" }));
-          expect((yield* get(props)).secretValue).toBe("rotated");
+          yield* stack.deploy(program({ value: Redacted.make("rotated"), comment: "Token" }));
+          expect(valueOf(yield* get(props))).toBe("rotated");
 
           // A create whose attributes never reached state: deploy finds the
           // row by its key and keeps it.
           yield* forgetAttributes(stack);
-          const recovered = yield* stack.deploy(program({ value: "rotated", comment: "Token" }));
+          const recovered = yield* stack.deploy(
+            program({ value: Redacted.make("rotated"), comment: "Token" }),
+          );
           expect(recovered.id).toBe(first.id);
 
           yield* stack.destroy();
@@ -109,7 +111,7 @@ describe.skipIf(!process.env.INFISICAL_TEST || !process.env.INFISICAL_TEST_PROJE
           const adopted = yield* stack.deploy(program).pipe(adopt(true));
           expect(adopted.id).toBe(original.id);
           const owned = yield* get(props);
-          expect(owned.secretValue).toBe(props.value);
+          expect(valueOf(owned)).toBe("Authorization=initial");
           expect(metadata(owned)).toEqual({
             "managed-by": "test-fixture",
             "alchemy::stack": stack.name,
@@ -131,7 +133,7 @@ const declaration = Effect.fn(function* (stack: Test.ScratchStack) {
     project: yield* Config.String("INFISICAL_TEST_PROJECT"),
     environment: yield* Config.String("INFISICAL_TEST_ENVIRONMENT").pipe(Config.withDefault("dev")),
     name: `ALCHEMY_${stack.name}_${stack.stage}`.replace(/[^a-zA-Z0-9_]/g, "_").toUpperCase(),
-    value: "Authorization=initial",
+    value: Redacted.make("Authorization=initial"),
   };
 });
 
@@ -151,6 +153,10 @@ const get = (props: Infisical.SecretProps) =>
 
 const find = (props: Infisical.SecretProps) =>
   get(props).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+
+/** Distilled returns the stored value as a `Redacted`. */
+const valueOf = ({ secretValue }: infisical.GetSecretByNameV4ResponseSecret) =>
+  Redacted.isRedacted(secretValue) ? Redacted.value(secretValue) : secretValue;
 
 const metadata = (secret: infisical.GetSecretByNameV4ResponseSecret) =>
   Object.fromEntries((secret.secretMetadata ?? []).map(({ key, value }) => [key, value]));

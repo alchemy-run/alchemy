@@ -11177,9 +11177,6 @@ importers:
 
   packages/infisical:
     dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../../submodules/distilled/packages/core
       '@distilled.cloud/infisical':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/infisical

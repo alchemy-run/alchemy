@@ -18,8 +18,11 @@ export interface SecretProps {
   path?: string;
   /** Secret key, used exactly as given. Changing it replaces the secret. */
   name: string;
-  /** Secret value. Never included in attributes. */
-  value: string | Redacted.Redacted<string>;
+  /**
+   * Secret value. A `Redacted` so state encryption seals it; it is never
+   * included in attributes.
+   */
+  value: Redacted.Redacted<string>;
   /** Secret comment. @default "" */
   comment?: string;
 }
@@ -167,8 +170,11 @@ const keyOf = (props: SecretProps): Key => ({
   name: props.name,
 });
 
-const valueOf = (props: SecretProps) =>
-  typeof props.value === "string" ? props.value : Redacted.value(props.value);
+const valueOf = (props: SecretProps) => Redacted.value(props.value);
+
+/** Distilled returns the stored value as a `Redacted`. */
+const plain = (value: string | Redacted.Redacted<string>) =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 const request = (key: Key) => ({
   projectId: key.project,
@@ -221,7 +227,7 @@ const current = Effect.fnUntraced(function* (
 ) {
   return (
     !live.secretValueHidden &&
-    live.secretValue === valueOf(props) &&
+    plain(live.secretValue) === valueOf(props) &&
     live.secretComment === (props.comment ?? "") &&
     metadataOf(live)[instanceTag] === instanceId &&
     (yield* hasAlchemyTags(id, metadataOf(live)))

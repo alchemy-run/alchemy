@@ -306,7 +306,8 @@ const getOidcAuth = Effect.fnUntraced(function* (identity: {
   const ips = yield* Schema.decodeUnknownEffect(TrustedIps)(auth.accessTokenTrustedIps ?? []);
   return yield* Schema.decodeUnknownEffect(OidcAuthSchema)({
     ...oidcDefaults,
-    ...auth,
+    // An absent field the API sends as `undefined` keeps its default.
+    ...Object.fromEntries(Object.entries(auth).filter(([, value]) => value !== undefined)),
     boundAudiences: policyValues(auth.boundAudiences),
     boundSubject: auth.boundSubject ?? "",
     boundClaims: auth.boundClaims ?? {},
