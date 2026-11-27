@@ -1209,6 +1209,19 @@ const workerAssetConfigForHash = (assets: WorkerProps["assets"]) => {
 };
 
 /**
+ * A binding's data without the dev-only `hyperdrives` channel a Hyperdrive binding contributes
+ * beside the wire binding. Only the local Worker provider reads it, and the upload never carries it.
+ * Its origins come from the Hyperdrive's attributes, which an apply takes from what it reconciled
+ * and a later plan from the live read, so hashing them planned every Worker bound to a Hyperdrive
+ * as an update on every deploy.
+ */
+const uploadedBindingData = <Data>(data: Data): Data => {
+  if (data === null || typeof data !== "object" || !("hyperdrives" in data)) return data;
+  const { hyperdrives: _hyperdrives, ...wire } = data as Data & { hyperdrives?: unknown };
+  return wire as Data;
+};
+
+/**
  * Hash a Worker's deploy-time metadata surface so metadata-only edits are
  * detected by the diff (#745). Previously the update decision compared only
  * the bundle/vite/asset-content hashes, so a change to e.g. a compatibility
@@ -1232,7 +1245,10 @@ const resolveWorkerMetadataHash = ({
     // materialized as different attribute projections between reconcile and a
     // later plan; hashing props.env as well would turn those irrelevant shape
     // differences into perpetual updates.
-    bindings: bindings.map((binding) => ({ sid: binding.sid, data: binding.data })),
+    bindings: bindings.map((binding) => ({
+      sid: binding.sid,
+      data: uploadedBindingData(binding.data),
+    })),
     assets: workerAssetConfigForHash(props.assets),
     cache: props.cache,
     entrypoints: props.entrypoints,

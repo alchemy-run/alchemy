@@ -280,6 +280,45 @@ test.provider(
   },
 );
 
+// A Worker's metadata hash must not take the dev-only `hyperdrives` channel: its origin comes
+// from the reconciled Connection on deploy and from the live read on the next plan, so hashing it
+// planned every Worker bound to a Hyperdrive as an update right after its own deploy.
+test.provider(
+  "a Worker bound to a Hyperdrive plans noop right after its own deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = Effect.gen(function* () {
+        const project = yield* Neon.Project("BoundNoopProject");
+        const connection = yield* Cloudflare.Hyperdrive.Connection("BoundNoopHyperdrive", {
+          origin: project.origin,
+        });
+        return yield* Cloudflare.Worker("BoundNoopWorker", {
+          main: pathe.resolve(import.meta.dirname, "fixtures/async-worker.ts"),
+          env: { HD: connection },
+        });
+      });
+
+      yield* stack.deploy(program);
+      const plan = yield* stack.plan(program);
+      expect(plan.resources.BoundNoopWorker!.action).toEqual("noop");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:hyperdrive",
+      "provider:cloudflare:worker",
+      "provider:neon",
+      "provider:neon:project",
+      "live",
+    ],
+    timeout: 240_000,
+  },
+);
+
 test.provider(
   "renaming replaces the config while the origin is unresolved",
   (stack) =>
