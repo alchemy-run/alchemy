@@ -317,8 +317,8 @@ export const make = (
       const read = base["effect/Sink:map"];
       const build = (to: Handing): RealSink =>
         Sink.mapEffect(built(to, self), (value) => straight(to, f)(value));
-      if (!isSink(self)) return wrongArguments(site, "Sink.map");
-      return flows.read(self)
+      // `dualBy` gives the body a sink first.
+      return flows.read(self!)
         ? Effect.map(read([self, f ?? Value.undef], site), (onto) =>
             sink("Sink.map", build, site, onto),
           )

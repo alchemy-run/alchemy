@@ -4335,8 +4335,16 @@ const rest: ReadonlyArray<Group> = [
       `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), () => Sink.take(9)))`,
       `Stream.run(four(a, b), Sink.flatMap(Sink.take(1), () => Sink.take(1)))`,
       `Stream.run(Stream.make(a), Sink.orElse(Sink.flatMap(Sink.take(1), () => Sink.fail("no")), () => Sink.collect()))`,
+      `Stream.run(four(a, b), Sink.map(Sink.ignoreLeftover(Sink.take(1)), (all) => [all, a]))`,
     ],
     unread: [
+      [
+        `Channel.fromIterable([[], [a]]).pipe(Channel.pipeTo(Sink.toChannel(Sink.take(1))), Channel.runDrain)`,
+        /Sink.toChannel is called in a way the prover has no model for/,
+      ],
+      [`Stream.run(four(a, b), Sink.make()((stream) => stream))`, /./],
+      [`Stream.run(four(a, b), Sink.fromChannel(a))`, /./],
+      [`Stream.run(four(a, b), Sink.map(Sink.take(1)))`, /./],
       [`Stream.run(four(a, b), Sink.failCause(a))`, /./],
       [`Stream.run(four(a, b), Sink.fromQueue(a))`, /./],
       [`Stream.run(four(a, b), Sink.fromPubSub(a))`, /./],
