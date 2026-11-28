@@ -5,7 +5,7 @@
  * page uses.
  *
  * The terminal sits over the card's right side from the line after the
- * process's opening, and hangs below the card. So the card is kept to 21
+ * process's opening, and hangs below the card. So the card is kept to 22
  * lines, and every line under that opening to 43 columns: the process's
  * declaration and the aggregate's handler are folded to their names.
  *
@@ -33,7 +33,8 @@ export class Account extends
   Domain.Aggregate("Account", {
     decide: { WithdrawMoney },
     invariants: {
-      NeverOverdrawn: (a) => a.balance >= 0,
+      NeverOverdrawn: ({ balance }) =>
+        balance >= 0,
     },
   }) {}`;
 
