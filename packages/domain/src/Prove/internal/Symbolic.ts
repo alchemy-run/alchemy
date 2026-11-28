@@ -1251,7 +1251,11 @@ export const show = (value: unknown): string => {
   if (typeof value === "string") return JSON.stringify(value);
   if (typeof value === "bigint") return `${value}n`;
   if (value === null || typeof value !== "object") return String(value);
-  if (DateTime.isDateTime(value)) return DateTime.formatIso(value);
+  // A time past what a date holds has no ISO text: it is written out as one that is not valid.
+  if (DateTime.isDateTime(value))
+    return Number.isFinite(DateTime.toEpochMillis(value))
+      ? DateTime.formatIso(value)
+      : "DateTime(invalid)";
   if (Duration.isDuration(value)) return `Duration.millis(${Duration.toMillis(value)})`;
   if (Option.isOption(value))
     return Option.isSome(value) ? `Option.some(${show(value.value)})` : "Option.none()";

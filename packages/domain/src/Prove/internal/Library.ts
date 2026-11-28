@@ -1411,24 +1411,16 @@ export const make = (host: Host) => {
         ? Effect.suspend(() => host.call(thunk, [], site)).pipe(effect, Effect.succeed)
         : wrongArguments(site, "Effect.sync"),
     "effect/Effect:andThen": onEffect("Effect.andThen", 1, (self, [next], site) =>
-      next
-        ? self.pipe(Effect.flatMap((value) => then(next, value, site)))
-        : wrongArguments(site, "Effect.andThen"),
+      self.pipe(Effect.flatMap((value) => then(next!, value, site))),
     ),
     "effect/Effect:flatMap": onEffect("Effect.flatMap", 1, (self, [next], site) =>
-      next
-        ? self.pipe(Effect.flatMap((value) => then(next, value, site)))
-        : wrongArguments(site, "Effect.flatMap"),
+      self.pipe(Effect.flatMap((value) => then(next!, value, site))),
     ),
     "effect/Effect:map": onEffect("Effect.map", 1, (self, [f], site) =>
-      f
-        ? self.pipe(Effect.flatMap((value) => host.call(f, [value], site)))
-        : wrongArguments(site, "Effect.map"),
+      self.pipe(Effect.flatMap((value) => host.call(f!, [value], site))),
     ),
     "effect/Effect:tap": onEffect("Effect.tap", 1, (self, [next], site) =>
-      next
-        ? self.pipe(Effect.tap((value) => then(next, value, site)))
-        : wrongArguments(site, "Effect.tap"),
+      self.pipe(Effect.tap((value) => then(next!, value, site))),
     ),
     "effect/Effect:asVoid": onEffect("Effect.asVoid", 0, (self) =>
       self.pipe(Effect.as(Value.undef)),
@@ -1885,7 +1877,8 @@ export const make = (host: Host) => {
     site: Site,
     use: (held: Provided, service: unknown) => Eval<V>,
   ): Eval<V> => {
-    const held = self ? contexts.get(self) : undefined;
+    // Every caller is `dual`: the context comes first, and is there.
+    const held = contexts.get(self!);
     return held
       ? Effect.flatMap(serviceOf(name, tag, site), (service) => use(held, service))
       : wrongArguments(site, name);
@@ -2023,7 +2016,7 @@ export const make = (host: Host) => {
       return Effect.succeed(contextOf(provided));
     },
     "effect/Context:add": dual("Context.add", 3, ([self, tag, value], site) => {
-      const held = self ? contexts.get(self) : undefined;
+      const held = contexts.get(self!);
       return held
         ? Effect.map(serviceOf("Context.add", tag, site), (service) =>
             contextOf([
@@ -2042,7 +2035,7 @@ export const make = (host: Host) => {
         : wrongArguments(site, "Context.merge");
     }),
     "effect/Context:getOption": dual("Context.getOption", 2, ([self, tag], site) => {
-      const held = self ? contexts.get(self) : undefined;
+      const held = contexts.get(self!);
       return held
         ? Effect.map(serviceOf("Context.getOption", tag, site), (service) => {
             const found = held.find(([each]) => each === service);
@@ -2286,19 +2279,17 @@ export const make = (host: Host) => {
     ),
     // The effect runs with these services and no others.
     "effect/Effect:setContext": onEffect("Effect.setContext", 1, (self, [given], site) =>
-      Effect.flatMap(holding("Effect.setContext", given ?? Value.undef, site), (provided) =>
+      Effect.flatMap(holding("Effect.setContext", given!, site), (provided) =>
         replacing(provided, self),
       ),
     ),
     // The services the function makes of the ones provided where the effect runs.
     "effect/Effect:updateContext": onEffect("Effect.updateContext", 1, (self, [f], site) =>
-      f
-        ? Effect.flatMap(host.call(f, [contextOf([...host.provided.entries()])], site), (made) =>
-            Effect.flatMap(holding("Effect.updateContext", made, site), (provided) =>
-              replacing(provided, self),
-            ),
-          )
-        : wrongArguments(site, "Effect.updateContext"),
+      Effect.flatMap(host.call(f!, [contextOf([...host.provided.entries()])], site), (made) =>
+        Effect.flatMap(holding("Effect.updateContext", made, site), (provided) =>
+          replacing(provided, self),
+        ),
+      ),
     ),
     // Every service that is provided where the effect runs.
     "effect/Effect:context": () =>

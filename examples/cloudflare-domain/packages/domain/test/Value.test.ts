@@ -1,5 +1,7 @@
+import * as Symbolic from "@alchemy.run/domain/Prove/internal/Symbolic";
 import * as Value from "@alchemy.run/domain/Prove/internal/Value";
 import { expect, it } from "@effect/vitest";
+import * as DateTime from "effect/DateTime";
 
 // The prover's values, on their own: what they do where no table reaches them.
 
@@ -31,4 +33,10 @@ it("a condition known true or false is taken without a choice", () => {
   expect(run.branch("true")).toBe(true);
   expect(run.branch("false")).toBe(false);
   expect(run.taken).toEqual([]);
+});
+
+it("a time past what a date holds is written out, not thrown on", () => {
+  const far = DateTime.add(DateTime.makeUnsafe(8.64e15), { days: 1 });
+  expect(Symbolic.show(far)).toBe("DateTime(invalid)");
+  expect(Symbolic.show(DateTime.makeUnsafe(0))).toBe("1970-01-01T00:00:00.000Z");
 });
