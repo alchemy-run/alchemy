@@ -83,6 +83,9 @@ export const DOCS_TABS: DocsTab[] = [
   hub("Hetzner", "hetzner", "Clouds", "servers · networks · volumes", ["/providers/hetzner"]),
   hub("Fly", "fly", "Clouds", "apps · machines · volumes", ["/providers/fly"]),
   hub("Railway", "railway", "Clouds", "services · environments · volumes", ["/providers/railway"]),
+  hub("Render", "render", "Clouds", "services · workflows · previews · postgres · kv", [
+    "/providers/render",
+  ]),
   hub("DigitalOcean", "digitalocean", "Clouds", "droplets · ssh keys · firewalls", [
     "/providers/digitalocean",
   ]),

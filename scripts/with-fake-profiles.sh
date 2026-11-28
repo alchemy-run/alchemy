@@ -54,6 +54,8 @@ export PLANETSCALE_ORGANIZATION=alchemy-local
 export PRISMA_SERVICE_TOKEN=alchemy-fake-local-prisma-token
 export PRISMA_API_TOKEN="$PRISMA_SERVICE_TOKEN"
 export RAILWAY_API_TOKEN=alchemy-fake-local-railway-token
+export RENDER_API_KEY=alchemy-fake-local-render-key
+export RENDER_OWNER_ID=tea-alchemy-fake-local
 export STRIPE_API_KEY=sk_test_alchemy_fake_local
 
 # exec preserves arguments, signals, and the wrapped command's exit status.

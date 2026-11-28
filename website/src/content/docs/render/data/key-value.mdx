@@ -1,0 +1,52 @@
+---
+title: Key Value
+description: Managed Render Key Value (Redis/Valkey-compatible) caches with eviction policies, persistence modes, and Read/Write/ReadWrite bindings.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+Render Key Value provisions managed Redis/Valkey-compatible stores (`red-...`) with configurable eviction policies, optional persistence on paid plans, CIDR allow lists, and internal/external TLS connection URLs.
+
+<Tree
+  nodes={[
+    { id: "env", label: "production", type: "Environment", icon: "layers", colGap: 4 },
+    { id: "api", label: "Api", type: "WebService · REDIS_URL", parent: "env", tone: "accent", icon: "server" },
+    { id: "kv", label: "Cache", type: "KeyValue · red-...", parent: "env", icon: "database" },
+  ]}
+  links={[{ from: "api", to: "kv", label: "ReadWriteKeyValue" }]}
+  caption="ReadKeyValue, WriteKeyValue, and ReadWriteKeyValue bind REDIS_URL on Render services and external TLS credentials on non-Render runtimes."
+/>
+
+## Create Key Value and bind a client
+
+```typescript
+// src/cache.ts
+import * as Render from "@alchemy.run/render";
+import * as Effect from "effect/Effect";
+
+export const Cache = Render.KeyValue("Cache", {
+  plan: "starter",
+  region: "oregon",
+  maxmemoryPolicy: "allkeys_lru",
+  ipAllowList: [{ cidrBlock: "0.0.0.0/0", description: "external-tls" }],
+});
+
+export const Api = Render.WebService(
+  "Api",
+  {
+    plan: "free",
+    region: "oregon",
+    runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+  },
+  Effect.gen(function* () {
+    const kv = yield* Render.ReadWriteKeyValue(Cache);
+    return { kv };
+  }).pipe(Effect.provide(Render.ReadWriteKeyValueHttp)),
+);
+```
+
+Choose [`ReadKeyValue`](/providers/render/reference/key-value#readkeyvalue), [`WriteKeyValue`](/providers/render/reference/key-value#writekeyvalue), or [`ReadWriteKeyValue`](/providers/render/reference/key-value#readwritekeyvalue) according to the commands your runtime calls.
+
+:::caution[Changing `region` replaces Key Value]
+Updating `region` creates a new Key Value instance and deletes the previous one.
+:::

@@ -9103,6 +9103,53 @@ importers:
         specifier: 'catalog:'
         version: 8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  examples/render-postgres:
+    dependencies:
+      '@alchemy.run/render':
+        specifier: workspace:*
+        version: link:../../packages/render
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../../packages/sql
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.4
+
+  examples/render-web-service:
+    dependencies:
+      '@alchemy.run/render':
+        specifier: workspace:*
+        version: link:../../packages/render
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
   examples/rivet-rooms:
     dependencies:
       '@alchemy.run/docker':
@@ -11298,6 +11345,9 @@ importers:
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
+      '@alchemy.run/render':
+        specifier: workspace:*
+        version: link:../render
       '@alchemy.run/rivet':
         specifier: workspace:*
         version: link:../rivet
@@ -11391,6 +11441,9 @@ importers:
       '@distilled.cloud/railway':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/railway
+      '@distilled.cloud/render':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/render
       '@distilled.cloud/rivet':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/rivet
@@ -12059,6 +12112,52 @@ importers:
         specifier: 'catalog:'
         version: 7.1.0-beta
 
+  packages/render:
+    dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@alchemy.run/redis':
+        specifier: workspace:*
+        version: link:../redis
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/render':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/render
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      '@effect/sql-pg':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.4
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-beta
+
   packages/rivet:
     dependencies:
       '@distilled.cloud/core':
@@ -12274,6 +12373,9 @@ importers:
       '@alchemy.run/railway':
         specifier: workspace:*
         version: link:../packages/railway
+      '@alchemy.run/render':
+        specifier: workspace:*
+        version: link:../packages/render
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../packages/stripe

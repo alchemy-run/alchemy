@@ -1,0 +1,75 @@
+---
+title: What is Render?
+description: The concepts behind Render — workspaces, projects, environments, services, datastores, env groups, workflows, previews and private networking — and how @alchemy.run/render models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Render runs your applications, background jobs, static sites, and managed databases in managed infrastructure backed by isolated private networks. You organize infrastructure inside a **workspace** into **projects** and **environments**, run compute as **Web Services**, **Private Services**, **Workers**, **Cron Jobs**, **Static Sites**, or **Workflows**, and connect **Postgres** and **Key Value** datastores over internal hostnames.
+
+Take one small app: a public API running in an environment alongside a managed Postgres database and a Key Value cache. Your workspace owns the project, and each environment gives its services a separate database, environment variables, and private network.
+
+<Tree
+  nodes={[
+    { id: "ws", label: "acme", type: "workspace · ownerId", icon: "brand:render" },
+    { id: "proj", label: "Site", type: "Project · prj-...", parent: "ws", dashed: true, icon: "folder" },
+    {
+      id: "prod",
+      label: "staging",
+      type: "Environment · evm-...",
+      parent: "proj",
+      dashed: true,
+      icon: "layers",
+      areas: ["web db", "web kv"],
+      colGap: 4,
+    },
+    { id: "web", label: "Web", type: "WebService · *.onrender.com", parent: "prod", tone: "accent", icon: "server" },
+    { id: "db", label: "Db", type: "Postgres · dpg-...", parent: "prod", icon: "brand:postgresql" },
+    { id: "kv", label: "Cache", type: "KeyValue · red-...", parent: "prod", icon: "database" },
+  ]}
+  links={[
+    { from: "web", to: "db", label: "DATABASE_URL" },
+    { from: "web", to: "kv", label: "REDIS_URL" },
+  ]}
+  caption="A Render workspace owns projects and billing. Each environment isolates services, datastores, and shared Env Groups behind a single environment ID."
+/>
+
+## Workspaces and owners
+
+A **workspace** (personal or team) holds every project, service, database, and billing plan. Alchemy resolves your `ownerId` automatically when your API key belongs to a single workspace, or reads the profile / `RENDER_OWNER_ID` / explicit `ownerId` prop when you work across multiple teams.
+
+See [Workspaces and tokens](/render/workspaces-and-tokens).
+
+## Projects and environments
+
+A **Project** groups one application across environments such as `staging` and `production`. Each **Environment** (`evm-...`) can enable `protectedStatus` for guarded resources and `networkIsolated` so services inside one environment cannot reach another environment over the private network.
+
+See [Projects and environments](/render/compute/projects-and-environments).
+
+## Services, previews, and workflows
+
+Render runs compute across specialized service types:
+
+- **Web Services** (`srv-...`): public HTTPS apps on `*.onrender.com` or custom domains, with optional persistent disks, autoscaling, and edge cache purging.
+- **Private Services** (`srv-...`): internal TCP/HTTP services reachable only on Render's private network.
+- **Background Workers** (`srv-...`) and **Cron Jobs** (`crn-...`): queue consumers and cron-scheduled commands.
+- **Static Sites** (`srv-...`): CDN-hosted static builds with custom headers and rewrite/redirect routes.
+- **Service Previews**, **Workflows** (`wfl-...`), and **Blueprints**: ephemeral PR preview instances, repository-backed task workflows (`/v1/task-runs`), and validated `render.yaml` Blueprints.
+
+See [Services and workflows](/render/compute/services).
+
+## Postgres and Key Value
+
+Render provides managed **Postgres** (`dpg-...`) with automated backups, point-in-time recovery, PgBouncer connection pooling (`:6432`), read replicas, SQL exports, and disk autoscaling, alongside Redis/Valkey-compatible **Key Value** (`red-...`) instances. Bindings attach internal connection strings on Render hosts and external TLS strings on foreign hosts.
+
+See [Postgres](/render/data/postgres) and [Key Value](/render/data/key-value).
+
+## Env groups and registry credentials
+
+**Env Groups** share common environment variables and secret files across multiple services in an environment. **Registry Credentials** let Render pull private OCI images from external container registries.
+
+See [Env groups and registries](/render/security/env-groups-and-registries).
+
+## State
+
+Render does not store Alchemy's stack state remotely. Keep stack state on disk with `Alchemy.localState()`, or share it across your team and CI using a remote store such as `Cloudflare.state()` or `AWS.state()`.

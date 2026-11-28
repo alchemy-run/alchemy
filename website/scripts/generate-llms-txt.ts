@@ -486,6 +486,26 @@ const SECTIONS: Section[] = [
     pages: { directory: "railway/frontend" },
   },
   {
+    heading: "Render",
+    intro:
+      "Render services (WebService, PrivateService, BackgroundWorker, CronJob, StaticSite, ServicePreview), Workflows and Blueprints, Projects and Environments, Postgres with migrations/PgBouncer/PITR/exports, Key Value caches, Env Groups, Registry Credentials, Dedicated IPs, Webhooks, Log/Metrics Streams, log tailing, and runtime bindings (ConnectPostgres, ConnectService, RunWorkflowTask, Read/Write/ReadWriteKeyValue).",
+    pages: {
+      slugs: [
+        "render/index",
+        "render/what-is-render",
+        "render/setup",
+        "render/workspaces-and-tokens",
+        "render/security/env-groups-and-registries",
+        "render/compute/projects-and-environments",
+        "render/compute/services",
+        "render/data/postgres",
+        "render/data/key-value",
+        "render/networking",
+        "render/observability",
+      ],
+    },
+  },
+  {
     heading: "DigitalOcean",
     intro:
       "DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM sandboxes, Spaces, Managed Databases, GenAI agents and inference, networking and monitoring, with bindings that give each runtime a key to one resource.",

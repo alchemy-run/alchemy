@@ -1,0 +1,124 @@
+---
+title: Render
+description: Deploy Render Web Services, Private Services, Workers, Cron Jobs, Static Sites, Service Previews, Workflows, Blueprints, Postgres with PgBouncer and PITR, Key Value, Projects, Environments, and Env Groups from TypeScript.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Render is a cloud platform with services for web apps, private internal services, background workers, cron jobs, static sites, ephemeral preview instances, durable Workflows, managed Postgres databases, and managed Key Value stores. A workspace holds your projects, and each environment groups services and datastores with their own private network and environment variables.
+
+**New to Render?** Start with [What is Render?](/render/what-is-render).
+
+## A quick example
+
+Declare a project, a staging environment, and an image-backed Web Service in one Stack:
+
+```typescript
+// alchemy.run.ts
+import * as Render from "@alchemy.run/render";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "RenderWebServiceExample",
+  {
+    providers: Render.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const site = yield* Render.Project("Site", {
+      environments: {
+        staging: { name: "staging", protectedStatus: "unprotected" },
+      },
+    });
+
+    const web = yield* Render.WebService("Web", {
+      plan: "free",
+      region: "oregon",
+      environmentId: site.environments.staging.id,
+      waitForDeployCompletion: true,
+      runtimeSource: {
+        image: {
+          imagePath: "docker.io/nginxdemos/hello",
+          tag: "plain-text",
+        },
+      },
+    });
+
+    return {
+      url: web.url,
+      projectId: site.id,
+      serviceId: web.id,
+    };
+  }),
+);
+```
+
+Bind managed Postgres into a hosted `Render.WebService` so `DATABASE_URL` and SQL migrations wire through automatically:
+
+```typescript
+// alchemy.run.ts
+import * as Render from "@alchemy.run/render";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "RenderPostgresExample",
+  {
+    providers: Render.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const db = yield* Render.Postgres("Db", {
+      plan: "basic_256mb",
+      region: "oregon",
+      version: "16",
+      diskSizeGB: 5,
+      ipAllowList: [{ cidrBlock: "0.0.0.0/0", description: "example" }],
+      migrations: "./migrations",
+    });
+
+    const api = yield* Render.WebService(
+      "Api",
+      {
+        plan: "free",
+        region: "oregon",
+        skipDeployAfterUpdate: true,
+        runtimeSource: {
+          image: {
+            imagePath: "docker.io/nginxdemos/hello",
+            tag: "plain-text",
+          },
+        },
+      },
+      Effect.gen(function* () {
+        yield* Render.ConnectPostgres(db);
+      }).pipe(Effect.provide(Render.ConnectPostgresHttp)),
+    );
+
+    return {
+      dbId: db.id,
+      url: api.url,
+      databaseUrl: api.envVars[Render.DATABASE_URL_ENV],
+      externalDbUrl: db.connectionInfo.externalConnectionString,
+    };
+  }),
+);
+```
+
+## Where to start
+
+**Want to build?** Connect your workspace in [Setup](/render/setup).
+
+**Looking for something specific?** Every section of these docs is listed below, and all 20 resources and 6 runtime bindings are in the generated [API reference](/providers/render).
+
+## Out of scope
+
+- **Deprecated Redis naming:** Render renamed managed Redis to Key Value; use [`Render.KeyValue`](/providers/render/reference/key-value#keyvalue) and [`ReadKeyValue`](/providers/render/reference/key-value#readkeyvalue) / [`WriteKeyValue`](/providers/render/reference/key-value#writekeyvalue) / [`ReadWriteKeyValue`](/providers/render/reference/key-value#readwritekeyvalue).
+- **Alchemy Workflow Engine:** Render Workflows execute external repository-backed tasks declared in `render.yaml` and invoked via `/v1/task-runs` ([`Render.Workflow`](/providers/render/reference/workflows#workflow) and [`Render.RunWorkflowTask`](/providers/render/reference/workflows#runworkflowtask)), rather than hosting inline Alchemy `WorkflowEngine` durable steps.
+- **Framework site composites (`Website.*`):** Static frontends deploy directly with [`Render.StaticSite`](/providers/render/reference/compute#staticsite) and server-rendered apps deploy as [`Render.WebService`](/providers/render/reference/compute#webservice) or [`examples/render-web-service`](https://github.com/alchemy-run/alchemy/tree/main/examples/render-web-service).
+- **Container registries:** Render does not host a first-party OCI registry; when building `WebService` from `main` or `context`, push to an external registry (`registryImage`) and attach [`Render.RegistryCredential`](/providers/render/reference/security#registrycredential) if the repository is private.
+
+## The docs
+
+<HubMap />

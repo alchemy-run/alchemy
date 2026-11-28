@@ -1,0 +1,71 @@
+---
+title: Postgres
+description: Managed Render Postgres with SQL migrations, PgBouncer connection pooling, read replicas, PITR cloning, exports, and ConnectPostgres bindings.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+Render Postgres provisions managed PostgreSQL instances (`dpg-...`) with automated backups, point-in-time recovery, PgBouncer pooling (`:6432`), read replicas, SQL exports, and private internal URLs alongside public TLS access.
+
+<Tree
+  nodes={[
+    { id: "env", label: "production", type: "Environment", icon: "layers", colGap: 4, areas: ["api db", ". rep"] },
+    { id: "api", label: "Api", type: "WebService · DATABASE_URL", parent: "env", tone: "accent", icon: "server" },
+    { id: "db", label: "MainDb", type: "Postgres · primary + pgbouncer", parent: "env", icon: "brand:postgresql" },
+    { id: "rep", label: "Replica", type: "read replica", parent: "env", icon: "brand:postgresql" },
+  ]}
+  links={[
+    { from: "api", to: "db", label: "ConnectPostgres (internal)" },
+    { from: "db", to: "rep", label: "replicates" },
+  ]}
+  caption="Services running on Render connect to Postgres over private networking, while external hosts connect over public TLS using externalConnectionString."
+/>
+
+## Create Postgres with migrations
+
+Install `pg` and `@effect/sql-pg` to run SQL migrations automatically during provisioning and updates:
+
+```typescript
+// src/db.ts
+import * as Render from "@alchemy.run/render";
+
+export const MainDb = Render.Postgres("MainDb", {
+  plan: "basic_256mb",
+  region: "oregon",
+  version: "16",
+  connectionPool: "pgbouncer",
+  diskSizeGB: 5,
+  ipAllowList: [{ cidrBlock: "0.0.0.0/0", description: "public-tls" }],
+  migrations: "./migrations",
+});
+```
+
+:::caution[Replacing properties on Postgres]
+Changing `region`, `version`, `databaseName`, `databaseUser`, or `restoreFrom` replaces the database instance.
+:::
+
+## Bind ConnectPostgres to a service
+
+Yield [`Render.ConnectPostgres`](/providers/render/reference/postgres#connectpostgres) inside a `Render.WebService` constructor and provide `Render.ConnectPostgresHttp`:
+
+```typescript
+// src/api.ts
+import * as Render from "@alchemy.run/render";
+import * as Effect from "effect/Effect";
+import { MainDb } from "./db.ts";
+
+export const Api = Render.WebService(
+  "Api",
+  {
+    plan: "free",
+    region: "oregon",
+    runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+  },
+  Effect.gen(function* () {
+    const conn = yield* Render.ConnectPostgres(MainDb);
+    return { conn };
+  }).pipe(Effect.provide(Render.ConnectPostgresHttp)),
+);
+```
+
+On Render hosts, `ConnectPostgres` binds `DATABASE_URL`, `RENDER_POSTGRES_<ID>_INTERNAL`, `RENDER_POSTGRES_<ID>_EXTERNAL`, and pooled `:6432` URLs. On foreign hosts, it injects the external TLS URL.

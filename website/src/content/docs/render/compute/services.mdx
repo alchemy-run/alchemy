@@ -1,0 +1,88 @@
+---
+title: Services and workflows
+description: Run Web Services, Private Services, Workers, Cron Jobs, Static Sites, Service Previews, Workflows, and Blueprints on Render.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+Render separates public web traffic, private microservices, queue workers, cron jobs, static sites, pull-request previews, and workflow tasks into distinct service types inside a project environment.
+
+<Tree
+  nodes={[
+    { id: "env", label: "staging", type: "Environment", icon: "layers", colGap: 4, areas: ["web priv", "wrk cron", "stat wf"] },
+    { id: "web", label: "WebService", type: "public HTTPS · *.onrender.com", parent: "env", tone: "accent", icon: "server" },
+    { id: "priv", label: "PrivateService", type: "private network TCP/HTTP", parent: "env", icon: "server" },
+    { id: "wrk", label: "BackgroundWorker", type: "always-on worker", parent: "env", icon: "zap" },
+    { id: "cron", label: "CronJob", type: "scheduled command", parent: "env", icon: "clock" },
+    { id: "stat", label: "StaticSite", type: "global CDN assets", parent: "env", icon: "layout-template" },
+    { id: "wf", label: "Workflow", type: "task runner · /v1/task-runs", parent: "env", icon: "workflow" },
+  ]}
+  links={[
+    { from: "web", to: "priv", label: "ConnectService" },
+    { from: "web", to: "wf", label: "RunWorkflowTask" },
+  ]}
+  caption="Public Web Services terminate HTTPS at Render's edge, while Private Services, Background Workers, Cron Jobs, Static Sites, and Workflows handle internal RPC, queues, schedules, assets, and durable tasks."
+/>
+
+## Web Services
+
+`Render.WebService` supports three deployment forms:
+
+- **Effectful handler (`Platform`)**: set `main: import.meta.url` and `registryImage`, and return `{ fetch }` (with optional `ServerHost` background loops).
+- **Async handler (`InferEnv`)**: point `main` at a plain `{ fetch(request, env) }` module and derive types with `Render.InferEnv<typeof Ping>`.
+- **Pre-built image or Git repository**: configure `runtimeSource: { image | nativeRuntime | docker }`.
+
+```typescript
+// src/api.ts
+import * as Render from "@alchemy.run/render";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Render.WebService<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    registryImage: "ghcr.io/org/api",
+    plan: "starter",
+    region: "oregon",
+    healthCheckPath: "/healthz",
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        return yield* HttpServerResponse.json({ ok: true });
+      }),
+    };
+  }),
+) {}
+```
+
+:::caution[Changing `region` replaces the service]
+Moving a service to a different Render `region` creates a new service instance and deletes the previous one.
+:::
+
+## Private Services, Workers, and Cron Jobs
+
+Run internal APIs on [`Render.PrivateService`](/providers/render/reference/compute#privateservice), continuous consumers on [`Render.BackgroundWorker`](/providers/render/reference/compute#backgroundworker), and cron schedules on [`Render.CronJob`](/providers/render/reference/compute#cronjob):
+
+```typescript
+// src/jobs.ts
+import * as Render from "@alchemy.run/render";
+
+export const Nightly = Render.CronJob("Nightly", {
+  plan: "starter",
+  region: "oregon",
+  schedule: "0 3 * * *",
+  runtimeSource: {
+    image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" },
+  },
+});
+```
+
+## Static Sites and Service Previews
+
+Serve CDN-hosted static builds with custom headers and rewrite rules via [`Render.StaticSite`](/providers/render/reference/compute#staticsite), or spin up image-backed pull-request previews off an existing base service with [`Render.ServicePreview`](/providers/render/reference/previews#servicepreview).
+
+## Workflows and Blueprints
+
+Manage external repository-backed Render Workflows with [`Render.Workflow`](/providers/render/reference/workflows#workflow) and invoke or await task runs from any host with [`Render.RunWorkflowTask`](/providers/render/reference/workflows#runworkflowtask). Validate or adopt `render.yaml` Blueprint stacks via [`Render.Blueprint`](/providers/render/reference/blueprints#blueprint).

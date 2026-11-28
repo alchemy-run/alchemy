@@ -144,6 +144,8 @@ const examples = [
   "./examples/fly-redis",
   "./examples/fly-bucket",
   "./examples/fly-postgres",
+  "./examples/render-web-service",
+  "./examples/render-postgres",
 ] as const;
 
 // The AWS examples share one floci emulator container (`alchemy-floci`):

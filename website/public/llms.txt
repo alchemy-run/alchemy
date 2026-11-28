@@ -638,6 +638,22 @@ The Railway hub: overview, What is Railway? (workspaces, projects, environments,
 - [Waku](https://alchemy.run/railway/frontend/waku) — Deploy a Waku app to Railway with Railway.Website.Waku — RSC server on a container Service, SSG pages in the image, and Waku's own dev server under alchemy dev.
 - [Octane](https://alchemy.run/railway/frontend/octane) — Deploy an OctaneJS app to Railway with Railway.Website.Octane — SSR plus client assets on one Service, and Octane's own Vite dev server under alchemy dev.
 
+## Render
+
+Render services (WebService, PrivateService, BackgroundWorker, CronJob, StaticSite, ServicePreview), Workflows and Blueprints, Projects and Environments, Postgres with migrations/PgBouncer/PITR/exports, Key Value caches, Env Groups, Registry Credentials, Dedicated IPs, Webhooks, Log/Metrics Streams, log tailing, and runtime bindings (ConnectPostgres, ConnectService, RunWorkflowTask, Read/Write/ReadWriteKeyValue).
+
+- [Render](https://alchemy.run/render) — Deploy Render Web Services, Private Services, Workers, Cron Jobs, Static Sites, Service Previews, Workflows, Blueprints, Postgres with PgBouncer and PITR, Key Value, Projects, Environments, and Env Groups from TypeScript.
+- [What is Render?](https://alchemy.run/render/what-is-render) — The concepts behind Render — workspaces, projects, environments, services, datastores, env groups, workflows, previews and private networking — and how @alchemy.run/render models each of them.
+- [Setup](https://alchemy.run/render/setup) — Connect Alchemy to Render — API keys, workspace owner ID, profiles, CI variables, and SQL migration drivers.
+- [Workspaces and tokens](https://alchemy.run/render/workspaces-and-tokens) — How Render workspaces own resources, how Alchemy resolves ownerId, and how to separate staging and production workspaces.
+- [Env groups and registries](https://alchemy.run/render/security/env-groups-and-registries) — Share environment variables and secret files with EnvGroup and EnvGroupLink, manage private image pulls with RegistryCredential, and feed secrets from external managers.
+- [Projects and environments](https://alchemy.run/render/compute/projects-and-environments) — Group services and datastores in a Render Project and isolate traffic and permissions across Environments.
+- [Services and workflows](https://alchemy.run/render/compute/services) — Run Web Services, Private Services, Workers, Cron Jobs, Static Sites, Service Previews, Workflows, and Blueprints on Render.
+- [Postgres](https://alchemy.run/render/data/postgres) — Managed Render Postgres with SQL migrations, PgBouncer connection pooling, read replicas, PITR cloning, exports, and ConnectPostgres bindings.
+- [Key Value](https://alchemy.run/render/data/key-value) — Managed Render Key Value (Redis/Valkey-compatible) caches with eviction policies, persistence modes, and Read/Write/ReadWrite bindings.
+- [Domains and private networking](https://alchemy.run/render/networking) — Custom domains, ConnectService internal discovery, DedicatedIp egress addresses, and IP allow lists on Render.
+- [Logs, streams, and webhooks](https://alchemy.run/render/observability) — Query and tail Render logs via Alchemy CLI, configure LogStream and MetricsStream forwarding, and subscribe to workspace Webhooks and NotificationSetting rules.
+
 ## DigitalOcean
 
 DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM sandboxes, Spaces, Managed Databases, GenAI agents and inference, networking and monitoring, with bindings that give each runtime a key to one resource.
@@ -1399,4 +1415,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~295 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~299 KB) — only fetch it when you need to locate a specific resource's reference page.
