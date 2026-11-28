@@ -13,13 +13,21 @@ export const site = {
   node: { start: 0 },
 } as unknown as Value.Site;
 
-const interpreter = Interpreter.make({} as Loader, new Value.Run([]));
+// No file is read: every value is one made here.
+const interpreter = Interpreter.make(
+  { opaque: () => undefined } as unknown as Loader,
+  new Value.Run([]),
+);
 
 /** A function of the library, as the interpreter holds one. */
 export const lib = (key: string): Value.V => {
   const at = key.lastIndexOf(":");
   return { _tag: "Lib", module: key.slice(0, at), path: key.slice(at + 1).split(".") } as Value.V;
 };
+
+/** A call, and what it gives as it gives it: an effect is not run. */
+export const make = (key: string, args: ReadonlyArray<Value.V>): Effect.Effect<Value.V, unknown> =>
+  interpreter.call(lib(key), args, site);
 
 /** A call, and what it gives run on a handler's timeline when it is an effect. */
 export const call = (key: string, args: ReadonlyArray<Value.V>): Effect.Effect<Value.V, unknown> =>
@@ -44,3 +52,5 @@ export const outcome = (self: Effect.Effect<Value.V, unknown>): Effect.Effect<st
 export const num = Value.num;
 export const str = Value.str;
 export const undef = Value.undef;
+export const arr = (...items: ReadonlyArray<Value.V>): Value.V => ({ _tag: "Arr", items });
+export const obj = Value.obj;

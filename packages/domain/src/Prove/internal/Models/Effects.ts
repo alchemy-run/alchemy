@@ -166,9 +166,8 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
   };
 
   const models: Models = {
-    "effect/Effect:as": onEffect("Effect.as", 1, (self, [value]) =>
-      Effect.as(self, value ?? Value.undef),
-    ),
+    // `onEffect` gives the body every argument it takes: each is there.
+    "effect/Effect:as": onEffect("Effect.as", 1, (self, [value]) => Effect.as(self, value!)),
     "effect/Effect:asSome": onEffect("Effect.asSome", 0, (self) => Effect.map(self, Value.some)),
     "effect/Effect:succeedSome": ([value]) =>
       Effect.succeed(lazy(() => Effect.succeed(Value.some(value ?? Value.undef)))),
@@ -273,9 +272,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
         : wrongArguments(site, "Effect.partition"),
     ),
     "effect/Effect:catch": onEffect("Effect.catch", 1, (self, [handler], site) =>
-      handler
-        ? onFailure(self, (error) => ran(handler, [error], site))
-        : wrongArguments(site, "Effect.catch"),
+      onFailure(self, (error) => ran(handler!, [error], site)),
     ),
     "effect/Effect:catchTag": over("Effect.catchTag", (self, [tag, handler, orElse], site) => {
       const tags = tagsOf(tag);
@@ -320,9 +317,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       ),
     ),
     "effect/Effect:mapError": onEffect("Effect.mapError", 1, (self, [f], site) =>
-      f
-        ? onFailure(self, (error) => Effect.flatMap(host.call(f, [error], site), rejected))
-        : wrongArguments(site, "Effect.mapError"),
+      onFailure(self, (error) => Effect.flatMap(host.call(f!, [error], site), rejected)),
     ),
     "effect/Effect:mapBoth": onEffect("Effect.mapBoth", 1, (self, [cases], site) => {
       const failed = handlerOf(cases, "onFailure");
@@ -335,14 +330,10 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
         : wrongArguments(site, "Effect.mapBoth");
     }),
     "effect/Effect:orElseSucceed": onEffect("Effect.orElseSucceed", 1, (self, [f], site) =>
-      f
-        ? onFailure(self, (error) => host.call(f, [error], site))
-        : wrongArguments(site, "Effect.orElseSucceed"),
+      onFailure(self, (error) => host.call(f!, [error], site)),
     ),
     "effect/Effect:tapError": onEffect("Effect.tapError", 1, (self, [f], site) =>
-      f
-        ? onFailure(self, (error) => Effect.flatMap(ran(f, [error], site), () => rejected(error)))
-        : wrongArguments(site, "Effect.tapError"),
+      onFailure(self, (error) => Effect.flatMap(ran(f!, [error], site), () => rejected(error))),
     ),
     "effect/Effect:tapErrorTag": onEffect("Effect.tapErrorTag", 2, (self, [tag, f], site) => {
       const tags = tagsOf(tag);
@@ -426,21 +417,20 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
           : wrongArguments(site, "Effect.filterOrElse"),
     ),
     // The effect runs when the condition holds, and gives its value in an `Option`.
-    "effect/Effect:when": onEffect("Effect.when", 1, (self, [condition], site) =>
-      condition
-        ? Effect.flatMap(
-            condition._tag === "Effect"
-              ? condition.run
-              : callable(condition)
-                ? kit.either(condition, [], site)
-                : Effect.succeed(condition),
-            (held) =>
-              Effect.flatMap(host.decide(held, site), (runs) =>
-                runs ? Effect.map(self, Value.some) : Effect.succeed(Value.none),
-              ),
-          )
-        : wrongArguments(site, "Effect.when"),
-    ),
+    "effect/Effect:when": onEffect("Effect.when", 1, (self, [given], site) => {
+      const condition = given!;
+      return Effect.flatMap(
+        condition._tag === "Effect"
+          ? condition.run
+          : callable(condition)
+            ? kit.either(condition, [], site)
+            : Effect.succeed(condition),
+        (held) =>
+          Effect.flatMap(host.decide(held, site), (runs) =>
+            runs ? Effect.map(self, Value.some) : Effect.succeed(Value.none),
+          ),
+      );
+    }),
     "effect/Effect:fromOption": ([option], site) => {
       const read = Value.optionOf(option);
       return read
