@@ -284,12 +284,21 @@ const flattenNamespace = (
         capabilityKind: "Term",
         capabilityDetail: model.term.kind,
       });
+      // Named `<Model>.<Piece>`, and `<Model>.<Piece>.<Part>` for what belongs
+      // to a piece: each is drawn by its last name, a part under its piece.
       const prefix = `${model.term.name}.`;
+      const under = new Map<string, number>();
       for (const binding of own) {
+        const within = own
+          .filter((each) => binding.sid.startsWith(`${each.sid}.`))
+          .sort((a, b) => b.sid.length - a.sid.length)[0];
+        const at = within === undefined ? depth + 2 : (under.get(within.sid) ?? depth + 2) + 1;
+        under.set(binding.sid, at);
+        const outer = within === undefined ? prefix : `${within.sid}.`;
         pushBinding(
           binding,
-          depth + 2,
-          binding.sid.startsWith(prefix) ? binding.sid.slice(prefix.length) : binding.sid,
+          at,
+          binding.sid.startsWith(outer) ? binding.sid.slice(outer.length) : binding.sid,
         );
       }
     }

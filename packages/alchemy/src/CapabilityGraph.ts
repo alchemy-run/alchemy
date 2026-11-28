@@ -386,9 +386,12 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
         for (const to of group.flatMap(reached)) {
           if (!named.has(to)) refs.set(`uses|${to}`, { relation: "uses", to });
         }
-        const host = group.some((frame) => loose.has(frame))
-          ? undefined
-          : group.map(hostOf).find((each) => each !== undefined);
+        // What was said to host it holds, wherever its Layer was built.
+        const host =
+          hosting.get(id) ??
+          (group.some((frame) => loose.has(frame))
+            ? undefined
+            : group.map(hostOf).find((each) => each !== undefined));
         terms.set(id, {
           id,
           kind: group[0]!.kind,
