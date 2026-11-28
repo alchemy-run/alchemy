@@ -643,6 +643,83 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
     ),
   );
 
+  it.effect("provideWith computes the service again for each command", () =>
+    Effect.suspend(() => {
+      let turn = 0;
+      return story(
+        Story.provideWith(Operator, () => Effect.sync(() => `op-${++turn}`)),
+        Story.when(new ResetCounter({ id: c1.id })),
+        Story.then(c1, new WasReset({ by: "op-1" })),
+        Story.when(new ResetCounter({ id: c1.id })),
+        Story.then(c1, new WasReset({ by: "op-2" })),
+      );
+    }),
+  );
+
+  it.effect("provideWith sees the command and the instances it is for", () =>
+    story(
+      Story.provideWith(Operator, ({ command, refs }) =>
+        Effect.succeed(`${command._tag}@${refs.map((ref) => String(ref.id)).join(",")}`),
+      ),
+      Story.when(new ResetCounter({ id: c1.id })),
+      Story.then(c1, new WasReset({ by: "ResetCounter@c-1" })),
+      Story.when(new ResetCounter({ id: c2.id })),
+      Story.then(c2, new WasReset({ by: "ResetCounter@c-2" })),
+    ),
+  );
+
+  it.effect("provideWith gives each instance its own caller", () =>
+    story(
+      Story.provideWith(Operator, ({ refs }) =>
+        Effect.succeed(refs[0]!.id === c1.id ? "sam" : "guest"),
+      ),
+      Story.when(new ResetCounter({ id: c1.id })),
+      Story.then(c1, new WasReset({ by: "sam" })),
+      Story.when(new ResetCounter({ id: c2.id })),
+      Story.rejected(new NotAnOperator()),
+    ),
+  );
+
+  it.effect("provideWith that fails fails the when it was computed for", () =>
+    story(
+      Story.provideWith(Operator, () => Effect.fail("no session")),
+      Story.given(c1, new Incremented({ by: 1, total: 1 })),
+      Story.when(new ResetCounter({ id: c1.id })),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.step).toBe(3);
+        expect(failure.reason).toBe("When: Test/Operator could not be provided: no session");
+      }),
+    ),
+  );
+
+  it.effect("a later provide replaces a provideWith, and the other way round", () =>
+    story(
+      Story.provideWith(Operator, () => Effect.succeed("computed")),
+      Story.provide(Operator, "sam"),
+      Story.when(new ResetCounter({ id: c1.id })),
+      Story.then(c1, new WasReset({ by: "sam" })),
+      Story.provideWith(Operator, () => Effect.succeed("computed")),
+      Story.when(new ResetCounter({ id: c1.id })),
+      Story.then(c1, new WasReset({ by: "computed" })),
+    ),
+  );
+
+  it.effect("a failed story shows a provideWith step as computed at each when", () =>
+    story(
+      Story.provideWith(Operator, () => Effect.succeed("sam")),
+      Story.when(new ResetCounter({ id: c1.id })),
+      Story.then(c1, new WasReset({ by: "alex" })),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.steps[0]!.summary).toBe("Test/Operator = (computed at each when)");
+        expect(failure.message).toContain("1 Provide    Test/Operator = (computed at each when)");
+      }),
+    ),
+  );
+
   it.effect("a command without its context fails", () =>
     // @ts-expect-error ResetCounter's middleware provides Operator, and no step does
     story(Story.when(new ResetCounter({ id: c1.id }))).pipe(

@@ -441,6 +441,8 @@ const CANCELLED = "cancelled";
 interface Armed {
   readonly commandId: string;
   readonly at: number;
+  /** Its command ran: the receipt that also says so is pruned after `retention.receipts`. */
+  readonly executed?: boolean;
 }
 
 // ---------------------------------------------------------------- retention
@@ -2274,7 +2276,8 @@ const aggregateObject = Effect.fn(function* (
   // the alarm claimed it does nothing. It is cleared after the commit (the
   // receipt takes over), so a retried job still runs. `armed:<name>` keeps
   // the latest arming's command id and due time: the same arming again
-  // changes nothing, and its receipt tells whether the name's command ran.
+  // changes nothing. Once its command runs, the arming is marked executed,
+  // which outlives the receipt; an arming from before the mark has its receipt.
   const timers = yield* makeCallback(
     "domain:schedule",
     (job: {
@@ -2293,8 +2296,13 @@ const aggregateObject = Effect.fn(function* (
             // A job scheduled before tokens existed has none, and runs.
             if (job.token !== undefined && (yield* state.storage.get<string>(key)) !== job.token)
               return;
-            yield* commit(job.id, job.command, job.meta);
+            const sent = yield* commit(job.id, job.command, job.meta);
             yield* state.storage.delete(key);
+            const name = job.name ?? job.meta.commandId;
+            const armed = yield* state.storage.get<Armed>(`armed:${name}`);
+            if (sent._tag === "Accepted" && armed?.commandId === job.meta.commandId) {
+              yield* state.storage.put(`armed:${name}`, { ...armed, executed: true });
+            }
           }),
         );
         // A failure is a defect here: the job is redelivered.
@@ -2342,7 +2350,9 @@ const aggregateObject = Effect.fn(function* (
       Effect.gen(function* () {
         // Before names, the command id was the name.
         const armed = yield* state.storage.get<Armed>(`armed:${name}`);
-        if (yield* executed(armed?.commandId ?? name)) return "AlreadyExecuted" as const;
+        if (armed?.executed === true || (yield* executed(armed?.commandId ?? name))) {
+          return "AlreadyExecuted" as const;
+        }
         const key = `scheduled:${name}`;
         const token = yield* state.storage.get<string>(key);
         if (token === CANCELLED) return "AlreadyCancelled" as const;
