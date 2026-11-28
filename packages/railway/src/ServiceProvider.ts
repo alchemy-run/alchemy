@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import {
   Railway,
@@ -44,7 +45,7 @@ import { createRailwayName, matchesAlchemyPhysicalName } from "./Metadata.ts";
 import { assertHostDisk, type MountSpec } from "./MountVolume.ts";
 import { ownedProjects } from "./Project.ts";
 import { RPC_TOKEN_ENV } from "./rpc-token.ts";
-import { Service } from "./Service.ts";
+import { Service, type ServiceProps } from "./Service.ts";
 import {
   deleteOwnedServiceDomain,
   ensureServiceDomain,
@@ -831,6 +832,7 @@ const toAttrs = (input: {
   codeHash: string;
   rpcToken: string;
   region: string | undefined;
+  registryCredentialsHash?: string | undefined;
 }): Service["Attributes"] => ({
   serviceId: input.service.id,
   name: input.service.name,
@@ -855,7 +857,34 @@ const toAttrs = (input: {
   deploymentId: input.instance?.latestDeployment?.id,
   deploymentStatus: input.instance?.latestDeployment?.status,
   code: { hash: input.codeHash },
+  ...(input.registryCredentialsHash === undefined
+    ? {}
+    : { registryCredentialsHash: input.registryCredentialsHash }),
 });
+
+/**
+ * The registry credentials a reconcile writes, and their fingerprint. Railway
+ * never returns stored credentials, so the fingerprint recorded in the
+ * attributes stands in for the observed value: the credentials are written
+ * when none were recorded (create, adoption) or when they changed, and left
+ * alone otherwise, so an unchanged service is neither rewritten nor
+ * redeployed. @internal
+ */
+export const registryCredentialsWrite = (
+  credentials: ServiceProps["registryCredentials"],
+  recordedHash: string | undefined,
+) =>
+  Effect.sync(() => {
+    if (credentials === undefined) return { hash: undefined, write: undefined };
+    const password = plainEnvValue(credentials.password) ?? "";
+    const hash = createHash("sha256")
+      .update(JSON.stringify([credentials.username, password]))
+      .digest("hex");
+    return {
+      hash,
+      write: hash === recordedHash ? undefined : { username: credentials.username, password },
+    };
+  });
 
 export const ServiceProvider = () =>
   Provider.effect(
@@ -966,6 +995,7 @@ export const ServiceProvider = () =>
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
             region,
+            registryCredentialsHash: output?.registryCredentialsHash,
           });
           if (output !== undefined) {
             // Keep the recorded ownership id even if the live list lags.
@@ -1072,6 +1102,10 @@ export const ServiceProvider = () =>
           yield* assertHostDisk({ name, mounts: bound.mounts });
           const port = hostedMain !== undefined ? (props.port ?? DEFAULT_PORT) : props.port;
           const rpcToken = plainEnvValue(props.rpcToken) ?? output?.rpcToken ?? "";
+          const registry = yield* registryCredentialsWrite(
+            props.registryCredentials,
+            output?.registryCredentialsHash,
+          );
           const env = {
             ...bound.env,
             ...(hostedMain !== undefined ? hosted.alchemyEnv : {}),
@@ -1137,6 +1171,7 @@ export const ServiceProvider = () =>
               environmentId,
               name,
               source: initialSource,
+              ...(registry.write !== undefined ? { registryCredentials: registry.write } : {}),
               ...(sourceRepo !== undefined && props.branch !== undefined
                 ? { branch: props.branch }
                 : {}),
@@ -1224,7 +1259,7 @@ export const ServiceProvider = () =>
             instance,
             sourceImage,
             sourceRepo,
-            registryCredentials: undefined,
+            registryCredentials: registry.write,
             props: {
               ...props,
               dockerfilePath,
@@ -1393,6 +1428,7 @@ export const ServiceProvider = () =>
             codeHash,
             rpcToken,
             region,
+            registryCredentialsHash: registry.hash,
           });
         }),
 
