@@ -80,6 +80,20 @@ Commands run as whoever `provide` says, as their middleware would. Here `asSam` 
 
 The checks after a `when` are type-checked against its command. `rejected` takes only a rejection the command declares, and `replied` only its reply type. A `when` needs a `provide` step before it for every service its command's middleware provides, so without `asSam` the story does not compile.
 
+### A service computed for each command
+
+`provide` gives every later command the same value. When the rule under test depends on which instance a command is for, one value can't exercise it. `Story.provideWith` computes the service at each `when`, as a middleware computes it for each request. Here each account's own customer withdraws from it:
+
+```typescript
+const owners: Record<string, string> = { "a-1": "c-1", "a-2": "c-2" };
+
+Story.provideWith(CurrentActor, ({ refs }) => Effect.succeed(customer(owners[refs[0]!.id]!))),
+Story.when(new WithdrawMoney({ accountId: "a-1", amount: 30 })),
+Story.when(new WithdrawMoney({ accountId: "a-2", amount: 30 })),
+```
+
+`refs` are the instances the model routes the command to: the one its aggregate targets, or each one its decision reads. `command` is the command itself, for a service scoped to one command, like a stamp naming the command it authorizes. If the function fails, so does the `when`, naming the service. A later `provide` or `provideWith` of the same service replaces it. A `query` step does not run it, so give a query its service with `provide`.
+
 ## Answer outside systems
 
 External system calls wait until you answer them, so you decide what the outside world says, and when.

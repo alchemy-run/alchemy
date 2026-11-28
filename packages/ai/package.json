@@ -34,7 +34,9 @@
     "./Cloudflare": "./src/Cloudflare/index.ts",
     "./Daytona": "./src/Daytona/index.ts",
     "./E2B": "./src/E2B/index.ts",
+    "./EffectCluster": "./src/EffectCluster/index.ts",
     "./Modal": "./src/Modal/index.ts",
+    "./Rivet": "./src/Rivet/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -76,11 +78,23 @@
         "worker": "./src/E2B/index.ts",
         "default": "./lib/E2B/index.js"
       },
+      "./EffectCluster": {
+        "types": "./lib/EffectCluster/index.d.ts",
+        "bun": "./src/EffectCluster/index.ts",
+        "worker": "./src/EffectCluster/index.ts",
+        "default": "./lib/EffectCluster/index.js"
+      },
       "./Modal": {
         "types": "./lib/Modal/index.d.ts",
         "bun": "./src/Modal/index.ts",
         "worker": "./src/Modal/index.ts",
         "default": "./lib/Modal/index.js"
+      },
+      "./Rivet": {
+        "types": "./lib/Rivet/index.d.ts",
+        "bun": "./src/Rivet/index.ts",
+        "worker": "./src/Rivet/index.ts",
+        "default": "./lib/Rivet/index.js"
       },
       "./internal/*": null,
       "./*": {
@@ -107,7 +121,9 @@
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/daytona": "workspace:*",
     "@alchemy.run/e2b": "workspace:*",
+    "@alchemy.run/effect-cluster": "workspace:*",
     "@alchemy.run/modal": "workspace:*",
+    "@alchemy.run/rivet": "workspace:*",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
@@ -119,7 +135,9 @@
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/daytona": "workspace:*",
     "@alchemy.run/e2b": "workspace:*",
+    "@alchemy.run/effect-cluster": "workspace:*",
     "@alchemy.run/modal": "workspace:*",
+    "@alchemy.run/rivet": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
@@ -139,7 +157,13 @@
     "@alchemy.run/e2b": {
       "optional": true
     },
+    "@alchemy.run/effect-cluster": {
+      "optional": true
+    },
     "@alchemy.run/modal": {
+      "optional": true
+    },
+    "@alchemy.run/rivet": {
       "optional": true
     }
   }

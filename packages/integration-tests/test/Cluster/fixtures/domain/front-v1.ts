@@ -9,8 +9,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { app } from "../../../Domain/conformance/app.ts";
 import { DomainDatabase } from "./cluster.ts";
-import { ConformanceClusterLiveV1 } from "./live.ts";
-import { TickersClusterLive, withTickRoute } from "./tickers.ts";
+import ConformanceClusterLiveV1 from "./live-v1.ts";
+import TickersClusterLive, { withTickRoute } from "./tickers.ts";
 
 export default class DomainFrontV1 extends Docker.Service<DomainFrontV1>()(
   "ClusterDomainFront",
