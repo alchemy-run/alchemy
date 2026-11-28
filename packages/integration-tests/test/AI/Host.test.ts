@@ -1,7 +1,14 @@
 import * as AI from "@alchemy.run/ai";
+import * as Host from "@alchemy.run/ai/Host";
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import {
+  CapabilityGraph,
+  makeCapabilityGraph,
+  observeLayerBuilds,
+  observeLookups,
+} from "alchemy/CapabilityGraph";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { LanguageModel } from "effect/ai";
 import * as Cause from "effect/Cause";
@@ -168,6 +175,57 @@ describe("AI: a process hosted beside a model", { tags: ["unit", "local"] }, () 
         expect(yield* tickets.get(Ticket.ref("t-4"))).toEqual({ open: false });
       }).pipe(Effect.provide(deskWith(HelperLive)), Effect.provide(RuntimeContext.phantom));
     }),
+  );
+
+  it.effect(
+    "a plan lists a hosted process under what holds its instances, used by the policy that holds it",
+    () =>
+      Effect.suspend(() => {
+        class Smart extends AI.Model<Smart>()("smart") {}
+        const HelperLive = Helper.toLayer({ description: "Close one ticket." })`
+        Close your ticket with ${Desk.CloseTicket}.
+      `.pipe(
+          Layer.provide(
+            Layer.mergeAll(recording().layer, AI.DefaultModel(Smart)).pipe(
+              Layer.provideMerge(
+                Smart.layer(Layer.succeed(LanguageModel.LanguageModel, undefined as never)),
+              ),
+            ),
+          ),
+        );
+        // Hosted apart, the way a Durable Object holds a process's sessions.
+        const DeskLive = Desk.layer(HandoverLive).pipe(Layer.provide(InMemory));
+        const HelperHosted = Host.make(HelperLive.pipe(Layer.provide(DeskLive)), (name) =>
+          Effect.succeed({
+            binding: `${name}Process`,
+            call: () => Effect.die(new Error("a plan calls no session")),
+          }),
+        );
+        const graph = makeCapabilityGraph();
+        return Effect.gen(function* () {
+          yield* Helper;
+          const terms = graph.describe();
+          expect(terms.find((term) => term.id === "Process:Helper")?.host).toBe("HelperProcess");
+          // The policy holds a client to the process: it uses the process, and binds nothing itself.
+          expect(terms.find((term) => term.id === "Policy:Handover")).toEqual({
+            id: "Policy:Handover",
+            kind: "Policy",
+            name: "Handover",
+            bindings: [],
+            references: [{ relation: "uses", to: "Process:Helper" }],
+          });
+        }).pipe(
+          Effect.provide(DeskLive.pipe(Layer.provideMerge(HelperHosted))),
+          Effect.provide(RuntimeContext.phantom),
+          // As a runtime's program is run at plan time.
+          observeLookups(graph),
+          Effect.provideService(
+            Layer.CurrentMemoMap,
+            observeLayerBuilds(Layer.makeMemoMapUnsafe(), graph),
+          ),
+          Effect.provideService(CapabilityGraph, graph),
+        );
+      }),
   );
 
   it.effect("a session's live events stay with its host: a client is told what to read", () =>

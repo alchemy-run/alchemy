@@ -326,6 +326,27 @@ function PlanRowView(props: {
     return <NamespaceRow id={row.id} depth={row.depth} action={row.action} />;
   }
 
+  if (row.type === "capability") {
+    // A term's head row: its kind, then its name.
+    if (row.kind === "Term") {
+      return (
+        <Row gap={1} paddingLeft={row.depth * 2}>
+          <Text tone="muted">{row.detail ?? ""}</Text>
+          <Text>{row.id}</Text>
+        </Row>
+      );
+    }
+    const lead =
+      row.kind === "Binding" ? glyphs.bullet : row.kind === "Reference" ? "→" : "reaches";
+    return (
+      <Row gap={1} paddingLeft={row.depth * 2}>
+        <Text tone="muted">{lead}</Text>
+        <Text color={row.kind === "Reference" ? undefined : theme.color.info}>{row.id}</Text>
+        {row.detail === undefined ? null : <Text tone="muted">{row.detail}</Text>}
+      </Row>
+    );
+  }
+
   if (row.type === "binding") {
     if (mode === "review") {
       const style =

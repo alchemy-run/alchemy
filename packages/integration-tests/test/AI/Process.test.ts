@@ -2,6 +2,14 @@ import * as AI from "@alchemy.run/ai";
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import {
+  CapabilityGraph,
+  makeCapabilityGraph,
+  observeLayerBuilds,
+  observeLookups,
+  reach,
+  recordAcquisition,
+} from "alchemy/CapabilityGraph";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { LanguageModel } from "effect/ai";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -400,6 +408,78 @@ describe("AI.Process", { tags: ["unit"] }, () => {
             Layer.provideMerge(SecureRandom.layerWebCrypto),
           ),
         ),
+      );
+    }),
+  );
+
+  it.effect("a plan can list a process with the tools it mentions and what each binds", () =>
+    Effect.suspend(() => {
+      class Lookup extends AI.Tool<Lookup>()("lookup", {
+        description: "Look a word up.",
+        parameters: Schema.Struct({ word: Schema.String }),
+        success: Schema.Struct({ meaning: Schema.String }),
+      }) {}
+      class Unused extends AI.Tool<Unused>()("unused", {
+        description: "Never mentioned.",
+        parameters: Schema.Struct({}),
+        success: Schema.Struct({}),
+      }) {}
+      // Each tool's Layer binds something while it is built.
+      const bound = (binding: string) =>
+        Effect.as(recordAcquisition({ binding, targets: ["Test.Table(words)"] }), () => ({
+          meaning: "",
+        }));
+      const LookupLive = Lookup.make(bound("Test.GetItem"));
+      const UnusedLive = Unused.make(bound("Test.DeleteItem") as never);
+      class Glossary extends (AI.Process<Glossary>()("Glossary", { description: "Define words." })`
+        Define the word with ${Lookup}.
+      `) {}
+      class Editor extends (AI.Process<Editor>()("Editor", { description: "Edit a text." })`
+        Fix the text. For a word you do not know, start a ${Glossary}.
+      `) {}
+
+      const graph = makeCapabilityGraph();
+      const harness = recording();
+      return Effect.gen(function* () {
+        yield* Editor;
+        const terms = graph.describe();
+        // A process refers to what it mentions, and to the tools of a process
+        // it may follow: following one, it calls them itself. A tool nobody
+        // mentions is a term no reference points at.
+        expect(terms.map((term) => [term.id, term.references.map((each) => each.to)])).toEqual([
+          ["Process:Editor", ["Process:Glossary", "Tool:lookup"]],
+          ["Process:Glossary", ["Tool:lookup"]],
+          ["Tool:lookup", []],
+          ["Tool:unused", []],
+        ]);
+        expect(terms.find((term) => term.id === "Tool:lookup")!.bindings).toEqual([
+          { binding: "Test.GetItem", targets: ["Test.Table(words)"], via: [] },
+        ]);
+        // What a process reaches is what the terms it refers to reach.
+        expect(reach(terms, "Process:Editor")).toEqual([
+          {
+            binding: "Test.GetItem",
+            targets: ["Test.Table(words)"],
+            via: ["Tool lookup"],
+          },
+        ]);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            harness.layer,
+            AI.DefaultModel(Smart),
+            LookupLive,
+            UnusedLive,
+            RuntimeContext.phantom,
+          ).pipe(Layer.provideMerge(ModelsLive)),
+        ),
+        // As a runtime's program is run at plan time.
+        observeLookups(graph),
+        Effect.provideService(
+          Layer.CurrentMemoMap,
+          observeLayerBuilds(Layer.makeMemoMapUnsafe(), graph),
+        ),
+        Effect.provideService(CapabilityGraph, graph),
       );
     }),
   );

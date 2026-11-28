@@ -151,6 +151,8 @@ export interface Host<R = never> {
     model: HostedModel,
     name: string,
     impl: ObjectImpl,
+    /** The policy or projection the class runs, for a plan to list under it. */
+    runs?: { readonly kind: string; readonly name: string },
   ) => Effect.Effect<Namespace, never, R>;
   /**
    * A class of the model by name, which code that doesn't build the model
@@ -3575,10 +3577,14 @@ export const makePlatform = <R>(
       const hostFor = Effect.fn(function* (hosted: HostedModel) {
         /** Every class this code declares for the model. */
         const declared = new Set<string>();
-        const object = (name: string, impl: ObjectImpl) =>
+        const object = (
+          name: string,
+          impl: ObjectImpl,
+          runs?: { readonly kind: string; readonly name: string },
+        ) =>
           Effect.andThen(
             Effect.sync(() => declared.add(name)),
-            host.declare(hosted, name, bindState(impl)),
+            host.declare(hosted, name, bindState(impl), runs),
           );
         /** The stream classes each projection writes, and each projection's keys' class. */
         const projectionStreams = new Map<string, ReadonlyArray<string>>();
@@ -4117,6 +4123,7 @@ export const makePlatform = <R>(
                 const namespace = yield* object(
                   cls,
                   projectionObject(kit, net, consumerPlans, random),
+                  { kind: "Projection", name: projection.projectionName },
                 );
                 consumers.set(cls, namespace);
                 consumers.set(
@@ -4214,6 +4221,7 @@ export const makePlatform = <R>(
                 const namespace = yield* object(
                   `${policy.policyName}Policy`,
                   policyObject(kit, aging, net),
+                  { kind: "Policy", name: policy.policyName },
                 );
                 return {
                   receive: (delivery) =>
