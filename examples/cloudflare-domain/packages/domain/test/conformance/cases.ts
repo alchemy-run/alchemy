@@ -4634,6 +4634,7 @@ const rest: ReadonlyArray<Group> = [
     ...numbers,
     effectful: true,
     prelude: [
+      `import * as Metric from "effect/Metric";`,
       `import * as Random from "effect/Random";`,
       `import * as Resource from "effect/Resource";`,
       `import * as SubscriptionRef from "effect/SubscriptionRef";`,
@@ -4742,6 +4743,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const ref = yield* SynchronizedRef.make(a); const one = yield* SynchronizedRef.updateSomeAndGetEffect(ref, () => Effect.succeed(Option.none())); const two = yield* SynchronizedRef.getAndUpdateSomeEffect(ref, () => Effect.succeed(Option.none())); return [one, two]; })`,
     ],
     misuse: [
+      `Ref.get(Metric.counter("c"))`,
+      `SubscriptionRef.get(Metric.counter("c"))`,
+      `Effect.flatMap(SubscriptionRef.make(a), (ref) => Stream.runCollect(Stream.take(ref.changes, 1)))`,
+      `Effect.succeed(Redacted.value(Metric.counter("c")))`,
       `Effect.exit(Effect.findFirst([a]))`,
       `Effect.exit(Effect.bind(Effect.succeed(a), "x", () => Effect.succeed(1)))`,
       `Effect.exit(Effect.bind(Effect.Do, 5, () => Effect.succeed(1)))`,
