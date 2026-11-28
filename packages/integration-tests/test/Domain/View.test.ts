@@ -159,7 +159,7 @@ const neverCaughtUp = (settle: Effect.Effect<void>) =>
 
 /**
  * A snapshot says the last fact it reflects: the source stream and seq of the
- * latest write it applied, per key, and none for a key that applied nothing.
+ * latest write it applied, per key, and `null` for a key that applied nothing.
  */
 const positionOfTheLastFact = Effect.gen(function* () {
   const api = yield* CounterApi.Client;
@@ -167,7 +167,7 @@ const positionOfTheLastFact = Effect.gen(function* () {
     api.Totals.snapshot(receipt.stream.slice("Counter/".length), {
       atLeast: { stream: receipt.stream, version: receipt.version },
     });
-  expect(yield* api.Totals.snapshot("p-none")).toEqual({ state: null, cursor: 0 });
+  expect(yield* api.Totals.snapshot("p-none")).toEqual({ state: null, cursor: 0, position: null });
   yield* api.Increment({ id: "p-1", by: 1 });
   yield* api.Increment({ id: "p-1", by: 2 });
   const third = yield* api.Increment({ id: "p-1", by: 3 });
@@ -219,7 +219,7 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
   it.live("gives the state and the cursor it is valid at", () =>
     Effect.gen(function* () {
       const api = yield* CounterApi.Client;
-      expect(yield* api.Totals.snapshot("c-0")).toEqual({ state: null, cursor: 0 });
+      expect(yield* api.Totals.snapshot("c-0")).toEqual({ state: null, cursor: 0, position: null });
       const receipt = yield* api.Increment({ id: "c-1", by: 4 });
       const snapshot = yield* api.Totals.snapshot("c-1", {
         atLeast: { stream: receipt.stream, version: receipt.version },

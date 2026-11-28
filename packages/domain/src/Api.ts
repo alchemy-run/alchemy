@@ -187,7 +187,7 @@ export interface ViewClient<V extends View.Any> {
    * The key's state and the cursor it is valid at, read together. Render the
    * state, then follow `events(key, { after: cursor })`: every later change
    * arrives once, and none is missed. `position` is the address of the last
-   * fact the key applied, read with the state (absent before it applied one).
+   * fact the key applied, read with the state (`null` before it applied one).
    *
    * **Example:** Say which fact a balance reflects
    * ```typescript
@@ -207,7 +207,7 @@ export interface ViewClient<V extends View.Any> {
       readonly where?: Filter<View.StateOf<V>>;
     },
   ) => Effect.Effect<
-    Read.Snapshot<View.StateOf<V> | null>,
+    Read.PositionedSnapshot<View.StateOf<V> | null>,
     ReadError<V["definition"]> | View.ConsistencyTimeout
   >;
 }
@@ -933,7 +933,7 @@ const handlersOf = (
             Effect.map(({ state, cursor, position }) => ({
               state: visible(state, where),
               cursor,
-              ...(position === undefined ? {} : { position }),
+              position,
             })),
           ),
         );

@@ -16,22 +16,32 @@ export interface Snapshot<S> {
   readonly state: S;
   /** Pass as `after` to `events` to receive every later event, once. */
   readonly cursor: number;
-  /**
-   * A view's `snapshot` only: the address of the last fact the key applied
-   * (the `stream` of the source it came from and its `seq` there), read from
-   * the same stored snapshot as the state. Absent before the key applies one,
-   * and on a key last written before positions were recorded. A fact's address
-   * names it across the model, so two reads can be compared by it. On a view
-   * with several sources it can name another stream than your command's: to
-   * wait for your own write, pass its receipt as `atLeast`.
-   *
-   * **Example:** Say which fact a balance reflects
-   * ```typescript
-   * const { state, position } = yield* bank.AccountSummary.snapshot(accountId);
-   * return { accountId, balance: state?.balance ?? 0, asOf: position };
-   * ```
-   */
-  readonly position?: { readonly stream: string; readonly seq: number };
+}
+
+/**
+ * The address of a fact: the `stream` it was written to and its `seq` there,
+ * the same address a command's receipt gives as `stream` and `version`. It
+ * names the fact across the model, so two reads can be compared by it.
+ */
+export const Position = Schema.Struct({ stream: Schema.String, seq: Schema.Number });
+export type Position = typeof Position.Type;
+
+/**
+ * What a view's `snapshot` returns: a {@link Snapshot} with the
+ * {@link Position} of the last fact the key applied, read from the same
+ * stored snapshot as the state. `position` is `null` before the key applies
+ * a fact, and on a key last written before positions were recorded. On a
+ * view with several sources it can name another stream than your command's:
+ * to wait for your own write, pass its receipt as `atLeast`.
+ *
+ * **Example:** Say which fact a balance reflects
+ * ```typescript
+ * const { state, position } = yield* bank.AccountSummary.snapshot(accountId);
+ * return { accountId, balance: state?.balance ?? 0, asOf: position };
+ * ```
+ */
+export interface PositionedSnapshot<S> extends Snapshot<S> {
+  readonly position: Position | null;
 }
 
 /**

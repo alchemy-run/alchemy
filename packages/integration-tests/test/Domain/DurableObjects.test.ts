@@ -403,7 +403,7 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
         Effect.gen(function* () {
           const ledger = Ledger.ref("positioned");
           const totals = yield* Totals;
-          expect((yield* totals.snapshot(ledger)).position).toBeUndefined();
+          expect((yield* totals.snapshot(ledger)).position).toBeNull();
           yield* (yield* Ledger).send(new BookMany({ id: ledger.id, count: 2 }));
           const receipt = yield* (yield* Ledger).send(new BookMany({ id: ledger.id, count: 1 }));
           const atLeast = { stream: receipt.stream, version: receipt.version };
@@ -424,6 +424,53 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
       { timeout: 60_000 },
     );
   }
+
+  it.live(
+    "a view's snapshot of a key stored before positions says none",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      return Effect.gen(function* () {
+        const ledger = Ledger.ref("legacy");
+        const totals = yield* Totals;
+        const receipt = yield* (yield* Ledger).send(new BookMany({ id: ledger.id, count: 2 }));
+        const atLeast = { stream: receipt.stream, version: receipt.version };
+        expect((yield* totals.snapshot(ledger, { atLeast })).position).toEqual({
+          stream: "Ledger/legacy",
+          seq: 2,
+        });
+        // Drop each view key's position, as snapshots stored before it had.
+        for (const { data } of disk.objects.values()) {
+          const snapshot = data.get("snapshot") as { last?: unknown } | undefined;
+          if (snapshot?.last === undefined) continue;
+          const { last: _, ...older } = snapshot;
+          data.set("snapshot", older);
+        }
+        expect(yield* totals.snapshot(ledger, { atLeast })).toEqual({
+          state: { count: 2 },
+          cursor: 2,
+          position: null,
+        });
+        // The key's next fact records its position again.
+        const next = yield* (yield* Ledger).send(new BookMany({ id: ledger.id, count: 1 }));
+        expect(
+          (yield* totals.snapshot(ledger, {
+            atLeast: { stream: next.stream, version: next.version },
+          })).position,
+        ).toEqual({ stream: "Ledger/legacy", seq: 3 });
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          BooksBefore.layer(Layer.empty).pipe(
+            Layer.provideMerge(
+              DurableObjects.makePlatform(simHost({ rowsRead: 0 }, { disk }).host),
+            ),
+            Layer.provideMerge(SecureRandom.layerWebCrypto),
+          ),
+        ),
+      );
+    },
+    { timeout: 60_000 },
+  );
 
   it.live(
     "a stream's list reads only the page it returns",

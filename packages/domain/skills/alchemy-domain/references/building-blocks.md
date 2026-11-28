@@ -549,7 +549,7 @@ Clients call commands and queries as methods (`bank.WithdrawMoney({ accountId, a
 
 Give every declaration a `{ description }` as its last argument, written for the person or agent who calls it; `toMcp` tools, `toCli` help and the `toHttpApi` OpenAPI document show it. Add your own keys by augmenting `Domain.Annotations` (`declare module "@alchemy.run/domain"`), and read them as `X.annotations`.
 
-A view's `snapshot` also returns `position`, the last fact the key applied, to cite what a read reflects.
+A view's `snapshot` also returns `position`, the last fact the key applied (`null` before any), to cite what a read reflects.
 
 More: [Api](https://alchemy.run/domain/api), [Annotations](https://alchemy.run/domain/annotations), [View: Say which fact a snapshot reflects](https://alchemy.run/domain/view#say-which-fact-a-snapshot-reflects).
 

@@ -342,7 +342,8 @@ export interface Host<S, Key extends Key.Any, E> {
    * to `events` as `after` to follow every later change once.
    *
    * `position` is the address of the last fact the key applied, read with the
-   * state: cite it to say what a read reflects, or compare two reads by it.
+   * state (`null` before it applied one): cite it to say what a read
+   * reflects, or compare two reads by it.
    */
   readonly snapshot: (
     key: Key.RefOf<Key>,
@@ -351,7 +352,7 @@ export interface Host<S, Key extends Key.Any, E> {
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly timeout?: Duration.Input;
     },
-  ) => Effect.Effect<Read.Snapshot<S | null>, ConsistencyTimeout>;
+  ) => Effect.Effect<Read.PositionedSnapshot<S | null>, ConsistencyTimeout>;
   /** Wait until a key's state matches a filter. */
   readonly waitFor: (
     key: Key.RefOf<Key>,
