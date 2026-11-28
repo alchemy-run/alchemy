@@ -1,0 +1,94 @@
+---
+title: Railway
+description: Run an Effect Cluster's database and runners on Railway, in a project's environment, with the gateway on its private network.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Postgres and the runner pool run as separate services in the same Railway environment. Alchemy builds the gateway URL from the runner service's name. For example, a service named `todos-runners` serves its gateway at `http://todos-runners.railway.internal:34500`. Port `34500` is the Effect Cluster gateway port, not a Railway default. Only services in the same environment can reach that address. You don't set it yourself or need a public domain.
+
+```typescript title="src/Cluster.ts"
+import * as ClusterRailway from "@alchemy.run/effect-cluster/Railway";
+import * as Railway from "@alchemy.run/railway";
+import * as Layer from "effect/Layer";
+
+export const Project = Railway.Project("App");
+
+export const Database = ClusterRailway.Database("Cluster", { project: Project });
+
+export const Default = ClusterRailway.ServicePool("Default").pipe(Layer.provide(Database));
+```
+
+Install `@alchemy.run/railway` and finish [Railway setup](/railway/setup).
+
+<Tree
+  nodes={[
+    { id: "project", label: "Railway project", type: "your project" },
+    { id: "env", label: "environment", type: "private network *.railway.internal", parent: "project", dashed: true },
+    { id: "db", label: "Database", type: "Railway Postgres", parent: "env", specs: [["data", "volume"]] },
+    { id: "pool", label: "Default", type: "Railway Service · runner replicas", parent: "env" },
+    { id: "api", label: "Api", type: "Railway Service", parent: "env" },
+  ]}
+  caption="The runner reaches Postgres over the private network, and callers in the environment reach the runner's gateway there. Neither has a public endpoint."
+/>
+
+## The database
+
+`ClusterRailway.Database` runs Postgres in the environment you specify, or the project's primary environment if you omit it. It has no public TCP proxy. Runners connect using `${{name.DATABASE_URL}}`, which Railway resolves to the private database URL. `retain: true` keeps Postgres when you remove the declaration or destroy the stage. It doesn't apply to the project or environment, and deleting either one deletes Postgres with it.
+
+```typescript title="src/Cluster.ts"
+export const Staging = Railway.Environment("Staging", { project: Project });
+
+export const Database = ClusterRailway.Database("Cluster", {
+  project: Project,
+  environment: Staging,
+  name: "cluster-db",
+  retain: true,
+});
+```
+
+## The pool
+
+`ClusterRailway.ServicePool` runs one Railway Service, built from the bundled runner program, in the database's environment. `replicas` sets how many runners it runs, one by default, all in the pool's shard group. Callers reach every replica through the one private hostname, and each runner registers under its own private address, the one it reaches Postgres from.
+
+```typescript title="src/Cluster.ts"
+export const Default = ClusterRailway.ServicePool("Default", {
+  replicas: 3,
+  region: "us-west2",
+}).pipe(Layer.provide(Database));
+```
+
+Changing `replicas` updates the same Service, database and shard group in place. Railway replaces every replica in the deployment that applies it. It stops each runner with `SIGTERM`, and the runner hands its shards back before it exits, so the others take them within seconds. A runner that crashes keeps its shards until Railway restarts it at the same address, or until its registration expires.
+
+`Cluster.Database.fromUrl` does not tell the pool where to run. Pass `project` to the pool, and pass `environment` if you are not using the project's primary environment. Such a pool runs one runner, under its Service's hostname.
+
+## Call it from a Railway Service
+
+A Service in the same environment reaches the gateway on the private network. Alchemy sets the Service's Railway healthcheck to `/health`, and Railway waits for it to pass before the Service takes traffic, so answer that without calling the cluster:
+
+```typescript title="src/Api.ts"
+import * as Railway from "@alchemy.run/railway";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Project, Staging } from "./Cluster.ts";
+import { Room } from "./Room.ts";
+
+export default class Api extends Railway.Service<Api>()(
+  "Api",
+  { project: Project, environment: Staging, main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.url === "/health") return HttpServerResponse.text("ok");
+        const lobby = yield* rooms.getByName("lobby");
+        return yield* HttpServerResponse.json({ members: yield* lobby.Join({ name: "sam" }) });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+Every option, with its default, is in the reference: [Database](/providers/cluster/railway#database) and [ServicePool](/providers/cluster/railway#servicepool).

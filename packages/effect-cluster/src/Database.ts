@@ -70,6 +70,14 @@ export type ClusterNetwork =
       /** The cluster, as `@alchemy.run/kubernetes` takes it. */
       readonly cluster: unknown;
       readonly namespace: string;
+    }
+  | {
+      /** The private network of the Railway environment where the runners run. */
+      readonly kind: "railway";
+      /** The project, as `@alchemy.run/railway` takes it. */
+      readonly project: unknown;
+      /** The Railway environment. Defaults to the project's primary environment. */
+      readonly environment?: unknown;
     };
 
 /** What every database Layer gives the pool it is provided to. */

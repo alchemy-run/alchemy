@@ -1,6 +1,6 @@
 # @alchemy.run/effect-cluster
 
-[Effect Cluster](https://effect.website) for [Alchemy](https://alchemy.run). Effect Cluster runs stateful, addressable programs across a group of processes. An entity has one instance per id, like a chat room or a cart, and handles its messages one at a time. Instances are spread over runners by shard, and a Postgres database records which runner owns each shard and keeps the messages that must survive a restart. Deploy the database and a pool of runners on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or run each instance as a Durable Object on Cloudflare.
+[Effect Cluster](https://effect.website) for [Alchemy](https://alchemy.run). Effect Cluster runs stateful, addressable programs across a group of processes. An entity has one instance per id, like a chat room or a cart, and handles its messages one at a time. Instances are spread over runners by shard, and a Postgres database records which runner owns each shard and keeps the messages that must survive a restart. Deploy the database and a pool of runners on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway, or run each instance as a Durable Object on Cloudflare.
 
 ```sh
 npm install alchemy @alchemy.run/effect-cluster @alchemy.run/docker effect

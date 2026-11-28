@@ -80,6 +80,12 @@ const readGithubRepos = Query.fn(() =>
   ),
 );
 
+const readDeploymentIds = Query.fn((environmentId: string, serviceId: string) =>
+  RailwayApi.deployments({ input: { environmentId, serviceId }, first: 20 }).pipe(
+    Query.map((deployment) => ({ id: deployment.id })),
+  ),
+);
+
 const readEnvironmentConfig = Query.fn((id: string, projectId: string) => ({
   config: RailwayApi.environment({ id, projectId }).config,
 }));
@@ -837,5 +843,71 @@ test.provider(
       "live",
     ],
     timeout: 600_000,
+  },
+);
+
+test.provider(
+  "run a service as replicas and change the count in place with one deployment",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const region = "europe-west4-drams3a";
+      const replicated = (replicas: number) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const { project, environment } = yield* suitePartition;
+            const api = yield* Railway.Service("Replicas", {
+              project,
+              environment,
+              image: "hashicorp/http-echo",
+              port: 5678,
+              publicDomain: false,
+              region,
+              replicas,
+            });
+            return { api };
+          }),
+        );
+
+      const created = yield* replicated(2);
+      const createdConfig = yield* readEnvironmentConfig(
+        created.api.environmentId,
+        created.api.projectId,
+      );
+      expect(
+        serviceRegionPlacement(createdConfig.config, created.api.serviceId)[region]?.numReplicas,
+      ).toEqual(2);
+      const before = yield* readDeploymentIds(created.api.environmentId, created.api.serviceId);
+
+      const scaled = yield* replicated(1);
+      expect(scaled.api.serviceId).toEqual(created.api.serviceId);
+      const scaledConfig = yield* readEnvironmentConfig(
+        scaled.api.environmentId,
+        scaled.api.projectId,
+      );
+      expect(
+        serviceRegionPlacement(scaledConfig.config, scaled.api.serviceId)[region]?.numReplicas,
+      ).toEqual(1);
+      // The count is applied by one deployment, not one for the placement and
+      // another for the update.
+      const after = yield* readDeploymentIds(scaled.api.environmentId, scaled.api.serviceId);
+      const known = new Set(before.map((deployment) => deployment.id));
+      expect(after.filter((deployment) => !known.has(deployment.id)).length).toEqual(1);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.api.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 300_000,
   },
 );

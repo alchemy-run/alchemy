@@ -10158,6 +10158,9 @@ importers:
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
+      '@alchemy.run/railway':
+        specifier: workspace:*
+        version: link:../railway
       alchemy:
         specifier: workspace:*
         version: link:../alchemy

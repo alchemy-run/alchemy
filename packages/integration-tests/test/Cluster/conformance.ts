@@ -9,7 +9,11 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 
-class NotReady extends Data.TaggedError("NotReady")<{ readonly detail: string }> {}
+export class NotReady extends Data.TaggedError("NotReady")<{ readonly detail: string }> {
+  override get message() {
+    return this.detail;
+  }
+}
 
 /** GET a route and decode its JSON, retrying while the front or runners start. */
 export const get = (url: string) =>
