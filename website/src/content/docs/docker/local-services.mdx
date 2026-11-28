@@ -93,9 +93,7 @@ const postgres = yield* Docker.Container("postgres", {
   },
   sharedMemorySize: "256m",
   ports: [{ external: 15432, internal: 5432 }],
-  volumes: [
-    { hostPath: data.name, containerPath: "/var/lib/postgresql/data" },
-  ],
+  mounts: [{ type: "volume", source: data.name, target: "/var/lib/postgresql" }],
   networks: [{ name: network.name, aliases: ["postgres"] }],
   healthcheck: {
     cmd: ["CMD-SHELL", "pg_isready -U alchemy -d app"],
@@ -107,9 +105,28 @@ const postgres = yield* Docker.Container("postgres", {
 });
 ```
 
-`image` takes the `RemoteImage` resource itself. A `hostPath` set to the volume's name mounts the volume. The `postgres` alias is the name other containers on `app-network` connect to. The health check marks the container healthy once Postgres accepts connections, and `start: true` runs it, rather than leaving it created and stopped.
+`image` takes the `RemoteImage` resource itself. The `mounts` entry attaches a named volume at PostgreSQL 18's data root; `Docker.Volume` manages the volume itself. The `postgres` alias is the name other containers on `app-network` connect to. The health check marks the container healthy once Postgres accepts connections, and `start: true` runs it, rather than leaving it created and stopped.
 
 `sharedMemorySize` raises `/dev/shm` above Docker's 64 MB default, which Postgres runs out of on parallel queries.
+
+### Volume, bind, and tmpfs mounts
+
+`Docker.Container.mounts` describes Docker `--mount` options. A named volume can skip initial image copy-up with `noCopy`, or mount a `subpath` that already exists inside the volume:
+
+```typescript
+const worker = yield* Docker.Container("worker", {
+  image: "alpine:3.22",
+  mounts: [
+    { type: "volume", source: data.name, target: "/data", noCopy: true },
+    { type: "bind", source: "/srv/config", target: "/config", readOnly: true },
+    { type: "tmpfs", target: "/run", size: "64m", mode: 0o1777 },
+  ],
+});
+```
+
+Bind source paths belong to the **Docker daemon host**, even when using a remote Docker context. They must exist unless `createHostPath: true` is set. Linux supports bind propagation and recursive mounts subject to daemon and kernel capabilities; volume subpaths also depend on the daemon version. Tmpfs contents disappear when the container stops.
+
+Alchemy validates mount declarations before replacement. Changing a mount replaces the container, not a separately managed named volume. Stopped, auto-named containers without automatic restart can use create-first replacement. Running or fixed-name containers require delete-first; failures involving daemon-host paths may still cause downtime. The existing `volumes` (`-v`) and `tmpfs` (`--tmpfs`) properties retain their original behavior.
 
 ## Read the bound ports
 

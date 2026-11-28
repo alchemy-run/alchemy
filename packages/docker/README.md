@@ -32,7 +32,7 @@ export default Alchemy.Stack(
       environment: { POSTGRES_PASSWORD: password },
       sharedMemorySize: "256m",
       ports: [{ external: 15432, internal: 5432 }],
-      volumes: [{ hostPath: data.name, containerPath: "/var/lib/postgresql/data" }],
+      mounts: [{ type: "volume", source: data.name, target: "/var/lib/postgresql" }],
       networks: [{ name: network.name, aliases: ["postgres"] }],
       start: true,
     });
@@ -43,6 +43,36 @@ export default Alchemy.Stack(
 ```
 
 `alchemy deploy` pulls the image and starts the container. Change a prop and the next deploy replaces only what changed; `alchemy destroy` removes all of it.
+
+## Typed mounts
+
+Use `mounts` to attach named volumes, host directories, and memory filesystems
+with Docker `--mount` options:
+
+```typescript
+const data = yield* Docker.Volume("WorkerData");
+yield* Docker.Container("Worker", {
+  image: "alpine:3.22",
+  mounts: [
+    { type: "volume", source: data.name, target: "/data", noCopy: true },
+    { type: "bind", source: "/srv/config", target: "/config", readOnly: true },
+    { type: "tmpfs", target: "/run", size: "32m", mode: 0o1777 },
+  ],
+});
+```
+
+Bind sources refer to the Docker daemon host, not necessarily the CLI host.
+`mounts` preserves the existing `volumes` (`-v`) and `tmpfs` (`--tmpfs`)
+semantics. Docker creates a named volume if it is missing; declare
+`Docker.Volume` separately when Alchemy should manage it. Changes to mounts
+replace only the container, not its named volume. Alchemy checks the selected
+daemon's known mount restrictions before replacement and reports invalid
+declarations through `InvalidContainerOptions` with a property path.
+Stopped containers with generated names and no restart policy can be replaced
+create-first, keeping
+the original if creation fails. Running and explicitly named containers
+require delete-first, which is not atomic; ensure host sources and volume
+subpaths exist before a replacement.
 
 ## Network configuration
 
