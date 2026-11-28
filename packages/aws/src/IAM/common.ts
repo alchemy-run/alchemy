@@ -36,19 +36,20 @@ export const toTagRecord = (
       .map((tag) => [tag.Key, tag.Value]),
   );
 
-const decodePolicyString = (value: string) => {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-};
-
-const decodeJson = Schema.decodeResult(Schema.fromJsonString(Schema.Unknown));
+const policyJson = Schema.fromJsonString(Schema.Unknown);
+const decodeJson = Schema.decodeResult(policyJson);
+const decodeUriJson = Schema.decodeResult(
+  Schema.StringFromUriComponent.pipe(Schema.decodeTo(policyJson)),
+);
 
 // Try plain JSON first so literal percent escapes in a policy are not altered.
 export const decodePolicyJson = (value: string) =>
-  decodeJson(value).pipe(Result.orElse(() => decodeJson(decodePolicyString(value))));
+  decodeJson(value).pipe(Result.orElse(() => decodeUriJson(value)));
+
+const encodeJson = Schema.encodeResult(policyJson);
+
+export const encodePolicyJson = (value: unknown): string =>
+  Result.getOrThrowWith(encodeJson(value), (error) => error);
 
 export const parsePolicyDocument = (value: string | undefined): PolicyDocument | undefined => {
   if (!value) {
@@ -58,7 +59,7 @@ export const parsePolicyDocument = (value: string | undefined): PolicyDocument |
   return Result.getOrThrowWith(decodePolicyJson(value), (error) => error) as PolicyDocument;
 };
 
-export const stringifyPolicyDocument = (value: PolicyDocument) => JSON.stringify(value);
+export const stringifyPolicyDocument = (value: PolicyDocument): string => encodePolicyJson(value);
 
 export const normalizeIamPath = (value: string | undefined) => {
   const path = value ?? "/";

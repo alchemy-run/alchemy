@@ -4,8 +4,13 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
+import * as Order from "effect/Order";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
@@ -15,6 +20,7 @@ import type { Providers } from "../Providers.ts";
 import type { IamAction } from "./actions.generated.ts";
 import {
   decodePolicyJson,
+  encodePolicyJson,
   oldestNondefaultPolicyVersion,
   parsePolicyDocument,
   policyArnFromParts,
@@ -78,6 +84,23 @@ export interface ServiceControlPolicyDocument {
   Statement: ServiceControlPolicyStatement[];
 }
 
+const canonicalizePolicyValue = (value: unknown): unknown => {
+  if (Arr.isArray(value)) {
+    return value.length === 1
+      ? canonicalizePolicyValue(value[0])
+      : Arr.map(value, canonicalizePolicyValue);
+  }
+  if (Predicate.isObject(value)) {
+    return pipe(
+      Rec.toEntries(value),
+      Arr.sortWith(([key]) => key, Order.String),
+      Arr.map(([key, entry]) => [key, canonicalizePolicyValue(entry)] as const),
+      Rec.fromEntries,
+    );
+  }
+  return value;
+};
+
 /**
  * Canonicalize an IAM policy document for drift comparison.
  *
@@ -97,25 +120,13 @@ export interface ServiceControlPolicyDocument {
  * Unparseable strings are returned unchanged so a diff still fires (and shows
  * the offending value) instead of throwing inside a provider.
  */
-export const normalizePolicyDocument = (json: string | object): string => {
-  const stable = (value: unknown): unknown =>
-    Array.isArray(value)
-      ? value.length === 1
-        ? stable(value[0])
-        : value.map(stable)
-      : value !== null && typeof value === "object"
-        ? Object.fromEntries(
-            Object.entries(value as Record<string, unknown>)
-              .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-              .map(([k, v]) => [k, stable(v)]),
-          )
-        : value;
-  if (typeof json === "string") {
-    const decoded = decodePolicyJson(json);
-    return Result.isSuccess(decoded) ? JSON.stringify(stable(decoded.success)) : json;
-  }
-  return JSON.stringify(stable(json));
-};
+export const normalizePolicyDocument = (json: string | object): string =>
+  typeof json === "string"
+    ? decodePolicyJson(json).pipe(
+        Result.map((value) => encodePolicyJson(canonicalizePolicyValue(value))),
+        Result.getOrElse(() => json),
+      )
+    : encodePolicyJson(canonicalizePolicyValue(json));
 
 export type PolicyName = string;
 export type PolicyArn = `arn:${Partition}:iam::${AccountID}:policy/${string}`;

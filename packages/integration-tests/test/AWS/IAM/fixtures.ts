@@ -103,9 +103,7 @@ export const testOidcThumbprintB = "2222222222222222222222222222222222222222";
 export const equivalentPolicyDocument = {
   Version: "2012-10-17",
   Statement: [{ Resource: "*", Action: "s3:ListBucket", Effect: "Allow" }],
-};
-
-export const equivalentPolicyJson = JSON.stringify(equivalentPolicyDocument);
+} as const;
 
 const iamPolicyDocumentJson = Schema.fromJsonString(
   Schema.StructWithRest(
@@ -113,7 +111,9 @@ const iamPolicyDocumentJson = Schema.fromJsonString(
     [Schema.Record(Schema.String, Schema.Json)],
   ),
 );
-const decodeIamPolicyJson = Schema.decodeSync(iamPolicyDocumentJson);
+export const equivalentPolicyJson =
+  Schema.encodeSync(iamPolicyDocumentJson)(equivalentPolicyDocument);
 
-export const decodeIamPolicyDocument = (encoded: string) =>
-  decodeIamPolicyJson(decodeURIComponent(encoded));
+export const decodeIamPolicyDocument = Schema.decodeSync(
+  Schema.StringFromUriComponent.pipe(Schema.decodeTo(iamPolicyDocumentJson)),
+);

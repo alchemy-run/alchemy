@@ -4,8 +4,11 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
@@ -132,10 +135,9 @@ export const UserProvider = () =>
       });
 
       const readInlinePolicies = Effect.fn(function* (userName: string) {
-        const policyNames = yield* iam.listUserPolicies.items({ UserName: userName }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-        );
+        const policyNames = yield* iam.listUserPolicies
+          .items({ UserName: userName })
+          .pipe(Stream.runCollect);
         const entries = yield* Effect.forEach(policyNames, (policyName) =>
           iam
             .getUserPolicy({
@@ -151,9 +153,13 @@ export const UserProvider = () =>
               ),
             ),
         );
-        return Object.fromEntries(
-          entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
+        const policies: Record<string, PolicyDocument> = Rec.fromEntries(
+          Arr.filter(
+            entries,
+            (entry): entry is readonly [string, PolicyDocument] => entry[1] !== undefined,
+          ),
         );
+        return policies;
       });
 
       const readTags = Effect.fn(function* (userName: string) {
@@ -203,11 +209,11 @@ export const UserProvider = () =>
         olds: Record<string, PolicyDocument>;
         news: Record<string, PolicyDocument>;
       }) {
-        for (const [policyName, document] of Object.entries(news)) {
-          const observed = olds[policyName];
+        for (const [policyName, document] of Rec.toEntries(news)) {
+          const observed = Rec.get(olds, policyName);
           if (
-            observed === undefined ||
-            normalizePolicyDocument(observed) !== normalizePolicyDocument(document)
+            Option.isNone(observed) ||
+            normalizePolicyDocument(observed.value) !== normalizePolicyDocument(document)
           ) {
             yield* iam.putUserPolicy({
               UserName: userName,
@@ -216,8 +222,8 @@ export const UserProvider = () =>
             });
           }
         }
-        for (const policyName of Object.keys(olds)) {
-          if (!(policyName in news)) {
+        for (const policyName of Rec.keys(olds)) {
+          if (!Rec.has(news, policyName)) {
             yield* iam
               .deleteUserPolicy({
                 UserName: userName,

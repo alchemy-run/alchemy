@@ -7,10 +7,18 @@ import {
 } from "@alchemy.run/aws/IAM/Policy";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Schema from "effect/Schema";
+import {
+  decodeIamPolicyDocument,
+  equivalentPolicyDocument,
+  equivalentPolicyJson,
+} from "./fixtures.ts";
 
-const decodeJson = Schema.decodeSync(
-  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
-);
+const jsonObject = Schema.Record(Schema.String, Schema.Json);
+const policyJson = Schema.fromJsonString(jsonObject);
+const decodeJson = Schema.decodeSync(policyJson);
+const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+const encodePrettyJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown, { space: 2 }));
+const encodeUriComponent = Schema.encodeSync(Schema.StringFromUriComponent);
 
 const document: PolicyDocument = {
   Version: "2012-10-17",
@@ -31,6 +39,15 @@ describe(
   () => {
     it("round-trips through the JSON schema", () => {
       expect(decodeJson(stringifyPolicyDocument(document))).toEqual(document);
+      expect(
+        decodeIamPolicyDocument(encodeUriComponent(stringifyPolicyDocument(document))),
+      ).toEqual(document);
+    });
+
+    it("keeps the scalar action and other fields in the IAM fixture readback", () => {
+      expect(decodeIamPolicyDocument(encodeUriComponent(equivalentPolicyJson))).toEqual(
+        equivalentPolicyDocument,
+      );
     });
   },
 );
@@ -56,12 +73,12 @@ describe(
     });
 
     it("treats a JSON string and the equivalent object identically", () => {
-      const json = JSON.stringify(document, null, 2);
+      const json = encodePrettyJson(document);
       expect(normalizePolicyDocument(json)).toBe(normalizePolicyDocument(document));
     });
 
     it("handles the URL-encoded documents IAM returns", () => {
-      const encoded = encodeURIComponent(JSON.stringify(document));
+      const encoded = encodeUriComponent(encodeJson(document));
       expect(normalizePolicyDocument(encoded)).toBe(normalizePolicyDocument(document));
     });
 
@@ -70,10 +87,20 @@ describe(
         ...document,
         Statement: [{ Effect: "Allow", Resource: "arn:aws:s3:::my-bucket/a%20b" }],
       };
-      const raw = JSON.stringify(escaped);
+      const raw = encodeJson(escaped);
       const expected = normalizePolicyDocument(escaped);
       expect(normalizePolicyDocument(raw)).toBe(expected);
-      expect(normalizePolicyDocument(encodeURIComponent(raw))).toBe(expected);
+      expect(normalizePolicyDocument(encodeUriComponent(raw))).toBe(expected);
+    });
+
+    it("preserves nulls, empty collections and the order of multi-value lists", () => {
+      const raw = { z: ["second", "first"], a: { empty: [], none: null } };
+      expect(normalizePolicyDocument(raw)).toBe(
+        '{"a":{"empty":[],"none":null},"z":["second","first"]}',
+      );
+      expect(normalizePolicyDocument(raw)).not.toBe(
+        normalizePolicyDocument({ ...raw, z: ["first", "second"] }),
+      );
     });
 
     it("is deterministic for the same document", () => {
@@ -182,7 +209,7 @@ describe(
       };
       expect(illegal).toBeDefined();
       expect(normalizePolicyDocument(scp)).toBe(
-        normalizePolicyDocument(decodeJson(JSON.stringify(scp))),
+        normalizePolicyDocument(decodeJson(encodeJson(scp))),
       );
     });
   },

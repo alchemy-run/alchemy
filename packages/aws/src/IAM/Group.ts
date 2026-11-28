@@ -3,7 +3,10 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument } from "./common.ts";
@@ -112,10 +115,9 @@ export const GroupProvider = () =>
           : createPhysicalName({ id, maxLength: 128 });
 
       const readInlinePolicies = Effect.fn(function* (groupName: string) {
-        const policyNames = yield* iam.listGroupPolicies.items({ GroupName: groupName }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-        );
+        const policyNames = yield* iam.listGroupPolicies
+          .items({ GroupName: groupName })
+          .pipe(Stream.runCollect);
         const entries = yield* Effect.forEach(policyNames, (policyName) =>
           iam
             .getGroupPolicy({
@@ -131,9 +133,13 @@ export const GroupProvider = () =>
               ),
             ),
         );
-        return Object.fromEntries(
-          entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
+        const policies: Record<string, PolicyDocument> = Rec.fromEntries(
+          Arr.filter(
+            entries,
+            (entry): entry is readonly [string, PolicyDocument] => entry[1] !== undefined,
+          ),
         );
+        return policies;
       });
 
       const readManagedPolicies = Effect.fn(function* (groupName: string) {
@@ -186,11 +192,11 @@ export const GroupProvider = () =>
         olds: Record<string, PolicyDocument>;
         news: Record<string, PolicyDocument>;
       }) {
-        for (const [policyName, document] of Object.entries(news)) {
-          const observed = olds[policyName];
+        for (const [policyName, document] of Rec.toEntries(news)) {
+          const observed = Rec.get(olds, policyName);
           if (
-            observed === undefined ||
-            normalizePolicyDocument(observed) !== normalizePolicyDocument(document)
+            Option.isNone(observed) ||
+            normalizePolicyDocument(observed.value) !== normalizePolicyDocument(document)
           ) {
             yield* iam.putGroupPolicy({
               GroupName: groupName,
@@ -199,8 +205,8 @@ export const GroupProvider = () =>
             });
           }
         }
-        for (const policyName of Object.keys(olds)) {
-          if (!(policyName in news)) {
+        for (const policyName of Rec.keys(olds)) {
+          if (!Rec.has(news, policyName)) {
             yield* iam
               .deleteGroupPolicy({
                 GroupName: groupName,
