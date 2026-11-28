@@ -29,6 +29,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Anthropic": "./src/Anthropic/index.ts",
     "./Archil": "./src/Archil/index.ts",
     "./Boat": "./src/Boat/index.ts",
     "./Cloudflare": "./src/Cloudflare/index.ts",
@@ -36,6 +37,7 @@
     "./E2B": "./src/E2B/index.ts",
     "./EffectCluster": "./src/EffectCluster/index.ts",
     "./Modal": "./src/Modal/index.ts",
+    "./OpenAI": "./src/OpenAI/index.ts",
     "./Rivet": "./src/Rivet/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -47,6 +49,12 @@
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./Anthropic": {
+        "types": "./lib/Anthropic/index.d.ts",
+        "bun": "./src/Anthropic/index.ts",
+        "worker": "./src/Anthropic/index.ts",
+        "default": "./lib/Anthropic/index.js"
       },
       "./Archil": {
         "types": "./lib/Archil/index.d.ts",
@@ -90,6 +98,12 @@
         "worker": "./src/Modal/index.ts",
         "default": "./lib/Modal/index.js"
       },
+      "./OpenAI": {
+        "types": "./lib/OpenAI/index.d.ts",
+        "bun": "./src/OpenAI/index.ts",
+        "worker": "./src/OpenAI/index.ts",
+        "default": "./lib/OpenAI/index.js"
+      },
       "./Rivet": {
         "types": "./lib/Rivet/index.d.ts",
         "bun": "./src/Rivet/index.ts",
@@ -124,6 +138,8 @@
     "@alchemy.run/effect-cluster": "workspace:*",
     "@alchemy.run/modal": "workspace:*",
     "@alchemy.run/rivet": "workspace:*",
+    "@effect/ai-anthropic": "catalog:",
+    "@effect/ai-openai": "catalog:",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
@@ -138,6 +154,8 @@
     "@alchemy.run/effect-cluster": "workspace:*",
     "@alchemy.run/modal": "workspace:*",
     "@alchemy.run/rivet": "workspace:*",
+    "@effect/ai-anthropic": "catalog:",
+    "@effect/ai-openai": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
@@ -164,6 +182,12 @@
       "optional": true
     },
     "@alchemy.run/rivet": {
+      "optional": true
+    },
+    "@effect/ai-anthropic": {
+      "optional": true
+    },
+    "@effect/ai-openai": {
       "optional": true
     }
   }

@@ -66,6 +66,8 @@ catalog:
   "@cloudflare/unenv-preset": "^2.16.2"
   "@cloudflare/vitest-plugin": "^1.4.0"
   "@cloudflare/workers-types": "5.20261117.1"
+  "@effect/ai-anthropic": "4.1.4"
+  "@effect/ai-openai": "4.1.4"
   "@effect/atom-react": "^4.1.4"
   "@effect/platform-bun": "^4.1.4"
   "@effect/platform-node": "^4.1.4"
