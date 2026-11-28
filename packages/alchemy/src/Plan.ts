@@ -274,6 +274,13 @@ export type Plan<Output = any> = {
    */
   cycleMembers: ReadonlySet<string>;
   /**
+   * Each member of {@link cycleMembers} mapped to the members of its own
+   * cycle (its strongly-connected component). Only peers of one cycle
+   * rendezvous on each other's early output; a node in another cycle is
+   * ordered like any DAG upstream.
+   */
+  cycles: ReadonlyMap<string, ReadonlySet<string>>;
+  /**
    * The run-level default {@link ProviderMode} this plan was built with
    * (`alchemy dev` → `"local"`, `alchemy deploy` → `"live"`). Renderers use
    * it to tag only the EXCEPTIONS — rows whose resolved mode differs from
@@ -2407,7 +2414,9 @@ const makePlan = <A>(
     // nothing, so it cannot close a cycle: two updating Workers that bind
     // each other only by `workerName` are not a cycle, and a node that
     // still references a peer's changing attribute waits for it (#3103).
-    const cycleMembers = findCycleMembers(
+    // Each member maps to its own cycle: a node in another cycle is ordered
+    // like any DAG upstream.
+    const cycles = findCycles(
       Object.fromEntries([
         ...Object.entries(resourceGraph).map(([fqn, node]): [string, string[]] => [
           fqn,
@@ -2424,6 +2433,7 @@ const makePlan = <A>(
         ]),
       ]),
     );
+    const cycleMembers = new Set(cycles.keys());
 
     // Detect unsatisfiable dependency cycles among create/replace nodes.
     // Update/noop nodes signal their Deferred before waitForDeps when in a
@@ -2491,7 +2501,7 @@ const makePlan = <A>(
         !node.provider.observe &&
         node.deferredAdoption?.adopt === false &&
         !isResolved(node.props) &&
-        Object.keys(Output.resolveUpstream(node.props)).some((dep) => cycleMembers.has(dep)) &&
+        Object.keys(Output.resolveUpstream(node.props)).some((dep) => cycles.get(fqn)?.has(dep)) &&
         // A resumed replacement already holds its precreated identity.
         !(node.state.status === "replacing" && !node.restart && node.state.attr !== undefined)
       ) {
@@ -2773,6 +2783,7 @@ const makePlan = <A>(
       output: selected ? undefined : stack.output,
       selectedFqns: selected,
       cycleMembers,
+      cycles,
       defaultMode: runDefaultMode,
     } satisfies Plan<A | undefined> as Plan<A | undefined>;
   }).pipe(

@@ -511,7 +511,9 @@ const executePlan = Effect.fn(function* (
         // against final outputs once the cycle settles. A downstream
         // outside the cycle must still wait for reconcile: e.g. a queue
         // consumer cannot attach to a Worker's fetch-only precreate stub.
-        plan.cycleMembers.has(downstreamFqn) && plan.cycleMembers.has(fqn)
+        // So must a member of another cycle: the cycles form a DAG, so
+        // waiting across them cannot deadlock.
+        plan.cycles.get(downstreamFqn)?.has(fqn)
           ? Deferred.await(ready[fqn])
           : Deferred.await(readyStable[fqn]),
       { concurrency: "unbounded" },
@@ -559,7 +561,7 @@ const executePlan = Effect.fn(function* (
             stage,
             (fqns) => waitForDeps(fqn, fqns),
             failures,
-            plan.cycleMembers,
+            plan.cycles.get(fqn),
           ),
     { concurrency: "unbounded" },
   );
@@ -609,10 +611,11 @@ const executeNode = (
   stage: string,
   waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
   failures: LifecycleFailure[],
-  cycleMembers: ReadonlySet<string>,
+  /** The members of this node's cycle, or `undefined` outside any cycle. */
+  cyclePeers: ReadonlySet<string> | undefined,
 ): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
-    const inCycle = cycleMembers.has(fqn);
+    const inCycle = cyclePeers !== undefined;
     const logicalId = node.resource.LogicalId;
     const namespace = node.resource.Namespace;
 
@@ -787,11 +790,12 @@ const executeNode = (
     };
 
     // A cycle precreates before its peers reconcile. An upstream outside the
-    // cycle cannot depend on it, so wait for those upstreams and resolve the
-    // props they determine: only values derived from cycle peers stay
-    // unresolved when precreate and `observe` run.
+    // cycle (in no cycle, or in another one) cannot depend on it, so wait for
+    // those upstreams and resolve the props they determine: only values
+    // derived from cycle peers stay unresolved when precreate and `observe`
+    // run.
     const resolvePrecreateProps = Effect.gen(function* () {
-      const outside = allUpstreamFqns().filter((upstream) => !cycleMembers.has(upstream));
+      const outside = allUpstreamFqns().filter((upstream) => !cyclePeers?.has(upstream));
       yield* waitForDeps(outside);
       return yield* Output.evaluateAvailable(
         node.props,
