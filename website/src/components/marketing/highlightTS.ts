@@ -46,16 +46,55 @@ function escape(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/**
+ * A template literal: its text is a string, and each `${...}` splice is
+ * code, highlighted as code.
+ */
+function highlightTemplate(template: string): string {
+  let out = "";
+  let text = "";
+  const flush = () => {
+    if (text !== "") out += `<span class="alc-tok-s">${escape(text)}</span>`;
+    text = "";
+  };
+  let i = 0;
+  while (i < template.length) {
+    if (template[i] === "\\") {
+      text += template.slice(i, i + 2);
+      i += 2;
+    } else if (template[i] === "$" && template[i + 1] === "{") {
+      // The splice ends at the brace that closes it, past any inside it.
+      let depth = 1;
+      let end = i + 2;
+      while (end < template.length && depth > 0) {
+        if (template[end] === "{") depth++;
+        else if (template[end] === "}") depth--;
+        end++;
+      }
+      flush();
+      out += `<span class="alc-tok-k">\${</span>${highlightTS(template.slice(i + 2, end - 1))}<span class="alc-tok-k">}</span>`;
+      i = end;
+    } else {
+      text += template[i++];
+    }
+  }
+  flush();
+  return out;
+}
+
 export function highlightTS(src: string): string {
   let out = "";
   let last = 0;
   let m: RegExpExecArray | null;
-  RE.lastIndex = 0;
-  while ((m = RE.exec(src)) !== null) {
+  // A regex of its own: a template's splices are highlighted while this one is mid-sweep.
+  const re = new RegExp(RE.source, "g");
+  while ((m = re.exec(src)) !== null) {
     if (m.index > last) out += escape(src.slice(last, m.index));
     if (m[1] || m[2]) {
       out += `<span class="alc-tok-c">${escape(m[0])}</span>`;
-    } else if (m[3] || m[4] || m[5]) {
+    } else if (m[5]) {
+      out += highlightTemplate(m[0]);
+    } else if (m[3] || m[4]) {
       out += `<span class="alc-tok-s">${escape(m[0])}</span>`;
     } else if (m[6]) {
       const id = m[6];
@@ -69,7 +108,7 @@ export function highlightTS(src: string): string {
     } else if (m[7]) {
       out += `<span class="alc-tok-n">${m[0]}</span>`;
     }
-    last = RE.lastIndex;
+    last = re.lastIndex;
   }
   if (last < src.length) out += escape(src.slice(last));
   return out;
