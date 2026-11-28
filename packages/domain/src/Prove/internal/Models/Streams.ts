@@ -1265,7 +1265,7 @@ export const make = (
     "effect/Sink:collect": () =>
       Effect.succeed(
         reducing("Sink.collect", given(arr([])), (state, chunk) =>
-          Effect.succeed(arr([...(kit.itemsOf(state) ?? []), ...chunk])),
+          Effect.succeed(arr([...kit.itemsOf(state)!, ...chunk])),
         ),
       ),
     "effect/Sink:head": () =>
@@ -1344,8 +1344,8 @@ export const make = (
           "Sink.take",
           true,
           given(arr([])),
-          (state) => Effect.succeed((kit.itemsOf(state)?.length ?? 0) < Math.max(0, count)),
-          (state, item) => Effect.succeed(arr([...(kit.itemsOf(state) ?? []), item])),
+          (state) => Effect.succeed(kit.itemsOf(state)!.length < Math.max(0, count)),
+          (state, item) => Effect.succeed(arr([...kit.itemsOf(state)!, item])),
         ),
       ),
     "effect/Sink:forEach": ([f], site) =>
@@ -1365,7 +1365,8 @@ export const make = (
       Effect.succeed(sink("Sink.fail", () => rejected(error ?? Value.undef))),
     "effect/Sink:map": (args, site) => {
       const mapped = (self: V | undefined, f: V | undefined, at: Site): Eval<V> => {
-        const feed = self ? sinks.get(self) : undefined;
+        // The sinks' own model gives this one the sink, first.
+        const feed = sinks.get(self!);
         return feed && f
           ? Effect.succeed(
               sink("Sink.map", (pull, where) =>
