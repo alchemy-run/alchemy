@@ -40,6 +40,12 @@ export interface ClusterShape {
   readonly network?: ClusterNetwork | undefined;
   /** The control plane's admin token. */
   readonly token: Input<Redacted.Redacted<string>>;
+  /**
+   * The secret the control plane keeps {@link token} in, when it keeps one
+   * that other stacks can be granted: `projects/acme/secrets/rivet-token`
+   * for `RivetGCP.ComputeEngineControlPlane`.
+   */
+  readonly tokenSecret?: Input<string> | undefined;
   /** The namespace this app's pools and actors live in. */
   readonly namespace: Input<string>;
   /**

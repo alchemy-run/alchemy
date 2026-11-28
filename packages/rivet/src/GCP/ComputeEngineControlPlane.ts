@@ -5,6 +5,7 @@ import * as Run from "@alchemy.run/gcp/Run";
 import * as SecretManager from "@alchemy.run/gcp/SecretManager";
 import * as Storage from "@alchemy.run/gcp/Storage";
 import * as VpcAccess from "@alchemy.run/gcp/VpcAccess";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -87,6 +88,15 @@ export interface ComputeEngineControlPlaneProps {
    * @default "10.44.16.0/28"
    */
   connectorCidrBlock?: string;
+  /**
+   * Identities that may read the admin token, such as
+   * `serviceAccount:app-deploy@acme-app.iam.gserviceaccount.com`: the
+   * deploys of apps that join this control plane from stacks of their own,
+   * with `RivetGCP.ControlPlane`. Each is granted
+   * `roles/secretmanager.secretAccessor` on the token's secret, and nothing
+   * else.
+   */
+  tokenReaders?: Input<string>[];
 }
 
 /**
@@ -159,6 +169,24 @@ setsid sh -c 'docker logs -f rivet-engine 2>&1 | sed -u "s/^/rivet-engine: /" > 
  *   machineType: "n2-standard-4",
  *   diskSize: 100,
  * });
+ * ```
+ *
+ * ### Letting other stacks join it
+ * **Example:** The app's deploy reads the token, and nothing else here
+ * ```typescript
+ * export const Cluster = RivetGCP.ComputeEngineControlPlane("Rivet", {
+ *   tokenReaders: ["serviceAccount:app-deploy@acme-app.iam.gserviceaccount.com"],
+ * });
+ *
+ * export default Alchemy.Stack(
+ *   "RivetControlPlane",
+ *   { providers: Layer.mergeAll(GCP.providers(), Rivet.providers()), state: GCP.state() },
+ *   Effect.gen(function* () {
+ *     const cluster = yield* Rivet.Cluster;
+ *     // The app joins with these two: see RivetGCP.ControlPlane.
+ *     return { endpoint: cluster.endpoint, tokenSecret: cluster.tokenSecret };
+ *   }).pipe(Effect.provide(Cluster)),
+ * );
  * ```
  *
  * @primitive
@@ -234,6 +262,14 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
         role: "roles/secretmanager.secretAccessor",
         member: Output.interpolate`serviceAccount:${account.email}`,
       });
+      for (const [i, member] of (props.tokenReaders ?? []).entries()) {
+        yield* IAM.Member(`${id}TokenReader${i}`, {
+          kind: "secretmanager.secret",
+          name: tokenSecret.name,
+          role: "roles/secretmanager.secretAccessor",
+          member,
+        });
+      }
       const metadataScript = Output.all(
         tokenSecret.version,
         bucket.bucketName,
@@ -325,6 +361,7 @@ export const ComputeEngineControlPlane = (id: string, props: ComputeEngineContro
         endpoint,
         network: Network(subnet),
         token: token.text,
+        tokenSecret: tokenSecret.name,
         namespace: namespace.name,
       };
     }),
