@@ -5,9 +5,9 @@
  * page uses.
  *
  * The terminal sits over the card's right side from the line after the
- * process's opening, so every line below that one is kept under 44
- * columns: the prose wraps early, and the aggregate folds its handler to
- * its name.
+ * process's opening, and hangs below the card. So the card is kept to 21
+ * lines, and every line under that opening to 43 columns: the process's
+ * declaration and the aggregate's handler are folded to their names.
  *
  * Props are plain objects: a prop accepts the resource's Effect directly
  * (`cluster: Cluster`), so nothing has to be yielded first.
@@ -24,10 +24,7 @@ export const HOST_TEMPLATE = `export default ⟨0⟩(
   }).pipe(Effect.provide(⟨2⟩)),
 );
 
-export class FraudReview extends AI.Process<FraudReview>()(
-  "FraudReview",
-  { description: "Review a withdrawal." },
-)\`
+export class FraudReview extends AI.Process("FraudReview")\`
   Read \${Bank.AccountSummary}. If it looks
   stolen, send \${Bank.FreezeAccount}.
 \` {}
@@ -36,8 +33,7 @@ export class Account extends
   Domain.Aggregate("Account", {
     decide: { WithdrawMoney },
     invariants: {
-      NeverOverdrawn: ({ balance }) =>
-        balance >= 0,
+      NeverOverdrawn: (a) => a.balance >= 0,
     },
   }) {}`;
 
