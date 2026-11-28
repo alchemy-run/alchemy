@@ -43,7 +43,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
@@ -160,12 +159,10 @@ export class CapabilityGraph extends Context.Service<CapabilityGraph, Capability
 
 /** The frame current on this fiber. A `Context.Reference`, so reading
  *  it never charges the requirement channel. */
-export const CurrentFrame: Context.Reference<Frame | undefined> = Context.Reference(
-  "alchemy/CapabilityGraph/CurrentFrame",
-  {
-    defaultValue: (): Frame | undefined => undefined,
-  },
-);
+const FRAME_KEY = "alchemy/CapabilityGraph/CurrentFrame";
+export const CurrentFrame: Context.Reference<Frame | undefined> = Context.Reference(FRAME_KEY, {
+  defaultValue: (): Frame | undefined => undefined,
+});
 
 const keyOf = (acquisition: Acquisition): string =>
   `${acquisition.binding}|${acquisition.targets.join(",")}`;
@@ -195,17 +192,27 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
   const isObject = (value: unknown): value is object =>
     (typeof value === "object" || typeof value === "function") && value !== null;
 
+  /** Term id → the frames built under that name. */
+  const named = new Map<string, Set<Frame>>();
+  /** A frame, as the one provider of a value. */
+  const alone = new Map<Frame, ReadonlySet<Frame>>();
+  const NONE: ReadonlySet<Frame> = new Set();
+
   const providersOf = (key: string, value: unknown): ReadonlySet<Frame> => {
     if (isObject(value)) {
       const term = standing.get(value);
       if (term !== undefined) {
-        const built = frames.filter((frame) => `${frame.kind}:${frame.name}` === term);
-        if (built.length > 0) return new Set(built);
+        const built = named.get(term);
+        if (built !== undefined) return built;
       }
       const exact = providersByValue.get(value);
-      if (exact !== undefined) return new Set([exact]);
+      if (exact !== undefined) {
+        let only = alone.get(exact);
+        if (only === undefined) alone.set(exact, (only = new Set([exact])));
+        return only;
+      }
     }
-    return providersByKey.get(key) ?? new Set();
+    return providersByKey.get(key) ?? NONE;
   };
 
   /**
@@ -218,31 +225,40 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
     frame: Frame,
     via: ReadonlyArray<string>,
     out: Map<string, Permission>,
-    visited: Set<string>,
+    /** `2 * id` for a frame reached through a lookup, `2 * id + 1` for one entered. */
+    visited: Set<number>,
     inside = true,
     /** Where to stop: another term, whose bindings are its own. */
     stop: (frame: Frame) => boolean = () => false,
   ): void => {
     if (stop(frame)) return;
-    const seen = `${frame.id}:${inside}`;
-    if (visited.has(seen) || visited.has(`${frame.id}:true`)) return;
-    visited.add(seen);
-    for (const acquisition of acquisitions.get(frame)?.values() ?? []) {
-      const id = keyOf(acquisition);
-      const existing = out.get(id);
-      // keep the SHORTEST chain to each acquisition
-      if (existing === undefined || existing.via.length > via.length) {
-        out.set(id, { ...acquisition, via });
+    const entered = frame.id * 2 + 1;
+    if (visited.has(entered) || (!inside && visited.has(entered - 1))) return;
+    visited.add(inside ? entered : entered - 1);
+    const bound = acquisitions.get(frame);
+    if (bound !== undefined) {
+      for (const [id, acquisition] of bound) {
+        const existing = out.get(id);
+        // keep the SHORTEST chain to each acquisition
+        if (existing === undefined || existing.via.length > via.length) {
+          out.set(id, { ...acquisition, via });
+        }
       }
     }
     if (inside) {
-      for (const child of children.get(frame) ?? []) {
-        collect(child, via, out, visited, true, stop);
+      const built = children.get(frame);
+      if (built !== undefined) {
+        for (const child of built) collect(child, via, out, visited, true, stop);
       }
     }
-    for (const [key, value] of uses.get(frame) ?? []) {
-      for (const provider of providersOf(key, value)) {
-        collect(provider, [...via, key], out, visited, provider.kind !== "Layer", stop);
+    const looked = uses.get(frame);
+    if (looked === undefined) return;
+    for (const [key, value] of looked) {
+      const providers = providersOf(key, value);
+      if (providers.size === 0) continue;
+      const through = [...via, key];
+      for (const provider of providers) {
+        collect(provider, through, out, visited, provider.kind !== "Layer", stop);
       }
     }
   };
@@ -252,7 +268,7 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
     stop?: (frame: Frame) => boolean,
   ): ReadonlyArray<Permission> => {
     const out = new Map<string, Permission>();
-    const visited = new Set<string>();
+    const visited = new Set<number>();
     for (const root of roots) collect(root, [], out, visited, true, stop);
     return [...out.values()].sort((a, b) =>
       a.via.length !== b.via.length
@@ -271,6 +287,12 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
     frame: (kind, name, parent) => {
       const frame = { id: nextId++, kind, name, parent };
       frames.push(frame);
+      if (kind !== "Layer" && name !== undefined) {
+        const id = `${kind}:${name}`;
+        const built = named.get(id);
+        if (built === undefined) named.set(id, new Set([frame]));
+        else built.add(frame);
+      }
       if (parent !== undefined) {
         const siblings = children.get(parent);
         if (siblings === undefined) children.set(parent, [frame]);
@@ -335,22 +357,27 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
       /** The terms a frame reaches by a lookup or by building them, without passing through another. */
       const reached = (root: Frame): ReadonlyArray<string> => {
         const out = new Set<string>();
-        const visited = new Set<string>([`${root.id}:true`]);
+        const self = idOf(root);
+        const visited = new Set<number>([root.id * 2 + 1]);
+        const step = (each: Frame, inside: boolean): void => {
+          const entered = each.id * 2 + 1;
+          if (visited.has(entered) || (!inside && visited.has(entered - 1))) return;
+          visited.add(inside ? entered : entered - 1);
+          if (isTerm(each)) {
+            const id = idOf(each);
+            if (id !== self) out.add(id);
+          } else walk(each, inside);
+        };
         const walk = (frame: Frame, inside: boolean): void => {
-          const next: Array<readonly [Frame, boolean]> = [
-            ...(inside ? (children.get(frame) ?? []) : []).map((each) => [each, true] as const),
-            // As in `collect`: a Layer reached through a lookup is not entered.
-            ...[...(uses.get(frame) ?? [])].flatMap(([key, value]) =>
-              [...providersOf(key, value)].map((each) => [each, false] as const),
-            ),
-          ];
-          for (const [each, entered] of next) {
-            const seen = `${each.id}:${entered}`;
-            if (visited.has(seen) || visited.has(`${each.id}:true`)) continue;
-            visited.add(seen);
-            if (isTerm(each)) {
-              if (idOf(each) !== idOf(root)) out.add(idOf(each));
-            } else walk(each, entered);
+          if (inside) {
+            const built = children.get(frame);
+            if (built !== undefined) for (const each of built) step(each, true);
+          }
+          // As in `collect`: a Layer reached through a lookup is not entered.
+          const looked = uses.get(frame);
+          if (looked === undefined) return;
+          for (const [key, value] of looked) {
+            for (const each of providersOf(key, value)) step(each, false);
           }
         };
         walk(root, true);
@@ -462,9 +489,27 @@ export const makeCapabilityGraph = (): CapabilityGraphShape => {
       hosting.clear();
       owned.clear();
       providersByKey.clear();
+      named.clear();
+      alone.clear();
     },
   };
 };
+
+/**
+ * The graph and the frame current on this fiber, read in one step.
+ *
+ * Every recorder below asks `globalThis.__ALCHEMY_RUNTIME__` before it calls
+ * this, where the bundler can see it: in a deployed runtime the flag is
+ * folded, and the recorder and what it would record are left out.
+ */
+const recording = <A, E, R>(
+  otherwise: Effect.Effect<A, E, R>,
+  record: (graph: CapabilityGraphShape, frame: Frame | undefined) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.withFiber((fiber) => {
+    const graph = Context.getOrUndefined(fiber.context, CapabilityGraph);
+    return graph === undefined ? otherwise : record(graph, fiber.getRef(CurrentFrame));
+  });
 
 /**
  * Run `effect` under a new named frame, a child of the current one:
@@ -483,21 +528,19 @@ export const framed =
     },
   ) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.flatMap(
-      Effect.all([Effect.serviceOption(CapabilityGraph), CurrentFrame]),
-      ([graph, parent]) => {
-        if (Option.isNone(graph)) return effect;
-        // A host is built where it is first yielded, which says nothing of
-        // what it belongs to: it starts a tree of its own.
-        const frame = graph.value.frame(kind, name, kind === HOST ? undefined : parent);
-        if (options?.hosted === false) graph.value.unhosted(frame);
-        // What the term's build gives is the term: a lookup that receives it
-        // (a tool's handler, through the Layer around it) reaches this frame.
-        return Effect.tap(Effect.provideService(effect, CurrentFrame, frame), (made) =>
-          Effect.sync(() => graph.value.provides(frame, new Map([[`${kind}:${name}`, made]]))),
-        );
-      },
-    );
+    globalThis.__ALCHEMY_RUNTIME__
+      ? effect
+      : recording(effect, (graph, parent) => {
+          // A host is built where it is first yielded, which says nothing of
+          // what it belongs to: it starts a tree of its own.
+          const frame = graph.frame(kind, name, kind === HOST ? undefined : parent);
+          if (options?.hosted === false) graph.unhosted(frame);
+          // What the term's build gives is the term: a lookup that receives it
+          // (a tool's handler, through the Layer around it) reaches this frame.
+          return Effect.tap(Effect.provideService(effect, CurrentFrame, frame), (made) =>
+            Effect.sync(() => graph.provides(frame, new Map([[`${kind}:${name}`, made]]))),
+          );
+        });
 
 /**
  * Record that the term being built uses another: `refer("uses", "Tool", name)`,
@@ -505,28 +548,25 @@ export const framed =
  * graph in context, it does nothing.
  */
 export const refer = (relation: string, kind: string, name: string): Effect.Effect<void> =>
-  Effect.flatMap(
-    Effect.all([Effect.serviceOption(CapabilityGraph), CurrentFrame]),
-    ([graph, frame]) =>
-      Effect.sync(() => {
-        if (Option.isNone(graph)) return;
-        // The term around this point: Layers built inside it are passed over.
-        let term = frame;
-        while (term !== undefined && term.kind === "Layer") term = term.parent;
-        if (term !== undefined && term.kind !== HOST) {
-          graph.value.refers(term, relation, kind, name);
-        }
-      }),
-  );
+  globalThis.__ALCHEMY_RUNTIME__
+    ? Effect.void
+    : recording(Effect.void, (graph, frame) =>
+        Effect.sync(() => {
+          // The term around this point: Layers built inside it are passed over.
+          let term = frame;
+          while (term !== undefined && term.kind === "Layer") term = term.parent;
+          if (term !== undefined && term.kind !== HOST) graph.refers(term, relation, kind, name);
+        }),
+      );
 
 /**
  * Record that one of the runtime's bindings is a resource of a term:
  * `own("Model", "Board", "Board.IssueAggregate")`. Without a graph it does nothing.
  */
 export const own = (kind: string, name: string, resource: string): Effect.Effect<void> =>
-  Effect.map(Effect.serviceOption(CapabilityGraph), (graph) => {
-    if (Option.isSome(graph)) graph.value.owns(kind, name, resource);
-  });
+  globalThis.__ALCHEMY_RUNTIME__
+    ? Effect.void
+    : recording(Effect.void, (graph) => Effect.sync(() => graph.owns(kind, name, resource)));
 
 /**
  * Record what hosts a term that is not built inside its host:
@@ -534,9 +574,9 @@ export const own = (kind: string, name: string, resource: string): Effect.Effect
  * that term are hosted by it too. Without a graph it does nothing.
  */
 export const hostedBy = (kind: string, name: string, host: string): Effect.Effect<void> =>
-  Effect.map(Effect.serviceOption(CapabilityGraph), (graph) => {
-    if (Option.isSome(graph)) graph.value.hosts(kind, name, host);
-  });
+  globalThis.__ALCHEMY_RUNTIME__
+    ? Effect.void
+    : recording(Effect.void, (graph) => Effect.sync(() => graph.hosts(kind, name, host)));
 
 /**
  * Record that `value` is given out for a term (a client to it): a lookup that
@@ -544,9 +584,9 @@ export const hostedBy = (kind: string, name: string, host: string): Effect.Effec
  * Without a graph it does nothing.
  */
 export const standsFor = (kind: string, name: string, value: unknown): Effect.Effect<void> =>
-  Effect.map(Effect.serviceOption(CapabilityGraph), (graph) => {
-    if (Option.isSome(graph)) graph.value.stands(kind, name, value);
-  });
+  globalThis.__ALCHEMY_RUNTIME__
+    ? Effect.void
+    : recording(Effect.void, (graph) => Effect.sync(() => graph.stands(kind, name, value)));
 
 /**
  * Every binding a term reaches: its own, and those of every term it
@@ -654,31 +694,52 @@ export const observeLayerBuilds = (
 const RECORDING = Symbol.for("alchemy/CapabilityGraph/recording");
 const EVALUATE = "~effect/Effect/evaluate" as const;
 
-/** A `ReadonlyMap` facade over a service map that reports every `get`. */
-const recordingMap = (
-  real: ReadonlyMap<string, unknown>,
-  onGet: (key: string, value: unknown, real: ReadonlyMap<string, unknown>) => void,
-): ReadonlyMap<string, unknown> =>
-  ({
-    [RECORDING]: true,
-    get: (key: string) => {
-      const value = real.get(key);
-      onGet(key, value, real);
-      return value;
-    },
-    has: (key: string) => real.has(key),
-    get size() {
-      return real.size;
-    },
-    forEach: (
-      f: (value: unknown, key: string, map: ReadonlyMap<string, unknown>) => void,
-      thisArg?: unknown,
-    ) => real.forEach(f, thisArg),
-    keys: () => real.keys(),
-    values: () => real.values(),
-    entries: () => real.entries(),
-    [Symbol.iterator]: () => real[Symbol.iterator](),
-  }) as unknown as ReadonlyMap<string, unknown>;
+/**
+ * A `ReadonlyMap` facade over a service map that reports every `get` to the
+ * frame current in that map. One is made each time a fiber's context changes,
+ * so it is two fields and a shared prototype.
+ */
+class RecordingMap {
+  readonly [RECORDING] = true;
+  readonly real: ReadonlyMap<string, unknown>;
+  readonly graph: CapabilityGraphShape;
+  constructor(real: ReadonlyMap<string, unknown>, graph: CapabilityGraphShape) {
+    this.real = real;
+    this.graph = graph;
+  }
+  get(key: string): unknown {
+    const real = this.real;
+    const value = real.get(key);
+    // The frame lives in the same map (a Reference row).
+    const frame = real.get(FRAME_KEY) as Frame | undefined;
+    if (frame !== undefined) this.graph.uses(frame, key, value);
+    return value;
+  }
+  has(key: string): boolean {
+    return this.real.has(key);
+  }
+  get size(): number {
+    return this.real.size;
+  }
+  forEach(
+    f: (value: unknown, key: string, map: ReadonlyMap<string, unknown>) => void,
+    thisArg?: unknown,
+  ): void {
+    this.real.forEach(f, thisArg);
+  }
+  keys() {
+    return this.real.keys();
+  }
+  values() {
+    return this.real.values();
+  }
+  entries() {
+    return this.real.entries();
+  }
+  [Symbol.iterator]() {
+    return this.real[Symbol.iterator]();
+  }
+}
 
 /**
  * Observe every service lookup `effect` (and its child fibers)
@@ -692,28 +753,23 @@ export const observeLookups =
   (graph: CapabilityGraphShape) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.flatMap(Tracer.Tracer, (base) => {
-      const onGet = (key: string, value: unknown, real: ReadonlyMap<string, unknown>) => {
-        // the frame lives in the SAME map (a Reference row), so read
-        // it from the real map — never through the facade
-        const frame = real.get(CurrentFrame.key) as Frame | undefined;
-        if (frame !== undefined) graph.uses(frame, key, value);
-      };
-      const rewrap = (fiber: Fiber.Fiber<any, any>) => {
-        const map = fiber.context.mapUnsafe as unknown as Record<symbol, unknown>;
-        if (RECORDING in map) return;
-        fiber.setContext(Context.makeUnsafe(recordingMap(fiber.context.mapUnsafe, onGet)));
-      };
+      const inner = base.context;
       const tracer = Tracer.make({
         span: (options) => base.span(options),
         context: (primitive, fiber) => {
           try {
-            rewrap(fiber);
+            const map = fiber.context.mapUnsafe;
+            if (!(RECORDING in map)) {
+              fiber.setContext(
+                Context.makeUnsafe(
+                  new RecordingMap(map, graph) as unknown as ReadonlyMap<string, unknown>,
+                ),
+              );
+            }
           } catch {
             // degrade to an unobserved step
           }
-          return base.context !== undefined
-            ? base.context(primitive, fiber)
-            : primitive[EVALUATE](fiber);
+          return inner !== undefined ? inner(primitive, fiber) : primitive[EVALUATE](fiber);
         },
       });
       return Effect.provideService(effect, Tracer.Tracer, tracer);
@@ -721,18 +777,16 @@ export const observeLookups =
 
 /**
  * Record one capability acquisition under the current frame. Called by
- * `Binding.Service` on every bind; a no-op without a graph.
+ * `Binding.Service` on every bind of a plan; a no-op without a graph.
  */
 export const recordAcquisition = (acquisition: Acquisition): Effect.Effect<void> =>
-  Effect.flatMap(
-    Effect.all([Effect.serviceOption(CapabilityGraph), CurrentFrame]),
-    ([graph, frame]) =>
-      Effect.sync(() => {
-        if (Option.isSome(graph) && frame !== undefined) {
-          graph.value.acquires(frame, acquisition);
-        }
-      }),
-  );
+  globalThis.__ALCHEMY_RUNTIME__
+    ? Effect.void
+    : recording(Effect.void, (graph, frame) =>
+        Effect.sync(() => {
+          if (frame !== undefined) graph.acquires(frame, acquisition);
+        }),
+      );
 
 /**
  * What each named term may use at runtime: the plan's list, as stored on the
@@ -775,20 +829,27 @@ export const CurrentPolicy: Context.Reference<Policy | undefined> = Context.Refe
 );
 
 /** The named term running on this fiber: the tool whose handler is being called. */
-export const CurrentCaller: Context.Reference<
-  { readonly kind: string; readonly name: string } | undefined
-> = Context.Reference("alchemy/CapabilityGraph/CurrentCaller", {
-  defaultValue: (): { readonly kind: string; readonly name: string } | undefined => undefined,
-});
+export interface Caller {
+  readonly kind: string;
+  readonly name: string;
+  /** `Kind:name`, as a {@link Policy} keys it. */
+  readonly id: string;
+}
+
+export const CurrentCaller: Context.Reference<Caller | undefined> = Context.Reference(
+  "alchemy/CapabilityGraph/CurrentCaller",
+  { defaultValue: (): Caller | undefined => undefined },
+);
 
 /**
  * Run `effect` as a named term: `calling("Tool", name)(handler(parameters))`.
  * The bindings it uses are checked against what the plan listed under it.
  */
-export const calling =
-  (kind: NamedFrameKind, name: string) =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.provideService(effect, CurrentCaller, { kind, name });
+export const calling = (kind: NamedFrameKind, name: string) => {
+  const caller: Caller = { kind, name, id: `${kind}:${name}` };
+  return <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.provideService(effect, CurrentCaller, caller);
+};
 
 /** A term used a binding the plan does not list under it. */
 export class CapabilityDenied extends Data.TaggedError("CapabilityDenied")<{
@@ -801,79 +862,153 @@ export class CapabilityDenied extends Data.TaggedError("CapabilityDenied")<{
   readonly message: string;
 }> {}
 
-const policies = new WeakMap<object, Policy | undefined>();
+/** A policy as a bind reads it: for each binding, the terms that may use it. */
+interface Held {
+  readonly allowed: ReadonlyMap<string, ReadonlySet<string>>;
+}
+const NOBODY: ReadonlySet<string> = new Set();
 
-/** The policy a client bound now is held to, if the runtime has one. */
-const policyInForce: Effect.Effect<Policy | undefined> = Effect.flatMap(CurrentPolicy, (given) => {
-  if (given !== undefined || !globalThis.__ALCHEMY_RUNTIME__) return Effect.succeed(given);
-  return Effect.flatMap(Effect.serviceOption(RuntimeContext), (runtime) => {
-    if (Option.isNone(runtime)) return Effect.succeed(undefined);
-    const context = runtime.value;
-    if (policies.has(context)) return Effect.succeed(policies.get(context));
-    return Effect.map(context.get<string>(POLICY_KEY), (raw) => {
-      let policy: Policy | undefined;
-      try {
-        policy =
-          typeof raw === "string" ? (JSON.parse(raw) as Policy) : (raw as Policy | undefined);
-      } catch {
-        policy = undefined;
-      }
-      policies.set(context, policy);
-      return policy;
+const hold = (policy: Policy): Held => {
+  const allowed = new Map<string, Set<string>>();
+  for (const term in policy.terms) {
+    for (const at of policy.terms[term]!) {
+      const binding = policy.bindings[at]!;
+      const terms = allowed.get(binding);
+      if (terms === undefined) allowed.set(binding, new Set([term]));
+      else terms.add(term);
+    }
+  }
+  return { allowed };
+};
+
+/** What a policy holds, built once per policy. */
+const helds = new WeakMap<Policy, Held>();
+const heldOf = (policy: Policy): Held => {
+  let held = helds.get(policy);
+  if (held === undefined) helds.set(policy, (held = hold(policy)));
+  return held;
+};
+
+/** The policy each runtime stored, read from its env once. `null`: it stored none. */
+const stored = new WeakMap<object, Held | null>();
+
+const parse = (raw: unknown): Held | null => {
+  try {
+    const policy =
+      typeof raw === "string" ? (JSON.parse(raw) as Policy) : (raw as Policy | undefined);
+    return policy === undefined || policy === null ? null : hold(policy);
+  } catch {
+    return null;
+  }
+};
+
+/** `Stream`'s brand: checking it here keeps `effect/Stream` out of a runtime that has no streams. */
+const STREAM_TYPE_ID = "~effect/Stream";
+
+/** `client`, with every call it makes checked against the terms that may use the binding. */
+const held = (
+  binding: string,
+  targets: ReadonlyArray<string>,
+  allowed: ReadonlySet<string>,
+  client: unknown,
+): unknown => {
+  const denied = (caller: Caller) => {
+    const what = `${binding}${targets.length > 0 ? ` on ${targets.join(", ")}` : ""}`;
+    return Effect.die(
+      new CapabilityDenied({
+        kind: caller.kind,
+        term: caller.name,
+        binding,
+        targets,
+        message: `${caller.kind} ${caller.name} used ${what}, which the plan does not list under it. Bind it where the ${caller.kind.toLowerCase()} is built.`,
+      }),
+    );
+  };
+  // One step in front of the client's own Effect: outside a term, and inside
+  // one that may use the binding, it runs as it is.
+  const checked = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.withFiber((fiber) => {
+      const caller = fiber.getRef(CurrentCaller);
+      return caller === undefined || allowed.has(caller.id) ? effect : denied(caller);
     });
-  });
-});
+  const guard = (value: unknown): unknown => {
+    if (Effect.isEffect(value)) return checked(value);
+    if (typeof value === "object" && value !== null && STREAM_TYPE_ID in value) {
+      // Checked when the stream is run, as an Effect is.
+      return Stream.unwrap(
+        checked(Effect.succeed(value as Stream.Stream<unknown, unknown, unknown>)),
+      );
+    }
+    return value;
+  };
+  if (Effect.isEffect(client)) return guard(client);
+  if (typeof client !== "function" && (typeof client !== "object" || client === null)) {
+    return client;
+  }
+  if (STREAM_TYPE_ID in client) return guard(client);
+  /** Each method, wrapped once. */
+  const methods = new Map<string | symbol, { readonly from: unknown; readonly to: unknown }>();
+  const member = (target: object, prop: string | symbol, receiver: unknown): unknown => {
+    const value = Reflect.get(target, prop, receiver);
+    if (typeof value !== "function") {
+      if (typeof value !== "object" || value === null) return value;
+      const own = Reflect.getOwnPropertyDescriptor(target, prop);
+      // A frozen property must be returned as it is.
+      return own !== undefined && !own.configurable && !own.writable ? value : guard(value);
+    }
+    const known = methods.get(prop);
+    if (known !== undefined && known.from === value) return known.to;
+    const own = Reflect.getOwnPropertyDescriptor(target, prop);
+    if (own !== undefined && !own.configurable && !own.writable) return value;
+    const to = (...args: Array<unknown>) => guard(Reflect.apply(value, target, args));
+    methods.set(prop, { from: value, to });
+    return to;
+  };
+  return new Proxy(
+    client,
+    typeof client === "function"
+      ? {
+          apply: (target, thisArg, argArray) =>
+            guard(Reflect.apply(target as (...args: Array<unknown>) => unknown, thisArg, argArray)),
+          get: member,
+        }
+      : { get: member },
+  );
+};
 
 /**
  * Hold a client a `Binding.Service` hands out to the policy in force: each
- * call it makes while a named term runs is checked. Without a policy the
- * client is returned as it is.
+ * call it makes while a named term runs is checked. A runtime that stored no
+ * policy (one with no named terms) gets the client as it is, after one step.
  */
-export const guardClient = (acquisition: Acquisition, client: unknown): Effect.Effect<unknown> =>
-  Effect.map(policyInForce, (policy) => {
-    if (policy === undefined) return client;
-    const at = policy.bindings.indexOf(keyOf(acquisition));
-    const check = Effect.flatMap(CurrentCaller, (caller) => {
-      if (caller === undefined) return Effect.void;
-      if (at !== -1 && policy.terms[`${caller.kind}:${caller.name}`]?.includes(at)) {
-        return Effect.void;
-      }
-      const what = `${acquisition.binding}${acquisition.targets.length > 0 ? ` on ${acquisition.targets.join(", ")}` : ""}`;
-      return Effect.die(
-        new CapabilityDenied({
-          kind: caller.kind,
-          term: caller.name,
-          ...acquisition,
-          message: `${caller.kind} ${caller.name} used ${what}, which the plan does not list under it. Bind it where the ${caller.kind.toLowerCase()} is built.`,
-        }),
+export const guardClient = (
+  binding: string,
+  /** The bind's targets, worked out only when there is a policy to hold it to. */
+  targets: () => ReadonlyArray<string>,
+  client: unknown,
+): Effect.Effect<unknown> =>
+  Effect.withFiber((fiber) => {
+    const apply = (policy: Held | null): unknown => {
+      if (policy === null) return client;
+      const over = targets();
+      return held(
+        binding,
+        over,
+        policy.allowed.get(keyOf({ binding, targets: over })) ?? NOBODY,
+        client,
       );
+    };
+    const given = fiber.getRef(CurrentPolicy);
+    if (given !== undefined) return Effect.succeed(apply(heldOf(given)));
+    // Unbundled source is a plan: nothing is held to a policy while it is recorded.
+    if (!globalThis.__ALCHEMY_RUNTIME__) return Effect.succeed(client);
+    const runtime = Context.getOrUndefined(fiber.context, RuntimeContext);
+    if (runtime === undefined) return Effect.succeed(client);
+    const known = stored.get(runtime);
+    if (known !== undefined) return Effect.succeed(apply(known));
+    return Effect.map(runtime.get<string>(POLICY_KEY), (raw) => {
+      const policy = parse(raw);
+      stored.set(runtime, policy);
+      return apply(policy);
     });
-    const guard = (value: unknown): unknown =>
-      Effect.isEffect(value)
-        ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a client's Effects come in any shape
-          Effect.andThen(check, value as Effect.Effect<any, any, any>)
-        : Stream.isStream(value)
-          ? Stream.unwrap(Effect.as(check, value))
-          : value;
-    if (Effect.isEffect(client) || Stream.isStream(client)) return guard(client);
-    if (typeof client === "function") {
-      return new Proxy(client, {
-        apply: (target, thisArg, argArray) => guard(Reflect.apply(target, thisArg, argArray)),
-        get: (target, prop, receiver) => method(target, prop, receiver),
-      });
-    }
-    if (typeof client === "object" && client !== null) {
-      return new Proxy(client, { get: (target, prop, receiver) => method(target, prop, receiver) });
-    }
-    return client;
-    function method(target: object, prop: string | symbol, receiver: unknown): unknown {
-      const value = Reflect.get(target, prop, receiver);
-      const own = Reflect.getOwnPropertyDescriptor(target, prop);
-      // A frozen property must be returned as it is.
-      if (own !== undefined && !own.configurable && !own.writable) return value;
-      if (typeof value === "function") {
-        return (...args: Array<unknown>) => guard(Reflect.apply(value, target, args));
-      }
-      return guard(value);
-    }
   });

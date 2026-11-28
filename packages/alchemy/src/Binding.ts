@@ -128,10 +128,16 @@ export const Service = <
         concurrency: "unbounded",
       }).pipe(
         Effect.flatMap((resolved) => {
+          // A deployed runtime only holds the client to what the plan listed.
+          if (globalThis.__ALCHEMY_RUNTIME__) {
+            return Effect.flatMap(f(...resolved), (client) =>
+              guardClient(id, () => acquisitionTargets(args, resolved), client),
+            );
+          }
           // The permission: this capability, over these targets, acquired by
           // whichever frame is current (see CapabilityGraph.ts).
-          const acquisition = { binding: id, targets: acquisitionTargets(args, resolved) };
-          return recordAcquisition(acquisition).pipe(
+          const targets = acquisitionTargets(args, resolved);
+          return recordAcquisition({ binding: id, targets }).pipe(
             Effect.andThen(f(...resolved)),
             // Deploy-time data-plane routing: the client's calls must target
             // whatever data plane the bound resource actually lives on. In an
@@ -140,8 +146,8 @@ export const Service = <
             // cloud environment would miss it — or worse, mutate the real
             // cloud. See {@link routeClientDataPlane}.
             Effect.flatMap((client) => routeClientDataPlane(resolved, client)),
-            // At runtime the client is held to what the plan listed.
-            Effect.flatMap((client) => guardClient(acquisition, client)),
+            // A policy given by hand holds the client here too.
+            Effect.flatMap((client) => guardClient(id, () => targets, client)),
           );
         }),
       ),
