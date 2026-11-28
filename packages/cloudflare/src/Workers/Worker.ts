@@ -2030,6 +2030,16 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * ) {}
  * ```
  *
+ * **Example:** Reusing a named service binding
+ *
+ * If the caller Worker already declares `env: { AUTH: WorkerB }`, pass that
+ * key to `bindWorker` instead of registering an additional binding named
+ * after `WorkerB.LogicalId`.
+ * ```typescript
+ * const auth = yield* Cloudflare.Workers.bindWorker(WorkerB, { binding: "AUTH" });
+ * const greeting = yield* auth.greet("alice");
+ * ```
+ *
  * **Example:** Binding a Worker to itself
  *
  * Declare the class before `.make()` so the implementation can reference it.

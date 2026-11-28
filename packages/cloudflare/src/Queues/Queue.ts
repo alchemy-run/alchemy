@@ -216,6 +216,16 @@ export type QueueLookup =
  * );
  * ```
  *
+ * **Example:** Using an explicit Worker env name
+ * ```typescript
+ * // Worker props: { main: import.meta.url, env: { EVENTS: MyQueue } }
+ * const producer = yield* Cloudflare.Queues.WriteQueue(MyQueue, { binding: "EVENTS" });
+ * yield* producer.send({ event: "signup" });
+ * ```
+ *
+ * The `binding` option uses the already-declared `EVENTS` producer binding;
+ * it does not create a second binding named after the queue's logical id.
+ *
  * ### Looking up an existing queue
  * `Queue.lookup` binds a queue Alchemy doesn't manage (created in the
  * dashboard or by another stack), found by `queueId` or `name`. It is read

@@ -2,6 +2,7 @@ import type { NonEmptyReadonlyArray } from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Sink from "effect/Sink";
+import type { BindingNameOptions } from "../Workers/WorkerBinding.ts";
 import type { Queue } from "./Queue.ts";
 import { QueueSink, type QueueSinkClient } from "./QueueSink.ts";
 import { WriteQueue, type WriteQueueClient } from "./WriteQueue.ts";
@@ -92,8 +93,8 @@ export const QueueSinkFromWriteQueue = Layer.effect(
   QueueSink,
   Effect.gen(function* () {
     const writeQueue = yield* WriteQueue;
-    return Effect.fn(function* (queue: Queue) {
-      const client = yield* writeQueue(queue);
+    return Effect.fn(function* (queue: Queue, options?: BindingNameOptions) {
+      const client = yield* writeQueue(queue, options);
       return makeQueueSink(client);
     });
   }),
