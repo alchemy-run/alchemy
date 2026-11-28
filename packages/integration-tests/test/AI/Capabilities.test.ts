@@ -40,7 +40,7 @@ test(
   Effect.gen(function* () {
     // `save` bound the namespace where it was built: the plan lists it there.
     expect(yield* call("save?key=greeting&text=hello")).toEqual({ ok: { saved: true } });
-    // So did `recall`, an inline tool, in the Effect that built it.
+    // So did `recall`, declared with its implementation, in the Effect that builds it.
     expect(yield* call("recall?key=greeting")).toEqual({ ok: { text: "hello" } });
     // The Worker bound it too, and reads it outside any tool.
     expect(yield* call("direct?key=greeting")).toEqual({ ok: { text: "hello" } });

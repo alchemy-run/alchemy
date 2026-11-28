@@ -195,20 +195,6 @@ export interface ToolConstructor {
     spec: Spec,
     handler: ToolHandler<Spec>,
   ): InlineTool<Name, Spec, Sandbox>;
-  /**
-   * Inline, with what it binds: the Effect runs where the tool is yielded
-   * and returns the handler, so the plan lists its bindings under the tool.
-   */
-  <const Name extends string, const Spec extends ToolSpec, R>(
-    name: Name,
-    spec: Spec,
-    build: Effect.Effect<PlainToolHandler<Spec>, never, R>,
-  ): Effect.Effect<InlineTool<Name, Spec>, never, R>;
-  <const Name extends string, const Spec extends ToolSpec, R>(
-    name: Name,
-    spec: Spec,
-    build: Effect.Effect<ToolHandler<Spec>, never, R>,
-  ): Effect.Effect<InlineTool<Name, Spec, Sandbox>, never, R>;
 }
 
 /**
@@ -309,12 +295,12 @@ export interface ToolConstructor {
  * );
  * ```
  *
- * **Example:** Inline, with a binding of its own
+ * **Example:** A class with its implementation, and no Layer to provide
  * ```typescript
  * // The Effect binds what the tool uses and returns its handler. A plan
  * // lists the namespace under `save_note`, and at runtime the tool can use
  * // no binding the plan does not list under it.
- * const SaveNote = yield* AI.Tool(
+ * export class SaveNote extends AI.Tool<SaveNote>()(
  *   "save_note",
  *   {
  *     description: "Save a note the user can read later.",
@@ -327,10 +313,10 @@ export interface ToolConstructor {
  *       yield* notes.put(key, text).pipe(Effect.orDie);
  *     });
  *   }),
- * );
+ * ) {}
  * ```
  *
- * **Example:** Inline, with nothing to bind
+ * **Example:** A value, for a tool that uses nothing
  * ```typescript
  * const Add = AI.Tool(
  *   "add",
@@ -389,37 +375,20 @@ export const ownTool = ((name: string, spec: ToolSpec, handler: AnyHandler): unk
 })) as ToolConstructor;
 
 export const Tool = ((...args: ReadonlyArray<unknown>): unknown => {
-  if (args.length === 3 && typeof args[0] === "string" && Effect.isEffect(args[2])) {
-    const [name, spec, build] = args as [string, ToolSpec, Effect.Effect<AnyHandler>];
-    // Built under the tool's own frame: what it binds is what the tool can reach.
-    return framed(
-      "Tool",
-      name,
-    )(
-      Effect.map(build, (handler) => ({
-        [ToolTypeId]: "inline",
-        toolName: name,
-        spec,
-        handler: called(name, lift(handler)),
-      })),
-    );
-  }
   if (args.length === 3 && typeof args[0] === "string" && typeof args[2] === "function") {
     const [name, spec, handler] = args as [string, ToolSpec, AnyHandler];
     return { [ToolTypeId]: "inline", toolName: name, spec, handler: called(name, lift(handler)) };
   }
-  return (
-    name: string,
-    spec?: ToolSpec,
-    impl?: Effect.Effect<ToolHandler<ToolSpec>, never, unknown>,
-  ) => {
+  return (name: string, spec?: ToolSpec, impl?: Effect.Effect<AnyHandler, never, unknown>) => {
     if (spec === undefined) return toolTag(name);
     const Tag = Context.Service<unknown, ToolHandler<ToolSpec>>()(`AI.Tool/${name}`);
     return class extends Tag {
       static readonly [ToolTypeId] = "class";
       static readonly toolName = name;
       static readonly spec = spec;
-      static readonly impl = impl;
+      // Built under the tool's own frame, like its Layer would be.
+      static readonly impl =
+        impl === undefined ? undefined : framed("Tool", name)(implOf(name, impl));
       static make(implementation: Effect.Effect<AnyHandler, never, unknown> | AnyHandler) {
         // Built under the tool's own frame: what it binds is what the tool can reach.
         return Layer.effect(this as never, framed("Tool", name)(implOf(name, implementation)));

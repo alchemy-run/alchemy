@@ -167,7 +167,7 @@ test(
 );
 
 test(
-  "an inline tool uses the KV binding it bound",
+  "a tool implemented on its class uses the KV binding it bound",
   Effect.gen(function* () {
     const user = `user-${Date.now()}`;
     yield* call(`/${user}/notes/create`, { tools: ["save_note"] });

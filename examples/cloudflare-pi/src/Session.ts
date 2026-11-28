@@ -5,11 +5,10 @@ import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
 import { Add, AddLive } from "./Add.tool.ts";
 import { Guard } from "./extensions.ts";
 import { Fast, FastLive } from "./models.ts";
-import { Notes } from "./Notes.ts";
+import { SaveNote } from "./SaveNote.tool.ts";
 
 /** Everything the harness needs: its model, its tools, where scripts run, and its storage. */
 const HarnessLive = Layer.mergeAll(
@@ -26,30 +25,6 @@ type ToolName = "add" | "save_note";
 export default class Session extends Cloudflare.DurableObject<Session>()(
   "Session",
   Effect.gen(function* () {
-    // An inline tool. Its Effect binds what the tool uses, so the plan lists
-    // the namespace under `save_note` and the tool can use nothing else.
-    const SaveNote = yield* AI.Tool(
-      "save_note",
-      {
-        description:
-          "Save a note under a key. Use it whenever the user asks you to remember something.",
-        parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
-        success: Schema.Void,
-      },
-      Effect.gen(function* () {
-        const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
-        return Effect.fn(function* ({
-          key,
-          text,
-        }: {
-          readonly key: string;
-          readonly text: string;
-        }) {
-          yield* notes.put(key, text).pipe(Effect.orDie);
-        });
-      }),
-    );
-
     const harness = yield* Pi.Harness({
       models: [Fast],
       // `add` is offered both ways: as a direct call, and from programs.

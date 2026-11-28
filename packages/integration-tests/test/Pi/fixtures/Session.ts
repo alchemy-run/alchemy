@@ -7,9 +7,17 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { Guard } from "./extensions.ts";
-import { Gateway, Notes } from "./infra.ts";
+import { Gateway } from "./infra.ts";
 import { Fast } from "./models.ts";
-import { Add, AddLive, codemodeSection, GlobLive, Withdraw, WithdrawLive } from "./tools.ts";
+import {
+  Add,
+  AddLive,
+  codemodeSection,
+  GlobLive,
+  SaveNote,
+  Withdraw,
+  WithdrawLive,
+} from "./tools.ts";
 
 const ModelsLive = AICloudflare.Model(Fast, {
   gateway: Gateway,
@@ -33,29 +41,6 @@ const Programs = AI.CodeMode(Add, Withdraw);
 export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
   "PiSession",
   Effect.gen(function* () {
-    // An inline tool. Its Effect binds what the tool uses.
-    const SaveNote = yield* AI.Tool(
-      "save_note",
-      {
-        description:
-          "Save a note under a key. Use it whenever the user asks you to remember something.",
-        parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
-        success: Schema.Void,
-      },
-      Effect.gen(function* () {
-        const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
-        return Effect.fn(function* ({
-          key,
-          text,
-        }: {
-          readonly key: string;
-          readonly text: string;
-        }) {
-          yield* notes.put(key, text).pipe(Effect.orDie);
-        });
-      }),
-    );
-
     // A tool whose handler dies: a bug, or a binding the tool may not use.
     const Explode = AI.Tool(
       "explode",

@@ -1,6 +1,6 @@
 ---
 title: Tools
-description: Give a Pi harness your own tools, inline tools that bind what they use in the Durable Object, and Pi's coding tools, and choose which ones each conversation may use.
+description: Give a Pi harness your own tools and Pi's coding tools, and choose which ones each conversation may use.
 ---
 
 A Pi harness runs every tool call in its Durable Object. A tool is an [`AI.Tool`](/ai/tools), declared once and listed on the harness. Pi adds its own coding tools, and lets each conversation choose which tools it uses.
@@ -53,12 +53,12 @@ yield* harness.configure("review", { tools: { remove: [AI.Bash] } });
 
 A tool that is not on the harness fails with `NotOnHarness`.
 
-## Declare a tool in the object
+## List a tool that has its implementation
 
-An inline tool is yielded in the Durable Object's outer Effect and has no Layer. Its Effect binds what the tool uses and returns the handler. [A tool uses only what it binds](/ai/tools#a-tool-uses-only-what-it-binds):
+A tool [implemented on its class](/ai/tools#implement-a-tool-on-its-class) has no Layer. Its Effect runs in the Durable Object's outer Effect, where the harness is yielded, and binds what the tool uses. [A tool uses only what it binds](/ai/tools#a-tool-uses-only-what-it-binds):
 
 ```typescript
-const SaveNote = yield* AI.Tool(
+export class SaveNote extends AI.Tool<SaveNote>()(
   "save_note",
   {
     description: "Save a note the user can read later.",
@@ -71,7 +71,7 @@ const SaveNote = yield* AI.Tool(
       yield* notes.put(key, text).pipe(Effect.orDie);
     });
   }),
-);
+) {}
 
 const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 ```

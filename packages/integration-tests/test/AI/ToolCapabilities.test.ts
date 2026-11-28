@@ -77,6 +77,18 @@ const ByTagLive = ByTag.make(
   ),
 );
 
+// A class with its implementation, and no Layer.
+class Inline extends AI.Tool<Inline>()(
+  "inline",
+  spec,
+  Effect.map(
+    Store("inline"),
+    (store) =>
+      ({ value }: Put) =>
+        store.put(value),
+  ),
+) {}
+
 type Handler = (parameters: Put) => Effect.Effect<string>;
 
 /** What a runtime builds: every tool, and one client bound outside them all. */
@@ -85,16 +97,8 @@ const build = Effect.gen(function* () {
   const byClass = (yield* ByClass) as unknown as Handler;
   const byService = (yield* ByService) as unknown as Handler;
   const byTag = ((yield* ByTag) as unknown as { readonly handler: Handler }).handler;
-  const inline = yield* AI.Tool(
-    "inline",
-    spec,
-    Effect.map(
-      Store("inline"),
-      (store) =>
-        ({ value }: Put) =>
-          store.put(value),
-    ),
-  );
+  // Built the way a harness builds a class that has its implementation.
+  const inline = (yield* Inline.impl!) as unknown as Handler;
   // Closes over the client bound above.
   const closure = AI.Tool("closure", spec, ({ value }: Put) => outer.put(value));
   // A class whose Layer closes over it too.
@@ -106,7 +110,7 @@ const build = Effect.gen(function* () {
     by_class: byClass,
     by_service: byService,
     by_tag: byTag,
-    inline: inline.handler as unknown as Handler,
+    inline,
     closure: closure.handler as unknown as Handler,
     handed,
   };

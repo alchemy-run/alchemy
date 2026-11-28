@@ -33,6 +33,22 @@ export class Leak extends AI.Tool<Leak>()("leak", {
   success: Schema.Struct({ text: Schema.String }),
 }) {}
 
+/** Declared with its implementation, which binds the namespace itself. */
+export class Recall extends AI.Tool<Recall>()(
+  "recall",
+  {
+    description: "Read a note.",
+    parameters: Schema.Struct({ key: Schema.String }),
+    success: Schema.Struct({ text: Schema.String }),
+  },
+  Effect.gen(function* () {
+    const own = yield* Cloudflare.KV.ReadWriteNamespace(yield* Notes);
+    return Effect.fn(function* ({ key }) {
+      return { text: (yield* Effect.orDie(own.get(key))) ?? "" };
+    });
+  }),
+) {}
+
 type Handler = (parameters: unknown) => Effect.Effect<unknown>;
 
 /**
@@ -57,22 +73,8 @@ export default class Guarded extends Cloudflare.Worker<Guarded>()(
       Effect.provide(Layer.mergeAll(SaveLive, LeakLive)),
     )) as unknown as [Handler, Handler];
 
-    // An inline tool that binds the namespace itself.
-    const Recall = yield* AI.Tool(
-      "recall",
-      {
-        description: "Read a note.",
-        parameters: Schema.Struct({ key: Schema.String }),
-        success: Schema.Struct({ text: Schema.String }),
-      },
-      Effect.gen(function* () {
-        const own = yield* Cloudflare.KV.ReadWriteNamespace(yield* Notes);
-        return Effect.fn(function* ({ key }: { readonly key: string }) {
-          return { text: (yield* Effect.orDie(own.get(key))) ?? "" };
-        });
-      }),
-    );
-    const recall = Recall.handler as unknown as Handler;
+    // A class with its implementation: built here, the way a harness builds it.
+    const recall = (yield* Recall.impl!) as unknown as Handler;
 
     return {
       fetch: Effect.gen(function* () {
