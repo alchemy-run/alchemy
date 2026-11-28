@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { NotYours } from "../src/NotYours.rejection.ts";
 import { UserId } from "../src/User.id.ts";
-import { NotebookNoDeps, NotesApp, NotesMessage, NotesUI, SignIn } from "../src/web/Notes.ts";
+import { NotebookNoDeps, NotesAppNoDeps, NotesMessage, NotesUI, SignIn } from "../src/web/Notes.ts";
 
 const sam = { userId: UserId.make("u-sam"), name: "Sam" };
 const notes = (...notes: Array<string>) => ({
@@ -18,11 +18,11 @@ const listed = HtmlLocator.role("list", { name: "Notes" });
 describe("NotesApp", () => {
   it.effect("signing in sends the browser to the chosen provider", () =>
     Effect.gen(function* () {
-      const s = yield* Story.make(NotesApp, { user: null });
+      const s = yield* Story.make(NotesAppNoDeps, { user: null });
       s.send(NotesMessage.ClickedSignIn({ provider: "github" })).expectExact(SignIn);
       expect(s.pending[0]!.command.args).toEqual({ provider: "github" });
-      s.resolve(SignIn, NotesMessage.Failed({ reason: "Redirecting" }));
-      expect(s.model.error).toBe("Redirecting");
+      s.resolve(SignIn, NotesMessage.Failed({ reason: "Provider not found" }));
+      expect(s.model.error).toBe("Provider not found");
     }),
   );
 });

@@ -2,12 +2,13 @@ import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
 import { Command, Component, UiSchema } from "@effect/ui";
 import { Html } from "@effect/ui/html";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Schema from "effect/Schema";
 import { NotesApi } from "../NotesApi.api.ts";
 import { UserId } from "../User.id.ts";
-import { auth } from "./auth.ts";
+import { auth, callAuth } from "./auth.ts";
 
 /** The NotesApi as Effect UI Commands and queries: `WriteNote`, and the `Notes` View. */
 export const NotesUI = DomainEffectUI.make(NotesApi);
@@ -23,28 +24,42 @@ export const NotesMessage = UiSchema.TaggedEnum({
   ChangedDraft: { text: Schema.String },
   SubmittedNote: {},
   SucceededWriteNote: {},
+  Redirecting: {},
   Failed: { reason: Schema.String },
 });
 
-/** Send the browser to GitHub or Google; better-auth brings it back to `/` signed in. */
-export const SignIn = Command.make(
-  "notes/SignIn",
-  { args: { provider: Provider } },
-  ({ provider }) =>
-    Effect.promise(() => auth.signIn.social({ provider, callbackURL: "/" })).pipe(
-      Effect.map((result) =>
-        NotesMessage.Failed({ reason: result.error?.message ?? "Redirecting" }),
-      ),
+/**
+ * Send the browser to GitHub or Google; better-auth brings it back to `/` signed in.
+ * If better-auth can't start the sign-in, the app shows why.
+ */
+export class SignIn extends Command.Service<SignIn>()("notes/SignIn", {
+  args: { provider: Provider },
+  success: NotesMessage,
+}) {
+  static readonly layer = this.toLayer(({ provider }) =>
+    callAuth(() => auth.signIn.social({ provider, callbackURL: "/" })).pipe(
+      Effect.match({
+        onSuccess: () => NotesMessage.Redirecting(),
+        onFailure: ({ message }) => NotesMessage.Failed({ reason: message }),
+      }),
     ),
-);
+  );
+}
 
-/** Clear better-auth's session, then start over signed out. */
-export const SignOut = Command.make("notes/SignOut", { args: {} }, () =>
-  Effect.promise(() => auth.signOut()).pipe(
-    Effect.andThen(Effect.sync(() => location.reload())),
-    Effect.as(Component.noop),
-  ),
-);
+/** Clear better-auth's session, then start over signed out. A failed sign-out shows why. */
+export class SignOut extends Command.Service<SignOut>()("notes/SignOut", {
+  success: NotesMessage,
+}) {
+  static readonly layer = this.toLayer(() =>
+    callAuth(() => auth.signOut()).pipe(
+      Effect.andThen(Effect.sync(() => location.reload())),
+      Effect.match({
+        onSuccess: () => NotesMessage.Redirecting(),
+        onFailure: ({ message }) => NotesMessage.Failed({ reason: message }),
+      }),
+    ),
+  );
+}
 
 /**
  * A signed-in user's notebook. The `Notes` View is a query: it shows the notes and follows
@@ -80,6 +95,8 @@ export const NotebookNoDeps = Html.component({
           ),
     // The note arrives through the View; success only clears an error.
     SucceededWriteNote: ($) => $.evolve({ error: null }),
+    // The browser is leaving the page.
+    Redirecting: ($) => $.model,
     Failed: ($, { reason }) => $.evolve({ error: reason }),
   },
   view: (h, model) =>
@@ -106,10 +123,12 @@ export const NotebookNoDeps = Html.component({
 });
 
 /** The notebook with its Commands and queries; the entry provides the NotesApi client. */
-export const Notebook = NotebookNoDeps.pipe(Component.provide(NotesUI.layer));
+export const Notebook = NotebookNoDeps.pipe(
+  Component.provide(Layer.mergeAll(NotesUI.layer, SignOut.layer)),
+);
 
 /** The app: sign-in buttons, or the signed-in user's notebook. */
-export const NotesApp = Html.component({
+export const NotesAppNoDeps = Html.component({
   name: "NotesApp",
   props: Schema.Struct({ user: Schema.NullOr(User) }),
   model: Schema.Struct({ error: Schema.NullOr(Schema.String) }),
@@ -122,6 +141,7 @@ export const NotesApp = Html.component({
     ChangedDraft: ($) => $.model,
     SubmittedNote: ($) => $.model,
     SucceededWriteNote: ($) => $.model,
+    Redirecting: ($) => $.model,
     Failed: ($, { reason }) => $.evolve({ error: reason }),
   },
   view: (h, model) =>
@@ -138,3 +158,6 @@ export const NotesApp = Html.component({
         )
       : Notebook(h, { key: h.props.user.userId, props: { user: h.props.user } }),
 });
+
+/** The app with its sign-in Command. */
+export const NotesApp = NotesAppNoDeps.pipe(Component.provide(SignIn.layer));

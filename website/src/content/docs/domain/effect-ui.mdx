@@ -338,9 +338,11 @@ When the session ends, the server ends each live read with the middleware error 
 ```typescript title="src/SignIn.ts"
 import { AccountId } from "@bank/domain/Account/Account.id";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
-import { Command, UiSchema } from "@effect/ui";
+import { Command, Component, UiSchema } from "@effect/ui";
 import { Html } from "@effect/ui/html";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Schema from "effect/Schema";
@@ -349,34 +351,61 @@ import { Bank } from "./Bank.ts";
 export const SessionMessage = UiSchema.TaggedEnum({
   ClickedSignIn: {},
   SignedIn: {},
+  FailedSignIn: { reason: Schema.String },
 });
 
 // Sign in again, then reopen every AccountSummary entry the page shows.
-export const SignIn = Command.make("bank/SignIn", { args: { customerId: CustomerId } }, ({ customerId }) =>
-  Effect.promise(() =>
-    fetch("/api/session", { method: "POST", body: JSON.stringify({ customerId }) }),
-  ).pipe(Effect.andThen(Bank.AccountSummary.invalidate()), Effect.as(SessionMessage.SignedIn())),
-);
+export class SignIn extends Command.Service<SignIn>()("bank/SignIn", {
+  args: { customerId: CustomerId },
+  success: SessionMessage,
+}) {
+  static readonly layer = this.toLayer(
+    Effect.gen(function* () {
+      const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+      return ({ customerId }) =>
+        client
+          .execute(
+            HttpClientRequest.post("/api/session").pipe(
+              HttpClientRequest.bodyJsonUnsafe({ customerId }),
+            ),
+          )
+          .pipe(
+            Effect.andThen(Bank.AccountSummary.invalidate()),
+            Effect.match({
+              onSuccess: () => SessionMessage.SignedIn(),
+              onFailure: (error) => SessionMessage.FailedSignIn({ reason: error._tag }),
+            }),
+          );
+    }),
+  );
+}
 
-export const Session = Html.component({
+export const SessionNoDeps = Html.component({
   name: "Session",
   props: Schema.Struct({ customerId: CustomerId, accountId: AccountId }),
-  model: Schema.Struct({}),
+  model: Schema.Struct({ error: Schema.NullOr(Schema.String) }),
   message: SessionMessage,
   queries: {
     summary: { query: Bank.AccountSummary, args: ({ props }) => ({ key: props.accountId }) },
   },
 }).make({
-  init: () => ({}),
+  init: () => ({ error: null }),
   update: {
     ClickedSignIn: ($) => $.run(SignIn.make({ customerId: $.props.customerId })),
-    SignedIn: ($) => $.model,
+    SignedIn: ($) => $.evolve({ error: null }),
+    FailedSignIn: ($, { reason }) => $.evolve({ error: reason }),
   },
-  view: (h) =>
+  view: (h, model) =>
     h.queries.summary._tag === "Failure" && Option.isNone(AsyncResult.value(h.queries.summary))
-      ? h.button.on("click", SessionMessage.ClickedSignIn()).children("Sign in again")
+      ? h.div(
+          h.button.on("click", SessionMessage.ClickedSignIn()).children("Sign in again"),
+          model.error !== null && h.p.attr("role", "alert").children(model.error),
+        )
       : h.p("Signed in"),
 });
+
+// The host provides the HttpClient and the Bank's client.
+export const Session = SessionNoDeps.pipe(Component.provide(SignIn.layer));
 ```
 
 A Subscription calls `onFailure` and stops. Change its `restartKey` after the new sign-in to start it again. A query that failed with `Denied` keeps its failure until it fetches again: invalidate it too, or name it in the `invalidates` of a command that signs in.
