@@ -20,9 +20,9 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
-    // The foldkit app, built with Vite. Its Worker serves the build and
+    // The Effect UI app, built with Vite. Its Worker serves the build and
     // forwards /api to the bank, so the app and the Api share one origin.
-    const app = yield* Cloudflare.Website.Foldkit("BankApp", {
+    const app = yield* Cloudflare.Website.EffectUI("BankApp", {
       rootDir: "packages/web",
       main: "src/worker.ts",
       env: { BANK: bank },

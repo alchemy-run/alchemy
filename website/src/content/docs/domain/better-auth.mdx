@@ -6,7 +6,7 @@ import PackageManagers from "../../../components/PackageManagers.astro";
 
 [better-auth](https://better-auth.com) signs users in with GitHub, Google and many other providers, and keeps their sessions in your database. A Domain Api reads that session in middleware, so every command and view knows who is asking.
 
-Take a small notes app on Cloudflare, with a [foldkit](https://foldkit.dev) UI: users sign in with GitHub or Google and write notes only they can read. The whole app is in [`examples/cloudflare-domain-better-auth`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth).
+Take a small notes app on Cloudflare, with an [Effect UI](https://ui.effect.website) UI: users sign in with GitHub or Google and write notes only they can read. The whole app is in [`examples/cloudflare-domain-better-auth`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth).
 
 ## Install
 
@@ -334,27 +334,27 @@ export default class NotesWorker extends Cloudflare.Worker<NotesWorker>()(
 
 The Notes Worker serves better-auth's routes under `/api/auth` and the NotesApi under `/api`. `CloudflareD1(AuthDb)` keeps users and sessions in D1 and migrates its tables on deploy.
 
-## Install foldkit
+## Install Effect UI
 
-<PackageManagers add="foldkit @effect/platform-browser" dev="vite @foldkit/vite-plugin" />
+<PackageManagers add="@effect/ui" dev="vite" />
+
+Effect UI is in public preview and isn't on npm yet: install a snapshot build as its [README](https://github.com/Effect-TS/ui#snapshots) describes.
 
 ## Configure Vite
 
 ```typescript
 // vite.config.ts
-import { foldkit } from "@foldkit/vite-plugin";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [foldkit()],
   optimizeDeps: {
     entries: ["src/web/entry.ts"],
-    include: ["effect", "effect/Function", "effect/http", "@effect/platform-browser"],
+    include: ["effect", "effect/Function", "effect/http", "@effect/ui", "@effect/ui/html"],
   },
 });
 ```
 
-The foldkit plugin builds the app. `include` pre-bundles the Effect modules foldkit imports, so the browser loads one copy of Effect.
+A browser-only Effect UI app needs no Vite plugin. `include` pre-bundles the Effect modules, so the browser loads one copy of Effect.
 
 ## Add the page
 
@@ -379,201 +379,225 @@ The foldkit plugin builds the app. `include` pre-bundles the Effect modules fold
 ```typescript
 // src/web/auth.ts
 import { createAuthClient } from "better-auth/client";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 
 /** better-auth's browser client, on the app's own origin. */
 export const auth = createAuthClient();
+
+/** better-auth could not be reached, or answered with an error. */
+export class AuthFailed extends Data.TaggedError("AuthFailed")<{ readonly message: string }> {}
+
+/**
+ * Call better-auth's client as an Effect. The client returns a Promise of
+ * `{ data, error }`: a rejection (the network) and an `error` (the server) both
+ * fail with `AuthFailed`, so neither can slip past as a success or a defect.
+ */
+export const callAuth = <A>(
+  call: () => Promise<
+    | { data: A; error: null }
+    | { data: null; error: { message?: string | undefined; statusText: string } }
+  >,
+) =>
+  Effect.tryPromise({
+    try: call,
+    catch: (cause) => new AuthFailed({ message: String(cause) }),
+  }).pipe(
+    Effect.flatMap(({ data, error }) =>
+      error === null
+        ? Effect.succeed(data)
+        : Effect.fail(new AuthFailed({ message: error.message ?? error.statusText })),
+    ),
+  );
 ```
+
+better-auth's client returns a Promise of `{ data, error }`. `callAuth` runs a call as an Effect that fails with `AuthFailed`, whether the network fails or better-auth answers with an error.
 
 ## Write the app
 
 ```typescript
 // src/web/Notes.ts
-import type * as Domain from "@alchemy.run/domain";
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
+import { Command, Component, UiSchema } from "@effect/ui";
+import { Html } from "@effect/ui/html";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import { Command, Subscription, type Update } from "foldkit";
-import type { Document, HtmlBuilder } from "foldkit/html";
-import { defineMessageUnion } from "foldkit/message";
 import { NotesApi } from "../NotesApi.api.ts";
 import { UserId } from "../User.id.ts";
-import { auth } from "./auth.ts";
+import { auth, callAuth } from "./auth.ts";
 
-// The services the app's commands and subscriptions use: the NotesApi client.
-type Notes = Domain.Api.ClientKey<"NotesApi">;
+/** The NotesApi as Effect UI Commands and queries: `WriteNote`, and the `Notes` View. */
+export const NotesUI = DomainEffectUI.make(NotesApi);
 
-const User = Schema.Struct({ userId: UserId, name: Schema.String });
-
-/** Who better-auth says is signed in when the page loads, or `null`. */
-export const Flags = Schema.Struct({ user: Schema.NullOr(User) });
-export type Flags = typeof Flags.Type;
-
-export const Model = Schema.Struct({
-  user: Schema.NullOr(User),
-  draft: Schema.String,
-  notes: Schema.Array(Schema.String),
-  error: Schema.NullOr(Schema.String),
-});
-export type Model = typeof Model.Type;
+export const User = Schema.Struct({ userId: UserId, name: Schema.String });
+export type User = typeof User.Type;
 
 const Provider = Schema.Literals(["github", "google"]);
 
-export const Message = defineMessageUnion({
+export const NotesMessage = UiSchema.TaggedEnum({
   ClickedSignIn: { provider: Provider },
   ClickedSignOut: {},
   ChangedDraft: { text: Schema.String },
   SubmittedNote: {},
-  Saved: {},
+  SucceededWriteNote: {},
+  Redirecting: {},
   Failed: { reason: Schema.String },
-  GotNotes: { notes: Schema.Array(Schema.String) },
 });
-export type Message = typeof Message.Type;
 
-/** Send the browser to GitHub or Google; better-auth brings it back to `/` signed in. */
-export const SignIn = Command.define("SignIn", {
+/**
+ * Send the browser to GitHub or Google; better-auth brings it back to `/` signed in.
+ * If better-auth can't start the sign-in, the app shows why.
+ */
+export class SignIn extends Command.Service<SignIn>()("notes/SignIn", {
   args: { provider: Provider },
-  messages: [Message.Failed],
-  execute: ({ provider }) =>
-    Effect.promise(() => auth.signIn.social({ provider, callbackURL: "/" })).pipe(
-      Effect.map((result) => Message.Failed({ reason: result.error?.message ?? "Redirecting" })),
-    ),
-});
+  success: NotesMessage,
+}) {}
 
-/** Clear better-auth's session, then start over signed out. */
-export const SignOut = Command.define("SignOut", {
-  args: {},
-  messages: [Message.Failed],
-  execute: () =>
-    Effect.promise(() => auth.signOut()).pipe(
-      Effect.flatMap(() => Effect.sync(() => location.reload())),
-      Effect.as(Message.Failed({ reason: "Signing out" })),
-    ),
-});
-
-/** Write a note in the user's notebook. The session cookie goes with the call. */
-export const WriteNote = Command.define("WriteNote", {
-  args: { userId: UserId, text: Schema.String },
-  messages: [Message.Saved, Message.Failed],
-  execute: ({ userId, text }) =>
-    Effect.gen(function* () {
-      const notes = yield* NotesApi.Client;
-      yield* notes.WriteNote({ userId, text });
-      return Message.Saved();
-    }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
-});
-
-export const update = (model: Model, message: Message): Update.Return<Model, Message, Notes> =>
-  Message.match<Update.Return<Model, Message, Notes>>(message, {
-    ClickedSignIn: ({ provider }) => ({ model, commands: [SignIn({ provider })] }),
-    ClickedSignOut: () => ({ model, commands: [SignOut({})] }),
-    ChangedDraft: ({ text }) => ({ model: { ...model, draft: text } }),
-    SubmittedNote: () =>
-      model.user === null || model.draft.trim() === ""
-        ? { model }
-        : {
-            model: { ...model, draft: "" },
-            commands: [WriteNote({ userId: model.user.userId, text: model.draft })],
-          },
-    // The note arrives through the subscription; success only clears an error.
-    Saved: () => ({ model: { ...model, error: null } }),
-    Failed: ({ reason }) => ({ model: { ...model, error: reason } }),
-    GotNotes: ({ notes }) => ({ model: { ...model, notes } }),
-  });
-
-export const init = (flags: Flags): Update.Return<Model, Message, Notes> => ({
-  model: { user: flags.user, draft: "", notes: [], error: null },
-});
-
-export const subscriptions = Subscription.make<Model, Message, Notes>()((entry) => ({
-  notes: entry(
-    { userId: Schema.NullOr(UserId) },
-    {
-      modelToDependencies: (model) => ({ userId: model.user?.userId ?? null }),
-      dependenciesToStream: ({ userId }) =>
-        userId === null
-          ? Stream.empty
-          : Stream.unwrap(
-              Effect.gen(function* () {
-                const notes = yield* NotesApi.Client;
-                return notes.Notes.watch(userId);
-              }),
-            ).pipe(
-              Stream.map(({ state }) => Message.GotNotes({ notes: state?.notes ?? [] })),
-              Stream.catch((error) => Stream.succeed(Message.Failed({ reason: error._tag }))),
-            ),
-    },
+export const SignInLive = SignIn.toLayer(({ provider }) =>
+  callAuth(() => auth.signIn.social({ provider, callbackURL: "/" })).pipe(
+    Effect.match({
+      onSuccess: () => NotesMessage.Redirecting(),
+      onFailure: ({ message }) => NotesMessage.Failed({ reason: message }),
+    }),
   ),
-}));
+);
 
-export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: "Notes",
-  body:
-    model.user === null
-      ? h.div(
-          [],
-          [
-            h.h1([], ["Notes"]),
-            h.button(
-              [h.OnClick(Message.ClickedSignIn({ provider: "github" }))],
-              ["Sign in with GitHub"],
+/** Clear better-auth's session, then start over signed out. A failed sign-out shows why. */
+export class SignOut extends Command.Service<SignOut>()("notes/SignOut", {
+  success: NotesMessage,
+}) {}
+
+export const SignOutLive = SignOut.toLayer(() =>
+  callAuth(() => auth.signOut()).pipe(
+    Effect.andThen(Effect.sync(() => location.reload())),
+    Effect.match({
+      onSuccess: () => NotesMessage.Redirecting(),
+      onFailure: ({ message }) => NotesMessage.Failed({ reason: message }),
+    }),
+  ),
+);
+
+/**
+ * A signed-in user's notebook. The `Notes` View is a query: it shows the notes and follows
+ * them live, and a written note arrives through it.
+ */
+export const NotebookNoDeps = Html.component({
+  name: "Notebook",
+  props: Schema.Struct({ user: User }),
+  model: Schema.Struct({ draft: Schema.String, error: Schema.NullOr(Schema.String) }),
+  message: NotesMessage,
+  queries: {
+    notes: { query: NotesUI.Notes, args: ({ props }) => ({ key: props.user.userId }) },
+  },
+}).make({
+  init: () => ({ draft: "", error: null }),
+  update: {
+    ClickedSignIn: ($) => $.model,
+    ClickedSignOut: ($) => $.run(SignOut.make({})),
+    ChangedDraft: ($, { text }) => $.evolve({ draft: text }),
+    SubmittedNote: ($) =>
+      $.model.draft.trim() === ""
+        ? $.model
+        : $.evolve({ draft: "" }).run(
+            // The session cookie goes with the call. A refusal keeps its reason.
+            NotesUI.WriteNote.make({
+              input: { userId: $.props.user.userId, text: $.model.draft },
+            }).pipe(
+              Command.match({
+                onSuccess: () => NotesMessage.SucceededWriteNote(),
+                onFailure: (failure) => NotesMessage.Failed({ reason: failure._tag }),
+              }),
             ),
-            h.button(
-              [h.OnClick(Message.ClickedSignIn({ provider: "google" }))],
-              ["Sign in with Google"],
-            ),
-            h.p([], [model.error ?? ""]),
-          ],
-        )
-      : h.div(
-          [],
-          [
-            h.h1([], ["Notes"]),
-            h.p([], [`Signed in as ${model.user.name}`]),
-            h.form(
-              [h.OnSubmit(Message.SubmittedNote())],
-              [
-                h.input([
-                  h.Value(model.draft),
-                  h.Placeholder("Write a note"),
-                  h.OnInput((text) => Message.ChangedDraft({ text })),
-                ]),
-                h.button([h.Type("submit")], ["Save"]),
-              ],
-            ),
-            h.ul(
-              [],
-              model.notes.map((note) => h.li([], [note])),
-            ),
-            h.button([h.OnClick(Message.ClickedSignOut())], ["Sign out"]),
-            h.p([], [model.error ?? ""]),
-          ],
-        ),
+          ),
+    // The note arrives through the View; success only clears an error.
+    SucceededWriteNote: ($) => $.evolve({ error: null }),
+    // The browser is leaving the page.
+    Redirecting: ($) => $.model,
+    Failed: ($, { reason }) => $.evolve({ error: reason }),
+  },
+  view: (h, model) =>
+    h.div(
+      h.h1("Notes"),
+      h.p(`Signed in as ${h.props.user.name}`),
+      h.form.on("submit", NotesMessage.SubmittedNote()).children(
+        h.input
+          .attrs({ placeholder: "Write a note", "aria-label": "Note" })
+          .value(model.draft)
+          .on("input", ({ value }) => NotesMessage.ChangedDraft({ text: value })),
+        h.button.attr("type", "submit").children("Save"),
+      ),
+      h.ul.attr("aria-label", "Notes").children(
+        ...Option.match(AsyncResult.value(h.queries.notes), {
+          onNone: () => [],
+          onSome: ({ state }) =>
+            Option.match(state, { onNone: () => [], onSome: ({ notes }) => notes }),
+        }).map((note) => h.li(note)),
+      ),
+      h.button.on("click", NotesMessage.ClickedSignOut()).children("Sign out"),
+      model.error !== null && h.p.attr("role", "alert").children(model.error),
+    ),
 });
+
+/** The notebook with its Commands and queries; the entry provides the NotesApi client. */
+export const Notebook = NotebookNoDeps.pipe(
+  Component.provide(Layer.mergeAll(NotesUI.layer, SignOutLive)),
+);
+
+/** The app: sign-in buttons, or the signed-in user's notebook. */
+export const NotesAppNoDeps = Html.component({
+  name: "NotesApp",
+  props: Schema.Struct({ user: Schema.NullOr(User) }),
+  model: Schema.Struct({ error: Schema.NullOr(Schema.String) }),
+  message: NotesMessage,
+}).make({
+  init: () => ({ error: null }),
+  update: {
+    ClickedSignIn: ($, { provider }) => $.run(SignIn.make({ provider })),
+    ClickedSignOut: ($) => $.model,
+    ChangedDraft: ($) => $.model,
+    SubmittedNote: ($) => $.model,
+    SucceededWriteNote: ($) => $.model,
+    Redirecting: ($) => $.model,
+    Failed: ($, { reason }) => $.evolve({ error: reason }),
+  },
+  view: (h, model) =>
+    h.props.user === null
+      ? h.div(
+          h.h1("Notes"),
+          h.button
+            .on("click", NotesMessage.ClickedSignIn({ provider: "github" }))
+            .children("Sign in with GitHub"),
+          h.button
+            .on("click", NotesMessage.ClickedSignIn({ provider: "google" }))
+            .children("Sign in with Google"),
+          model.error !== null && h.p.attr("role", "alert").children(model.error),
+        )
+      : Notebook(h, { key: h.props.user.userId, props: { user: h.props.user } }),
+});
+
+/** The app with its sign-in Command. */
+export const NotesApp = NotesAppNoDeps.pipe(Component.provide(SignInLive));
 ```
 
-`SignIn` hands the browser to better-auth, which sends it to GitHub or Google and back to `/` signed in. `WriteNote` sends the domain command with the session cookie. The notes never change on a command's success: the subscription watches the `Notes` view, so a new note arrives from the watch, including notes written on another device. See [Integrate with foldkit](/domain/foldkit) for how commands, subscriptions and the client fit together.
+`NotesUI` turns the NotesApi into Effect UI services with `@alchemy.run/domain/EffectUI`: a `WriteNote` Command and a `Notes` query. `SignIn` and `SignOut` are Command services over better-auth's client, and a failure from either becomes a `Failed` message the app shows. `SignIn` sends the browser to GitHub or Google and back to `/` signed in. The `Notebook` reads the `Notes` View as a query, so a new note arrives from the View, including notes written on another device; a command's success only clears an error. See [Integrate with Effect UI](/domain/effect-ui) for how Commands, queries and the client fit together.
 
 ## Start the app
 
 ```typescript
 // src/web/entry.ts
 import * as Domain from "@alchemy.run/domain";
+import { BrowserHost } from "@effect/ui/html";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
-import { Runtime } from "foldkit";
 import { NotesApi } from "../NotesApi.api.ts";
 import { UserId } from "../User.id.ts";
-import { auth } from "./auth.ts";
-import { Flags, init, Model, subscriptions, update, view } from "./Notes.ts";
-
-// Who better-auth says is signed in, before the app starts.
-const flags = Effect.promise(() => auth.getSession()).pipe(
-  Effect.map(({ data }) => ({
-    user: data ? { userId: UserId.make(data.user.id), name: data.user.name } : null,
-  })),
-);
+import { auth, callAuth } from "./auth.ts";
+import { NotesApp } from "./Notes.ts";
 
 // The session cookie is first-party, so every call and watch on /api carries it.
 const NotesConnection = NotesApi.layerClient.pipe(
@@ -581,22 +605,24 @@ const NotesConnection = NotesApi.layerClient.pipe(
   Layer.provide(Layer.mergeAll(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
 );
 
-Runtime.run(
-  Runtime.makeApplication({
-    Model,
-    Flags,
-    init,
-    update,
-    view,
-    subscriptions,
-    resources: NotesConnection,
-    container: document.getElementById("root"),
-  }),
-  { flags },
-);
+// Who better-auth says is signed in, before the app mounts. If better-auth can't
+// say, the app doesn't start: it fails with AuthFailed.
+const Main = Layer.unwrap(
+  callAuth(() => auth.getSession()).pipe(
+    Effect.map((data) =>
+      BrowserHost.mount(
+        NotesApp,
+        { user: data ? { userId: UserId.make(data.user.id), name: data.user.name } : null },
+        document.getElementById("root")!,
+      ),
+    ),
+  ),
+).pipe(Layer.provide(NotesConnection));
+
+Layer.launch(Main).pipe(Effect.runFork);
 ```
 
-The app asks better-auth who is signed in before it starts, and connects to the NotesApi on its own origin. `Domain.protocolWebSocket` sends commands over HTTP and opens a WebSocket for each watch; the browser sends the session cookie with both.
+The app asks better-auth who is signed in, then mounts with that user as its props, connected to the NotesApi on its own origin. `Domain.protocolWebSocket` sends commands over HTTP and opens a WebSocket for each live read; the browser sends the session cookie with both.
 
 ## Serve the app and the Api from one origin
 
@@ -607,7 +633,7 @@ interface Fetcher {
 }
 
 /**
- * The app's Worker: the foldkit build, plus `/api` (better-auth's routes and
+ * The app's Worker: the Effect UI build, plus `/api` (better-auth's routes and
  * the NotesApi) forwarded to the Notes Worker. One origin for both, so the
  * session cookie is first-party and reaches every call and watch.
  */
@@ -640,9 +666,9 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const notes = yield* NotesWorker;
-    // The foldkit app, built with Vite. Its Worker serves the build and
+    // The Effect UI app, built with Vite. Its Worker serves the build and
     // forwards /api to the Notes Worker, so the app and the Api share one origin.
-    const app = yield* Cloudflare.Website.Foldkit("NotesApp", {
+    const app = yield* Cloudflare.Website.EffectUI("NotesApp", {
       main: "src/web/worker.ts",
       env: { NOTES: notes },
       assets: { runWorkerFirst: ["/api", "/api/*"] },
@@ -652,7 +678,7 @@ export default Alchemy.Stack(
 );
 ```
 
-`Cloudflare.Website.Foldkit` builds the app with Vite and deploys its Worker. `runWorkerFirst` sends `/api` through the Worker instead of the static files.
+`Cloudflare.Website.EffectUI` builds the app with Vite and deploys its Worker. `runWorkerFirst` sends `/api` through the Worker instead of the static files.
 
 ## Register a GitHub OAuth App
 
@@ -692,45 +718,78 @@ Open the app's URL, sign in with GitHub or Google, and write a note.
 
 ```typescript
 // test/Notes.app.test.ts
-import { expect, test } from "@effect/vitest";
-import * as Story from "foldkit/story";
+import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing";
+import { Story } from "@effect/ui/testing";
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { NotYours } from "../src/NotYours.rejection.ts";
 import { UserId } from "../src/User.id.ts";
-import { Message, type Model, SignIn, update, WriteNote } from "../src/web/Notes.ts";
+import { NotebookNoDeps, NotesApp, NotesMessage, NotesUI, SignIn } from "../src/web/Notes.ts";
 
-const signedOut: Model = { user: null, draft: "", notes: [], error: null };
-const sam: Model = {
-  user: { userId: UserId.make("u-sam"), name: "Sam" },
-  draft: "",
-  notes: [],
-  error: null,
-};
+const sam = { userId: UserId.make("u-sam"), name: "Sam" };
+const notes = (...notes: Array<string>) => ({
+  state: Option.some({ notes }),
+  cursor: notes.length,
+});
+const note = HtmlLocator.role("textbox", { name: "Note" });
+const listed = HtmlLocator.role("list", { name: "Notes" });
 
-test("signing in sends the browser to the chosen provider", () =>
-  Story.story(
-    update,
-    Story.given(signedOut),
-    Story.message(Message.ClickedSignIn({ provider: "github" })),
-    Story.Command.resolve(SignIn, Message.Failed({ reason: "Redirecting" })),
-    Story.model((next) => expect(next.user).toBeNull()),
-  ));
-
-test("a note is written to the user's notebook, and arrives from the watch", () =>
-  Story.story(
-    update,
-    Story.given(sam),
-    Story.message(Message.ChangedDraft({ text: "buy milk" })),
-    Story.message(Message.SubmittedNote()),
-    Story.Command.resolve(WriteNote, Message.Saved()),
-    Story.model((next) => {
-      expect(next.draft).toBe("");
-      expect(next.notes).toEqual([]);
+describe("NotesApp", () => {
+  it.effect("signing in sends the browser to the chosen provider", () =>
+    Effect.gen(function* () {
+      const s = yield* Story.make(NotesApp, { user: null });
+      s.send(NotesMessage.ClickedSignIn({ provider: "github" })).expectExact(SignIn);
+      expect(s.pending[0]!.command.args).toEqual({ provider: "github" });
+      s.resolve(SignIn, NotesMessage.Failed({ reason: "Redirecting" }));
+      expect(s.model.error).toBe("Redirecting");
     }),
-    Story.message(Message.GotNotes({ notes: ["buy milk"] })),
-    Story.model((next) => expect(next.notes).toEqual(["buy milk"])),
-  ));
+  );
+});
+
+describe("Notebook", () => {
+  it.effect("writes a note to the user's notebook, and shows it from the View", () =>
+    Effect.gen(function* () {
+      const s = yield* HtmlScene.make(NotebookNoDeps, { user: sam });
+      s.loaded("notes", notes())
+        .type(note, "buy milk")
+        .click(HtmlLocator.role("button", { name: "Save" }))
+        .expectExact(NotesUI.WriteNote)
+        .expect(note)
+        .toHaveValue("");
+      expect(s.pending[0]!.command.args).toMatchObject({
+        input: { userId: sam.userId, text: "buy milk" },
+      });
+      // The note arrives through the View, not the command's answer.
+      s.resolve(NotesUI.WriteNote, {
+        commandId: "c-1",
+        reply: undefined,
+        receipt: { stream: "Notebook/u-sam", version: 1 },
+        commits: [{ stream: "Notebook/u-sam", version: 1 }],
+      })
+        .expect(listed)
+        .toHaveText("")
+        .loaded("notes", notes("buy milk"))
+        .expect(listed)
+        .toHaveText("buy milk");
+    }),
+  );
+
+  it.effect("shows why a note was refused", () =>
+    Effect.gen(function* () {
+      const s = yield* HtmlScene.make(NotebookNoDeps, { user: sam });
+      s.loaded("notes", notes())
+        .type(note, "not mine")
+        .click(HtmlLocator.role("button", { name: "Save" }))
+        .fail(NotesUI.WriteNote, { _tag: "Rejected", commandId: "c-1", rejection: new NotYours() })
+        .expect(HtmlLocator.role("alert"))
+        .toHaveText("Rejected");
+    }),
+  );
+});
 ```
 
-foldkit stories test `update` without a browser or server: each command resolves with the message it would produce.
+A Story drives a component's `update` and a Scene drives its view, with no browser or server. Every Command a step runs stays pending until the test resolves or fails it, and a query has no result until the test loads one, so each test says exactly what the app did and what came back.
 
 ## Test sign-in
 

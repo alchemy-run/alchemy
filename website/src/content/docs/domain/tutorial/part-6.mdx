@@ -1,16 +1,18 @@
 ---
-title: "Part 6: Build the UI with foldkit"
-description: A browser app that signs in with a cookie, opens an account, deposits, and watches its balance live.
+title: "Part 6: Build the UI with Effect UI"
+description: A browser app that signs in with a cookie, opens an account, deposits, and shows its balance live.
 sidebar:
   order: 6
 ---
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-Build a browser app with [foldkit](https://foldkit.dev): sign in, open your account, deposit, and see the balance change as it happens.
+Build a browser app with [Effect UI](https://ui.effect.website): sign in, open your account, deposit, and see the balance change as it happens. Effect UI tests a component the way the domain tests a model: as a story of messages in and effects out.
 
 ## Install
 
-<PackageManagers add="foldkit @effect/platform-browser" dev="vite @foldkit/vite-plugin" />
+<PackageManagers add="@effect/ui @effect/platform-browser" dev="vite" />
+
+Effect UI is in public preview and isn't on npm yet: install a snapshot build as its [README](https://github.com/Effect-TS/ui#snapshots) describes.
 
 ## Add the browser's types
 
@@ -28,19 +30,17 @@ The app runs in a browser. Add `"DOM"` to `lib` in your `tsconfig.json`, so `doc
 
 ```typescript
 // vite.config.ts
-import { foldkit } from "@foldkit/vite-plugin";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [foldkit()],
   optimizeDeps: {
     entries: ["src/web/entry.ts"],
-    include: ["effect", "effect/Function", "effect/http", "@effect/platform-browser"],
+    include: ["effect", "effect/Function", "effect/http", "@effect/ui", "@effect/ui/html"],
   },
 });
 ```
 
-The foldkit plugin builds the app. `include` pre-bundles the Effect modules foldkit imports, so the browser loads one copy of Effect.
+The app runs in the browser alone, so it needs no Vite plugin. `include` pre-bundles the Effect modules, so the browser loads one copy of Effect.
 
 ## Add the page
 
@@ -173,217 +173,245 @@ const BankLive = SessionLive.pipe(
 
 `/api/session` signs in, and everything else goes to the Api.
 
-## Describe the app's state
+## Derive the bank's commands and view
 
 ```typescript
 // src/web/Bank.ts
-import type * as Domain from "@alchemy.run/domain";
-import * as Schema from "effect/Schema";
-import { defineMessageUnion } from "foldkit/message";
-import { AccountId } from "../Account.id.ts";
-import { CustomerId } from "../Customer.id.ts";
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
+import { BankApi } from "../BankApi.api.ts";
 
-// The bank client this app runs on, provided when the app starts.
-type Bank = Domain.Api.ClientKey<"BankApi">;
-
-export const Flags = Schema.Struct({ customerId: CustomerId });
-export type Flags = typeof Flags.Type;
-
-export const Model = Schema.Struct({
-  customerId: CustomerId,
-  accountId: AccountId,
-  // `null` until the account is open.
-  balance: Schema.NullOr(Schema.Number),
-  error: Schema.NullOr(Schema.String),
-});
-export type Model = typeof Model.Type;
-
-export const Message = defineMessageUnion({
-  ClickedOpen: {},
-  ClickedDeposit: {},
-  Succeeded: {},
-  Failed: { reason: Schema.String },
-  GotBalance: { balance: Schema.NullOr(Schema.Number) },
-});
-export type Message = typeof Message.Type;
+// The bank's commands and its view, as Effect UI services.
+export const BankUI = DomainEffectUI.make(BankApi);
 ```
 
-`Flags` is what the app starts with, `Model` is what it shows, and `Message` is everything that can happen. The balance is `null` until the account is open.
+`BankUI` has one Effect UI Command per Api command and one query per view. `BankUI.layer` runs them on the bank client, which the app provides when it starts.
+
+## Name what can happen
+
+```diff lang="typescript"
+// src/web/Bank.ts
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
++import { UiSchema } from "@effect/ui";
++import * as Schema from "effect/Schema";
+import { BankApi } from "../BankApi.api.ts";
+// ...
+export const BankUI = DomainEffectUI.make(BankApi);
++
++export const BankMessage = UiSchema.TaggedEnum({
++  ClickedOpen: {},
++  ClickedDeposit: {},
++  Succeeded: {},
++  Failed: { reason: Schema.String },
++});
+```
+
+A message is everything that can happen to the app: a click, or the answer to a command.
 
 ## Send domain commands
 
 ```diff lang="typescript"
 // src/web/Bank.ts
-import type * as Domain from "@alchemy.run/domain";
-+import * as Effect from "effect/Effect";
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
+-import { UiSchema } from "@effect/ui";
++import { Command, UiSchema } from "@effect/ui";
++import { Html } from "@effect/ui/html";
 import * as Schema from "effect/Schema";
-+import { Command } from "foldkit";
-import { defineMessageUnion } from "foldkit/message";
-import { AccountId } from "../Account.id.ts";
-+import { BankApi } from "../BankApi.api.ts";
-import { CustomerId } from "../Customer.id.ts";
++import { AccountId } from "../Account.id.ts";
+import { BankApi } from "../BankApi.api.ts";
++import { CustomerId } from "../Customer.id.ts";
 // ...
-});
-export type Message = typeof Message.Type;
-+
-+export const Register = Command.define("Register", {
-+  args: { customerId: CustomerId },
-+  messages: [Message.Succeeded, Message.Failed],
-+  execute: ({ customerId }) =>
-+    Effect.gen(function* () {
-+      const bank = yield* BankApi.Client;
-+      yield* bank.RegisterCustomer({ customerId, name: customerId });
-+      return Message.Succeeded();
-+    }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
-+});
-+
-+export const Deposit = Command.define("Deposit", {
-+  args: { accountId: AccountId, amount: Schema.Number },
-+  messages: [Message.Succeeded, Message.Failed],
-+  execute: ({ accountId, amount }) =>
-+    Effect.gen(function* () {
-+      const bank = yield* BankApi.Client;
-+      yield* bank.DepositMoney({ accountId, amount });
-+      return Message.Succeeded();
-+    }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
-+});
-```
-
-A foldkit command runs a domain command through the bank client and turns the outcome into a message. A rejection becomes `Failed` with its tag.
-
-## Update the model
-
-```diff lang="typescript"
-// src/web/Bank.ts
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
--import { Command } from "foldkit";
-+import { Command, type Update } from "foldkit";
-import { defineMessageUnion } from "foldkit/message";
-import { AccountId } from "../Account.id.ts";
-      // ...
-      yield* bank.DepositMoney({ accountId, amount });
-      return Message.Succeeded();
-    }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
+  Failed: { reason: Schema.String },
 });
 +
-+export const update = (model: Model, message: Message): Update.Return<Model, Message, Bank> =>
-+  Message.match<Update.Return<Model, Message, Bank>>(message, {
-+    ClickedOpen: () => ({ model, commands: [Register({ customerId: model.customerId })] }),
-+    ClickedDeposit: () => ({
-+      model,
-+      commands: [Deposit({ accountId: model.accountId, amount: 1_000 })],
-+    }),
-+    // The balance arrives through the subscription; success only clears an error.
-+    Succeeded: () => ({ model: { ...model, error: null } }),
-+    Failed: ({ reason }) => ({ model: { ...model, error: reason } }),
-+    GotBalance: ({ balance }) => ({ model: { ...model, balance } }),
-+  });
++const accountIdOf = (customerId: typeof CustomerId.Type) => AccountId.make(`${customerId}-main`);
 +
-+export const init = (flags: Flags): Update.Return<Model, Message, Bank> => ({
-+  model: {
-+    customerId: flags.customerId,
-+    accountId: AccountId.make(`${flags.customerId}-main`),
-+    balance: null,
-+    error: null,
++export const BankNoDeps = Html.component({
++  name: "Bank",
++  props: Schema.Struct({ customerId: CustomerId }),
++  model: Schema.Struct({ error: Schema.NullOr(Schema.String) }),
++  message: BankMessage,
++}).make({
++  init: () => ({ error: null }),
++  update: {
++    ClickedOpen: ($) =>
++      $.run(
++        BankUI.RegisterCustomer.make({
++          input: { customerId: $.props.customerId, name: $.props.customerId },
++        }).pipe(
++          Command.match({
++            onSuccess: () => BankMessage.Succeeded(),
++            onFailure: (failure) => BankMessage.Failed({ reason: failure._tag }),
++          }),
++        ),
++      ),
++    ClickedDeposit: ($) =>
++      $.run(
++        BankUI.DepositMoney.make({
++          input: { accountId: accountIdOf($.props.customerId), amount: 1_000 },
++        }).pipe(
++          Command.match({
++            onSuccess: () => BankMessage.Succeeded(),
++            onFailure: (failure) => BankMessage.Failed({ reason: failure._tag }),
++          }),
++        ),
++      ),
++    // The balance arrives through the view; success only clears an error.
++    Succeeded: ($) => $.evolve({ error: null }),
++    Failed: ($, { reason }) => $.evolve({ error: reason }),
 +  },
 +});
 ```
 
-Clicks send commands. The balance never changes on success: it arrives from the bank, through the next step.
+The signed-in customer is the component's props. A click runs a domain command and maps its outcome to a message: a rejection, a refused session or a lost reply becomes `Failed` with its tag. The balance never changes on success: it comes from the bank, through the next step.
 
-## Watch the balance
+## Read the balance
 
 ```diff lang="typescript"
 // src/web/Bank.ts
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
--import { Command, type Update } from "foldkit";
-+import * as Stream from "effect/Stream";
-+import { Command, Subscription, type Update } from "foldkit";
-import { defineMessageUnion } from "foldkit/message";
-import { AccountId } from "../Account.id.ts";
-  // ...
-  },
-});
-+
-+export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) => ({
-+  balance: entry(
-+    { accountId: AccountId },
-+    {
-+      modelToDependencies: (model) => ({ accountId: model.accountId }),
-+      dependenciesToStream: ({ accountId }) =>
-+        Stream.unwrap(
-+          Effect.gen(function* () {
-+            const bank = yield* BankApi.Client;
-+            return bank.AccountSummary.watch(accountId);
-+          }),
-+        ).pipe(
-+          Stream.map(({ state: summary }) =>
-+            Message.GotBalance({ balance: summary?.owner ? summary.balance : null }),
-+          ),
-+          Stream.catch((error) => Stream.succeed(Message.Failed({ reason: error._tag }))),
-+        ),
+  model: Schema.Struct({ error: Schema.NullOr(Schema.String) }),
+  message: BankMessage,
++  queries: {
++    summary: {
++      query: BankUI.AccountSummary,
++      args: ({ props }) => ({ key: accountIdOf(props.customerId) }),
 +    },
-+  ),
-+}));
++  },
+}).make({
 ```
 
-The subscription watches the account's summary. The bank pushes every change over a WebSocket, so a deposit from any device shows up here.
+The `AccountSummary` view is a query keyed by the account. The bank pushes every change over a WebSocket, so a deposit from any device shows up here.
 
 ## Draw the page
 
 ```diff lang="typescript"
 // src/web/Bank.ts
-import * as Stream from "effect/Stream";
-import { Command, Subscription, type Update } from "foldkit";
-+import type { Document, HtmlBuilder } from "foldkit/html";
-import { defineMessageUnion } from "foldkit/message";
-import { AccountId } from "../Account.id.ts";
-  // ...
-  ),
-}));
-+
-+const cents = (amount: number) => (amount / 100).toFixed(2);
-+
-+export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-+  title: "Bank",
-+  body: h.div(
-+    [],
-+    [
-+      h.p([], [`Signed in as ${model.customerId}`]),
-+      model.balance === null
-+        ? h.button([h.OnClick(Message.ClickedOpen())], ["Open my account"])
-+        : h.div(
-+            [],
-+            [
-+              h.p([], [`Balance: ${cents(model.balance)}`]),
-+              h.button([h.OnClick(Message.ClickedDeposit())], ["Deposit 10.00"]),
-+            ],
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
+-import { Command, UiSchema } from "@effect/ui";
++import { Command, Component, UiSchema } from "@effect/ui";
+import { Html } from "@effect/ui/html";
++import * as Option from "effect/Option";
++import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Schema from "effect/Schema";
+// ...
+    Failed: ($, { reason }) => $.evolve({ error: reason }),
+  },
++  view: (h, model) => {
++    const summary = Option.flatMap(AsyncResult.value(h.queries.summary), ({ state }) => state);
++    const balance = Option.flatMap(summary, ({ owner, balance }) =>
++      owner === null ? Option.none() : Option.some(balance),
++    );
++    return h.div(
++      h.p(`Signed in as ${h.props.customerId}`),
++      Option.match(balance, {
++        onNone: () => h.button.on("click", BankMessage.ClickedOpen()).children("Open my account"),
++        onSome: (balance) =>
++          h.div(
++            h.p.attr("aria-label", "Balance").children(`Balance: ${(balance / 100).toFixed(2)}`),
++            h.button.on("click", BankMessage.ClickedDeposit()).children("Deposit 10.00"),
 +          ),
-+      h.p([], [model.error ?? ""]),
-+    ],
-+  ),
-+});
++      }),
++      model.error !== null && h.p.attr("role", "alert").children(model.error),
++    );
++  },
+});
++
++// The app with its commands and view provided; the entry provides the bank's client.
++export const Bank = BankNoDeps.pipe(Component.provide(BankUI.layer));
 ```
 
-Before the account opens, the page offers to open it. After, it shows the balance and a deposit button.
+Before the account opens, the page offers to open it. After, it shows the balance and a deposit button. `Bank` is the component with `BankUI.layer` provided, so only the bank's client is left for the entry.
+
+## Test the app
+
+```typescript
+// test/Bank.app.test.ts
+import { HtmlLocator, HtmlScene } from "@effect/ui/html/testing";
+import { Story } from "@effect/ui/testing";
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { CustomerId } from "../src/Customer.id.ts";
+import { NotOpen } from "../src/NotOpen.rejection.ts";
+import { BankMessage, BankNoDeps, BankUI } from "../src/web/Bank.ts";
+
+const props = { customerId: CustomerId.make("c-2") };
+const summary = (owner: string | null, balance: number) => ({
+  state: Option.some({ owner, balance }),
+  cursor: 1,
+});
+
+describe("the bank app", () => {
+  it.effect("opens the customer's account", () =>
+    Effect.gen(function* () {
+      const s = yield* Story.make(BankNoDeps, props);
+      s.loaded("summary", { state: Option.none(), cursor: 0 })
+        .send(BankMessage.ClickedOpen())
+        .expectExact(BankUI.RegisterCustomer);
+      expect(s.pending[0]!.command.args).toMatchObject({ input: { customerId: "c-2", name: "c-2" } });
+      s.resolve(BankUI.RegisterCustomer, {
+        commandId: "page:0",
+        reply: undefined,
+        receipt: { stream: "Customer/c-2", version: 1 },
+        commits: [{ stream: "Customer/c-2", version: 1 }],
+      });
+      expect(s.model.error).toBeNull();
+    }),
+  );
+
+  it.effect("deposits, and shows the balance the view reports", () =>
+    Effect.gen(function* () {
+      const s = yield* HtmlScene.make(BankNoDeps, props);
+      s.loaded("summary", summary("c-2", 0))
+        .expect(HtmlLocator.label("Balance"))
+        .toHaveText("Balance: 0.00")
+        .click(HtmlLocator.role("button", { name: "Deposit 10.00" }))
+        .resolve(BankUI.DepositMoney, {
+          commandId: "page:0",
+          reply: { balance: 1_000 },
+          receipt: { stream: "Account/c-2-main", version: 2 },
+          commits: [{ stream: "Account/c-2-main", version: 2 }],
+        })
+        // The balance comes from the view, not from the command's reply.
+        .expect(HtmlLocator.label("Balance"))
+        .toHaveText("Balance: 0.00")
+        .loaded("summary", summary("c-2", 1_000))
+        .expect(HtmlLocator.label("Balance"))
+        .toHaveText("Balance: 10.00");
+    }),
+  );
+
+  it.effect("shows why a deposit was refused", () =>
+    Effect.gen(function* () {
+      const s = yield* HtmlScene.make(BankNoDeps, props);
+      s.loaded("summary", summary("c-2", 0))
+        .click(HtmlLocator.role("button", { name: "Deposit 10.00" }))
+        .fail(BankUI.DepositMoney, { _tag: "Rejected", commandId: "page:0", rejection: new NotOpen() })
+        .expect(HtmlLocator.role("alert"))
+        .toHaveText("Rejected");
+    }),
+  );
+});
+```
+
+A Story drives the component's `update` and a Scene drives its view, with no browser or server. Like the domain's stories, each test says what happened and what came back: every command a step runs stays pending until the test resolves or fails it, and the view's query has no value until the test loads one.
+
+<PackageManagers run="vitest" />
 
 ## Start the app
 
 ```typescript
 // src/web/entry.ts
 import * as Domain from "@alchemy.run/domain";
+import { BrowserHost } from "@effect/ui/html";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
-import { Runtime } from "foldkit";
 import { BankApi } from "../BankApi.api.ts";
 import { CustomerId } from "../Customer.id.ts";
-import { Flags, init, Model, subscriptions, update, view } from "./Bank.ts";
+import { Bank } from "./Bank.ts";
 
 // A stand-in for a login page: `?customer=c-2` picks who you are.
 const customerId = CustomerId.make(new URLSearchParams(location.search).get("customer") ?? "c-1");
@@ -408,22 +436,14 @@ const BankConnection = Layer.unwrap(
   ),
 ).pipe(Layer.provide(FetchHttpClient.layer));
 
-Runtime.run(
-  Runtime.makeApplication({
-    Model,
-    Flags,
-    init,
-    update,
-    view,
-    subscriptions,
-    resources: BankConnection,
-    container: document.getElementById("root"),
-  }),
-  { flags: Effect.succeed({ customerId }) },
+const Main = BrowserHost.mount(Bank, { customerId }, document.getElementById("root")!).pipe(
+  Layer.provide(BankConnection),
 );
+
+Layer.launch(Main).pipe(Effect.runFork);
 ```
 
-The app signs in first, then connects to the Api on its own origin. `Domain.protocolWebSocket` sends commands over HTTP and opens a WebSocket for each watch.
+The app signs in first, then mounts with the customer as its props and connects to the Api on its own origin. `Domain.protocolWebSocket` sends commands over HTTP and opens a WebSocket for each live read.
 
 ## Serve the app and the Api from one origin
 
@@ -451,7 +471,7 @@ The app's Worker serves the built page and forwards `/api` to the bank. Sharing 
   Effect.gen(function* () {
     const bank = yield* BankWorker;
 -    return { url: bank.url.as<string>() };
-+    const app = yield* Cloudflare.Website.Foldkit("BankApp", {
++    const app = yield* Cloudflare.Website.EffectUI("BankApp", {
 +      main: "src/web/worker.ts",
 +      env: { BANK: bank },
 +      assets: { runWorkerFirst: ["/api", "/api/*"] },
@@ -461,7 +481,7 @@ The app's Worker serves the built page and forwards `/api` to the bank. Sharing 
 );
 ```
 
-`Cloudflare.Website.Foldkit` builds the app with Vite. `env: { BANK: bank }` gives the app's Worker a binding to the bank, and `runWorkerFirst` sends `/api` through it.
+`Cloudflare.Website.EffectUI` builds the app with Vite. `env: { BANK: bank }` gives the app's Worker a binding to the bank, and `runWorkerFirst` sends `/api` through it.
 
 ## Run it
 

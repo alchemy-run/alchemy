@@ -69,7 +69,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
     // Claims POST /webhooks/stripe and provisions the Stripe webhook endpoint.
     yield* StripeSettlements;
     return {
-      // The foldkit app reaches /api through its own Worker, on its own origin,
+      // The Effect UI app reaches /api through its own Worker, on its own origin,
       // so the session cookie needs no cross-origin allowances.
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;

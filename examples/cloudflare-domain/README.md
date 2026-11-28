@@ -1,6 +1,6 @@
 # cloudflare-domain
 
-A bank built with `@alchemy.run/domain`: customers, accounts and transfers modelled as aggregates, commands, events, views, policies, a saga, projections, streams and a query; hosted on Cloudflare Durable Objects; driven from a foldkit app; traced end to end into Axiom.
+A bank built with `@alchemy.run/domain`: customers, accounts and transfers modelled as aggregates, commands, events, views, policies, a saga, projections, streams and a query; hosted on Cloudflare Durable Objects; driven from an Effect UI app; traced end to end into Axiom.
 
 The docs at [alchemy.run/domain](https://alchemy.run/domain) are written around this project, and quote its files.
 
@@ -10,7 +10,7 @@ The docs at [alchemy.run/domain](https://alchemy.run/domain) are written around 
 packages/
   domain/   @bank/domain   the model: one <Noun>.<kind>.ts per building block, by subdomain, plus its stories
   server/   @bank/server   the Worker that hosts it, middleware, Stripe/Sift/D1 adapters, Axiom telemetry
-  web/      @bank/web      the foldkit app and its Worker
+  web/      @bank/web      the Effect UI app and its Worker
 alchemy.run.ts             the stack: the bank Worker and the app
 test/integ.test.ts         deploys the stack and drives it
 ```
@@ -22,7 +22,7 @@ See [Project layout](https://alchemy.run/domain/project-layout) for the conventi
 ```sh
 pnpm --filter @bank/domain test   # stories: the whole model, in memory
 pnpm --filter @bank/server test   # the Apis, in memory
-pnpm --filter @bank/web test      # the foldkit app
+pnpm --filter @bank/web test      # the Effect UI app
 ```
 
 ## Deploy

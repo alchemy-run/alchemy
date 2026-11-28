@@ -1,0 +1,56 @@
+---
+title: Frontends
+description: Drive a Domain Api from a browser app. Effect UI is recommended; Foldkit and any other framework work through the same typed client.
+---
+
+A browser app reaches a Domain Api through the Api's client: typed commands, queries and live reads, with no hand-written fetch code and no copied schemas. Any frontend can use that client directly. For [Effect UI](https://ui.effect.website) and [Foldkit](https://foldkit.dev), an adapter turns the Api into the framework's own Commands, queries and Subscriptions.
+
+```typescript title="src/Bank.ts"
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
+
+export const Bank = DomainEffectUI.make(CustomerApi);
+```
+
+## Start with Effect UI
+
+Effect UI is the recommended frontend for a Domain model. It is built on Effect and the Elm Architecture, like the domain: a component changes its Model through Messages, and every side effect is a value the runtime runs.
+
+That shape makes a component testable the way an aggregate is. A domain story gives a model commands and checks the events it records. An Effect UI Story gives a component messages and checks the Commands it runs and the Model it ends with. Nothing runs until the test resolves it:
+
+```typescript title="test/Bank.app.test.ts"
+import { Story } from "@effect/ui/testing";
+import { expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { CustomerId } from "../src/Customer.id.ts";
+import { BankMessage, BankNoDeps, BankUI } from "../src/web/Bank.ts";
+
+it.effect("opens the customer's account", () =>
+  Effect.gen(function* () {
+    const s = yield* Story.make(BankNoDeps, { customerId: CustomerId.make("c-2") });
+    s.loaded("summary", { state: Option.none(), cursor: 0 })
+      .send(BankMessage.ClickedOpen())
+      .expectExact(BankUI.RegisterCustomer);
+    s.resolve(BankUI.RegisterCustomer, {
+      commandId: "page:0",
+      reply: undefined,
+      receipt: { stream: "Customer/c-2", version: 1 },
+      commits: [{ stream: "Customer/c-2", version: 1 }],
+    });
+    expect(s.model.error).toBeNull();
+  }),
+);
+```
+
+This is the test from [Part 6 of the tutorial](/domain/tutorial/part-6#test-the-app), which builds the `Bank` component it drives.
+
+Its adapter reads each View as a query that every component shares, renders it on the server, and follows it live. See [Integrate with Effect UI](/domain/effect-ui), and build a whole app in [Part 6 of the tutorial](/domain/tutorial/part-6).
+
+## Keep a Foldkit app
+
+Effect UI continues the work of Foldkit 0.x. The [Foldkit adapter](/domain/foldkit) stays supported, with the same failures and read rules, for apps already written with it.
+
+## Use any other framework
+
+The Api's client is an Effect service, so a React, Solid or Svelte app can run its commands and reads with an Effect runtime. Commands go over HTTP, and each live read is a WebSocket. See [Api](/domain/api) for the client, and [Plain HTTP and OpenAPI](/domain/http-api) for callers outside Effect.

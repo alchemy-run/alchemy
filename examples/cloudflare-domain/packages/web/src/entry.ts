@@ -1,7 +1,8 @@
 import * as Domain from "@alchemy.run/domain";
-import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import { BrowserHost } from "@effect/ui/html";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -12,8 +13,7 @@ import * as OtlpTracer from "effect/observability/OtlpTracer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
-import { Runtime } from "foldkit";
-import { Flags, Intent, init, intentsKey, Model, subscriptions, update, view } from "./Bank.ts";
+import { Bank, Intent, intentsKey } from "./Bank.ts";
 
 /**
  * The signed-in customer. A demo stand-in for a login: `?customer=c-2` picks
@@ -48,56 +48,46 @@ const signIn = Effect.fn(function* (customerId: CustomerId) {
  * each watch is a WebSocket to the Durable Object that owns what it reads,
  * which pushes every change.
  */
-const BankConnection = Layer.unwrap(
-  Effect.gen(function* () {
-    // The app cannot run signed out.
-    yield* signIn(yield* signedIn).pipe(Effect.orDie);
-    return CustomerApi.layerClient.pipe(
-      Layer.provide(Domain.protocolWebSocket(`${location.origin}/api`)),
-      Layer.provide(Socket.layerWebSocketConstructorGlobal),
-    );
-  }),
+const BankConnection = CustomerApi.layerClient.pipe(
+  Layer.provide(Domain.protocolWebSocket(`${location.origin}/api`)),
+  Layer.provide(Socket.layerWebSocketConstructorGlobal),
 );
 
 /**
  * The app's spans, exported to its own origin, where the bank Worker relays
- * them on. foldkit traces every Command, and each Api call carries the trace
- * on, so a click and everything it causes on the server is one trace.
+ * them on. Effect UI traces every Command, and each Api call carries the
+ * trace on, so a click and everything it causes on the server is one trace.
  */
 const Tracing = OtlpTracer.layer({
   url: `${location.origin}/api/telemetry/v1/traces`,
   resource: { serviceName: "bank-web" },
 }).pipe(Layer.provide(OtlpSerialization.layerJson));
 
-const Headers = Layer.succeed(DomainFoldkit.CommandHeaders, {
+/** A demo MFA code on every withdrawal, read when the command runs. */
+const Headers = Layer.succeed(DomainEffectUI.CommandHeaders, {
   get: (command) => Effect.succeed(command === "WithdrawMoney" ? { "x-mfa-code": "000000" } : {}),
 });
 
-const Resources = Layer.mergeAll(BankConnection, Tracing, Headers).pipe(
-  Layer.provide(FetchHttpClient.layer),
-);
-
-Runtime.run(
-  Runtime.makeApplication({
-    Model,
-    Flags,
-    init,
-    update,
-    view,
-    subscriptions,
-    resources: Resources,
-    container: document.getElementById("root"),
-  }),
-  {
-    flags: Effect.gen(function* () {
-      const customerId = yield* signedIn;
-      return {
+const Main = Layer.unwrap(
+  Effect.gen(function* () {
+    const customerId = yield* signedIn;
+    // The app cannot run signed out.
+    yield* signIn(customerId).pipe(Effect.orDie);
+    return BrowserHost.mount(
+      Bank,
+      {
         customerId,
         // Names this page's commands, so each is unique even across reloads.
         session: crypto.randomUUID(),
         online: navigator.onLine,
         intents: yield* savedIntents(customerId),
-      };
-    }),
-  },
+      },
+      document.getElementById("root")!,
+    );
+  }),
+).pipe(
+  Layer.provide(Layer.mergeAll(BankConnection, Tracing, Headers)),
+  Layer.provide(FetchHttpClient.layer),
 );
+
+Layer.launch(Main).pipe(Effect.runFork);

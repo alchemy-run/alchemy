@@ -35,9 +35,8 @@
     "@alchemy.run/test": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-browser": "catalog:",
+    "@effect/ui": "catalog:",
     "@effect/vitest": "catalog:",
-    "@foldkit/vite-plugin": "catalog:",
-    "foldkit": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   }

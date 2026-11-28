@@ -43,13 +43,14 @@ my-app/
         Fraud/SiftFraudCheck.ts       FraudCheck.toLayer(...) - real adapter
         Ledger/D1LedgerStore.ts       LedgerStore over D1
       test/CustomerApi.test.ts        Api clients over in-memory hosting
-    web/                  @acme/web - foldkit app
+    web/                  @acme/web - Effect UI app
       index.html
       vite.config.ts
-      src/Bank.ts                     Model / Message / update / view / Commands / Subscriptions
-      src/entry.ts                    Runtime.run with the Api client as a resource
+      src/Bank.ts                     DomainEffectUI.make(CustomerApi): the Api's Commands and queries
+      src/Account.ts                  a component: Model / Message / update / view
+      src/entry.ts                    BrowserHost.mount with the Api client provided
       src/worker.ts                   serves the build, forwards /api to the server
-      test/Bank.test.ts               foldkit stories
+      test/Account.test.ts            Effect UI Stories, Scenes and Plays
 ```
 
 ## What goes where
@@ -58,7 +59,7 @@ my-app/
 | --- | --- | --- |
 | domain | every Domain building block, Apis, middleware declarations, request contexts, ports (`Context.Service` interfaces) with memory implementations, stories | `@alchemy.run/domain`, `@alchemy.run/domain/Story` (tests), `effect` |
 | server | the Worker, `*Live` middleware, external system adapters, port implementations (D1, HTTP), event sources (Stripe webhooks), Api tests | domain, `@alchemy.run/cloudflare`, `@alchemy.run/domain/Cloudflare`, provider packages |
-| web | the foldkit app and its Worker | domain (Api, ids, value schemas), `@alchemy.run/domain` (client protocols), `foldkit` |
+| web | the Effect UI app and its Worker | domain (Api, ids, value schemas), `@alchemy.run/domain` (client protocols), `@effect/ui` |
 
 Split a file when it mixes the two sides. For example, `Session.middleware.ts` (the domain declares it) and `Session.ts` (the server implements it).
 
@@ -90,7 +91,7 @@ import { CustomerApi } from "@acme/domain/CustomerApi.api";
 
 Inside a package, import with relative paths and the `.ts` extension (`./Account.id.ts`). Across packages, import without the extension (`@acme/domain/Account/Account.id`). Don't add barrel files.
 
-`server` depends on `@acme/domain` (`workspace:*`), `alchemy` and `effect`. `web` depends on `@acme/domain`, `alchemy`, `effect`, `foldkit` and `@effect/platform-browser`, with `vite`, `@foldkit/vite-plugin` and `vitest` as devDependencies. The root depends on `@acme/server` and `alchemy`.
+`server` depends on `@acme/domain` (`workspace:*`), `alchemy` and `effect`. `web` depends on `@acme/domain`, `alchemy`, `effect` and `@effect/ui`, with `vite` and `vitest` as devDependencies. The root depends on `@acme/server` and `alchemy`.
 
 ## TypeScript
 
@@ -129,7 +130,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
-    const app = yield* Cloudflare.Website.Foldkit("BankApp", {
+    const app = yield* Cloudflare.Website.EffectUI("BankApp", {
       rootDir: "packages/web",
       main: "src/worker.ts",
       env: { BANK: bank },

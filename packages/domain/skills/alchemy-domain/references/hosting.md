@@ -47,7 +47,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 - Swap `DomainCloudflare.layerDurableObjects()` for `Domain.InMemory` and nothing else changes. That's how the Api tests host the model.
 - Resources the adapters need, like a D1 database, are declared in the server package and bound through alchemy bindings (`Cloudflare.D1.QueryDatabase(db)` inside the adapter's Layer).
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
-- `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
+- `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the web app.
 
 ## Hosting on Rivet or Effect Cluster
 
@@ -134,7 +134,7 @@ More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-proces
 
 ## Deploying
 
-The root `alchemy.run.ts` yields the server Worker and the foldkit website (see [layout.md](layout.md)). Deploy with `alchemy deploy`, develop with `alchemy dev`, and tear down with `alchemy destroy`.
+The root `alchemy.run.ts` yields the server Worker and the web app's website (see [layout.md](layout.md)). Deploy with `alchemy deploy`, develop with `alchemy dev`, and tear down with `alchemy destroy`.
 
 More: [Cloudflare: Deploy it](https://alchemy.run/domain/cloudflare#deploy-it), [Cloudflare: Deploy without dropping requests](https://alchemy.run/domain/cloudflare#deploy-without-dropping-requests).
 

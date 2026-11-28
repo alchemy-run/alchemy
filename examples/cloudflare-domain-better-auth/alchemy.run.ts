@@ -13,9 +13,9 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const notes = yield* NotesWorker;
-    // The foldkit app, built with Vite. Its Worker serves the build and
+    // The Effect UI app, built with Vite. Its Worker serves the build and
     // forwards /api to the Notes Worker, so the app and the Api share one origin.
-    const app = yield* Cloudflare.Website.Foldkit("NotesApp", {
+    const app = yield* Cloudflare.Website.EffectUI("NotesApp", {
       main: "src/web/worker.ts",
       env: { NOTES: notes },
       assets: { runWorkerFirst: ["/api", "/api/*"] },

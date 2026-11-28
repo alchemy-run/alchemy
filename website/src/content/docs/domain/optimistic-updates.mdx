@@ -5,101 +5,210 @@ description: Show pending intent, confirm it by commandId from a View feed, and 
 
 Show a deposit when the customer clicks. Confirm it when the bank's event arrives. A successful command reply means the write committed. The line waits for the feed before it becomes confirmed.
 
-The examples use `Bank = DomainFoldkit.make(CustomerApi)` from [Integrate with Foldkit](/domain/foldkit). The bank example keeps its own queue and line Model. The adapter has no generic pending-state helper.
+The examples use the [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain)'s `CustomerApi` through [Effect UI](/domain/effect-ui).
+
+## Patch a query while the command runs
+
+When the value lives in a query or a View entry, let the adapter patch it. The patch shows the write at once and drops when the command answers:
+
+```typescript title="src/Bank.ts"
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import * as Option from "effect/Option";
+
+export const Bank = DomainEffectUI.make(CustomerApi, {
+  queries: { AccountLedger: { take: 20, key: (row) => row.id } },
+  commands: {
+    DepositMoney: {
+      // The ledger gains a row: fetch it again.
+      invalidates: ({ input }, queries) => [
+        queries.AccountLedger.entry({ input: { account: input.accountId } }),
+      ],
+      // Show the deposit in the summary while it runs.
+      optimistic: ({ input }, queries) => [
+        queries.AccountSummary.patch({ key: input.accountId }, (snapshot) => ({
+          ...snapshot,
+          state: Option.map(snapshot.state, (summary) => ({
+            ...summary,
+            balance: summary.balance + input.amount,
+          })),
+        })),
+      ],
+    },
+  },
+});
+```
+
+See [Patch a View before the command answers](/domain/effect-ui#patch-a-view-before-the-command-answers) for how the View's stream reopens without stepping back. The rest of this page keeps each pending write as its own line instead, so the app can show, queue and retry it.
 
 ## Track each intent
 
-```typescript
-import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
-import { StatementLine } from "@bank/domain/Account/Statement.view";
-import * as Schema from "effect/Schema";
+Keep each pending write as its own line, so the app can show, queue and retry it. The component makes the id when the customer clicks, from the page's `session` prop and a counter, so the pending line and the command share it. A fresh `session` per page load keeps ids unique across reloads:
 
+```typescript title="src/Deposits.ts"
+import { AccountId } from "@bank/domain/Account/Account.id";
+import { StatementLine } from "@bank/domain/Account/Statement.view";
+import { Command, UiSchema } from "@effect/ui";
+import { Html } from "@effect/ui/html";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { Bank } from "./Bank.ts";
+
+// One line per deposit, from the click until the statement confirms it.
 const Line = Schema.Struct({
   commandId: Schema.String,
-  kind: StatementLine.fields.kind,
   amount: Schema.Number,
+  ack: Schema.Literals(["Pending", "Confirmed", "Rejected", "Denied", "Unknown"]),
   balance: Schema.Option(Schema.Number),
-  ack: Schema.Literals(["Pending", "Queued", "Confirmed", "Rejected", "Denied"]),
-  reason: Schema.Option(Schema.String),
 });
 type Line = typeof Line.Type;
+
+export const DepositsMessage = UiSchema.TaggedEnum({
+  ClickedDeposit: {},
+  Answered: { commandId: Schema.String, ack: Line.fields.ack },
+  ReceivedLine: { commandId: Schema.String, line: StatementLine, cursor: Schema.Number },
+  CaughtUp: { cursor: Schema.Number },
+  FailedRead: { reason: Schema.String },
+});
+type DepositsMessage = typeof DepositsMessage.Type;
+
+/** The statement confirmed `commandId`: its line takes the bank's balance. */
+const confirm = (lines: ReadonlyArray<Line>, commandId: string, line: StatementLine) => [
+  { commandId, amount: line.amount, ack: "Confirmed" as const, balance: Option.some(line.balance) },
+  ...lines.filter((other) => other.commandId !== commandId),
+];
+
+export const Deposits = Html.component({
+  name: "Deposits",
+  props: Schema.Struct({ accountId: AccountId, session: Schema.String }),
+  model: Schema.Struct({
+    sent: Schema.Number,
+    lines: Schema.Array(Line),
+    cursor: Schema.Option(Schema.Number),
+  }),
+  message: DepositsMessage,
+}).make({
+  init: () => ({ sent: 0, lines: [], cursor: Option.none() }),
+  update: {
+    // The id is made here, so the pending line and the command share it.
+    ClickedDeposit: ($) => {
+      const commandId = `${$.props.session}:${$.model.sent}`;
+      return $.evolve({
+        sent: (sent) => sent + 1,
+        lines: (lines) => [
+          { commandId, amount: 1_000, ack: "Pending", balance: Option.none() },
+          ...lines,
+        ],
+      }).run(
+        Bank.DepositMoney.make({
+          input: { accountId: $.props.accountId, amount: 1_000 },
+          commandId,
+        }).pipe(
+          Command.match({
+            // Committed, but not yet on the statement: still pending.
+            onSuccess: () => DepositsMessage.Answered({ commandId, ack: "Pending" }),
+            onFailure: (failure) => DepositsMessage.Answered({ commandId, ack: failure._tag }),
+          }),
+        ),
+      );
+    },
+    // A reply never overrides a line the statement already confirmed.
+    Answered: ($, { commandId, ack }) =>
+      $.evolve({
+        lines: (lines) =>
+          lines.map((line) =>
+            line.commandId === commandId && line.ack !== "Confirmed" ? { ...line, ack } : line,
+          ),
+      }),
+    ReceivedLine: ($, { commandId, line, cursor }) =>
+      $.evolve({
+        lines: (lines) => confirm(lines, commandId, line),
+        cursor: Option.some(cursor),
+      }),
+    CaughtUp: ($, { cursor }) => $.evolve({ cursor: Option.some(cursor) }),
+    FailedRead: ($) => $.model,
+  },
+  subscriptions: ({ props, model }) => [
+    Bank.Statement.events<DepositsMessage>(props.accountId, {
+      after: model.cursor,
+      onEntry: ({ event, envelope }) =>
+        DepositsMessage.ReceivedLine({ commandId: envelope.commandId, line: event, cursor: envelope.seq }),
+      onCaughtUp: (cursor) => DepositsMessage.CaughtUp({ cursor }),
+      onFailure: (error) => DepositsMessage.FailedRead({ reason: error._tag }),
+      onDefect: () => DepositsMessage.FailedRead({ reason: "Read defect" }),
+    }),
+  ],
+  view: (h, model) =>
+    h.div(
+      h.button.on("click", DepositsMessage.ClickedDeposit()).children("Deposit 10.00"),
+      h.ul(
+        ...model.lines.map((line) =>
+          h.li.key(line.commandId).children(`${line.amount / 100} ${line.ack}`),
+        ),
+      ),
+    ),
+});
 ```
 
-Allocate the id with `DomainFoldkit.next(model.commandIds)`. Store the returned command id state in the Model. Add a pending line with the allocated id. Send `Bank.DepositMoney({ input, commandId })` through `Command.mapMessage`.
-
-The command and its pending line share one id. Each event caused by the command carries that id in `entry.envelope.commandId`.
+Each event caused by the command carries its id in `envelope.commandId`, which is how the statement finds the line.
 
 ## Handle the command result
 
-Match the generated result with `Bank.Message.match`. Handle each failure through its named variant.
+`Command.match` maps the Command's success and its typed failure where the update issues it:
 
 | Result | Line state | What happens next |
 | --- | --- | --- |
-| `SucceededDepositMoney` | `Pending` | Wait for the feed. |
+| Success | `Pending` | Wait for the feed. |
 | `Rejected` | `Rejected` | Show the Rejection's fields. |
 | `Denied` | `Denied` | Request authentication or MFA before a retry. |
-| `Unknown` | `Queued` | Retry with the original id. |
+| `Unknown` | `Unknown` | Retry with the original id. |
 
-Do not mark a confirmed line pending when a late reply arrives. The feed can arrive before the reply.
+`Answered` never marks a confirmed line pending again: the feed can arrive before the reply.
 
 ## Confirm by command id
 
-```typescript
-import * as Option from "effect/Option";
-import { modifyFields } from "foldkit/struct";
-
-const confirm = (model: Model, commandId: string, event: StatementLine) => {
-  const nextLine = Line.make({
-    commandId,
-    kind: event.kind,
-    amount: event.amount,
-    balance: Option.some(event.balance),
-    ack: "Confirmed",
-    reason: Option.none(),
-  });
-  const otherLines = model.lines.filter((line) => line.commandId !== commandId);
-  return modifyFields(model, { lines: () => [nextLine, ...otherLines] });
-};
-```
-
-`Model` is the app's Model with a `lines: Schema.Array(Line)` field. This example replaces a pending line with the feed's line. It also accepts history and writes from another device. A repeated confirmation replaces the same line.
-
-Keep your own display order. The bank example puts unconfirmed lines above confirmed lines.
+`confirm` replaces the pending line with the statement's line and its balance. It also accepts history and writes from another device, and a repeated confirmation replaces the same line. Keep your own display order: the bank example puts unconfirmed lines above confirmed ones.
 
 ## Resume the feed
 
-```typescript
-import { Subscription } from "foldkit";
-import { defineMessageUnion } from "foldkit/message";
+The `events` Subscription reads `after` when it starts, and a new cursor alone leaves the stream alive. The adapter drops entries at or below the applied cursor. A filtered feed can skip sequence numbers, so the adapter does not count gaps.
 
-const Message = defineMessageUnion({
-  ReceivedStatementLine: { commandId: Schema.String, line: StatementLine, cursor: Schema.Number },
-  CaughtUpStatement: { cursor: Schema.Number },
-  FailedReadStatement: { reason: Schema.String },
-});
+The adapter does not reduce entries into state. Read the View as a query, or follow it with `watch`, for its current state. Use this event feed to confirm intents or build the app's display list.
 
-const subscriptions = Subscription.make<Model, typeof Message.Type, typeof CustomerApi.Client.Identifier>()(() => ({
-  statement: Bank.Statement.events({
-    key: (model: Model) => model.accountId,
-    cursor: (model) => model.statementCursor,
-    isEnabled: (model) => model.online,
-    onEntry: (entry): typeof Message.Type => Message.ReceivedStatementLine({
-      commandId: entry.envelope.commandId,
-      line: entry.event,
-      cursor: entry.envelope.seq,
-    }),
-    onCaughtUp: (cursor): typeof Message.Type => Message.CaughtUpStatement({ cursor }),
-    onFailure: (error): typeof Message.Type => Message.FailedReadStatement({ reason: error._tag }),
-    onDefect: (): typeof Message.Type => Message.FailedReadStatement({ reason: "Read defect" }),
+## Test it
+
+```typescript title="test/Deposits.test.ts"
+import { AccountId } from "@bank/domain/Account/Account.id";
+import { StatementLine } from "@bank/domain/Account/Statement.view";
+import { Story } from "@effect/ui/testing";
+import { expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { Bank } from "../src/Bank.ts";
+import { Deposits, DepositsMessage } from "../src/Deposits.ts";
+
+it.effect("a deposit stays pending after its reply, until the statement confirms it", () =>
+  Effect.gen(function* () {
+    const s = yield* Story.make(Deposits, { accountId: AccountId.make("c-1-main"), session: "page" });
+    s.send(DepositsMessage.ClickedDeposit()).resolve(Bank.DepositMoney, {
+      commandId: "page:0",
+      reply: { balance: 1_000 },
+      receipt: { stream: "Account/c-1-main", version: 1 },
+      commits: [{ stream: "Account/c-1-main", version: 1 }],
+    });
+    expect(s.model.lines.map((line) => line.ack)).toEqual(["Pending"]);
+    s.send(
+      DepositsMessage.ReceivedLine({
+        commandId: "page:0",
+        line: StatementLine.make({ kind: "deposit", amount: 1_000, balance: 1_000 }),
+        cursor: 1,
+      }),
+    );
+    expect(s.model.lines.map((line) => line.ack)).toEqual(["Confirmed"]);
   }),
-}));
+);
 ```
 
-
-A restart reads the latest Model cursor and passes it as `after`. Cursor changes leave the stream alive. The adapter drops entries at or below the applied cursor. A filtered feed can skip sequence numbers, so the adapter does not count gaps.
-
-
-The adapter does not reduce entries into state. Use `watch` for the current View state. Use this event feed to confirm intents or build the app's display list.
+The Story resolves the command's reply by hand, then sends the statement's line: the line stays pending after the reply and is confirmed only by the feed.
 
 ## Keep the offline queue
 
