@@ -30,6 +30,9 @@ export const files: Readonly<Record<string, string>> = {
     `export default function byDefault(n: number) { return n - 1; }`,
     `export const { length: stamp } = new Intl.NumberFormat("en-US").format(1234);`,
     `export const { format: grouped } = new Intl.NumberFormat("en-US");`,
+    `export const { p: truth, q: whole, r: empty, s: absent } = Object.fromEntries([["p", true], ["q", 1n], ["r", null], ["s", undefined]]);`,
+    `export let unset;`,
+    `export namespace Inner { const hidden = 20; export const shown = hidden + 1; }`,
   ].join("\n"),
   "data.json": `{ "n": 3 }`,
   "value.ts": [`const value = 9;`, `export default value;`].join("\n"),
@@ -77,7 +80,7 @@ export const imports: ReadonlyArray<string> = [
   `import { uno, double as barrelDouble, four, plus, deepest, packed, theDefault, triple as barrelTriple } from "./barrel.ts";`,
   `import * as Barrel from "./barrel.ts";`,
   `import { round } from "./loop-a.ts";`,
-  `import { stamp, grouped } from "./lib.ts";`,
+  `import { stamp, grouped, truth, whole, empty, absent, unset, Inner } from "./lib.ts";`,
   `import data from "./data.json" with { type: "json" };`,
   `import * as NodePath from "node:path";`,
   `import * as NodeOs from "os";`,
@@ -168,6 +171,9 @@ export const cases: ReadonlyArray<Case> = [
   read("NotExported", `Lib.hidden === undefined ? a : -1`),
   // An export the prover does not read is the value the file's module holds.
   read("ExportedReadFromTheModule", `stamp + a`),
+  read("ExportedKindsFromTheModule", `[truth, whole === 1n, empty, absent, a]`),
+  read("ExportedLetWithNothing", `unset === undefined ? a : -1`),
+  read("NamespaceWithAHiddenName", `Inner.shown + a`),
   // A function the module holds whose source is not a function the file writes is not read.
   unread(
     "CallsAFunctionOfTheModule",
