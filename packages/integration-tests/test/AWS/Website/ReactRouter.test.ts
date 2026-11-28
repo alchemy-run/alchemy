@@ -69,6 +69,15 @@ describe.skipIf(!runLive)(
           expect(deployed.site.serverUrl).toBeDefined();
           // The server is a Lambda Web Function (the default).
           expect(deployed.site.serverUrl).toContain(".lambda-web.");
+          const distributionConfig = yield* cloudfront.getDistributionConfig({
+            Id: deployed.site.distribution!.distributionId,
+          });
+          const origin = distributionConfig.DistributionConfig?.Origins?.Items?.find(
+            (item) => item.Id === "default",
+          );
+          // The framework server defaults to 30 seconds; this is distinct
+          // from the explicit 45-second regression covered by Next.js below.
+          expect(origin?.CustomOriginConfig?.OriginReadTimeout).toBe(30);
           yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
           // The Lambda Function URL serves the SSR page directly — isolates

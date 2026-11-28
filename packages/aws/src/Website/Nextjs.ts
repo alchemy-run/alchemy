@@ -5,6 +5,7 @@ import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
+import { normalizeDurationInput } from "alchemy/Util/Duration";
 import { Server, type ServerDevProps } from "alchemy/Website/Server";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -63,6 +64,15 @@ export interface NextjsBaseProps {
    * @default 30 seconds
    */
   timeout?: Duration.Duration;
+  /**
+   * CloudFront's idle/inter-packet origin read timeout for SSR responses (not
+   * an overall response deadline). Defaults to the server timeout rounded up
+   * to whole seconds, conservatively capped at 60 seconds by this application.
+   * CloudFront accepts 1–120 seconds; an explicit value is subject to the
+   * account quota. See https://docs.aws.amazon.com/cloudfront/latest/APIReference/API_CustomOriginConfig.html
+   * and https://docs.aws.amazon.com/general/latest/gr/cf_region.html.
+   */
+  originReadTimeout?: Duration.Duration;
   /**
    * Environment variables for the SSR server (Lambda environment).
    * Values accept `Output`s (e.g. `API_URL: api.url`).
@@ -197,6 +207,14 @@ export type NextjsProps = NextjsBaseProps & (WebFunctionServerProps | NextjsFunc
 export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
   function* (id: string, propsIn: InputProps<NextjsProps, "server"> = {}) {
     const props = propsIn as NextjsProps;
+    const timeout = props.timeout ?? Duration.seconds(30);
+    const originReadTimeout =
+      props.originReadTimeout ??
+      Output.map(Output.isOutput(timeout) ? timeout : Output.literal(timeout), (value) =>
+        Duration.seconds(
+          Math.min(60, Math.max(1, Math.ceil(Duration.toSeconds(normalizeDurationInput(value))))),
+        ),
+      );
     yield* checkWebsiteRegions(`AWS.Website.Nextjs "${id}"`, props);
     const ctx = yield* AlchemyContext;
     const remoted = yield* ProviderModePolicy;
@@ -325,7 +343,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
           invalidation: props.invalidation,
           tags: props.tags,
         },
-        { serverHost: endpoint.domainName },
+        { serverHost: endpoint.domainName, originReadTimeout },
       );
       return {
         ...site,
@@ -534,6 +552,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
     const site = yield* makeKvSite(id, siteProps, {
       serverHost,
       image: { route: "/_next/image", host: imageHost },
+      originReadTimeout,
     });
 
     // Seed the ISR/fetch cache: `.open-next/cache/<buildId>/...` uploaded
