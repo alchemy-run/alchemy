@@ -543,6 +543,7 @@ const base: ReadonlyArray<Group> = [
       `Optic.id().at("n").replaceResult(b, { n: a })`,
       `[Result.isSuccess(Optic.getResult(Option.none(), Optic.none())), Result.isSuccess(Optic.getResult(Option.some(a), Optic.none()))]`,
       `[Optic.getResult(Result.fail(a), Optic.failure()), Result.isSuccess(Optic.getResult(Result.succeed(b), Optic.failure()))]`,
+      `[Record.replace({ x: a }, "y", 1), Struct.evolve({ x: a }, { y: (n) => n + 1 }), Tuple.get([a], 5)]`,
     ],
     unread: [
       [
@@ -737,6 +738,16 @@ const base: ReadonlyArray<Group> = [
       `text.at(1) ?? "none"`,
       `text.at(-2) ?? "none"`,
       `text.at(9) ?? "none"`,
+      `["ab".includes("b"), /a/.test("ab")]`,
+      `["ab".match(/(x)?b/), "ab".match(/z/), "ab".search(/z/)]`,
+      `["ab".replace(/a/), "aba".replaceAll(/a/g)]`,
+      `[text.slice(undefined, 2), text.substring(undefined, 1), text.charCodeAt(), text.slice(-1)]`,
+    ],
+    unread: [
+      [`text.startsWith("a", 1)`, /calls startsWith on a string an input holds/],
+      [`text.charAt(-1)`, /on a string an input holds, in a way the prover does not translate/],
+      [`text.charCodeAt(-1)`, /on a string an input holds, in a way the prover does not translate/],
+      [`"ab".matchAll(/a/g)`, /./],
     ],
     known: [
       `text.slice(-2)`,
@@ -841,6 +852,17 @@ const base: ReadonlyArray<Group> = [
       `Array.copy(items)`,
       `Array.fromIterable(items)`,
       `Array.isReadonlyArrayNonEmpty(items) ? [Array.headNonEmpty(items), Array.lastNonEmpty(items), Array.tailNonEmpty(items), Array.initNonEmpty(items), Array.unprepend(items), Array.unappend(items)] : []`,
+      `[Array.insertAt(1)([a, a + 1]), Array.replace(0)([a, a + 1])]`,
+      `Array.findLast([a, a + 1, a + 2], (n) => (n > a ? Option.some(n * 2) : Option.none()))`,
+    ],
+    unread: [
+      [
+        `Array.mapAccum([a], 0, (state, n) => [n])`,
+        /is called in a way the prover has no model for/,
+      ],
+      [`Array.headNonEmpty([])`, /Array.headNonEmpty is given an empty array/],
+      [`Array.getUnsafe([a], 5)`, /Array.getUnsafe reads past the end of an array/],
+      [`Array.mapAccum([a], 0, (state, n) => n)`, /is called in a way the prover has no model for/],
     ],
   },
   {

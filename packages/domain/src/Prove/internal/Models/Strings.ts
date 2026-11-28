@@ -454,8 +454,8 @@ export const make = (kit: Kit) => {
         const found = text.at(i);
         return Effect.succeed(found === undefined ? Value.undef : Value.str(found));
       }
-      const term = Compare.textual(self);
-      if (!term) return unread(site, "at");
+      // A method of a string is called on text.
+      const term = Compare.textual(self)!;
       // A place from the end is counted back from the length; one past either end has nothing.
       const length = `(str.len ${term.text})`;
       const [outside, place] =
@@ -470,8 +470,8 @@ export const make = (kit: Kit) => {
       const i = absent(at) ? 0 : index(at);
       if (i === undefined || i < 0) return unread(site, "charCodeAt");
       if (text !== undefined) return Effect.succeed(Value.num(text.charCodeAt(i)));
-      const term = Compare.textual(self);
-      if (!term) return unread(site, "charCodeAt");
+      // A method of a string is called on text.
+      const term = Compare.textual(self)!;
       return Effect.map(
         host.decide(Value.term("Bool", `(<= (str.len ${term.text}) ${i})`), site),
         (missing) =>
@@ -493,8 +493,8 @@ export const make = (kit: Kit) => {
       const times = index(args[0]);
       if (text !== undefined || times === undefined || times < 0 || times > 16)
         return computed("repeat", (held, [n]) => held.repeat(Number(n)))(self, args, site);
-      const term = Compare.textual(self);
-      if (!term) return unread(site, "repeat");
+      // A method of a string is called on text.
+      const term = Compare.textual(self)!;
       return Effect.succeed(
         times === 0
           ? Value.str("")
