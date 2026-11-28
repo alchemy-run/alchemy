@@ -117,10 +117,10 @@ const htmlServerWorker = (options: CloudflareVitePluginOptions): Plugin => {
       const configureServer = htmlServer?.configureServer;
       if (htmlServer === undefined || typeof configureServer !== "function") return;
       Object.assign(htmlServer, {
-        configureServer(this: unknown, ...args: Parameters<typeof configureServer>) {
+        async configureServer(this: unknown, ...args: Parameters<typeof configureServer>) {
           // Records the dev server for the document template, and drops the
           // post middleware that would render pages in Node.
-          configureServer.apply(this as never, args);
+          await configureServer.apply(this as never, args);
         },
       });
     },
