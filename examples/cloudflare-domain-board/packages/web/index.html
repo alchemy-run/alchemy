@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Board</title>
+    <style>
+      :root {
+        --bg: #fafafa;
+        --panel: #ffffff;
+        --text: #111111;
+        --muted: #6b6b6b;
+        --line: #e5e5e5;
+        --accent: #111111;
+        --error: #c62828;
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0a0a0a;
+          --panel: #161616;
+          --text: #ededed;
+          --muted: #8f8f8f;
+          --line: #2a2a2a;
+          --accent: #ededed;
+          --error: #ef5350;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.45 ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      button {
+        font: inherit;
+        padding: 6px 12px;
+        border: 1px solid var(--accent);
+        border-radius: 6px;
+        background: var(--accent);
+        color: var(--bg);
+        cursor: pointer;
+      }
+      input {
+        font: inherit;
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--text);
+      }
+      ul,
+      ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+      h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .error {
+        color: var(--error);
+        min-height: 1.4em;
+      }
+      .sign-in {
+        max-width: 360px;
+        margin: 15vh auto;
+        padding: 0 16px;
+        display: grid;
+        gap: 12px;
+      }
+      .sign-in form {
+        display: grid;
+        gap: 8px;
+      }
+      .app {
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      header .channel {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 600;
+      }
+      header .who {
+        margin-left: auto;
+        font-weight: 600;
+      }
+      .draft {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .draft input:not([type="checkbox"]) {
+        flex: 1 1 160px;
+      }
+      .layout {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      .columns {
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+      }
+      .column {
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+      .column ul {
+        display: grid;
+        gap: 8px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        display: grid;
+        gap: 4px;
+        cursor: pointer;
+      }
+      .card.open {
+        border-color: var(--accent);
+      }
+      .labels {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      .label {
+        font-size: 11px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 0 8px;
+      }
+      .thread {
+        width: min(420px, 100%);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        display: grid;
+        gap: 10px;
+      }
+      .thread-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: center;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .timeline {
+        display: grid;
+        gap: 8px;
+        max-height: 50vh;
+        overflow-y: auto;
+      }
+      .line {
+        border-left: 2px solid var(--line);
+        padding-left: 8px;
+      }
+      .line .author {
+        font-weight: 600;
+        margin-right: 6px;
+      }
+      .line .kind {
+        color: var(--muted);
+        font-size: 12px;
+        margin-right: 6px;
+      }
+      .line p {
+        white-space: pre-wrap;
+      }
+      .reply {
+        display: flex;
+        gap: 8px;
+      }
+      .reply input {
+        flex: 1;
+      }
+      @media (max-width: 720px) {
+        .layout {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/entry.ts"></script>
+  </body>
+</html>
