@@ -113,7 +113,7 @@ import {
   type ViewEntry,
   type ViewInput,
   type ViewKit,
-  type ViewSnapshot,
+  type StoredViewSnapshot,
   withoutRevision,
 } from "./Platform.ts";
 import * as TwoPhase from "./TwoPhase.ts";
@@ -2357,10 +2357,10 @@ const viewObject = Effect.fn(function* (
   const expiry = yield* makeExpiry;
   const outbox = yield* queue<Delivery>("outbox", kit.deliver);
   const stored = state.storage
-    .get<ViewSnapshot>("snapshot")
+    .get<StoredViewSnapshot>("snapshot")
     .pipe(Effect.map((s) => s ?? emptySnapshot));
   // Built by an earlier generation of the view: it reads as empty, and starts over on write.
-  const stale = (snapshot: ViewSnapshot) => (snapshot.generation ?? 0) < kit.generation;
+  const stale = (snapshot: StoredViewSnapshot) => (snapshot.generation ?? 0) < kit.generation;
   const read = stored.pipe(Effect.map((s) => (stale(s) ? emptySnapshot : s)));
   const reset = Effect.gen(function* () {
     if (!stale(yield* stored)) return;
@@ -4058,7 +4058,7 @@ export const makePlatform = <R>(
                   announce.pipe(
                     Effect.andThen(
                       orComputed(
-                        unwrapDefects<ViewSnapshot>(namespace.getByName(key).read()),
+                        unwrapDefects<StoredViewSnapshot>(namespace.getByName(key).read()),
                         (result) => result.snapshot,
                         key,
                       ),

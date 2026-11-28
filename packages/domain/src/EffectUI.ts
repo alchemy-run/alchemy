@@ -806,8 +806,13 @@ const readClient = (api: Api.Any, entry: ReadEntry, name: string) => ({
     Subscription.make(`${api.apiName}/${name}/watch`, [key, options.restartKey ?? null], () =>
       Stream.unwrap(
         api.Client.pipe(
-          Effect.map((client) =>
-            (client as Record<string, ReadClient<ReadEntry>>)[name].watch(key),
+          Effect.map(
+            (client) =>
+              // A view's frames also carry `position`; both kinds are read as a plain snapshot here.
+              (client as Record<string, ReadClient<ReadEntry>>)[name].watch(key) as Stream.Stream<
+                Read.Snapshot<unknown>,
+                ErrorOf<ReadEntry>
+              >,
           ),
         ),
       ).pipe(

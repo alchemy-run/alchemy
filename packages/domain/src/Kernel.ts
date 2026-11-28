@@ -72,7 +72,7 @@ import {
   type ViewEntry,
   type ViewKit,
   type ViewInput,
-  type ViewSnapshot,
+  type StoredViewSnapshot,
   sameJson,
   viewInputOf,
 } from "./Platform.ts";
@@ -2117,7 +2117,7 @@ const build = (
      */
     const applyBatch = Effect.fnUntraced(function* (
       key: string,
-      snapshot: ViewSnapshot,
+      snapshot: StoredViewSnapshot,
       batch: ReadonlyArray<Delivery>,
       stored: boolean,
     ) {
@@ -2248,7 +2248,7 @@ const build = (
             through: seq,
           };
         }
-        const next: ViewSnapshot = {
+        const next: StoredViewSnapshot = {
           state: encodeState(current),
           version,
           checkpoints,
@@ -2264,7 +2264,7 @@ const build = (
     return Object.assign(kit, {
       refold: Effect.fnUntraced(function* (
         key: string,
-        cursor: { readonly snapshot: ViewSnapshot; readonly top: number },
+        cursor: { readonly snapshot: StoredViewSnapshot; readonly top: number },
         rows: ReadonlyArray<ViewInput | Delivery>,
       ) {
         let snapshot = cursor.snapshot;

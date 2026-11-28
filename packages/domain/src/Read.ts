@@ -9,8 +9,9 @@ import type * as Rejection from "./Rejection.ts";
 export type Mode = "get" | "watch" | "events" | "list";
 
 /**
- * What `watch` sends: the key's state and the cursor it is valid at, the
- * `seq` of the last event the key had when the state was read (`0` before any).
+ * What a stream's `peek` and `watch` send: the key's state and the cursor it
+ * is valid at, the `seq` of the last event the key had when the state was
+ * read (`0` before any). A view's reads send a {@link ViewSnapshot}.
  */
 export interface Snapshot<S> {
   readonly state: S;
@@ -27,9 +28,9 @@ export const Position = Schema.Struct({ stream: Schema.String, seq: Schema.Numbe
 export type Position = typeof Position.Type;
 
 /**
- * What a view's `snapshot` returns: a {@link Snapshot} with the
- * {@link Position} of the last fact the key applied, read from the same
- * stored snapshot as the state. `position` is `null` before the key applies
+ * What a view's `snapshot` returns and each frame its `watch` sends: a
+ * {@link Snapshot} with the {@link Position} of the last fact the key
+ * applied, read from the same stored snapshot as the state. `position` is `null` before the key applies
  * a fact, and on a key last written before positions were recorded. On a
  * view with several sources it can name another stream than your command's:
  * to wait for your own write, pass its receipt as `atLeast`.
@@ -40,7 +41,7 @@ export type Position = typeof Position.Type;
  * return { accountId, balance: state?.balance ?? 0, asOf: position };
  * ```
  */
-export interface PositionedSnapshot<S> extends Snapshot<S> {
+export interface ViewSnapshot<S> extends Snapshot<S> {
   readonly position: Position | null;
 }
 

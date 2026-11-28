@@ -23,7 +23,7 @@ import {
   type StreamMeta,
   type Subscription,
   type ViewEntry,
-  type ViewSnapshot,
+  type StoredViewSnapshot,
 } from "./Platform.ts";
 import type * as Read from "./Read.ts";
 import { readRpcs } from "./ReadRpcs.ts";
@@ -177,7 +177,7 @@ export const viewPush =
   (
     key: string,
     subscription: Subscription,
-    snapshot: ViewSnapshot,
+    snapshot: StoredViewSnapshot,
     entries: ReadonlyArray<ViewEntry>,
   ): Effect.Effect<Push> =>
     Effect.gen(function* () {
@@ -204,6 +204,7 @@ export const viewPush =
                       state:
                         current !== null && matches(where(subscription), current) ? current : null,
                       cursor: snapshot.seq,
+                      position: snapshot.last ?? null,
                     })
                   : Option.none(),
             },

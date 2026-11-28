@@ -352,7 +352,7 @@ export interface Host<S, Key extends Key.Any, E> {
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly timeout?: Duration.Input;
     },
-  ) => Effect.Effect<Read.PositionedSnapshot<S | null>, ConsistencyTimeout>;
+  ) => Effect.Effect<Read.ViewSnapshot<S | null>, ConsistencyTimeout>;
   /** Wait until a key's state matches a filter. */
   readonly waitFor: (
     key: Key.RefOf<Key>,

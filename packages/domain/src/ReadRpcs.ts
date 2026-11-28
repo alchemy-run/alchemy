@@ -25,11 +25,11 @@ import * as View from "./View.ts";
  * @internal
  */
 
-/** What `watch` sends: a state with its cursor. */
+/** What a stream's `watch` sends: a state with its cursor. */
 const snapshotSchema = (state: Schema.Top) => Schema.Struct({ state, cursor: Schema.Number });
 
-/** What a view's `snapshot` sends: a state with its cursor and the last fact it applied. */
-const positionedSnapshotSchema = (state: Schema.Top) =>
+/** What a view's `snapshot` and `watch` send: a state with its cursor and the last fact it applied. */
+const viewSnapshotSchema = (state: Schema.Top) =>
   Schema.Struct({ state, cursor: Schema.Number, position: Schema.NullOr(Read.Position) });
 
 /** Something an Api can expose for reading. */
@@ -168,7 +168,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
       watch: guard(
         Rpc.make(`${name}.watch`, {
           payload: { key, where: Schema.optional(FilterJson) },
-          success: snapshotSchema(state),
+          success: viewSnapshotSchema(state),
           error,
           stream: true,
         }),
@@ -209,7 +209,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             atLeast: Schema.optional(Query.AtLeastJson),
             where: Schema.optional(FilterJson),
           },
-          success: positionedSnapshotSchema(state),
+          success: viewSnapshotSchema(state),
           error: waitError,
         }),
       ),

@@ -821,7 +821,7 @@ export interface HistoryJson {
 /**
  * The stored state of one view key.
  */
-export interface ViewSnapshot {
+export interface StoredViewSnapshot {
   /** The encoded state, or `null` when the key does not exist. */
   readonly state: Json;
   /** Number of applied deliveries. */
@@ -1075,7 +1075,11 @@ export const entryChanges = (
 };
 
 /** A key's snapshot after a refold: it never reports less than it did before. */
-export const refolded = (before: ViewSnapshot, after: ViewSnapshot, top: number): ViewSnapshot => {
+export const refolded = (
+  before: StoredViewSnapshot,
+  after: StoredViewSnapshot,
+  top: number,
+): StoredViewSnapshot => {
   const checkpoints: Record<string, number> = { ...after.checkpoints };
   for (const [source, seq] of Object.entries(before.checkpoints)) {
     checkpoints[source] = Math.max(checkpoints[source] ?? 0, seq);
@@ -1092,7 +1096,12 @@ export const refolded = (before: ViewSnapshot, after: ViewSnapshot, top: number)
 };
 
 /** The snapshot of a key that has never received a delivery. */
-export const emptySnapshot: ViewSnapshot = { state: null, version: 0, checkpoints: {}, seq: 0 };
+export const emptySnapshot: StoredViewSnapshot = {
+  state: null,
+  version: 0,
+  checkpoints: {},
+  seq: 0,
+};
 
 /**
  * One event a view key emitted, with the key's state after it.
@@ -1118,10 +1127,10 @@ export interface ViewKit {
    */
   readonly apply: (
     key: string,
-    snapshot: ViewSnapshot,
+    snapshot: StoredViewSnapshot,
     deliveries: ReadonlyArray<Delivery>,
   ) => Effect.Effect<{
-    readonly snapshot: ViewSnapshot;
+    readonly snapshot: StoredViewSnapshot;
     /** `false` when every delivery was a duplicate. */
     readonly changed: boolean;
     readonly entries: ReadonlyArray<ViewEntry>;
@@ -1138,10 +1147,10 @@ export interface ViewKit {
    */
   readonly refold: (
     key: string,
-    cursor: { readonly snapshot: ViewSnapshot; readonly top: number },
+    cursor: { readonly snapshot: StoredViewSnapshot; readonly top: number },
     rows: ReadonlyArray<StoredViewInput>,
   ) => Effect.Effect<{
-    readonly snapshot: ViewSnapshot;
+    readonly snapshot: StoredViewSnapshot;
     readonly top: number;
     readonly inputs: ReadonlyArray<ViewInput>;
     readonly entries: ReadonlyArray<ViewEntry>;
@@ -1224,7 +1233,7 @@ export interface ViewKit {
   readonly push: (
     key: string,
     subscription: Subscription,
-    snapshot: ViewSnapshot,
+    snapshot: StoredViewSnapshot,
     entries: ReadonlyArray<ViewEntry>,
   ) => Effect.Effect<Push>;
 }
@@ -1284,9 +1293,9 @@ export const inRange = <A extends { readonly seq: number }>(
 export interface ViewStore {
   /** Apply deliveries to one key (single writer per key), then forward downstream deliveries. */
   readonly receive: (key: string, deliveries: ReadonlyArray<Delivery>) => Effect.Effect<void>;
-  readonly read: (key: string) => Effect.Effect<ViewSnapshot>;
+  readonly read: (key: string) => Effect.Effect<StoredViewSnapshot>;
   /** The current snapshot, then every new one. */
-  readonly changes: (key: string) => Stream.Stream<ViewSnapshot>;
+  readonly changes: (key: string) => Stream.Stream<StoredViewSnapshot>;
   /** A key's entries in `range`: only these are read from storage. */
   readonly list: (key: string, range?: ListRange) => Effect.Effect<ReadonlyArray<ViewEntry>>;
   /** Entries with `seq > after`, then live entries. */

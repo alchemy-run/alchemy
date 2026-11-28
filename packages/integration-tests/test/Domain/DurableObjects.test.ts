@@ -15,6 +15,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { type Disk, type Intercept, simHost, type Stats } from "./sim-host.ts";
 
@@ -142,6 +143,11 @@ const eventually = (until: () => boolean, within: Duration.Input = "15 seconds")
 class BooksBefore extends Domain.Model("Books", {
   aggregates: [Ledger],
   views: [Totals],
+}) {}
+class BooksApi extends Domain.Api("BooksApi", {
+  model: BooksBefore,
+  commands: ["BookMany"],
+  views: ["Totals"],
 }) {}
 
 const sendOne = Effect.gen(function* () {
@@ -411,6 +417,54 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
             state: { count: 3 },
             cursor: 3,
             position: { stream: "Ledger/positioned", seq: 3 },
+          });
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            BooksBefore.layer(Layer.empty).pipe(
+              Layer.provideMerge(platform()),
+              Layer.provideMerge(SecureRandom.layerWebCrypto),
+            ),
+          ),
+        ),
+      { timeout: 60_000 },
+    );
+  }
+
+  for (const [name, platform] of [
+    ["Durable Objects", () => DurableObjects.makePlatform(simHost({ rowsRead: 0 }).host)],
+    ["the in-memory platform", () => InMemory],
+  ] as const) {
+    it.live(
+      `each view watch frame says which fact it reflects, on ${name}`,
+      () =>
+        Effect.gen(function* () {
+          const api = yield* BooksApi.clientInProcess;
+          const [empty] = yield* api.Totals.watch("watched-none").pipe(
+            Stream.take(1),
+            Stream.runCollect,
+          );
+          expect(empty).toEqual({ state: null, cursor: 0, position: null });
+          const booked = yield* api.BookMany({ id: "watched", count: 2 });
+          yield* api.Totals.snapshot("watched", { atLeast: booked });
+          const watched = yield* api.Totals.watch("watched").pipe(
+            Stream.takeUntil((frame) => frame.position?.seq === 3),
+            Stream.runCollect,
+            Effect.timeout("15 seconds"),
+            Effect.forkChild,
+          );
+          yield* Effect.sleep("50 millis");
+          yield* api.BookMany({ id: "watched", count: 1 });
+          const frames = [...(yield* Fiber.join(watched))];
+          expect(frames[0]).toEqual({
+            state: { count: 2 },
+            cursor: 2,
+            position: { stream: "Ledger/watched", seq: 2 },
+          });
+          expect(frames.at(-1)).toEqual({
+            state: { count: 3 },
+            cursor: 3,
+            position: { stream: "Ledger/watched", seq: 3 },
           });
         }).pipe(
           Effect.scoped,

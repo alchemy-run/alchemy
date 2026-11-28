@@ -293,9 +293,48 @@ for (const [transport, layer] of [
         const api = yield* seed;
         const [view] = yield* api.Totals.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
         const [stream] = yield* api.Bumps.watch("c-1").pipe(Stream.take(1), Stream.runCollect);
-        expect(view).toEqual({ state: { total: 6 }, cursor: 3 });
+        expect(view).toEqual({
+          state: { total: 6 },
+          cursor: 3,
+          position: { stream: "Counter/c-1", seq: 3 },
+        });
         expect(stream!.state?.event).toEqual(new Bumped({ by: 3 }));
         expect(stream!.cursor).toBe(3);
+        // A stream's frames carry no position.
+        expect("position" in stream!).toBe(false);
+      }).pipe(Effect.scoped, Effect.provide(layer)),
+    );
+
+    it.live("each view watch frame says which fact it reflects", () =>
+      Effect.gen(function* () {
+        const api = yield* seed;
+        const empty = yield* api.Totals.watch("c-0").pipe(Stream.take(1), Stream.runCollect);
+        expect([...empty]).toEqual([{ state: null, cursor: 0, position: null }]);
+        const watched = yield* api.Totals.watch("c-1").pipe(
+          Stream.takeUntil((frame) => frame.position?.seq === 4),
+          Stream.runCollect,
+          Effect.timeout("5 seconds"),
+          Effect.forkChild,
+        );
+        yield* Effect.sleep("30 millis");
+        yield* api.Increment({ id: "c-1", by: 4 });
+        const frames = [...(yield* Fiber.join(watched))];
+        expect(frames[0]!.position).toEqual({ stream: "Counter/c-1", seq: 3 });
+        expect(frames.at(-1)).toEqual({
+          state: { total: 10 },
+          cursor: 4,
+          position: { stream: "Counter/c-1", seq: 4 },
+        });
+        // A filter that hides the state still says where the key is.
+        const [hidden] = yield* api.Totals.watch("c-1", { where: { total: { gt: 1000 } } }).pipe(
+          Stream.take(1),
+          Stream.runCollect,
+        );
+        expect(hidden).toEqual({
+          state: null,
+          cursor: 4,
+          position: { stream: "Counter/c-1", seq: 4 },
+        });
       }).pipe(Effect.scoped, Effect.provide(layer)),
     );
   });

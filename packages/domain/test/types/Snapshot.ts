@@ -1,7 +1,7 @@
 /**
- * Type-level regressions for what a view's `snapshot` read says: the state,
- * the cursor it is valid at, and the position of the last fact it reflects
- * (`null` before any); `watch` frames and stream snapshots carry no position.
+ * Type-level regressions for what a view's `snapshot` and `watch` frames say:
+ * the state, the cursor it is valid at, and the position of the last fact it
+ * reflects (`null` before any); a stream's `peek` and `watch` carry no position.
  * Compiled under `exactOptionalPropertyTypes` (see ./tsconfig.json), never run.
  */
 import * as Domain from "@alchemy.run/domain";
@@ -34,36 +34,48 @@ class CounterTotal extends Domain.View("CounterTotal", {
   initial: { total: 0 },
   evolve: { Incremented: (view, event) => ({ total: view.total + event.by }) },
 }) {}
+class Noted extends Domain.Event("Noted", { total: Schema.Int }) {}
+class CounterLog extends Domain.Stream("CounterLog", { key: Counter, entries: [Noted] }) {}
 
 type Position = { readonly stream: string; readonly seq: number };
 assertType<Equals<Domain.Read.Position, Position>>(true);
 
 // A view's snapshot always says its position: `null` before the key applied a fact.
-const empty: Domain.Read.PositionedSnapshot<null> = { state: null, cursor: 0, position: null };
-const applied: Domain.Read.PositionedSnapshot<number> = {
+const empty: Domain.Read.ViewSnapshot<null> = { state: null, cursor: 0, position: null };
+const applied: Domain.Read.ViewSnapshot<number> = {
   state: 1,
   cursor: 1,
   position: { stream: "Counter/a", seq: 1 },
 };
 // @ts-expect-error a view's snapshot cannot leave `position` out
-const missing: Domain.Read.PositionedSnapshot<null> = { state: null, cursor: 0 };
+const missing: Domain.Read.ViewSnapshot<null> = { state: null, cursor: 0 };
 void empty;
 void applied;
 void missing;
-assertType<Equals<Domain.Read.PositionedSnapshot<number>["position"], Position | null>>(true);
+assertType<Equals<Domain.Read.ViewSnapshot<number>["position"], Position | null>>(true);
 
 // A view client's `snapshot` answers it.
-type ViewSnapshot = Effect.Success<
+type SnapshotRead = Effect.Success<
   ReturnType<Domain.Api.ViewClient<typeof CounterTotal>["snapshot"]>
 >;
-assertType<Equals<ViewSnapshot["position"], Position | null>>(true);
-assertType<Equals<ViewSnapshot["state"], { readonly total: number } | null>>(true);
+assertType<Equals<SnapshotRead, Domain.Read.ViewSnapshot<{ readonly total: number } | null>>>(true);
+assertType<Equals<SnapshotRead["position"], Position | null>>(true);
+assertType<Equals<SnapshotRead["state"], { readonly total: number } | null>>(true);
 
-// `watch` frames and a stream's snapshot are plain snapshots: no `position`.
+// So does every frame of a view's `watch`.
 type WatchFrame = Stream.Success<ReturnType<Domain.Api.ViewClient<typeof CounterTotal>["watch"]>>;
-declare const frame: WatchFrame;
-// @ts-expect-error a watch frame has no position
-void frame.position;
+assertType<Equals<WatchFrame, Domain.Read.ViewSnapshot<{ readonly total: number } | null>>>(true);
+assertType<Equals<WatchFrame["position"], Position | null>>(true);
+
+// A stream's `peek` (its latest entry) and `watch` frames (plain snapshots) carry no `position`.
+type Tail = Effect.Success<ReturnType<Domain.Api.StreamClient<typeof CounterLog>["peek"]>>;
+declare const tail: NonNullable<Tail>;
+// @ts-expect-error a stream's peek has no position
+void tail.position;
+type StreamFrame = Stream.Success<ReturnType<Domain.Api.StreamClient<typeof CounterLog>["watch"]>>;
+declare const streamFrame: StreamFrame;
+// @ts-expect-error a stream's watch frame has no position
+void streamFrame.position;
 declare const plain: Domain.Read.Snapshot<number>;
 // @ts-expect-error a plain snapshot has no position
 void plain.position;
