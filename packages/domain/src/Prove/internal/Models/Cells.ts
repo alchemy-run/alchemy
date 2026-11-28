@@ -124,7 +124,8 @@ export const make = (
         : wrongArguments(site, name);
     });
 
-  const one = (before: V): V => (Value.isBig(before) ? { _tag: "Big", value: 1n } : Value.num(1));
+  // The library adds the number 1, as the language does: to a bigint, that throws.
+  const one = (): V => Value.num(1);
 
   const stepped =
     (operator: "+" | "-", gives: "self" | "after" | "before"): Model =>
@@ -132,7 +133,7 @@ export const make = (
       const fields = cellOf(self);
       if (!fields || !self) return wrongArguments(site, "MutableRef");
       const before = held(fields);
-      return Effect.map(host.arithmetic(operator, before, one(before), site), (after) => {
+      return Effect.map(host.arithmetic(operator, before, one(), site), (after) => {
         fields.value = after;
         return gives === "self" ? self : gives === "after" ? after : before;
       });

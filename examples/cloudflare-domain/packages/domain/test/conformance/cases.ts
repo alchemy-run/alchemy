@@ -4345,6 +4345,7 @@ const rest: ReadonlyArray<Group> = [
     ...numbers,
     effectful: true,
     prelude: [
+      `import * as SynchronizedRef from "effect/SynchronizedRef";`,
       `import * as PartitionedSemaphore from "effect/PartitionedSemaphore";`,
       `import * as TxHashMap from "effect/TxHashMap";`,
       `import * as PubSub from "effect/PubSub";`,
@@ -4444,8 +4445,30 @@ const rest: ReadonlyArray<Group> = [
       `Effect.scoped(Effect.acquireRelease(Effect.succeed(a), () => Effect.fail(new Odd({ n: b })))).pipe(Effect.exit, Effect.map((exit) => [Exit.hasDies(exit), Exit.isFailure(exit)]))`,
       `Effect.onInterrupt(Effect.interrupt, () => Effect.fail(new Odd({ n: a }))).pipe(Effect.exit, Effect.map((exit) => [Exit.hasDies(exit), Exit.hasInterrupts(exit), b]))`,
       `Effect.onInterrupt(Effect.interrupt, () => Effect.fail(new Odd({ n: a }))).pipe(Effect.exit, Effect.map((exit) => exit.cause.reasons.map((reason) => reason._tag)))`,
+      `Console.withGroup(Effect.succeed(a), { label: "g" })`,
+      `Effect.sync(() => { const cell = MutableRef.make(a); return [MutableRef.compareAndSet(a)(cell), MutableRef.get(cell), MutableRef.compareAndSet()(MutableRef.make(undefined))]; })`,
+      `Effect.gen(function* () { const ref = yield* SynchronizedRef.make(a); const one = yield* SynchronizedRef.updateSomeAndGetEffect(ref, () => Effect.succeed(Option.none())); const two = yield* SynchronizedRef.getAndUpdateSomeEffect(ref, () => Effect.succeed(Option.none())); return [one, two]; })`,
     ],
     unread: [
+      [
+        `Effect.sync(() => MutableRef.incrementAndGet(MutableRef.make(1n)))`,
+        /applies \+ to a bigint and a number/,
+      ],
+      [
+        `Effect.flatMap(Ref.make(a), (ref) => Ref.updateSome(ref, () => a))`,
+        /is called in a way the prover has no model for/,
+      ],
+      [
+        `Effect.flatMap(SynchronizedRef.make(a), (ref) => SynchronizedRef.modifyEffect(ref, () => Effect.succeed([a])))`,
+        /is called in a way the prover has no model for/,
+      ],
+      [`Console.consoleWith(() => a)`, /is called in a way the prover has no model for/],
+      [`Effect.succeed(Ordering.match(0, {}))`, /is called in a way the prover has no model for/],
+      [`Effect.succeed(UndefinedOr.map()(a))`, /is called in a way the prover has no model for/],
+      [
+        `Effect.succeed(UndefinedOr.match(a, {}))`,
+        /is called in a way the prover has no model for/,
+      ],
       [
         `Effect.gen(function* () { const step = yield* Schedule.toStep(Schedule.recurs(2)); return yield* step(a, b); })`,
         /steps a schedule at a time the prover cannot see/,
@@ -4740,6 +4763,12 @@ const shapes: ReadonlyArray<Group> = [
       `Array.length(partsOf(text))`,
     ],
     unread: [
+      [
+        `UndefinedOr.match(nameOf(text), { onDefined: (n) => n, onUndefined: () => "" })`,
+        /is called in a way the prover has no model for/,
+      ],
+      [`UndefinedOr.getOrThrow(nameOf(text))`, /is called in a way the prover has no model for/],
+      [`UndefinedOr.map(nameOf(text), (n) => n)`, /is called in a way the prover has no model for/],
       [`nameOf(text).length`, /what nameOf returned/],
       // Two results the code compares with each other: nothing says what kind either is.
       [`flagOf(text) === isBlank(text)`, /compares what flagOf returned/],
