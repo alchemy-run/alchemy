@@ -1,0 +1,224 @@
+---
+title: Effect UI
+description: Deploy Effect UI SPA, SSR, SSG, and hybrid applications to Prisma Compute with native local development.
+sidebar:
+  order: 9
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Prisma.Website.EffectUI` deploys an [Effect UI](https://ui.effect.website) app to
+Prisma Compute. It supports browser-only SPAs, server-side rendering (SSR), static
+site generation (SSG), and hybrid rendering. `HtmlServerVite.plugin` in your
+Vite config renders the pages and emits the handler; Alchemy packages them
+for deployment.
+
+## Install
+
+The build integration is not bundled with alchemy. Install
+`@alchemy.run/frontend-frameworks`; the resource loads its `/effect-ui`
+and `/effect-ui/node` exports from your project at deploy time. It is only
+used at build time, so a dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+Effect UI is in public preview and isn't on npm yet. Install a snapshot
+build of `@effect/ui` as its
+[README](https://github.com/Effect-TS/ui#snapshots) describes.
+
+## Configure Vite
+
+A browser-only app needs no plugin. Its Vite config stays what the
+[Effect UI quick start](https://github.com/Effect-TS/ui#start-a-new-app)
+gives you, and the build deploys as static files.
+
+## Render pages on the server
+
+Add `HtmlServerVite.plugin` and point it at a server entry. With
+`serverOutDir`, the build also emits a request handler, which answers
+every request that matches no file:
+
+```typescript
+// vite.config.ts
+import { plugin as htmlServer } from "@effect/ui/html/HtmlServerVite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  build: { outDir: "dist/client" },
+  plugins: [
+    htmlServer({
+      entry: "/src/entry.server.ts",
+      serverOutDir: "dist/server",
+    }),
+  ],
+});
+```
+
+The server output must not overlap the client's, so the client builds
+to `dist/client`.
+
+The server entry's default export is a Layer that adds the app's routes
+to `HttpRouter`. `prerender` lists the pages the build renders ahead of
+time. They are served as files, and the server renders everything else:
+
+```typescript
+// src/entry.server.ts
+/// <reference types="@effect/ui/html/HtmlServerViteDocument" />
+import { layerHttp } from "@effect/ui/html/HtmlServerHttp";
+import { document } from "virtual:@effect/ui/document";
+import { App } from "./App.ts";
+import { AppRoute } from "./routes.ts";
+
+export default layerHttp(App, { routes: AppRoute, document });
+
+export const prerender = ["/about", "/404"];
+```
+
+`index.html` marks where the page goes with `<!--app-html-->`. The
+browser entry hydrates the server's HTML instead of mounting a new app:
+
+```typescript
+// src/entry.client.ts
+import { Router } from "@effect/ui";
+import { BrowserRouter, HtmlHydrate } from "@effect/ui/html";
+import { Effect, Layer } from "effect";
+import { App } from "./App.ts";
+import { AppRoute } from "./routes.ts";
+
+const Main = HtmlHydrate.hydrate(
+  App,
+  Router.props(AppRoute),
+  document.getElementById("app")!,
+  JSON.parse(document.getElementById("state")!.textContent!),
+).pipe(Layer.provide(BrowserRouter.layer({ routes: AppRoute })));
+
+Layer.launch(Main).pipe(Effect.runFork);
+```
+
+## Prerender without a server
+
+Leave `serverOutDir` out and the build keeps only the prerendered pages.
+The site deploys as static files, and a prerendered `/404` is the page
+for paths that match nothing:
+
+```typescript
+// vite.config.ts
+import { plugin as htmlServer } from "@effect/ui/html/HtmlServerVite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [htmlServer({ entry: "/src/entry.server.ts" })],
+});
+```
+
+## Declare the Website
+
+```typescript
+// alchemy.run.ts
+import * as Prisma from "@alchemy.run/prisma";
+
+export const Website = Prisma.Website.EffectUI("Website", {
+  rootDir: "applications/web",
+});
+```
+
+Omit `rootDir` for an app at `.`. Omit `project` to create a
+database-less Prisma project on live deploy, or pass an existing project.
+
+## Add it to the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyEffectUISite",
+  { providers: Prisma.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Website;
+    return { url: site.url };
+  }),
+);
+```
+
+`site.url` is the Compute endpoint on deploy and Vite's local URL in dev.
+
+## Add environment variables
+
+```diff lang="typescript"
+export const Website = Prisma.Website.EffectUI("Website", {
+  rootDir: "applications/web",
++  env: {
++    VITE_API_URL: "https://api.example.com",
++  },
+});
+```
+
+`env` is applied before build and dev, and passed to Compute. Server code
+reads private values from `process.env`. Vite inlines `VITE_*` keys into the
+browser build; keep secrets out of those keys and the server-rendered
+state, which both reach the browser.
+
+## Read the environment in client code
+
+```typescript
+// src/vite-env.d.ts
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_API_URL: string;
+}
+```
+
+This declares the client-visible key for TypeScript.
+
+```typescript
+const apiUrl = import.meta.env.VITE_API_URL;
+```
+
+Vite replaces the lookup with the build-time value.
+
+## Deep links
+
+For browser-only builds, `assets.notFoundHandling` defaults to `"single-page-application"`.
+A path like `/counter/42` returns `index.html` with status 200, letting
+the app's router resolve it. For real 404 responses instead:
+
+```typescript
+export const Website = Prisma.Website.EffectUI("Website", {
+  assets: { notFoundHandling: "404-page" },
+});
+```
+
+## Local dev
+
+`alchemy dev` runs the project's Vite dev server, where `HtmlServerVite`
+renders every page. The Website
+creates no Prisma resources. `.pipe(Alchemy.remote())` selects the live
+path during dev. Pin the local address when running several apps:
+
+```typescript
+export const Website = Prisma.Website.EffectUI("Website", {
+  dev: { host: "127.0.0.1", port: 5180, strictPort: true },
+});
+```
+
+## Custom domain
+
+```typescript
+const site = yield* Prisma.Website.EffectUI("Web", {
+  domain: "app.example.com",
+});
+```
+
+This creates `Prisma.CustomDomain`. Configure the returned DNS records yourself
+and verify status before cutover. See
+[Custom domains](/prisma/frontend/websites#custom-domains).
+
+## Where next
+
+- [EffectUI API](/providers/prisma/website#effectui).
+- [Vite](/prisma/frontend/vite), [Websites](/prisma/frontend/websites), and [Compute apps](/prisma/compute/apps).

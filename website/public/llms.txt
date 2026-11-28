@@ -158,7 +158,7 @@ A linear six-part walkthrough from zero to a tested, locally-developed, CI-deplo
 
 ## Cloudflare — Frontend
 
-- [Frontend frameworks](https://alchemy.run/cloudflare/frontend/frontends) — Deploy Vite, Foldkit, Astro, Next.js, vinext, Nuxt, SvelteKit, Waku, or any static build to Cloudflare Workers with first-class Website resources.
+- [Frontend frameworks](https://alchemy.run/cloudflare/frontend/frontends) — Deploy Vite, Foldkit, Effect UI, Astro, Next.js, vinext, Nuxt, SvelteKit, Waku, or any static build to Cloudflare Workers with first-class Website resources.
 - [Vite](https://alchemy.run/cloudflare/frontend/vite) — Deploy any pure-Vite app to Cloudflare Workers with a single resource.
 - [Static sites](https://alchemy.run/cloudflare/frontend/static-site) — Deploy any build command's output directory as Cloudflare Worker static assets with Cloudflare.Website.StaticSite — custom edge Workers, framework-native local dev, and memoized rebuilds.
 - [Add a React SPA](https://alchemy.run/cloudflare/frontend/vite-spa) — Ship a React single-page app from the same Stack as your Worker — built with Vite and deployed to Cloudflare in one command.
@@ -169,6 +169,7 @@ A linear six-part walkthrough from zero to a tested, locally-developed, CI-deplo
 - [Foldkit](https://alchemy.run/cloudflare/frontend/foldkit) — Deploy Foldkit SPA, SSR, SSG, and hybrid applications to Cloudflare Workers.
 - [SolidStart](https://alchemy.run/cloudflare/frontend/solidstart) — Deploy SolidStart to Cloudflare with Cloudflare.Website.Vite — plus the hand-rolled SolidJS SSR variant for full control over the server entry.
 - [Astro](https://alchemy.run/cloudflare/frontend/astro) — Deploy an Astro site to Cloudflare Workers with Cloudflare.Website.Astro — SSR in the Worker, prerendered pages as static assets, sessions backed by an auto-provisioned KV namespace, and route caching on Workers Cache.
+- [Effect UI](https://alchemy.run/cloudflare/frontend/effect-ui) — Deploy Effect UI SPA, SSR, SSG, and hybrid applications to Cloudflare Workers.
 - [Next.js](https://alchemy.run/cloudflare/frontend/nextjs) — Deploy a Next.js app to Cloudflare Workers with Cloudflare.Website.Nextjs — the OpenNext pipeline, writable ISR, and wrangler-free local dev.
 - [Vinext](https://alchemy.run/cloudflare/frontend/vinext) — Deploy vinext to Cloudflare Workers with the shared Website API, native local development, and KV-backed caching.
 - [Nuxt](https://alchemy.run/cloudflare/frontend/nuxt) — Deploy a Nuxt app to Cloudflare Workers with Cloudflare.Website.Nuxt — nitro's cloudflare_module preset, native nuxt.config.ts loading, and wrangler-free local dev.
@@ -271,12 +272,13 @@ A four-part walkthrough: a Project, an Effect-native Compute API, Postgres, and 
 
 ## Prisma — Frontend
 
-- [Websites](https://alchemy.run/prisma/frontend/websites) — Deploy Vite, Astro, Next.js, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Prisma Compute.
+- [Websites](https://alchemy.run/prisma/frontend/websites) — Deploy Vite, Astro, Next.js, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Effect UI, Vocs, or any static build to Prisma Compute.
 - [Vite](https://alchemy.run/prisma/frontend/vite) — Deploy a Vite SPA to Prisma Compute with Prisma.Website.Vite — static files served on Bun and Vite's native dev server locally.
 - [Static sites](https://alchemy.run/prisma/frontend/static-site) — Deploy any static build to Prisma Compute with Prisma.Website.StaticSite — a shell command, output directory, and Bun static-file server.
 - [React Router](https://alchemy.run/prisma/frontend/react-router) — Deploy React Router v8 framework apps to Prisma Compute with Prisma.Website.ReactRouter — SSR on Bun and native Vite dev locally.
 - [Foldkit](https://alchemy.run/prisma/frontend/foldkit) — Deploy Foldkit SPA, SSR, SSG, and hybrid applications to Prisma Compute with native local development.
 - [TanStack Start](https://alchemy.run/prisma/frontend/tanstack-start) — Deploy TanStack Start to Prisma Compute with Prisma.Website.TanStackStart — React or Solid SSR on Bun, with native Vite dev locally.
+- [Effect UI](https://alchemy.run/prisma/frontend/effect-ui) — Deploy Effect UI SPA, SSR, SSG, and hybrid applications to Prisma Compute with native local development.
 - [Next.js](https://alchemy.run/prisma/frontend/nextjs) — Deploy Next.js to Prisma Compute with Prisma.Website.Nextjs — a normal Next server on Bun, not OpenNext, and next dev locally.
 - [Vinext](https://alchemy.run/prisma/frontend/vinext) — Deploy vinext to Prisma Compute with the shared Website API, native local development, and traced runtime dependencies.
 - [Nuxt](https://alchemy.run/prisma/frontend/nuxt) — Deploy Nuxt to Prisma Compute with Prisma.Website.Nuxt — Nitro's Node target running on Bun and Nuxt's own dev server locally.
@@ -331,6 +333,7 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 - [Websites](https://alchemy.run/aws/frontend/websites) — Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SvelteKit, TanStack Start, Waku, Octane, or any static build to AWS with first-class Website resources.
 - [Vite](https://alchemy.run/aws/frontend/vite) — Deploy a plain Vite app to AWS with AWS.Website.Vite — the vite build output on S3 behind CloudFront, SPA fallback at the edge, and Vite's own dev server under alchemy dev.
 - [Foldkit](https://alchemy.run/aws/frontend/foldkit) — Deploy Foldkit SPA, SSR, SSG, and hybrid applications to AWS with native local development.
+- [Effect UI](https://alchemy.run/aws/frontend/effect-ui) — Deploy Effect UI SPA, SSR, SSG, and hybrid applications to AWS with native local development.
 - [Static sites](https://alchemy.run/aws/frontend/static-site) — Ship a static site to S3 + CloudFront with AWS.Website.StaticSite — build-step support, Router composition, and cache invalidation on deploy.
 - [React SPA](https://alchemy.run/aws/frontend/vite-spa) — Deploy a React single-page app to AWS with AWS.Website.Vite — the Vite build on S3 + CloudFront, deep links answered by index.html out of the box, and Vite's own dev server under alchemy dev.
 - [Vue](https://alchemy.run/aws/frontend/vue) — Deploy a Vue single-page app to AWS with AWS.Website.Vite — S3 + CloudFront, deep links that work by default, and Vue's own Vite dev server under alchemy dev.
@@ -427,6 +430,7 @@ Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/
 - [React SPA](https://alchemy.run/gcp/frontend/vite-spa) — Deploy a React single-page app to Cloud Run with GCP.Website.Vite — scaffold with Vite, deep links answered by index.html, Vite's dev server under alchemy dev.
 - [Vue](https://alchemy.run/gcp/frontend/vue) — Deploy a Vue single-page app to Cloud Run with GCP.Website.Vite — scaffold with create-vue, deep links answered by index.html.
 - [Foldkit](https://alchemy.run/gcp/frontend/foldkit) — Deploy a Foldkit app to Cloud Run with GCP.Website.Foldkit — a Vite build with deep links that boot the app.
+- [Effect UI](https://alchemy.run/gcp/frontend/effect-ui) — Deploy Effect UI SPA, SSR, SSG, and hybrid applications to Cloud Run with GCP.Website.EffectUI.
 - [Astro](https://alchemy.run/gcp/frontend/astro) — Deploy an Astro site to Cloud Run with GCP.Website.Astro — server-rendered pages, prerendered pages, and Astro's own dev server under alchemy dev.
 - [Next.js](https://alchemy.run/gcp/frontend/nextjs) — Deploy a Next.js app to Cloud Run with GCP.Website.Nextjs — Next's own production server in a container, no OpenNext.
 - [Nuxt](https://alchemy.run/gcp/frontend/nuxt) — Deploy a Nuxt app to Cloud Run with GCP.Website.Nuxt — the nitro Node server in a container, prerendered pages served as static files.
@@ -518,12 +522,13 @@ The Fly hub: overview, What is Fly? (organizations, Apps, Machines, regions, the
 
 ## Fly — Frontend
 
-- [Websites](https://alchemy.run/fly/frontend/websites) — Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Fly with first-class Website resources.
+- [Websites](https://alchemy.run/fly/frontend/websites) — Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Effect UI, Vocs, or any static build to Fly with first-class Website resources.
 - [Vite](https://alchemy.run/fly/frontend/vite) — Deploy a Vite SPA to Fly with Fly.Website.Vite — static assets on a Node Machine, fly.dev (or your domain) over HTTPS, and Vite's own dev server under alchemy dev.
 - [Static sites](https://alchemy.run/fly/frontend/static-site) — Deploy a static site to Fly with Fly.Website.StaticSite — a build command, a Node static-file server on a Machine, and https://{app}.fly.dev (or your hostname) on deploy.
 - [React Router](https://alchemy.run/fly/frontend/react-router) — Deploy React Router v8 (framework mode) to Fly with Fly.Website.ReactRouter — SSR on a Machine, client assets baked into the image, and React Router's own Vite dev server under alchemy dev.
 - [Foldkit](https://alchemy.run/fly/frontend/foldkit) — Deploy Foldkit SPA, SSR, SSG, and hybrid applications to Fly with native local development.
 - [TanStack Start](https://alchemy.run/fly/frontend/tanstack-start) — Deploy TanStack Start (React or Solid) to Fly with Fly.Website.TanStackStart — SSR on a Machine, client assets baked into the image, and TanStack Start's own Vite dev server under alchemy dev.
+- [Effect UI](https://alchemy.run/fly/frontend/effect-ui) — Deploy Effect UI SPA, SSR, SSG, and hybrid applications to Fly with native local development.
 - [Next.js](https://alchemy.run/fly/frontend/nextjs) — Deploy a Next.js app to Fly with Fly.Website.Nextjs — next build plus a Node next({ dev: false }) Machine, and next dev under alchemy dev.
 - [Vinext](https://alchemy.run/fly/frontend/vinext) — Deploy vinext to Fly with the shared Website API, native local development, and a platform-specific data cache.
 - [Nuxt](https://alchemy.run/fly/frontend/nuxt) — Deploy a Nuxt app to Fly with Fly.Website.Nuxt — nitro's node preset on a Machine, assets baked into the image, and Nuxt's own dev server under alchemy dev.
@@ -567,12 +572,13 @@ The Hetzner hub: overview, What is Hetzner? (projects, locations, Servers, Servi
 
 ## Hetzner — Frontend
 
-- [Websites](https://alchemy.run/hetzner/frontend/websites) — Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Hetzner with first-class Website resources.
+- [Websites](https://alchemy.run/hetzner/frontend/websites) — Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Effect UI, Vocs, or any static build to Hetzner with first-class Website resources.
 - [Vite](https://alchemy.run/hetzner/frontend/vite) — Deploy a Vite SPA to Hetzner with Hetzner.Website.Vite — static assets as a systemd unit on a Server, http://{ipv4}:3000, and Vite's own dev server under alchemy dev.
 - [Static sites](https://alchemy.run/hetzner/frontend/static-site) — Deploy a static site to Hetzner with Hetzner.Website.StaticSite — a build command, a systemd unit on a Server, and http://{ipv4}:3000 (or your hostname) on deploy.
 - [React Router](https://alchemy.run/hetzner/frontend/react-router) — Deploy React Router v8 (framework mode) to Hetzner with Hetzner.Website.ReactRouter — SSR as a systemd unit on port 3000, client assets baked into the unit, and React Router's own Vite dev server under alchemy dev.
 - [Foldkit](https://alchemy.run/hetzner/frontend/foldkit) — Deploy Foldkit SPA, SSR, SSG, and hybrid applications to Hetzner with native local development.
 - [TanStack Start](https://alchemy.run/hetzner/frontend/tanstack-start) — Deploy TanStack Start (React or Solid) to Hetzner with Hetzner.Website.TanStackStart — SSR as a systemd unit on port 3000, client assets baked into the unit, and TanStack Start's own Vite dev server under alchemy dev.
+- [Effect UI](https://alchemy.run/hetzner/frontend/effect-ui) — Deploy Effect UI SPA, SSR, SSG, and hybrid applications to Hetzner with native local development.
 - [Next.js](https://alchemy.run/hetzner/frontend/nextjs) — Deploy a Next.js app to Hetzner with Hetzner.Website.Nextjs — next build plus a Node next({ dev: false }) systemd unit, and next dev under alchemy dev.
 - [Vinext](https://alchemy.run/hetzner/frontend/vinext) — Deploy vinext to Hetzner with the shared Website API, native local development, and a platform-specific data cache.
 - [Nuxt](https://alchemy.run/hetzner/frontend/nuxt) — Deploy a Nuxt app to Hetzner with Hetzner.Website.Nuxt — nitro's node preset as a systemd unit on port 3000, and Nuxt's own dev server under alchemy dev.
@@ -622,12 +628,13 @@ The Railway hub: overview, What is Railway? (workspaces, projects, environments,
 
 ## Railway — Frontend
 
-- [Websites](https://alchemy.run/railway/frontend/websites) — Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Railway with first-class Website resources.
+- [Websites](https://alchemy.run/railway/frontend/websites) — Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Effect UI, Vocs, or any static build to Railway with first-class Website resources.
 - [Vite](https://alchemy.run/railway/frontend/vite) — Deploy a Vite SPA to Railway with Railway.Website.Vite — static assets on a container Service, a *.up.railway.app URL (or your domain), and Vite's own dev server under alchemy dev.
 - [Static sites](https://alchemy.run/railway/frontend/static-site) — Deploy a static site to Railway with Railway.Website.StaticSite — a build command, a container Service.
 - [React Router](https://alchemy.run/railway/frontend/react-router) — Deploy React Router v8 (framework mode) to Railway with Railway.Website.ReactRouter — SSR on a container Service, client assets in the image, and React Router's own Vite dev server under alchemy dev.
 - [Foldkit](https://alchemy.run/railway/frontend/foldkit) — Deploy Foldkit SPA, SSR, SSG, and hybrid applications to Railway with native local development.
 - [TanStack Start](https://alchemy.run/railway/frontend/tanstack-start) — Deploy TanStack Start (React or Solid) to Railway with Railway.Website.TanStackStart — SSR on a container Service, client assets in the image, and TanStack Start's own Vite dev server under alchemy dev.
+- [Effect UI](https://alchemy.run/railway/frontend/effect-ui) — Deploy Effect UI SPA, SSR, SSG, and hybrid applications to Railway with native local development.
 - [Next.js](https://alchemy.run/railway/frontend/nextjs) — Deploy a Next.js app to Railway with Railway.Website.Nextjs — next build plus a Node next({ dev: false }) container, and next dev under alchemy dev.
 - [Vinext](https://alchemy.run/railway/frontend/vinext) — Deploy vinext to Railway with the shared Website API, native local development, and a platform-specific data cache.
 - [Nuxt](https://alchemy.run/railway/frontend/nuxt) — Deploy a Nuxt app to Railway with Railway.Website.Nuxt — nitro's node preset on a Service, and Nuxt's own dev server under alchemy dev.
@@ -708,8 +715,9 @@ DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM
 - [Vite](https://alchemy.run/digitalocean/frontend/vite) — Deploy a Vite app to DigitalOcean App Platform with DigitalOcean.Website.Vite, built on your machine and served by an App, with Vite's own dev server under alchemy dev.
 - [Vocs](https://alchemy.run/digitalocean/frontend/vocs) — Deploy a Vocs app to DigitalOcean App Platform with DigitalOcean.Website.Vocs, built on your machine and served by an App, with Vocs's own dev server under alchemy dev.
 - [Foldkit](https://alchemy.run/digitalocean/frontend/foldkit) — Deploy a Foldkit app to DigitalOcean App Platform with DigitalOcean.Website.Foldkit, built on your machine and served by an App, with Foldkit's own dev server under alchemy dev.
+- [Effect UI](https://alchemy.run/digitalocean/frontend/effect-ui) — Deploy an Effect UI app to DigitalOcean App Platform with DigitalOcean.Website.EffectUI, built on your machine and served by an App.
 - [Octane](https://alchemy.run/digitalocean/frontend/octane) — Deploy a Octane app to DigitalOcean App Platform with DigitalOcean.Website.Octane, built on your machine and served by an App, with Octane's own dev server under alchemy dev.
-- [Websites](https://alchemy.run/digitalocean/frontend/websites) — Deploy Astro, Next.js, Nuxt, SvelteKit, SolidStart, React Router, TanStack Start, Waku, Vinext, Vite, Vocs, Foldkit, Octane and static sites to DigitalOcean App Platform from one Stack.
+- [Websites](https://alchemy.run/digitalocean/frontend/websites) — Deploy Astro, Next.js, Nuxt, SvelteKit, SolidStart, React Router, TanStack Start, Waku, Vinext, Vite, Vocs, Foldkit, Effect UI, Octane and static sites to DigitalOcean App Platform from one Stack.
 
 ## PlanetScale
 
@@ -768,6 +776,7 @@ Neon backend resources: Postgres branches, Functions, private object storage, ma
 - [Waku](https://alchemy.run/neon/frontend/waku) — Package Waku RSC and static pages for Neon Functions, with native Waku development.
 - [Octane](https://alchemy.run/neon/frontend/octane) — Package Octane rendering and server routes as a Neon Function Fetch artifact.
 - [Foldkit](https://alchemy.run/neon/frontend/foldkit) — Deploy Foldkit SPA, SSR, SSG, and hybrid applications to Neon Functions with native local development.
+- [Effect UI](https://alchemy.run/neon/frontend/effect-ui) — Deploy Effect UI SPA, SSR, SSG, and hybrid applications to Neon Functions with native local development.
 - [Vocs](https://alchemy.run/neon/frontend/vocs) — Package Vocs documentation and its Waku RSC handler for Neon Functions.
 - [Static Site](https://alchemy.run/neon/frontend/static-site) — Run a static-site build command and package its output for a Neon Function.
 
@@ -1399,4 +1408,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~295 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~296 KB) — only fetch it when you need to locate a specific resource's reference page.
