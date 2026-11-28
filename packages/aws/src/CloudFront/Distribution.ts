@@ -1619,6 +1619,30 @@ const fillUndefined = <T>(desired: T, observed: T): T => {
 const originKind = (origin: cloudfront.Origin) =>
   origin.VpcOriginConfig ? "vpc" : origin.S3OriginConfig ? "s3" : "custom";
 
+/**
+ * What CloudFront stores for the members an origin leaves out when it is
+ * created. `UpdateDistribution` requires them, so an origin an update adds
+ * (no observed copy to fill from) is completed with these.
+ */
+const originDefaults = (origin: cloudfront.Origin): cloudfront.Origin => ({
+  Id: origin.Id,
+  DomainName: origin.DomainName,
+  OriginPath: "",
+  CustomHeaders: { Quantity: 0 },
+  ConnectionAttempts: 3,
+  ConnectionTimeout: 10,
+  OriginShield: { Enabled: false },
+  ...(originKind(origin) === "custom"
+    ? {
+        CustomOriginConfig: {
+          ...origin.CustomOriginConfig!,
+          OriginReadTimeout: 30,
+          OriginKeepaliveTimeout: 5,
+        },
+      }
+    : {}),
+});
+
 export const mergeWithObservedConfig = (
   desired: cloudfront.DistributionConfig,
   observed: cloudfront.DistributionConfig,
@@ -1629,7 +1653,8 @@ export const mergeWithObservedConfig = (
     merged.Origins = {
       ...merged.Origins,
       Items: merged.Origins.Items.map((item) => {
-        const current = observedOrigins.find((origin) => origin.Id === item.Id) ?? item;
+        const current = observedOrigins.find((origin) => origin.Id === item.Id);
+        if (current === undefined) return fillUndefined(item, originDefaults(item));
         if (originKind(current) === originKind(item)) return fillUndefined(item, current);
         // An origin that changes kind (custom <-> S3 <-> VPC) under the same
         // id must not inherit the old kind's config or access control:
@@ -1641,7 +1666,11 @@ export const mergeWithObservedConfig = (
           OriginAccessControlId: _oac,
           ...shared
         } = current;
-        return fillUndefined(item, shared as cloudfront.Origin);
+        // The new kind's config has no observed copy: complete it too.
+        return fillUndefined(
+          fillUndefined(item, shared as cloudfront.Origin),
+          originDefaults(item),
+        );
       }),
     };
   }
