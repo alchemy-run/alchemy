@@ -83,6 +83,7 @@ import {
   type SendResult,
   sendResultOf,
   answersResend,
+  rewrittenResult,
   type CommandReceipt,
   storedCommand,
   storedRejection,
@@ -1752,20 +1753,16 @@ const aggregateObject = Effect.fn(function* (
               if (stored.at !== undefined || stored.events.length === 0) continue;
               yield* state.storage.put(key, { ...stored, events: [] });
             }
-            // A receipt stored with a copy of its events keeps their count instead.
+            // A receipt keeps its count instead of a copy of its events, and
+            // neither the command it answered nor a rejection.
             for (const [key, stored] of yield* state.storage.list<StoredResult>({
               prefix: "receipt:",
             })) {
-              if (stored._tag !== "Accepted" || !("receipt" in stored)) continue;
-              yield* state.storage.put<StoredResult>(
-                key,
-                storedResult(
-                  stored.receipt.version,
-                  stored.receipt.events.length,
-                  stored.receipt.reply,
-                  stored.command,
-                ),
-              );
+              if (stored._tag === "Accepted" && "stored" in stored && stored.command === undefined)
+                continue;
+              const kept = rewrittenResult(stored);
+              if (kept === undefined) yield* state.storage.delete(key);
+              else yield* state.storage.put<StoredResult>(key, kept);
             }
           }
           yield* finish(

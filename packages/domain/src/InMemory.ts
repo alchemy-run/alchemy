@@ -40,6 +40,7 @@ import {
   revisionKey,
   sendResultOf,
   answersResend,
+  rewrittenResult,
   type CommandReceipt,
   storedCommand,
   storedRejection,
@@ -1091,6 +1092,14 @@ export const make = (
                 return change === undefined ? [row] : change.after ? [change.after] : [];
               });
               current.state = state;
+              if (!deletes) {
+                // A receipt keeps neither the command it answered nor a rejection.
+                for (const [commandId, stored] of current.receipts) {
+                  const kept = rewrittenResult(stored);
+                  if (kept === undefined) current.receipts.delete(commandId);
+                  else current.receipts.set(commandId, kept);
+                }
+              }
               if (deletes) {
                 // What it kept of the commands it handled and scheduled goes with it.
                 current.receipts.clear();

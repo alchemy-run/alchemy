@@ -370,6 +370,20 @@ export const storedRejection = (rejection: Json, command: StoredCommand): Stored
 });
 
 /**
+ * A stored result as a rewrite leaves it, or `undefined` to delete it. The
+ * rewrite governs what an instance keeps, and a stored command is a copy of
+ * input it doesn't rewrite: an accepted result keeps its count alone, and a
+ * rejected one, which answers no resend, goes.
+ */
+export const rewrittenResult = (result: StoredResult): StoredResult | undefined => {
+  if (result._tag === "Rejected") return undefined;
+  if ("receipt" in result)
+    return storedResult(result.receipt.version, result.receipt.events.length, result.receipt.reply);
+  const { version, count, reply } = result.stored;
+  return storedResult(version, count, reply);
+};
+
+/**
  * Whether a stored result answers a resend of its command. Only an accepted
  * one does: a rejected command is decided again, against the state then.
  */

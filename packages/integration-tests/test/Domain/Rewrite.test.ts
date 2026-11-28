@@ -57,9 +57,12 @@ class Deposit extends Domain.Command("Deposit", {
   events: [Deposited],
   reply: { balance: Schema.Number },
 }) {}
+/** A note too long to keep, with what it said. */
+class TooLong extends Domain.Rejection("TooLong", { text: Schema.String }) {}
 class Note extends Domain.Command("Note", {
   input: { id: Schema.String, text: Schema.String },
   events: [Noted],
+  rejects: [TooLong],
 }) {}
 class Account extends Domain.Aggregate("Account", {
   id: Schema.String,
@@ -74,7 +77,7 @@ class Account extends Domain.Aggregate("Account", {
     Deposit: (account, { amount }) => [
       new Deposited({ amount, balance: account.balance + amount }),
     ],
-    Note: (_, { text }) => [new Noted({ text })],
+    Note: (_, { text }) => (text.length > 40 ? new TooLong({ text }) : [new Noted({ text })]),
   },
   evolve: {
     Opened: (account, e) => ({ ...account, customerId: e.customerId, owner: e.owner }),
@@ -548,6 +551,35 @@ for (const platform of Object.keys(platforms) as ReadonlyArray<keyof typeof plat
           const again = yield* accounts.send(open, { commandId: "open-a-9" });
           expect(again.version).toBe(first.version);
           expect(again.events).toEqual([new Opened({ customerId: "c-9", owner: "" })]);
+        }).pipe(Effect.scoped, Effect.provide(bankOn(platform))),
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "a rewrite keeps no copy of a command in its receipts, and drops rejected ones",
+      () =>
+        Effect.gen(function* () {
+          const accounts = yield* Account;
+          const store = (yield* Internals).aggregates.get("Account")!;
+          const open = new Open({ id: "a-9", customerId: "c-9", owner: "Alex" });
+          const first = yield* accounts.send(open, { commandId: "open-a-9" });
+          const long = new Note({ id: "a-9", text: "Alex said to call back after the holidays" });
+          yield* accounts.send(long, { commandId: "long" }).pipe(Effect.flip);
+          expect((yield* store.receipt!("a-9", "open-a-9"))?.command.input).toMatchObject({
+            owner: "Alex",
+          });
+          expect((yield* store.receipt!("a-9", "long"))?.result._tag).toBe("Rejected");
+
+          yield* accounts.rewritten(
+            yield* accounts.rewrite("a-9", new ForgetOwner({ customerId: "c-9" })),
+          );
+          // Neither still holds what the rewrite forgot.
+          expect(yield* store.receipt!("a-9", "open-a-9")).toBeUndefined();
+          expect(yield* store.receipt!("a-9", "long")).toBeUndefined();
+          // The accepted one still answers a resend.
+          expect((yield* accounts.send(open, { commandId: "open-a-9" })).version).toBe(
+            first.version,
+          );
         }).pipe(Effect.scoped, Effect.provide(bankOn(platform))),
       { timeout: 60_000 },
     );
