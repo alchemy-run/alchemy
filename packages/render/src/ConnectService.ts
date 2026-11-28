@@ -53,8 +53,18 @@ export interface ConnectServiceClient {
  *
  * **Example:** Bind a PrivateService from a WebService
  * ```typescript
- * const internal = yield* Render.ConnectService(privateApi);
- * const res = yield* internal.fetch(HttpClientRequest.get("/health"));
+ * const api = yield* Render.WebService(
+ *   "Api",
+ *   {
+ *     plan: "free",
+ *     region: "oregon",
+ *     runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+ *   },
+ *   Effect.gen(function* () {
+ *     const internal = yield* Render.ConnectService(privateApi);
+ *     return { internal };
+ *   }).pipe(Effect.provide(Render.ConnectServiceHttp)),
+ * );
  * ```
  *
  * @binding

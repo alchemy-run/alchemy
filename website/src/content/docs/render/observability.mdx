@@ -1,0 +1,47 @@
+---
+title: Logs, streams, and webhooks
+description: Query and tail Render logs via Alchemy CLI, configure LogStream and MetricsStream forwarding, and subscribe to workspace Webhooks and NotificationSetting rules.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Render collects runtime logs and telemetry across services, Workflows, Postgres, and Key Value instances, forwards streams to external OTLP/syslog collectors, and emits workspace webhooks for deployment events.
+
+<Tree
+  nodes={[
+    { id: "svc", label: "Render Resource", type: "service · db · kv · workflow", icon: "server", colGap: 4, areas: ["logs otel", "wh notif"] },
+    { id: "logs", label: "alchemy logs", type: "CLI history & --tail", parent: "svc", icon: "file-code" },
+    { id: "otel", label: "LogStream & MetricsStream", type: "syslog / OTLP sinks", parent: "svc", icon: "activity" },
+    { id: "wh", label: "Webhook", type: "signed workspace events", parent: "svc", icon: "bell" },
+    { id: "notif", label: "NotificationSetting", type: "failure & preview alerts", parent: "svc", icon: "mail" },
+  ]}
+  caption="Query historical or live logs from the CLI, or export streams and workspace webhook notifications."
+/>
+
+## Query and tail resource logs
+
+All Render compute resources, Workflows, Postgres databases, and Key Value stores implement Alchemy's log and tail interface:
+
+<PackageManagers
+  script={`{run} alchemy logs Web --limit 100
+{run} alchemy logs Web --tail`}
+/>
+
+## Webhooks and workspace notifications
+
+Subscribe external automation endpoints with [`Render.Webhook`](/providers/render/reference/observability-events#webhook) and tune workspace deployment alerts with [`Render.NotificationSetting`](/providers/render/reference/notifications#notificationsetting):
+
+```typescript
+// src/webhooks.ts
+import * as Render from "@alchemy.run/render";
+
+export const DeployHook = Render.Webhook("DeployHook", {
+  name: "deploy-events",
+  url: "https://example.com/webhooks/render",
+  enabled: true,
+  eventFilter: ["deploy_ended"],
+});
+```
+
+Workspace-level and resource-scoped forwarding to syslog or OpenTelemetry collectors is managed through [`Render.LogStream`](/providers/render/reference/observability#logstream) and [`Render.MetricsStream`](/providers/render/reference/observability#metricsstream).

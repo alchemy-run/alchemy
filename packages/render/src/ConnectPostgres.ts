@@ -88,9 +88,20 @@ export interface ConnectPostgresClient {
  * `RuntimeContext` host, it binds the external connection string into the host's
  * runtime context. Provide {@link ConnectPostgresHttp}.
  *
- * **Example:** Connect to Render Postgres from a service
+ * **Example:** Connect to Render Postgres from a WebService
  * ```typescript
- * const dbConn = yield* Render.ConnectPostgres(mainDb);
+ * const api = yield* Render.WebService(
+ *   "Api",
+ *   {
+ *     plan: "free",
+ *     region: "oregon",
+ *     runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+ *   },
+ *   Effect.gen(function* () {
+ *     const dbConn = yield* Render.ConnectPostgres(mainDb);
+ *     return { dbConn };
+ *   }).pipe(Effect.provide(Render.ConnectPostgresHttp)),
+ * );
  * ```
  *
  * @binding

@@ -10,10 +10,20 @@ export type ReadKeyValueClient = ReadClient;
  *
  * Provide {@link ReadKeyValueHttp}.
  *
- * **Example:** Read a cached key
+ * **Example:** Read from Key Value on a WebService
  * ```typescript
- * const kv = yield* Render.ReadKeyValue(cache);
- * const value = yield* kv.get("session:123");
+ * const api = yield* Render.WebService(
+ *   "Api",
+ *   {
+ *     plan: "free",
+ *     region: "oregon",
+ *     runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+ *   },
+ *   Effect.gen(function* () {
+ *     const kv = yield* Render.ReadKeyValue(cache);
+ *     return { kv };
+ *   }).pipe(Effect.provide(Render.ReadKeyValueHttp)),
+ * );
  * ```
  *
  * @binding

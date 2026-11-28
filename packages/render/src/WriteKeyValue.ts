@@ -10,10 +10,20 @@ export type WriteKeyValueClient = WriteClient;
  *
  * Provide {@link WriteKeyValueHttp}.
  *
- * **Example:** Write a key with TTL
+ * **Example:** Write to Key Value on a WebService
  * ```typescript
- * const kv = yield* Render.WriteKeyValue(cache);
- * yield* kv.set("session:123", "ok", { ex: 60 });
+ * const api = yield* Render.WebService(
+ *   "Api",
+ *   {
+ *     plan: "free",
+ *     region: "oregon",
+ *     runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+ *   },
+ *   Effect.gen(function* () {
+ *     const kv = yield* Render.WriteKeyValue(cache);
+ *     return { kv };
+ *   }).pipe(Effect.provide(Render.WriteKeyValueHttp)),
+ * );
  * ```
  *
  * @binding

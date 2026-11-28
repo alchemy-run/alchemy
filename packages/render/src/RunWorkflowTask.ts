@@ -81,10 +81,20 @@ export interface RunWorkflowTaskClient {
  * and Render API credentials into the host's `RuntimeContext`. Provide
  * {@link RunWorkflowTaskHttp}.
  *
- * **Example:** Trigger and await a workflow task from a web handler
+ * **Example:** Bind RunWorkflowTask on a WebService
  * ```typescript
- * const jobs = yield* Render.RunWorkflowTask(workflow);
- * const result = yield* jobs.runAndWait("send-digest", { userId: "usr_123" });
+ * const api = yield* Render.WebService(
+ *   "Api",
+ *   {
+ *     plan: "free",
+ *     region: "oregon",
+ *     runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+ *   },
+ *   Effect.gen(function* () {
+ *     const jobs = yield* Render.RunWorkflowTask(workflow);
+ *     return { jobs };
+ *   }).pipe(Effect.provide(Render.RunWorkflowTaskHttp)),
+ * );
  * ```
  *
  * @binding

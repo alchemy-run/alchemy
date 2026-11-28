@@ -1,0 +1,52 @@
+---
+title: Workspaces and tokens
+description: How Render workspaces own resources, how Alchemy resolves ownerId, and how to separate staging and production workspaces.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Every resource on Render belongs to an **owner workspace** (`tea-...` for teams or `usr-...` for personal accounts). An API key grants access to one or more workspaces that your Render account belongs to.
+
+<Tree
+  nodes={[
+    { id: "token", label: "RENDER_API_KEY", type: "account API key", icon: "key-round" },
+    { id: "ws", label: "acme", type: "workspace · ownerId", parent: "token", icon: "brand:render" },
+    { id: "proj", label: "Site", type: "Project", parent: "ws", dashed: true, icon: "folder" },
+    { id: "web", label: "Web", type: "WebService", parent: "proj", tone: "accent", icon: "server" },
+    { id: "db", label: "Db", type: "Postgres", parent: "proj", icon: "brand:postgresql" },
+  ]}
+  caption="When a Render API key belongs to a single owner, Alchemy auto-resolves ownerId from /owners. Multi-workspace tokens pin ownerId in the profile, env var, or resource prop."
+/>
+
+## How Alchemy chooses a workspace
+
+Alchemy resolves `ownerId` in this order:
+
+1. An explicit `ownerId` property passed on a resource.
+2. The `ownerId` saved on your active `Render` profile (or `RENDER_OWNER_ID` in CI).
+3. Auto-discovery from `GET /owners` when your token sees a single workspace. If your token belongs to multiple workspaces, specify `ownerId` explicitly so deployments never target the wrong team.
+
+```typescript
+// src/project.ts
+import * as Render from "@alchemy.run/render";
+
+export const project = Render.Project("Site", {
+  ownerId: "tea-xxxxxxxxxxxxxxxxxxxx",
+  environments: {
+    staging: { name: "staging", protectedStatus: "unprotected" },
+  },
+});
+```
+
+## Separate production from staging
+
+Create separate Render profiles (or separate team API keys in CI) when production and staging live in isolated workspaces:
+
+<PackageManagers
+  script={`{run} alchemy profile create prod
+{run} alchemy profile edit --profile prod --add Render
+{run} alchemy deploy --stage prod --profile prod`}
+/>
+
+In CI (`CI=true`), export `RENDER_API_KEY` and `RENDER_OWNER_ID` in your workflow environment. See [CI](/environments/ci).

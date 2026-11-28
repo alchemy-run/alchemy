@@ -1,6 +1,6 @@
 ---
 title: Setup
-description: Connect Alchemy to Render — workspace owner ID, API key, profiles, and optional SQL drivers.
+description: Connect Alchemy to Render — API keys, workspace owner ID, profiles, CI variables, and SQL migration drivers.
 ---
 
 import PackageManagers from "../../../components/PackageManagers.astro";
@@ -9,16 +9,31 @@ Create an API key in the Render Dashboard under **Account Settings -> API Keys**
 
 <PackageManagers add="@alchemy.run/render" />
 
-Register the provider on your stack:
+Register the provider layer on your stack:
 
 ```typescript
 // alchemy.run.ts
 import * as Render from "@alchemy.run/render";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
 
-providers: Render.providers(),
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Render.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
 ```
 
-Run `alchemy profile edit --add Render` and provide your Render API key (`ownerId` is optional and auto-resolved when your token belongs to a single workspace/owner).
+Configure a local profile interactively:
+
+<PackageManagers run="alchemy profile edit --add Render" />
+
+Enter your Render API key when prompted (`ownerId` is optional and auto-resolved when your token belongs to a single workspace).
 
 In CI (`CI=true`), profiles are bypassed. Set `RENDER_API_KEY` (or `RENDER_TOKEN`); `RENDER_OWNER_ID` and `RENDER_API_BASE_URL` are optional.
 
@@ -28,5 +43,6 @@ See [Profiles](/environments/profiles) for how credentials are stored and switch
 
 ## Next steps
 
-- [Render overview](/render) — resources, workflows, previews, and runtime bindings.
-- [API reference](/providers/render) — generated docs for all 21 resources and 6 bindings.
+- [What is Render?](/render/what-is-render) — workspaces, projects, environments, compute, and datastores.
+- [Workspaces and tokens](/render/workspaces-and-tokens) — scoping multiple workspaces and CI secrets.
+- [API reference](/providers/render) — generated docs for all 20 resources and 6 runtime bindings.

@@ -1,0 +1,58 @@
+---
+title: Domains and private networking
+description: Custom domains, ConnectService internal discovery, DedicatedIp egress addresses, and IP allow lists on Render.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Public Render services accept traffic at `*.onrender.com` and optional custom domains, while internal services communicate across Render's private network without public exposure.
+
+<Tree
+  nodes={[
+    { id: "edge", label: "Internet / CDN", type: "customDomains", icon: "globe" },
+    { id: "web", label: "WebService", type: "public · customDomains", parent: "edge", tone: "accent", icon: "server" },
+    { id: "priv", label: "PrivateService", type: "private network", icon: "server" },
+    { id: "egress", label: "DedicatedIp", type: "fixed outbound IP", icon: "network" },
+  ]}
+  links={[
+    { from: "web", to: "priv", label: "ConnectService" },
+    { from: "priv", to: "egress", label: "outbound IP" },
+  ]}
+  caption="ConnectService passes internal service URLs to callers, while DedicatedIp attaches static outbound IPs to eligible services."
+/>
+
+## Service-to-service calls (`ConnectService`)
+
+Bind any [`WebService`](/providers/render/reference/compute#webservice), [`PrivateService`](/providers/render/reference/compute#privateservice), [`StaticSite`](/providers/render/reference/compute#staticsite), or [`ServicePreview`](/providers/render/reference/previews#servicepreview) to inject `RENDER_SERVICE_<ID>_URL` and `RENDER_SERVICE_<ID>_SLUG` and issue relative HTTP requests:
+
+```typescript
+// src/proxy.ts
+import * as Render from "@alchemy.run/render";
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+
+export const PrivateApi = Render.PrivateService("PrivateApi", {
+  plan: "starter",
+  region: "oregon",
+  runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+});
+
+export const Gateway = Render.WebService(
+  "Gateway",
+  {
+    plan: "free",
+    region: "oregon",
+    runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+  },
+  Effect.gen(function* () {
+    const backend = yield* Render.ConnectService(PrivateApi);
+    return {
+      fetch: backend.fetch(HttpClientRequest.get("/health")).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Render.ConnectServiceHttp)),
+);
+```
+
+## Custom domains, allow lists, and Dedicated IPs
+
+Pass `customDomains` and `ipAllowList` directly on [`WebService`](/providers/render/reference/compute#webservice), [`Postgres`](/providers/render/reference/postgres#postgres), or [`KeyValue`](/providers/render/reference/key-value#keyvalue). Manage workspace static outbound IP associations with [`Render.DedicatedIp`](/providers/render/reference/networking#dedicatedip).

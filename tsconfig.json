@@ -713,6 +713,12 @@
       "path": "./examples/fly-postgres/tsconfig.json"
     },
     {
+      "path": "./examples/render-web-service/tsconfig.json"
+    },
+    {
+      "path": "./examples/render-postgres/tsconfig.json"
+    },
+    {
       "path": "./examples/monorepo-single-stack/tsconfig.json"
     },
     {

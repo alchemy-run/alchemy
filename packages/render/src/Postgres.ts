@@ -206,18 +206,50 @@ export type Postgres = Resource<
  * A managed Render PostgreSQL database with automated backups, high availability,
  * read replicas, and Alchemy SQL migration support.
  *
- * Connect from a Render service or foreign runtime via {@link ConnectPostgres}.
+ * Changing `region`, `version`, `databaseName`, `databaseUser`, or `restoreFrom`
+ * replaces the database instance. Connect from a Render service or foreign
+ * runtime via {@link ConnectPostgres}.
  *
- * **Example:** Postgres database with SQL migrations
+ * ### Migrations & PgBouncer
+ * **Example:** Postgres database with PgBouncer pooling and SQL migrations
  * ```typescript
  * const db = yield* Render.Postgres("MainDb", {
  *   name: "main-db",
  *   plan: "basic_256mb",
  *   region: "oregon",
  *   version: "16",
+ *   connectionPool: "pgbouncer",
  *   environmentId: env.id,
  *   migrations: "./migrations",
  * });
+ * ```
+ *
+ * ### Read Replicas & Access Control
+ * **Example:** Postgres primary with a read replica and external CIDR allow list
+ * ```typescript
+ * const haDb = yield* Render.Postgres("HaDb", {
+ *   plan: "basic_1gb",
+ *   region: "oregon",
+ *   enableHighAvailability: true,
+ *   ipAllowList: [{ cidrBlock: "0.0.0.0/0", description: "public-tls" }],
+ *   readReplicas: [{ name: "ha-db-replica" }],
+ * });
+ * ```
+ *
+ * ### Binding to a Web Service
+ * **Example:** Bind `ConnectPostgres` into a hosted service
+ * ```typescript
+ * const api = yield* Render.WebService(
+ *   "Api",
+ *   {
+ *     plan: "free",
+ *     region: "oregon",
+ *     runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+ *   },
+ *   Effect.gen(function* () {
+ *     yield* Render.ConnectPostgres(db);
+ *   }).pipe(Effect.provide(Render.ConnectPostgresHttp)),
+ * );
  * ```
  *
  * @resource

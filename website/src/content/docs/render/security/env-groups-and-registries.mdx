@@ -1,0 +1,81 @@
+---
+title: Env groups and registries
+description: Share environment variables and secret files with EnvGroup and EnvGroupLink, manage private image pulls with RegistryCredential, and feed secrets from external managers.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+Render separates shared configuration from individual services with **Env Groups** (`evg-...`) and stores external container pull credentials as **Registry Credentials** (`rgc-...`).
+
+<Tree
+  nodes={[
+    { id: "ws", label: "acme", type: "workspace", icon: "brand:render", colGap: 4, areas: ["eg reg", "api wrk"] },
+    { id: "eg", label: "SharedConfig", type: "EnvGroup · envVars + secretFiles", parent: "ws", icon: "lock" },
+    { id: "reg", label: "GhcrPull", type: "RegistryCredential · PRIVATE_REGISTRY", parent: "ws", icon: "package" },
+    { id: "api", label: "Api", type: "WebService", parent: "ws", tone: "accent", icon: "server" },
+    { id: "wrk", label: "Worker", type: "BackgroundWorker", parent: "ws", icon: "zap" },
+  ]}
+  links={[
+    { from: "eg", to: "api", label: "EnvGroupLink" },
+    { from: "eg", to: "wrk", label: "EnvGroupLink" },
+    { from: "reg", to: "api", label: "pulls image" },
+  ]}
+  caption="EnvGroupLink attaches a shared EnvGroup to one or more services, while RegistryCredential authenticates private OCI image pulls."
+/>
+
+## Shared Env Groups
+
+Declare an `EnvGroup` with plain variables, generated secrets (`{ generateValue: true }`), or mounted secret files, and attach it to any service using `EnvGroupLink`:
+
+```typescript
+// src/config.ts
+import * as Render from "@alchemy.run/render";
+import * as Effect from "effect/Effect";
+
+export const SharedEnv = Effect.gen(function* () {
+  const group = yield* Render.EnvGroup("SharedConfig", {
+    envVars: {
+      APP_MODE: "production",
+      SESSION_SECRET: { generateValue: true },
+    },
+    secretFiles: {
+      "config.json": JSON.stringify({ featureFlag: true }),
+    },
+  });
+
+  const api = yield* Render.WebService("Api", {
+    plan: "starter",
+    region: "oregon",
+    runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+  });
+
+  yield* Render.EnvGroupLink("ApiSharedEnv", {
+    envGroupId: group.id,
+    serviceId: api.id,
+  });
+
+  return { group, api };
+});
+```
+
+## Secret managers and `.env`
+
+Per-service secrets and runtime configuration work with Alchemy's `Config` and external secret providers including [Doppler](/environments/secrets), [Infisical](/environments/secrets), per-stage `secrets`, and `.env` files. Pass resolved `Redacted` values via `envVars` or `env` on [`Render.WebService`](/providers/render/reference/compute#webservice) so values stay redacted in state and logs. See [Secrets](/environments/secrets) for setup.
+
+## Private container registries
+
+When deploying private OCI images from GHCR, Docker Hub, AWS ECR, or GCP Artifact Registry, declare a [`Render.RegistryCredential`](/providers/render/reference/security#registrycredential) and reference its ID on `registryCredentialId` or inside `runtimeSource.image`:
+
+```typescript
+// src/registry.ts
+import * as Render from "@alchemy.run/render";
+import * as Redacted from "effect/Redacted";
+
+export const GhcrCreds = (token: string) =>
+  Render.RegistryCredential("GhcrCreds", {
+    name: "ghcr-creds",
+    registry: "GITHUB",
+    username: "ci-bot",
+    authToken: Redacted.make(token),
+  });
+```

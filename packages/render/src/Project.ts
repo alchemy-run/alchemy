@@ -76,6 +76,7 @@ export interface ProjectLookup {
  * A Render project groups environments (such as `staging` and `production`)
  * and isolates configuration across services and datastores.
  *
+ * ### Environments & Isolation
  * **Example:** Project with production and staging environments
  * ```typescript
  * const app = yield* Render.Project("App", {
@@ -84,6 +85,17 @@ export interface ProjectLookup {
  *     production: { name: "production", protectedStatus: "protected", networkIsolated: true },
  *     staging: { name: "staging", protectedStatus: "unprotected" },
  *   },
+ * });
+ * ```
+ *
+ * ### Scoping Services
+ * **Example:** Deploy a Web Service into a project environment
+ * ```typescript
+ * const api = yield* Render.WebService("Api", {
+ *   plan: "free",
+ *   region: "oregon",
+ *   environmentId: app.environments.staging.id,
+ *   runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
  * });
  * ```
  *

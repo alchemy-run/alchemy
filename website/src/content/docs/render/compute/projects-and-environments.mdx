@@ -1,0 +1,70 @@
+---
+title: Projects and environments
+description: Group services and datastores in a Render Project and isolate traffic and permissions across Environments.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A **Project** (`prj-...`) organizes an application on Render into separate **Environments** (`evm-...`) such as `staging` and `production`. Every service, Postgres database, Key Value instance, and Env Group can be attached to an `environmentId`.
+
+<Tree
+  nodes={[
+    { id: "proj", label: "Site", type: "Project · prj-...", icon: "folder", colGap: 4, areas: ["stg prd"] },
+    { id: "stg", label: "staging", type: "unprotected", parent: "proj", dashed: true, icon: "layers" },
+    { id: "prd", label: "production", type: "protected · networkIsolated", parent: "proj", dashed: true, icon: "shield-check" },
+    { id: "sweb", label: "Web", type: "WebService", parent: "stg", icon: "server" },
+    { id: "pweb", label: "Web", type: "WebService", parent: "prd", tone: "accent", icon: "server" },
+  ]}
+  caption="Environments isolate services and datastores inside one Project. Setting networkIsolated blocks private-network traffic across environment boundaries."
+/>
+
+## Inline environments on a Project
+
+Manage common environments directly on `Render.Project`:
+
+```typescript
+// src/project.ts
+import * as Render from "@alchemy.run/render";
+import * as Effect from "effect/Effect";
+
+export const stackResources = Effect.gen(function* () {
+  const project = yield* Render.Project("Site", {
+    environments: {
+      staging: { name: "staging", protectedStatus: "unprotected" },
+      production: {
+        name: "production",
+        protectedStatus: "protected",
+        networkIsolated: true,
+      },
+    },
+  });
+
+  const web = yield* Render.WebService("Web", {
+    plan: "free",
+    region: "oregon",
+    environmentId: project.environments.staging.id,
+    runtimeSource: {
+      image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" },
+    },
+  });
+
+  return { project, web };
+});
+```
+
+## Standalone environments
+
+When environments are added or owned separately from the Project definition (for example per-branch preview environments), manage them with [`Render.Environment`](/providers/render/reference/organization#environment):
+
+```typescript
+// src/env.ts
+import * as Render from "@alchemy.run/render";
+
+export const qaEnv = (projectId: string) =>
+  Render.Environment("QaEnv", {
+    projectId,
+    name: "qa",
+    protectedStatus: "unprotected",
+    networkIsolated: true,
+  });
+```

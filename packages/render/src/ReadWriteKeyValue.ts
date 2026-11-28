@@ -11,11 +11,20 @@ export type ReadWriteKeyValueClient = ReadWriteClient;
  *
  * Provide {@link ReadWriteKeyValueHttp}.
  *
- * **Example:** Read and write a key
+ * **Example:** Read and write Key Value on a WebService
  * ```typescript
- * const kv = yield* Render.ReadWriteKeyValue(cache);
- * yield* kv.set("greeting", "hello");
- * const value = yield* kv.get("greeting");
+ * const api = yield* Render.WebService(
+ *   "Api",
+ *   {
+ *     plan: "free",
+ *     region: "oregon",
+ *     runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+ *   },
+ *   Effect.gen(function* () {
+ *     const kv = yield* Render.ReadWriteKeyValue(cache);
+ *     return { kv };
+ *   }).pipe(Effect.provide(Render.ReadWriteKeyValueHttp)),
+ * );
  * ```
  *
  * @binding

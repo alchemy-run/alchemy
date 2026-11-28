@@ -149,13 +149,25 @@ export type WebServiceShape = Main<WebServiceServices>;
 
 export type WebServiceRuntimeContext = HostRuntimeContext;
 
+export type WebService = Resource<
+  "Render.WebService",
+  WebServiceProps,
+  WebServiceAttributes,
+  RenderServiceBinding,
+  Providers,
+  WebServiceLookup
+>;
+
 /**
  * A Render Web Service accepts public HTTP/HTTPS traffic over an `onrender.com`
  * or custom domain, supports autoscaling, persistent disks, health checks, and
  * accepts runtime bindings (`ConnectPostgres`, `ReadWriteKeyValue`, etc.).
  *
+ * Changing `region` replaces the service.
+ *
  * ### Effect WebService
  * Deploy a bundled Effect HTTP server (built and pushed to `registryImage`):
+ * **Example:** Effect HTTP handler
  * ```typescript
  * // src/Api.ts
  * export default class Api extends Render.WebService<Api>()(
@@ -178,6 +190,7 @@ export type WebServiceRuntimeContext = HostRuntimeContext;
  *
  * ### Async WebService
  * Deploy a plain `{ fetch(request, env) }` handler with typed env via {@link InferEnv}:
+ * **Example:** Async fetch handler with `InferEnv`
  * ```typescript
  * // alchemy.run.ts
  * export const Ping = Render.WebService("Ping", {
@@ -199,8 +212,9 @@ export type WebServiceRuntimeContext = HostRuntimeContext;
  * };
  * ```
  *
- * ### Git or Pre-Built Image WebService
- * Manage an existing Git repo or pre-built registry image on Render directly:
+ * ### Pre-Built Registry Image
+ * Manage a pre-built container image on Render directly:
+ * **Example:** Image-backed Web Service
  * ```typescript
  * const api = yield* Render.WebService("Api", {
  *   name: "my-api",
@@ -214,19 +228,49 @@ export type WebServiceRuntimeContext = HostRuntimeContext;
  * });
  * ```
  *
+ * ### Git Native Runtime & Docker Builds
+ * Build from a connected Git repository using Render's native buildpacks or a Dockerfile:
+ * **Example:** Git repo with Node native runtime
+ * ```typescript
+ * const repoApi = yield* Render.WebService("RepoApi", {
+ *   plan: "starter",
+ *   region: "oregon",
+ *   runtimeSource: {
+ *     nativeRuntime: {
+ *       runtime: "node",
+ *       repo: "https://github.com/org/api",
+ *       branch: "main",
+ *       buildCommand: "pnpm install && pnpm build",
+ *       startCommand: "node dist/server.js",
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * ### Scaling, Disks & Bindings
+ * Configure horizontal autoscaling, persistent disks, and runtime database/KV bindings:
+ * **Example:** Bind Postgres and Key Value into a Web Service
+ * ```typescript
+ * const service = yield* Render.WebService(
+ *   "App",
+ *   {
+ *     plan: "starter",
+ *     region: "oregon",
+ *     numInstances: 2,
+ *     disk: { name: "uploads", mountPath: "/var/data", sizeGB: 10 },
+ *     runtimeSource: { image: { imagePath: "ghcr.io/org/app", tag: "latest" } },
+ *   },
+ *   Effect.gen(function* () {
+ *     yield* Render.ConnectPostgres(db);
+ *     yield* Render.ReadWriteKeyValue(cache);
+ *   }).pipe(Effect.provide(Layer.merge(Render.ConnectPostgresHttp, Render.ReadWriteKeyValueHttp))),
+ * );
+ * ```
+ *
  * @resource
  * @product Compute
  * @category Compute
  */
-export type WebService = Resource<
-  "Render.WebService",
-  WebServiceProps,
-  WebServiceAttributes,
-  RenderServiceBinding,
-  Providers,
-  WebServiceLookup
->;
-
 export const WebService: Platform<
   WebService,
   WebServiceServices,

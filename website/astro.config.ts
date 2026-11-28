@@ -1344,7 +1344,43 @@ export default defineConfig({
           label: "Render",
           items: [
             { label: "Overview", link: "/render" },
+            { label: "What is Render?", link: "/render/what-is-render" },
             { label: "Setup", link: "/render/setup" },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Workspaces and tokens", link: "/render/workspaces-and-tokens" },
+                {
+                  label: "Env groups and registries",
+                  link: "/render/security/env-groups-and-registries",
+                },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                {
+                  label: "Projects and environments",
+                  link: "/render/compute/projects-and-environments",
+                },
+                { label: "Services and workflows", link: "/render/compute/services" },
+              ],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Postgres", link: "/render/data/postgres" },
+                { label: "Key Value", link: "/render/data/key-value" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [{ label: "Domains and private networking", link: "/render/networking" }],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "Logs, streams, and webhooks", link: "/render/observability" }],
+            },
             providerResourcesEntry("Render"),
           ],
         },

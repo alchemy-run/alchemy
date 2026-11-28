@@ -111,8 +111,10 @@ export type KeyValue = Resource<
  * A Render managed Key Value (Redis/Valkey-compatible) datastore with private
  * networking, persistence options, eviction policies, and IP allow listing.
  *
- * Bind with {@link ReadKeyValue}, {@link WriteKeyValue}, or {@link ReadWriteKeyValue}.
+ * Changing `region` replaces the instance. Bind with {@link ReadKeyValue},
+ * {@link WriteKeyValue}, or {@link ReadWriteKeyValue}.
  *
+ * ### Eviction & Access Control
  * **Example:** Key Value instance with LRU eviction
  * ```typescript
  * const cache = yield* Render.KeyValue("Cache", {
@@ -120,8 +122,24 @@ export type KeyValue = Resource<
  *   plan: "starter",
  *   region: "oregon",
  *   maxmemoryPolicy: "allkeys_lru",
- *   persistenceMode: "off",
+ *   ipAllowList: [{ cidrBlock: "0.0.0.0/0", description: "external-tls" }],
  * });
+ * ```
+ *
+ * ### Binding to a Service
+ * **Example:** Bind `ReadWriteKeyValue` into a Web Service
+ * ```typescript
+ * const api = yield* Render.WebService(
+ *   "Api",
+ *   {
+ *     plan: "free",
+ *     region: "oregon",
+ *     runtimeSource: { image: { imagePath: "docker.io/nginxdemos/hello", tag: "plain-text" } },
+ *   },
+ *   Effect.gen(function* () {
+ *     yield* Render.ReadWriteKeyValue(cache);
+ *   }).pipe(Effect.provide(Render.ReadWriteKeyValueHttp)),
+ * );
  * ```
  *
  * @resource

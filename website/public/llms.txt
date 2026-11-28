@@ -299,7 +299,7 @@ The AWS hub: overview, What is AWS? (accounts, regions, IAM, resources and ARNs,
 - [What is AWS?](https://alchemy.run/aws/what-is-aws) — The concepts behind AWS — accounts, regions, IAM identities and policies, resources and ARNs, runtimes, event sources, VPCs and the edge — and how @alchemy.run/aws models each of them.
 - [Accounts and regions](https://alchemy.run/aws/accounts-and-regions) — How AWS accounts isolate resources, how regions and Availability Zones place them, and how profiles and stages choose where each Alchemy deploy goes.
 - [IAM and bindings](https://alchemy.run/aws/iam) — How IAM identities, roles, trust, resource-based policies and tag-based access (ABAC) work on AWS, and how Alchemy bindings write each runtime's least-privilege policies from the calls its code makes.
-- [Setup](https://alchemy.run/aws/setup) — Connect Alchemy to AWS with SSO, console login, stored access keys, or CI environment credentials.
+- [Setup](https://alchemy.run/aws/setup) — Connect Alchemy to AWS with an AWS CLI profile (console login, SSO, credential_process, assumed roles), stored access keys, or CI environment credentials.
 - [Local development](https://alchemy.run/aws/local-development) — alchemy dev runs your AWS stack on your machine — Lambda in Docker containers, local S3/DynamoDB/SQS, event sources firing, hot reload — with no AWS account or credentials required.
 - [Choosing a runtime](https://alchemy.run/aws/compute/choosing-a-runtime) — How Lambda Functions, Lambda Web Functions, ECS, EKS and EC2 differ in how they run your code, scale and cost, and how to choose one for each part of an app.
 
@@ -640,10 +640,19 @@ The Railway hub: overview, What is Railway? (workspaces, projects, environments,
 
 ## Render
 
-Render services (WebService, PrivateService, BackgroundWorker, CronJob, StaticSite, ServicePreview), Workflows and Blueprints, Projects and Environments, Postgres with migrations/PgBouncer/PITR/exports, Key Value/Redis, Env Groups, Registry Credentials, Dedicated IPs, Webhooks, Log/Metrics Streams, log tailing, and runtime bindings (ConnectPostgres, ConnectService, RunWorkflowTask, Read/WriteKeyValue).
+Render services (WebService, PrivateService, BackgroundWorker, CronJob, StaticSite, ServicePreview), Workflows and Blueprints, Projects and Environments, Postgres with migrations/PgBouncer/PITR/exports, Key Value caches, Env Groups, Registry Credentials, Dedicated IPs, Webhooks, Log/Metrics Streams, log tailing, and runtime bindings (ConnectPostgres, ConnectService, RunWorkflowTask, Read/Write/ReadWriteKeyValue).
 
-- [Render](https://alchemy.run/render) — Render Web Services, Private Services, Workers, Cron Jobs, Static Sites, Service Previews, Workflows, Blueprints, Postgres with PgBouncer & PITR, Key Value, Environments, Env Groups, and runtime bindings in Alchemy.
-- [Setup](https://alchemy.run/render/setup) — Connect Alchemy to Render — workspace owner ID, API key, profiles, and optional SQL drivers.
+- [Render](https://alchemy.run/render) — Deploy Render Web Services, Private Services, Workers, Cron Jobs, Static Sites, Service Previews, Workflows, Blueprints, Postgres with PgBouncer and PITR, Key Value, Projects, Environments, and Env Groups from TypeScript.
+- [What is Render?](https://alchemy.run/render/what-is-render) — The concepts behind Render — workspaces, projects, environments, services, datastores, env groups, workflows, previews and private networking — and how @alchemy.run/render models each of them.
+- [Setup](https://alchemy.run/render/setup) — Connect Alchemy to Render — API keys, workspace owner ID, profiles, CI variables, and SQL migration drivers.
+- [Workspaces and tokens](https://alchemy.run/render/workspaces-and-tokens) — How Render workspaces own resources, how Alchemy resolves ownerId, and how to separate staging and production workspaces.
+- [Env groups and registries](https://alchemy.run/render/security/env-groups-and-registries) — Share environment variables and secret files with EnvGroup and EnvGroupLink, manage private image pulls with RegistryCredential, and feed secrets from external managers.
+- [Projects and environments](https://alchemy.run/render/compute/projects-and-environments) — Group services and datastores in a Render Project and isolate traffic and permissions across Environments.
+- [Services and workflows](https://alchemy.run/render/compute/services) — Run Web Services, Private Services, Workers, Cron Jobs, Static Sites, Service Previews, Workflows, and Blueprints on Render.
+- [Postgres](https://alchemy.run/render/data/postgres) — Managed Render Postgres with SQL migrations, PgBouncer connection pooling, read replicas, PITR cloning, exports, and ConnectPostgres bindings.
+- [Key Value](https://alchemy.run/render/data/key-value) — Managed Render Key Value (Redis/Valkey-compatible) caches with eviction policies, persistence modes, and Read/Write/ReadWrite bindings.
+- [Domains and private networking](https://alchemy.run/render/networking) — Custom domains, ConnectService internal discovery, DedicatedIp egress addresses, and IP allow lists on Render.
+- [Logs, streams, and webhooks](https://alchemy.run/render/observability) — Query and tail Render logs via Alchemy CLI, configure LogStream and MetricsStream forwarding, and subscribe to workspace Webhooks and NotificationSetting rules.
 
 ## DigitalOcean
 
@@ -1406,4 +1415,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~295 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~299 KB) — only fetch it when you need to locate a specific resource's reference page.
