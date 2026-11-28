@@ -137,11 +137,11 @@ export const Service = <
         concurrency: "unbounded",
       }).pipe(
         Effect.flatMap((resolved) => {
-          // A sandbox with a gateway builds its bindings there (see `Gateway.ts`).
-          const build = Gateway.bind(id, resolved, f, options?.local === true);
+          const local = options?.local === true;
           // A deployed runtime only holds the client to what the plan listed.
+          // A sandbox with a gateway builds its bindings there (see `Gateway.ts`).
           if (globalThis.__ALCHEMY_RUNTIME__) {
-            return Effect.flatMap(build, (client) =>
+            return Gateway.bind(id, resolved, f, local, (client) =>
               guardClient(id, () => acquisitionTargets(args, resolved), client),
             );
           }
@@ -149,7 +149,7 @@ export const Service = <
           // whichever frame is current (see CapabilityGraph.ts).
           const targets = acquisitionTargets(args, resolved);
           return recordAcquisition({ binding: id, targets }).pipe(
-            Effect.andThen(build),
+            Effect.andThen(Gateway.bind(id, resolved, f, local)),
             // Deploy-time data-plane routing: the client's calls must target
             // whatever data plane the bound resource actually lives on. In an
             // `alchemy dev` run a local-mode resource exists only on the

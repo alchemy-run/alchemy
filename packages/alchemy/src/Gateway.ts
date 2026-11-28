@@ -436,37 +436,71 @@ export const bind = <A, E, R>(
   build: (...args: any[]) => Effect.Effect<A, E, R>,
   /** The binding configures its own host (a mount) and holds no credential. */
   local: boolean,
+  /**
+   * Holds a client, or one call of a client the gateway holds, to the plan's
+   * policy (see `CapabilityGraph.guardClient`). A stand-in is an Effect and a
+   * function at once, so each of its calls is held rather than the stand-in.
+   */
+  hold: (client: unknown) => Effect.Effect<unknown> = Effect.succeed,
 ): Effect.Effect<A, E, R> =>
   Effect.flatMap(CurrentRuntimeContext, (ctx) => {
-    if (ctx === undefined) return build(...args);
+    const held = (client: A) => hold(client) as Effect.Effect<A>;
+    return bindIn(ctx, id, args, build, local, hold).pipe(
+      Effect.flatMap((bound) => (bound.remote ? Effect.succeed(bound.client) : held(bound.client))),
+    );
+  });
+
+const bindIn = <A, E, R>(
+  ctx: RuntimeContext["Service"] | undefined,
+  id: string,
+  args: ReadonlyArray<unknown>,
+  build: (...args: any[]) => Effect.Effect<A, E, R>,
+  local: boolean,
+  hold: (client: unknown) => Effect.Effect<unknown>,
+): Effect.Effect<{ readonly client: A; readonly remote: boolean }, E, R> => {
+  const bound = (effect: Effect.Effect<A, E, R>) =>
+    Effect.map(effect, (client) => ({ client, remote: false }));
+  return Effect.suspend(() => {
+    if (ctx === undefined) return bound(build(...args));
     const gateway = ctx.gateway;
     // Built on the host itself: what it binds stays there.
     const onHost = () =>
-      Effect.provideService(build(...args), RuntimeContext, derive(ctx, undefined, id, local));
+      bound(
+        Effect.provideService(build(...args), RuntimeContext, derive(ctx, undefined, id, local)),
+      );
     if (gateway === undefined || local) return onHost();
     if (ctx.gatewayScope !== undefined && !ctx.gatewayScope.has(id)) return onHost();
     if (gateway.phase === "plan") {
       // Everything the binding binds, `Config` included, is the gateway's.
-      return Effect.provideService(
-        build(...args),
-        RuntimeContext,
-        derive(ctx, { ...gateway, set: (key, output) => gateway.set(key, output) }, id, true),
+      return bound(
+        Effect.provideService(
+          build(...args),
+          RuntimeContext,
+          derive(ctx, { ...gateway, set: (key, output) => gateway.set(key, output) }, id, true),
+        ),
       );
     }
     const key = keyOf(id, args);
     if (gateway.phase === "gateway") {
-      return Effect.tap(build(...args), (client) => gateway.register(key, client));
+      return bound(Effect.tap(build(...args), (client) => gateway.register(key, client)));
     }
     const direct = gateway.direct?.(id);
     if (direct !== undefined) {
       // Built here after all: its calls leave the sandbox themselves.
-      return build(...args).pipe(
-        Effect.provide(direct),
-        Effect.map((client) => wrapClientInvocations(client, direct) as A),
-      ) as Effect.Effect<A, E, R>;
+      return bound(
+        build(...args).pipe(
+          Effect.provide(direct),
+          Effect.map((client) => wrapClientInvocations(client, direct) as A),
+        ) as Effect.Effect<A, E, R>,
+      );
     }
-    return Effect.succeed(remoteClient(gateway.call, key, []) as A);
+    const call: Call = (key, path, args) =>
+      Effect.flatten(
+        hold(gateway.call(key, path, args)) as Effect.Effect<Effect.Effect<unknown, unknown>>,
+      );
+    return Effect.succeed({ client: remoteClient(call, key, []) as A, remote: true });
   });
+};
 
 /**
  * Wrap every invocation surface of a binding client so its returned Effects
