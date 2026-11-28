@@ -615,33 +615,57 @@ const executeNode = (
     const inCycle = cycleMembers.has(fqn);
     const logicalId = node.resource.LogicalId;
     const namespace = node.resource.Namespace;
+    let committed: ResourceState | undefined = node.state;
 
     const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
-      state.set({
-        stack: stackName,
-        stage,
-        fqn,
-        // Early commits (`creating`/`replacing`) persist plan props that may
-        // still hold unresolved Output exprs; strip them so state stores only
-        // plain data (see stripUnresolved in Diff.ts).
-        //
-        // Binding rows follow the same rule. Even the RESOLVED binding
-        // payload can carry Effect leaves — a tagged Worker/Function class in
-        // `env` (the circular-bindings pattern) is a function-typed Effect
-        // that `Output.evaluate` passes through untouched. A JSON state store
-        // would persist it via its `toJSON` as an `{"_id":"Effect",...}`
-        // relic, which the next plan's `diffBindings` compares against the
-        // live class stripped to `undefined` — a phantom binding "update" on
-        // every deploy, forever. Stripping at the commit boundary keeps both
-        // store kinds consistent with the comparison in `havePropsChanged`.
-        value: {
-          ...value,
-          adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
-          propsIncomplete: propsIncomplete(value),
-          props: stripUnresolved(value.props),
-          bindings: stripUnresolved(value.bindings),
-          namespace,
-        } as S,
+      state
+        .set({
+          stack: stackName,
+          stage,
+          fqn,
+          // Early commits (`creating`/`replacing`) persist plan props that may
+          // still hold unresolved Output exprs; strip them so state stores only
+          // plain data (see stripUnresolved in Diff.ts).
+          //
+          // Binding rows follow the same rule. Even the RESOLVED binding
+          // payload can carry Effect leaves — a tagged Worker/Function class in
+          // `env` (the circular-bindings pattern) is a function-typed Effect
+          // that `Output.evaluate` passes through untouched. A JSON state store
+          // would persist it via its `toJSON` as an `{"_id":"Effect",...}`
+          // relic, which the next plan's `diffBindings` compares against the
+          // live class stripped to `undefined` — a phantom binding "update" on
+          // every deploy, forever. Stripping at the commit boundary keeps both
+          // store kinds consistent with the comparison in `havePropsChanged`.
+          value: {
+            ...value,
+            adoptionBlocked: value.adoptionBlocked ?? node.adoptionBlocked,
+            propsIncomplete: propsIncomplete(value),
+            props: stripUnresolved(value.props),
+            bindings: stripUnresolved(value.bindings),
+            namespace,
+          } as S,
+        })
+        .pipe(
+          Effect.tap((saved) =>
+            Effect.sync(() => {
+              committed = saved;
+            }),
+          ),
+        );
+
+    const checkpointInputs = (props: ResourceState["props"], bindings: ResourceBinding[]) =>
+      Effect.suspend(() => {
+        if (
+          !committed ||
+          committed.attr !== undefined ||
+          (committed.status !== "creating" && committed.status !== "replacing")
+        )
+          return Effect.void;
+        // Without attributes, recovery can only identify the attempted write
+        // through its inputs. Keep an existing attributes/props pair intact.
+        return commit({ ...committed, props, bindings, propsIncomplete: undefined }).pipe(
+          Effect.asVoid,
+        );
       });
 
     const scopedSession = resourceSession(reportEvent, fqn, logicalId);
@@ -903,6 +927,7 @@ const executeNode = (
         // Without `observe`, precreate and reconcile claim the identity unchecked.
         admitted =
           (yield* observeBeforePrecreate(node, props, fqn, logicalId, instanceId)) !== "unresolved";
+        yield* checkpointInputs(props, excludeDeletedBindings(node.bindings));
         // Some resources need a placeholder physical resource before their real
         // create can finish. Persist that stub so downstream evaluation can proceed.
         yield* report("pre-creating");
@@ -922,7 +947,7 @@ const executeNode = (
           logicalId,
           instanceId,
           resourceType: node.resource.Type,
-          props: node.props,
+          props,
           // A stub for an unresolved identity claims nothing. Leave the
           // checkpoint without it, so a retry checks the identity again.
           attr: admitted ? attr : undefined,
@@ -991,6 +1016,7 @@ const executeNode = (
         }
       }
 
+      yield* checkpointInputs(news, bindingOutputs);
       attr = yield* node.provider
         .reconcile({
           id: logicalId,
@@ -1384,6 +1410,7 @@ const executeNode = (
       }
 
       if (inCycle && node.provider.precreate && attr === undefined) {
+        yield* checkpointInputs(precreateProps, excludeDeletedBindings(node.bindings));
         yield* report("pre-creating");
         attr = yield* node.provider
           .precreate({
@@ -1401,7 +1428,7 @@ const executeNode = (
           logicalId,
           instanceId,
           resourceType: node.resource.Type,
-          props: node.props,
+          props: precreateProps,
           // A stub for an unresolved identity claims nothing. Leave the
           // checkpoint without it, so a retry checks the identity again.
           attr: admitted ? attr : undefined,
@@ -1437,6 +1464,7 @@ const executeNode = (
         yield* deleteFirst();
       }
 
+      yield* checkpointInputs(news, bindingOutputs);
       attr = yield* node.provider
         .reconcile({
           id: logicalId,
