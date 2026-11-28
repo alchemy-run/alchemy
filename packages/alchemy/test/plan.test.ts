@@ -1724,6 +1724,28 @@ describe("prior crash in 'updating' state", () => {
       state: { status: "updating", props: { replaceString: "A" } },
     },
   });
+
+  // The row holds the failed attempt on top; the provider will be handed
+  // `old.props` as `olds`, so the plan diffs against them too.
+  testSimple("update if the props last applied can be updated to the declared props", {
+    state: {
+      status: "updating",
+      props: { string: "B" },
+      old: { props: { string: "A" } },
+    },
+    props: { string: "B" },
+    plan: { action: "update", props: { string: "B" } },
+  });
+
+  testSimple("replace if the props last applied can not be updated to the declared props", {
+    state: {
+      status: "updating",
+      props: { replaceString: "B" },
+      old: { props: { replaceString: "A" } },
+    },
+    props: { replaceString: "B" },
+    plan: { action: "replace", props: { replaceString: "B" } },
+  });
 });
 
 describe("pending replacement deletion plans", { tags: ["unit", "local"] }, () => {

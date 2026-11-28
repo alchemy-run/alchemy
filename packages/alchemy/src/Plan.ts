@@ -80,6 +80,7 @@ import {
   type StateStoreError,
   type UpdatedResourceState,
   type UpdatingReourceState,
+  previousProps,
 } from "./State/index.ts";
 import { isPlainData, mapPlainData } from "./Util/data.ts";
 import { findCycleMembers, findCycles } from "./Util/scc.ts";
@@ -921,7 +922,7 @@ const makePlan = <A>(
           return nothing;
         }
 
-        const oldProps = oldState.status === "updating" ? oldState.old.props : oldState.props;
+        const oldProps = previousProps(oldState);
 
         // Normalize both sides through `dedupeBindings` so the binding
         // sets handed to `diff` are deduped AND sid-sorted — provider
@@ -1980,10 +1981,12 @@ const makePlan = <A>(
         }
       }
 
-      // Diff against whatever props represent the best-known current attempt.
-      // For replacement recovery that means the top-level replacement props,
-      // not the older generations stored under `old`.
-      const oldProps = oldState.props;
+      // Diff against the props the provider will be handed as `olds`: for an
+      // `updating` row, the last applied props under `old`, not the attempt
+      // committed before a reconcile that may have failed (#3754). For
+      // replacement recovery, the top-level replacement props, not the older
+      // generations stored under `old`.
+      const oldProps = previousProps(oldState);
 
       // On a mode switch the provider diff is skipped entirely:
       // comparing props across runtimes is meaningless (and the new

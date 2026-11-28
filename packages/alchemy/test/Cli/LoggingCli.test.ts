@@ -6,7 +6,14 @@ import * as Layer from "effect/Layer";
 import { LoggingCli, formatPlanLines } from "@/Cli/LoggingCli.ts";
 import { Cli } from "@/Report.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { createNode, deleteNode, planWith, replaceNode, updateNode } from "./PlanTestNodes.ts";
+import {
+  createNode,
+  deleteNode,
+  failedUpdateNode,
+  planWith,
+  replaceNode,
+  updateNode,
+} from "./PlanTestNodes.ts";
 
 /**
  * The plain renderer's printed lines, without the time and level prefix.
@@ -56,6 +63,16 @@ describe("formatPlanLines", { tags: ["unit", "local"] }, () => {
     ).join("\n");
     expect(output).toContain("no declared property changes");
     expect(output).not.toContain("secret:");
+  });
+
+  test("renders a failed update's retry against the props last applied", () => {
+    const output = formatPlanLines(
+      planWith([failedUpdateNode({ retries: 2 }, { retries: 3 }, { retries: 3 })]),
+      { detailed: true },
+    ).join("\n");
+    expect(output).not.toContain("no declared property changes");
+    expect(output).toContain("  properties:\n  -   retries: 2");
+    expect(output).toContain("  +   retries: 3");
   });
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "@alchemy.run/test";
 import { buildNamespaceTree, flattenTree } from "@/Cli/NamespaceTree.ts";
-import { createNode, replaceNode, updateNode } from "./PlanTestNodes.ts";
+import { createNode, failedUpdateNode, replaceNode, updateNode } from "./PlanTestNodes.ts";
 
 describe("NamespaceTree YAML properties", { tags: ["unit", "local"] }, () => {
   test("does not attach details in compact mode", () => {
@@ -28,6 +28,14 @@ describe("NamespaceTree YAML properties", { tags: ["unit", "local"] }, () => {
       "-   retries: 2",
       "+   retries: 3",
     ]);
+  });
+
+  test("diffs a failed update's retry against the props last applied", () => {
+    const [item] = flattenTree(
+      buildNamespaceTree([failedUpdateNode({ retries: 2 }, { retries: 3 }, { retries: 3 })]),
+      { includePropertyYaml: true },
+    );
+    expect(item?.propertyYaml?.lines).toEqual(["properties:", "-   retries: 2", "+   retries: 3"]);
   });
 
   test("attaches drift details in compact mode", () => {
