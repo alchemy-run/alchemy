@@ -79,6 +79,9 @@ const SELF: Readonly<Record<string, string>> = {
   UndefinedOr: `a`,
 };
 
+/** The most calls one table holds. */
+const PART = 1500;
+
 const numbers = {
   input: `a: Small, b: Small`,
   pins: `[{ a: 1, b: 2 }]`,
@@ -87,9 +90,12 @@ const numbers = {
     known ? `const a = pin.a; const b = pin.b;` : `const a = command.a; const b = command.b;`,
 };
 
-/** A call, made in a scope with a value of the module's own first, and what it gives run when it is an effect. */
+/**
+ * A call, made in a scope with a value of the module's own first: what it
+ * gives is called when it is a function, and run when it is an effect.
+ */
 const ran = (self: string | undefined, call: string): string =>
-  `Effect.scoped(Effect.gen(function* () { ${self ? `const self = ${self}; ` : ""}const made = ${call}; if (Effect.isEffect(made)) yield* Effect.exit(made); return 1; }))`;
+  `Effect.scoped(Effect.gen(function* () { ${self ? `const self = ${self}; ` : ""}const made = ${call}; const out = typeof made === "function" ? made() : made; if (Effect.isEffect(out)) yield* Effect.exit(out); return 1; }))`;
 
 /** One table for each module the prover has models of, named after it. */
 export const misuseGroups = (only?: ReadonlyArray<string>): ReadonlyArray<Group> => {
@@ -104,7 +110,7 @@ export const misuseGroups = (only?: ReadonlyArray<string>): ReadonlyArray<Group>
   const paths = process.env.MISUSE_PATHS?.split(",");
   return [...byModule]
     .filter(([module]) => !only || only.includes(module))
-    .map(([module, all]): Group => {
+    .flatMap(([module, all]): ReadonlyArray<Group> => {
       const name = module.slice("effect/".length).replace(/\W/g, "");
       // The module is imported as `Under`: its own value is made with it.
       const self = SELF[name]?.replaceAll(`${name}.`, "Under.");
@@ -117,17 +123,19 @@ export const misuseGroups = (only?: ReadonlyArray<string>): ReadonlyArray<Group>
                 ...AFTER.map((after) =>
                   ran(self, `Under.${path}(self${after ? `, ${after}` : ""})`),
                 ),
-                ...AFTER.filter(Boolean).map((after) => ran(self, `Under.${path}(${after})(self)`)),
+                ...AFTER.map((after) => ran(self, `Under.${path}(${after})(self)`)),
               ]
             : []),
         ]);
-      return {
-        name: `Misuse${name}`,
+      // A large module is read in parts, each in the time a test is given.
+      const parts = Math.ceil(calls.length / PART);
+      return Array.from({ length: parts }, (_, index) => ({
+        name: `Misuse${name}${parts > 1 ? index + 1 : ""}`,
         ...numbers,
         effectful: true,
         prelude: [`import * as Under from "${module}";`],
         both: [],
-        misuse: calls,
-      };
+        misuse: calls.slice(index * PART, (index + 1) * PART),
+      }));
     });
 };

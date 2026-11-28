@@ -435,6 +435,14 @@ const kindOf = (v: V): string | undefined => {
           : v.term.sort === "Bool"
             ? "boolean"
             : "number";
+    // An effect is an object of the library's, a function only when it is called to make one.
+    case "Effect":
+      return "object";
+    // What the library made is what it is.
+    case "Host":
+      return typeof v.value;
+    case "Lib":
+      return v.host === undefined ? undefined : typeof v.host;
     default:
       return undefined;
   }

@@ -1504,6 +1504,7 @@ const base: ReadonlyArray<Group> = [
       `Effect.sync(() => Effect.runSync(Effect.succeed(a + b)))`,
       `Effect.ensuring(Effect.succeed(a), Effect.fail(new Odd({ n: b }))).pipe(Effect.exit, Effect.map(Exit.hasDies))`,
       `even(a).pipe(Effect.ignore(), Effect.as(b))`,
+      `Effect.succeed([typeof Effect.succeed(a), typeof Effect.void, typeof even(a)])`,
     ],
     unread: [
       [
@@ -4372,6 +4373,7 @@ const rest: ReadonlyArray<Group> = [
       `Effect.gen(function* () { const done = yield* Deferred.make(); yield* Deferred.done(done, Exit.fail(new Odd({ n: a }))); return yield* Effect.result(Deferred.await(done)); })`,
       `Effect.gen(function* () { const one = yield* Deferred.make(); const two = yield* Deferred.make(); yield* Deferred.failCause(one, Cause.fail("no")); yield* Deferred.failCauseSync(two, () => Cause.die("gone")); return [Result.isFailure(yield* Effect.result(Deferred.await(one))), Exit.hasDies(yield* Effect.exit(Deferred.await(two)))]; })`,
       `Effect.gen(function* () { const done = yield* Deferred.make(); const set = yield* Deferred.into(even(a), done); return [set, yield* Effect.result(Deferred.await(done))]; })`,
+      `Effect.map(Queue.unbounded(), (queue) => [typeof queue, a])`,
     ],
   },
   {
