@@ -1205,7 +1205,7 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
             ...client.Total,
             snapshot: (...args: Parameters<typeof client.Total.snapshot>) =>
               args[1]?.atLeast === undefined
-                ? Effect.succeed({ state: null, cursor: 0 })
+                ? Effect.succeed({ state: null, cursor: 0, position: null })
                 : client.Total.snapshot(...args),
           },
         })),

@@ -8,7 +8,12 @@ import type * as Compaction from "../../Compaction.ts";
 import type * as ModelSearch from "../../Explore/internal/ModelSearch.ts";
 import * as Script from "../../Explore/internal/Script.ts";
 import type * as Model from "../../Model.ts";
-import { type Delivery, emptySnapshot, type Json, type ViewSnapshot } from "../../Platform.ts";
+import {
+  type Delivery,
+  emptySnapshot,
+  type Json,
+  type StoredViewSnapshot,
+} from "../../Platform.ts";
 import type * as Rewrite from "../../Rewrite.ts";
 import { loose, probe, type Probed, quietly, Story } from "../../Story.ts";
 import type * as View from "../../View.ts";
@@ -48,7 +53,7 @@ const rebuilt = Effect.fn(function* (model: Model.Any, probed: Probed) {
     const routed = yield* kernel.aggregateKit(cls, none).replay({ id, routed: {}, rows });
     queue.push(...routed.deliveries);
   }
-  const snapshots = new Map<string, ViewSnapshot>();
+  const snapshots = new Map<string, StoredViewSnapshot>();
   for (let at = 0; at < queue.length; at++) {
     const delivery = queue[at]!;
     const kit = delivery.target.kind === "view" ? views.get(delivery.target.name) : undefined;

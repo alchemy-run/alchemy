@@ -9,13 +9,40 @@ import type * as Rejection from "./Rejection.ts";
 export type Mode = "get" | "watch" | "events" | "list";
 
 /**
- * What `watch` sends: the key's state and the cursor it is valid at, the
- * `seq` of the last event the key had when the state was read (`0` before any).
+ * What a stream's `peek` and `watch` send: the key's state and the cursor it
+ * is valid at, the `seq` of the last event the key had when the state was
+ * read (`0` before any). A view's reads send a {@link ViewSnapshot}.
  */
 export interface Snapshot<S> {
   readonly state: S;
   /** Pass as `after` to `events` to receive every later event, once. */
   readonly cursor: number;
+}
+
+/**
+ * The address of a fact: the `stream` it was written to and its `seq` there,
+ * the same address a command's receipt gives as `stream` and `version`. It
+ * names the fact across the model, so two reads can be compared by it.
+ */
+export const Position = Schema.Struct({ stream: Schema.String, seq: Schema.Number });
+export type Position = typeof Position.Type;
+
+/**
+ * What a view's `snapshot` returns and each frame its `watch` sends: a
+ * {@link Snapshot} with the {@link Position} of the last fact the key
+ * applied, read from the same stored snapshot as the state. `position` is `null` before the key applies
+ * a fact, and on a key last written before positions were recorded. On a
+ * view with several sources it can name another stream than your command's:
+ * to wait for your own write, pass its receipt as `atLeast`.
+ *
+ * **Example:** Say which fact a balance reflects
+ * ```typescript
+ * const { state, position } = yield* bank.AccountSummary.snapshot(accountId);
+ * return { accountId, balance: state?.balance ?? 0, asOf: position };
+ * ```
+ */
+export interface ViewSnapshot<S> extends Snapshot<S> {
+  readonly position: Position | null;
 }
 
 /**

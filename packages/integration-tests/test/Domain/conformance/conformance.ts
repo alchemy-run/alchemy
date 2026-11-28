@@ -204,8 +204,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       // client gives up instead of falling back to polling.
       const api = yield* ConformanceApi.clientWebSocket(`${base}/api`);
       const watched = yield* api.CounterTotal.watch(id).pipe(
-        Stream.map((frame) => frame.state?.total ?? 0),
-        Stream.takeUntil((total) => total === 5),
+        Stream.takeUntil((frame) => frame.state?.total === 5),
         Stream.runCollect,
         Effect.timeout(within),
         Effect.forkChild,
@@ -213,9 +212,17 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       yield* Effect.sleep("1 second");
       yield* call(`/increment/${id}?by=2`);
       yield* call(`/increment/${id}?by=3`);
-      const totals = [...(yield* Fiber.join(watched))];
+      const frames = [...(yield* Fiber.join(watched))];
+      const totals = frames.map((frame) => frame.state?.total ?? 0);
       expect(totals.at(-1)).toBe(5);
       expect(totals).toEqual([...totals].sort((a, b) => a - b));
+      // Each frame says the fact it reflects: none before the first, then the last one applied.
+      const seqOf = { 0: null, 2: 1, 5: 2 } as Record<number, number | null>;
+      expect(frames.map((frame) => frame.position)).toEqual(
+        totals.map((total) =>
+          seqOf[total] === null ? null : { stream: `Counter/${id}`, seq: seqOf[total] },
+        ),
+      );
     }).pipe(Effect.scoped, Effect.provide(Socket.layerWebSocketConstructorGlobal)),
     options,
   );

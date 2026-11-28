@@ -391,7 +391,7 @@ const endpointOf = (
  *
  * **Example:** Watch a view from a browser
  * ```typescript
- * // in the browser: one event per change, each `{ state, cursor }`
+ * // in the browser: one event per change, each `{ state, cursor, position }`
  * const source = new EventSource(`/AccountSummary/${accountId}/watch`);
  * source.onmessage = (event) => render(JSON.parse(event.data).state);
  * ```

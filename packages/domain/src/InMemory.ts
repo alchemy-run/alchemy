@@ -59,7 +59,7 @@ import {
   type StreamMeta,
   type StreamWrite,
   type ViewEntry,
-  type ViewSnapshot,
+  type StoredViewSnapshot,
   RunWait,
 } from "./Platform.ts";
 import { serveSocket } from "./Watch.ts";
@@ -1353,7 +1353,7 @@ export const make = (
             keys: new Map<
               string,
               {
-                readonly snapshot: SubscriptionRef.SubscriptionRef<ViewSnapshot>;
+                readonly snapshot: SubscriptionRef.SubscriptionRef<StoredViewSnapshot>;
                 readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<ViewEntry>>;
                 /** The key's input log: every delivery it applied, in order, with what it emitted. */
                 inputs: Array<ViewInput>;
