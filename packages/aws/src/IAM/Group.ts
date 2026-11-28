@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument } from "./common.ts";
-import type { PolicyDocument } from "./Policy.ts";
+import { normalizePolicyDocument, type PolicyDocument } from "./Policy.ts";
 
 export interface GroupProps {
   /**
@@ -24,7 +24,8 @@ export interface GroupProps {
    */
   managedPolicyArns?: string[];
   /**
-   * Inline policies embedded in the group.
+   * Inline policies embedded in the group. Key order and singleton-list formatting
+   * alone do not trigger a rewrite.
    */
   inlinePolicies?: Record<string, PolicyDocument>;
 }
@@ -186,7 +187,11 @@ export const GroupProvider = () =>
         news: Record<string, PolicyDocument>;
       }) {
         for (const [policyName, document] of Object.entries(news)) {
-          if (JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)) {
+          const observed = olds[policyName];
+          if (
+            observed === undefined ||
+            normalizePolicyDocument(observed) !== normalizePolicyDocument(document)
+          ) {
             yield* iam.putGroupPolicy({
               GroupName: groupName,
               PolicyName: policyName,

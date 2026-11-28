@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
-import type { PolicyDocument } from "./Policy.ts";
+import { normalizePolicyDocument, type PolicyDocument } from "./Policy.ts";
 
 export class UserConflict extends Data.TaggedError("UserConflict")<{
   readonly message: string;
@@ -35,7 +35,8 @@ export interface UserProps {
    */
   managedPolicyArns?: string[];
   /**
-   * Inline policies embedded in the user.
+   * Inline policies embedded in the user. Key order and singleton-list formatting
+   * alone do not trigger a rewrite.
    */
   inlinePolicies?: Record<string, PolicyDocument>;
   /**
@@ -203,7 +204,11 @@ export const UserProvider = () =>
         news: Record<string, PolicyDocument>;
       }) {
         for (const [policyName, document] of Object.entries(news)) {
-          if (JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)) {
+          const observed = olds[policyName];
+          if (
+            observed === undefined ||
+            normalizePolicyDocument(observed) !== normalizePolicyDocument(document)
+          ) {
             yield* iam.putUserPolicy({
               UserName: userName,
               PolicyName: policyName,

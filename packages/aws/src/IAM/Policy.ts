@@ -136,7 +136,8 @@ export interface PolicyProps {
    */
   path?: string;
   /**
-   * The JSON IAM policy document.
+   * The JSON IAM policy document. Key order and singleton-list formatting
+   * alone do not create a new policy version.
    */
   policyDocument: PolicyDocument;
   /**
@@ -483,7 +484,11 @@ export const PolicyProvider = () =>
             policyArn,
             versionId: observed?.DefaultVersionId,
           });
-          if (JSON.stringify(observedDocument ?? null) !== JSON.stringify(news.policyDocument)) {
+          if (
+            observedDocument === undefined ||
+            normalizePolicyDocument(observedDocument) !==
+              normalizePolicyDocument(news.policyDocument)
+          ) {
             yield* prunePolicyVersions(policyArn);
             const createdVersion = yield* iam.createPolicyVersion({
               PolicyArn: policyArn,
