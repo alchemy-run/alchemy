@@ -1,8 +1,11 @@
+import * as AI from "@alchemy.run/ai";
 import * as Domain from "@alchemy.run/domain";
 import * as DomainAi from "@alchemy.run/domain/Ai";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import * as InMemoryPlatform from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import { RuntimeContext } from "alchemy/RuntimeContext";
+import { LanguageModel } from "effect/ai";
 import { McpProtocol, McpServer, Tool } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -17,6 +20,7 @@ import type * as Rpc from "effect/rpc/Rpc";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { recording } from "../AI/fixtures/recording.ts";
 
 // ---------------------------------------------------------------- a wallet domain
 
@@ -662,4 +666,287 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
       expect(JSON.parse(anonymous.content[0].text)).toEqual({ _tag: "Unauthenticated" });
     }).pipe(Effect.scoped),
   );
+});
+
+// ---------------------------------------------------------------- a model a process mentions
+
+class Smart extends AI.Model<Smart>()("smart") {}
+
+class ChallengeRequired extends Domain.Rejection("ChallengeRequired") {}
+/** Checks something on each call, and says nothing of who is calling. */
+class Challenge extends RpcMiddleware.Service<Challenge>()("Test/Challenge", {
+  error: ChallengeRequired,
+}) {}
+
+class Stored extends Domain.Event("Stored", { amount: Schema.Int, balance: Schema.Int }) {}
+class Emptied extends Domain.Event("Emptied", {}) {}
+class NotYours extends Domain.Rejection("NotYours") {}
+
+class Store extends Domain.Command("Store", {
+  input: { vaultId: Schema.String, amount: Schema.Int },
+  middleware: [Session],
+  events: [Stored],
+  rejects: [NotYours, OverLimit],
+  reply: { balance: Schema.Int },
+}) {}
+
+class Empty extends Domain.Command("Empty", {
+  input: { vaultId: Schema.String },
+  middleware: [Session, Challenge],
+  events: [Emptied],
+  rejects: [NotYours],
+}) {}
+
+/** A vault is named after its owner: only they may use it. */
+class Vault extends Domain.Aggregate("Vault", {
+  id: Schema.String,
+  state: Schema.Struct({ balance: Schema.Int }),
+  initial: { balance: 0 },
+  commands: [Store, Empty],
+  keyOf: (command) => command.vaultId,
+  decide: {
+    Store: Effect.fn(function* (vault, command, { id }) {
+      if (id !== `${yield* Owner}-vault`) return yield* new NotYours();
+      if (command.amount > 100) return yield* new OverLimit({ limit: 100 });
+      return [new Stored({ amount: command.amount, balance: vault.balance + command.amount })];
+    }),
+    Empty: Effect.fn(function* (_, __, { id }) {
+      if (id !== `${yield* Owner}-vault`) return yield* new NotYours();
+      return [new Emptied({})];
+    }),
+  },
+  evolve: {
+    Stored: (_, event) => ({ balance: event.balance }),
+    Emptied: () => ({ balance: 0 }),
+  },
+  reply: { Store: (vault) => ({ balance: vault.balance }) },
+}) {}
+
+class Holdings extends Domain.View("Holdings", {
+  from: [Vault],
+  key: Vault,
+  state: Schema.Struct({ balance: Schema.Int }),
+  initial: { balance: 0 },
+  evolve: {
+    Stored: (_, event) => ({ balance: event.balance }),
+    Emptied: () => ({ balance: 0 }),
+  },
+}) {}
+
+class Vaults extends Domain.Model("Vaults", { aggregates: [Vault], views: [Holdings] }) {}
+
+/** Mentions one command and one view of the model, and nothing else of it. */
+class Keeper extends (AI.Process<Keeper>()("Keeper", {
+  description: "Look after one owner's vault.",
+})`
+  Put what the owner hands you away with ${Vaults.Store}, and read it back with ${Vaults.Holdings}.
+`) {}
+
+/** Mentions the aggregate: every command it takes, one of them behind a challenge. */
+class Clerk extends (AI.Process<Clerk>()("Clerk", {
+  description: "Do anything to one owner's vault.",
+})`
+  Use ${Vaults.Vault}.
+`) {}
+
+describe("Domain: a model a process mentions", { tags: ["unit", "local"] }, () => {
+  const VaultsLive = Vaults.layer(Layer.empty).pipe(Layer.provide(InMemory));
+  const never = Smart.layer(Layer.succeed(LanguageModel.LanguageModel, undefined as never));
+
+  /** Run with a recording harness over the in-memory vaults, with `checks` for the middleware that check something. */
+  const run = <A, E, R>(
+    effect: (harness: ReturnType<typeof recording>) => Effect.Effect<A, E, R>,
+    checks: Layer.Layer<Challenge> = Layer.succeed(Challenge, () =>
+      Effect.fail(new ChallengeRequired()),
+    ),
+  ) =>
+    Effect.suspend(() => {
+      const harness = recording();
+      return effect(harness).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            harness.layer,
+            AI.DefaultModel(Smart),
+            VaultsLive,
+            checks,
+            RuntimeContext.phantom,
+          ).pipe(Layer.provideMerge(never)),
+        ),
+      ) as Effect.Effect<A, E>;
+    });
+
+  it.effect("gives a process the command and the view it mentions, by name", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const keeper = yield* Keeper;
+        yield* keeper.start("ada", { as: Owner.context("ada") });
+        yield* keeper.get("ada").send("Here is 30.");
+
+        const session = harness.sessions.get("Keeper/ada")!;
+        expect(session.tools).toEqual(["Vaults_Store_send", "Vaults_Holdings_get"]);
+        expect(session.instructions).toBe(
+          "Put what the owner hands you away with `Vaults_Store_send`, and read it back with `Vaults_Holdings_get`.",
+        );
+      }),
+    ),
+  );
+
+  it.effect("sends a command as whoever the session was started as", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const keeper = yield* Keeper;
+        yield* keeper.start("ada", { as: Owner.context("ada") });
+
+        // The command's own rule sees ada: her vault takes it, another's refuses it.
+        const stored = yield* harness.call(
+          "Vaults_Store_send",
+          { input: { vaultId: "ada-vault", amount: 30 }, consistency: "strong" },
+          "call-1",
+          "Keeper/ada",
+        );
+        expect(stored).toMatchObject({ isError: false, structured: { reply: { balance: 30 } } });
+
+        const refused = yield* harness.call(
+          "Vaults_Store_send",
+          { input: { vaultId: "bob-vault", amount: 30 } },
+          "call-2",
+          "Keeper/ada",
+        );
+        expect(refused).toMatchObject({ isError: true, structured: { _tag: "NotYours" } });
+
+        const read = yield* harness.call(
+          "Vaults_Holdings_get",
+          { key: "ada-vault" },
+          "call-3",
+          "Keeper/ada",
+        );
+        expect(read).toMatchObject({ isError: false, structured: { value: { balance: 30 } } });
+      }),
+    ),
+  );
+
+  it.effect("keeps each session's identity to itself", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const keeper = yield* Keeper;
+        yield* keeper.start("ada", { as: Owner.context("ada") });
+        yield* keeper.start("bob", { as: Owner.context("bob") });
+
+        // Bob's session, asked for Ada's vault.
+        const refused = yield* harness.call(
+          "Vaults_Store_send",
+          { input: { vaultId: "ada-vault", amount: 5 } },
+          "call-1",
+          "Keeper/bob",
+        );
+        expect(refused).toMatchObject({ isError: true, structured: { _tag: "NotYours" } });
+        // What a session acts as is stored beside it, and is no part of what the model reads.
+        expect(harness.values.get("as:Keeper/bob")).toBe(JSON.stringify({ "Test/Owner": "bob" }));
+        expect(harness.sessions.get("Keeper/bob")!.messages).toEqual([]);
+      }),
+    ),
+  );
+
+  it.effect("refuses to start a session that acts as nobody", () =>
+    run(() =>
+      Effect.gen(function* () {
+        const keeper = yield* Keeper;
+        // @ts-expect-error `Store` is behind `Session`, so a session is started as an Owner
+        const error = yield* Effect.flip(keeper.start("ada", {}));
+
+        expect(error.message).toContain("acts as someone");
+      }),
+    ),
+  );
+
+  it.effect("sends each call's command under that call's id, never one the model chose", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const keeper = yield* Keeper;
+        yield* keeper.start("ada", { as: Owner.context("ada") });
+
+        // A model fills an id it is offered with the same text on every call.
+        const store = (callId: string) =>
+          harness.call(
+            "Vaults_Store_send",
+            { input: { vaultId: "ada-vault", amount: 10 }, commandId: "null" },
+            callId,
+            "Keeper/ada",
+          );
+        expect((yield* store("call-1")).structured).toMatchObject({ reply: { balance: 10 } });
+        expect((yield* store("call-2")).structured).toMatchObject({ reply: { balance: 20 } });
+        // The same call, run again after a crash, sends nothing new.
+        expect((yield* store("call-2")).structured).toMatchObject({ reply: { balance: 20 } });
+      }),
+    ),
+  );
+
+  it.effect("runs a middleware that checks something, with the Layer given for sessions", () =>
+    run((harness) =>
+      Effect.gen(function* () {
+        const clerk = yield* Clerk;
+        yield* clerk.start("ada", { as: Owner.context("ada") });
+        yield* clerk.get("ada").send("Empty it.");
+
+        // The aggregate is every command it takes.
+        expect(harness.sessions.get("Clerk/ada")!.tools).toEqual([
+          "Vaults_Store_send",
+          "Vaults_Empty_send",
+        ]);
+        // `Empty` is behind a challenge, and this Layer says a session never passes one.
+        const refused = yield* harness.call(
+          "Vaults_Empty_send",
+          { input: { vaultId: "ada-vault" } },
+          "call-1",
+          "Clerk/ada",
+        );
+        expect(refused).toMatchObject({
+          isError: true,
+          structured: { _tag: "ChallengeRequired" },
+        });
+      }),
+    ),
+  );
+
+  it.effect("lets the call through where that Layer does", () =>
+    run(
+      (harness) =>
+        Effect.gen(function* () {
+          const clerk = yield* Clerk;
+          yield* clerk.start("ada", { as: Owner.context("ada") });
+
+          const emptied = yield* harness.call(
+            "Vaults_Empty_send",
+            { input: { vaultId: "ada-vault" } },
+            "call-1",
+            "Clerk/ada",
+          );
+          expect(emptied).toMatchObject({ isError: false });
+        }),
+      Layer.succeed(Challenge, (effect) => effect),
+    ),
+  );
+
+  it("requires a Layer for a middleware that checks something, and none for one that says who is calling", () => {
+    type Requires<P> = P extends Effect.Effect<any, any, infer R> ? R : never;
+    const needsChallenge: Challenge extends Requires<typeof Clerk> ? true : false = true;
+    const keeperNeedsNone: Challenge extends Requires<typeof Keeper> ? true : false = false;
+    const noSession: Session extends Requires<typeof Clerk> ? true : false = false;
+    expect([needsChallenge, keeperNeedsNone, noSession]).toEqual([true, false, false]);
+  });
+
+  it("refuses a command, an aggregate or a view named after a member of the model's class", () => {
+    class Views extends Domain.Aggregate("views", {
+      id: Schema.String,
+      state: Schema.Struct({}),
+      initial: {},
+      commands: [],
+      keyOf: () => "",
+      decide: {},
+      evolve: {},
+    }) {}
+    expect(() => Domain.Model("Clash", { aggregates: [Views] })).toThrow(
+      "cannot have a command, aggregate or view named 'views'",
+    );
+  });
 });

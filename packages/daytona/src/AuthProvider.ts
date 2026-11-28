@@ -13,6 +13,7 @@ import { deviceOAuth } from "alchemy/Auth/BrowserOAuth";
 import { displayRedacted } from "alchemy/Auth/Credentials";
 import { getEnv, getEnvRedacted, mapPromptCancellation } from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
+import { refreshAndSave } from "alchemy/Auth/Refresh";
 import {
   collectFieldValues,
   storedSecret,
@@ -249,19 +250,20 @@ export const DaytonaAuth = AuthProviderLayer<DaytonaAuthConfig, DaytonaResolvedC
             const fresh =
               session.expires > now + 60_000
                 ? session
-                : yield* OAuthClient.refresh(session).pipe(
-                    Effect.mapError((e) =>
-                      NeedsReauth.make({
-                        provider: DAYTONA_AUTH_PROVIDER_NAME,
-                        profile: profileName,
-                        message: `Daytona session refresh failed. ${reauth}`,
-                        cause: e,
-                      }),
+                : yield* refreshAndSave(
+                    OAuthClient.refresh(session).pipe(
+                      Effect.mapError((e) =>
+                        NeedsReauth.make({
+                          provider: DAYTONA_AUTH_PROVIDER_NAME,
+                          profile: profileName,
+                          message: `Daytona session refresh failed. ${reauth}`,
+                          cause: e,
+                        }),
+                      ),
                     ),
+                    (fresh) =>
+                      updateConfig?.({ ...oauth, ...fromOAuthCredentials(fresh) }) ?? Effect.void,
                   );
-            if (fresh !== session) {
-              yield* updateConfig?.({ ...oauth, ...fromOAuthCredentials(fresh) }) ?? Effect.void;
-            }
             return {
               type: "oauth" as const,
               token: fresh.access,
@@ -296,11 +298,16 @@ export const DaytonaAuth = AuthProviderLayer<DaytonaAuthConfig, DaytonaResolvedC
                 if (current.method !== "oauth") return { type: "signIn" as const };
                 const session = toOAuthCredentials(current);
                 if (!OAuthClient.usesCurrentClient(session)) return { type: "signIn" as const };
-                const fresh = yield* OAuthClient.refresh(session);
-                const config = { ...current, ...fromOAuthCredentials(fresh) };
-                if (updateConfig === undefined) return { type: "refreshed" as const, config };
-                yield* updateConfig(config);
-                return { type: "refreshed" as const, config: undefined };
+                const config = yield* refreshAndSave(
+                  OAuthClient.refresh(session).pipe(
+                    Effect.map((fresh) => ({ ...current, ...fromOAuthCredentials(fresh) })),
+                  ),
+                  (config) => updateConfig?.(config) ?? Effect.void,
+                );
+                return {
+                  type: "refreshed" as const,
+                  config: updateConfig === undefined ? config : undefined,
+                };
               }),
             ).pipe(
               Effect.catchTag(

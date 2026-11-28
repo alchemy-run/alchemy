@@ -647,7 +647,7 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
     Effect.suspend(() => {
       let turn = 0;
       return story(
-        Story.provideWith(Operator, () => Effect.sync(() => Option.some(`op-${++turn}`))),
+        Story.provideWith(Operator, () => Effect.sync(() => `op-${++turn}`)),
         Story.when(new ResetCounter({ id: c1.id })),
         Story.then(c1, new WasReset({ by: "op-1" })),
         Story.when(new ResetCounter({ id: c1.id })),
@@ -659,9 +659,7 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
   it.effect("provideWith sees the command and the instances it is for", () =>
     story(
       Story.provideWith(Operator, ({ command, refs }) =>
-        Effect.succeed(
-          Option.some(`${command._tag}@${refs.map((ref) => String(ref.id)).join(",")}`),
-        ),
+        Effect.succeed(`${command._tag}@${refs.map((ref) => String(ref.id)).join(",")}`),
       ),
       Story.when(new ResetCounter({ id: c1.id })),
       Story.then(c1, new WasReset({ by: "ResetCounter@c-1" })),
@@ -670,16 +668,15 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
     ),
   );
 
-  it.effect("provideWith provides nothing for a command when it makes none", () =>
+  it.effect("provideWith gives each instance its own caller", () =>
     story(
-      Story.provideWith(Operator, () => Effect.succeed(Option.none<string>())),
-      Story.when(new ResetCounter({ id: c1.id })),
-    ).pipe(
-      Effect.flip,
-      Effect.map((failure) => expect(String(failure)).toContain("Test/Operator")),
-      Effect.catchDefect((defect) =>
-        Effect.sync(() => expect(String(defect)).toContain("Test/Operator")),
+      Story.provideWith(Operator, ({ refs }) =>
+        Effect.succeed(refs[0]!.id === c1.id ? "sam" : "guest"),
       ),
+      Story.when(new ResetCounter({ id: c1.id })),
+      Story.then(c1, new WasReset({ by: "sam" })),
+      Story.when(new ResetCounter({ id: c2.id })),
+      Story.rejected(new NotAnOperator()),
     ),
   );
 
@@ -699,11 +696,11 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
 
   it.effect("a later provide replaces a provideWith, and the other way round", () =>
     story(
-      Story.provideWith(Operator, () => Effect.succeed(Option.some("computed"))),
+      Story.provideWith(Operator, () => Effect.succeed("computed")),
       Story.provide(Operator, "sam"),
       Story.when(new ResetCounter({ id: c1.id })),
       Story.then(c1, new WasReset({ by: "sam" })),
-      Story.provideWith(Operator, () => Effect.succeed(Option.some("computed"))),
+      Story.provideWith(Operator, () => Effect.succeed("computed")),
       Story.when(new ResetCounter({ id: c1.id })),
       Story.then(c1, new WasReset({ by: "computed" })),
     ),
@@ -711,7 +708,7 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
 
   it.effect("a failed story shows a provideWith step as computed at each when", () =>
     story(
-      Story.provideWith(Operator, () => Effect.succeed(Option.some("sam"))),
+      Story.provideWith(Operator, () => Effect.succeed("sam")),
       Story.when(new ResetCounter({ id: c1.id })),
       Story.then(c1, new WasReset({ by: "alex" })),
     ).pipe(

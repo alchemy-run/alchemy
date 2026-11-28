@@ -3,6 +3,7 @@ import * as Neon from "@alchemy.run/neon";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -39,7 +40,7 @@ test.provider(
         project_id: deployed.branch.projectId,
         branch_id: deployed.branch.branchId,
       };
-      const credentials = (yield* SDK.listCredentials(request)).credentials.filter(
+      const credentials = (yield* SDKUnstable.listCredentials(request)).credentials.filter(
         (item) =>
           item.principal_type === "user" &&
           item.branch_id === deployed.branch.branchId &&

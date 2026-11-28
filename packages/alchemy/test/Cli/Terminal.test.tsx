@@ -2065,6 +2065,39 @@ it.effect(
 );
 
 it.effect(
+  "shows the authorization URL in the frame as one line the terminal wraps",
+  () =>
+    Effect.gen(function* () {
+      const stdin = new InputStream();
+      const { service, stdout } = yield* makeLive({ stdin });
+      // Longer than the 80-column terminal, so an indented or hard-wrapped
+      // render would split it with spaces or line breaks.
+      const url = `https://signin.aws.amazon.com/v1/authorize?client_id=${"x".repeat(120)}&state=abc`;
+
+      const fiber = yield* service.prompt
+        .screen(
+          browserLoginScreen({
+            message: "AWS authorization",
+            waitingLabel: "Waiting",
+            url,
+            allowManualInput: false,
+          }),
+        )
+        .pipe(Effect.flip, Effect.forkChild);
+      yield* Effect.promise(() => stdin.ready);
+      yield* Effect.promise(() => stdout.waitFor("AWS authorization"));
+
+      const output = stripVTControlCharacters(stdout.output);
+      // In the frame, below its heading, flush left and unbroken.
+      expect(output.slice(output.indexOf("AWS authorization")).split(/\r?\n/)).toContain(url);
+
+      yield* Effect.sync(() => stdin.write("\x1b"));
+      expect(yield* Fiber.join(fiber)).toBeInstanceOf(TerminalCancelled);
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.effect(
   "shows a device authorization code",
   () =>
     Effect.gen(function* () {

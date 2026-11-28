@@ -8,6 +8,7 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { toRedacted } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 
 const TypeId = "Cloudflare.Turnstile.Widget" as const;
@@ -406,7 +407,7 @@ const toAttributes = (
   accountId: string,
 ): WidgetAttributes => ({
   sitekey: widget.sitekey,
-  secret: Redacted.make(widget.secret),
+  secret: toRedacted(widget.secret),
   accountId,
   name: widget.name,
   // Distilled widens generated string enums to open unions (`string & {}`).

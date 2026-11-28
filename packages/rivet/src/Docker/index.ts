@@ -5,3 +5,4 @@
 export * from "./SwarmControlPlane.ts";
 export * from "./SwarmPool.ts";
 export * from "./ServicesPool.ts";
+export * from "./Network.ts";

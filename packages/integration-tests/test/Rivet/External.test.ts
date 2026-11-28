@@ -13,13 +13,12 @@ import * as Schedule from "effect/Schedule";
 import { createClient } from "rivetkit/client";
 import type { registry } from "./fixtures/external/async-actors.ts";
 
-const CONTROL_PLANE_PORT = 16460;
-
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "RivetExternal", import.meta.url);
 
-const Cluster = RivetDocker.SwarmControlPlane("RivetExternal", { port: CONTROL_PLANE_PORT });
+// On a free port, so the suite runs beside itself in other worktrees.
+const Cluster = RivetDocker.SwarmControlPlane("RivetExternal", { port: 0 });
 const AsyncPool = RivetDocker.SwarmPool("AsyncPool").pipe(Layer.provide(Cluster));
 const EffectPool = RivetDocker.SwarmPool("EffectPool").pipe(Layer.provide(Cluster));
 const RustPool = RivetDocker.SwarmPool("RustPool").pipe(Layer.provide(Cluster));
@@ -73,7 +72,9 @@ const program = (step: string) =>
       context: fixture("."),
       dockerfile: fixture("image.Dockerfile"),
     }).pipe(Effect.provide(DockerfilePool));
+    const cluster = yield* Rivet.Cluster.pipe(Effect.provide(Cluster));
     return {
+      endpoint: cluster.endpoint,
       token: asyncActors.token,
       namespace: asyncActors.namespace,
       asyncPool: asyncActors.pool,
@@ -85,6 +86,7 @@ const program = (step: string) =>
   });
 
 let deployed: {
+  endpoint: string;
   token: Redacted.Redacted<string>;
   namespace: string;
   asyncPool: string;
@@ -96,7 +98,7 @@ let deployed: {
 
 const clientFor = (poolName: string) =>
   createClient<typeof registry>({
-    endpoint: `http://localhost:${CONTROL_PLANE_PORT}`,
+    endpoint: deployed.endpoint,
     token: Redacted.value(deployed.token),
     namespace: deployed.namespace,
     poolName,

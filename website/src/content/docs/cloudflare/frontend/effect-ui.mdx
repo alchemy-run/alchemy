@@ -1,0 +1,305 @@
+---
+title: Effect UI
+description: Deploy Effect UI SPA, SSR, SSG, and hybrid applications to Cloudflare Workers.
+sidebar:
+  order: 9
+---
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Cloudflare.Website.EffectUI` deploys an [Effect UI](https://ui.effect.website)
+app as a Cloudflare Worker. Alchemy runs the project's Vite build and uploads
+the client output as Worker static assets. With `HtmlServerVite.plugin` and a
+`serverOutDir`, the server it generates becomes the Worker.
+
+The resource supports browser-only SPAs, server-side rendering (SSR), static
+site generation (SSG), and hybrid rendering. Asset routing follows the build's
+output.
+
+## Install
+
+The build integration is not bundled with alchemy. Install
+`@alchemy.run/frontend-frameworks`; the resource loads its `/effect-ui`
+and `{target_export}` exports from your project at deploy time. It is only
+used at build time, so a dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+Effect UI is in public preview and isn't on npm yet. Install a snapshot
+build of `@effect/ui` as its
+[README](https://github.com/Effect-TS/ui#snapshots) describes.
+
+## Configure Vite
+
+A browser-only app needs no plugin. Its Vite config stays what the
+[Effect UI quick start](https://github.com/Effect-TS/ui#start-a-new-app)
+gives you, and the build deploys as static files.
+
+## Render pages on the server
+
+Add `HtmlServerVite.plugin` and point it at a server entry. With
+`serverOutDir`, the build also emits a request handler, which answers
+every request that matches no file. Alchemy deploys it as the Worker:
+
+```typescript
+// vite.config.ts
+import { plugin as htmlServer } from "@effect/ui/html/HtmlServerVite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  build: { outDir: "dist/client" },
+  plugins: [
+    htmlServer({
+      entry: "/src/entry.server.ts",
+      serverOutDir: "dist/server",
+    }),
+  ],
+});
+```
+
+The server output must not overlap the client's, so the client builds
+to `dist/client`.
+
+The server entry's default export is a Layer that adds the app's routes
+to `HttpRouter`. `prerender` lists the pages the build renders ahead of
+time. They are served as files, and the server renders everything else:
+
+```typescript
+// src/entry.server.ts
+/// <reference types="@effect/ui/html/HtmlServerViteDocument" />
+import { layerHttp } from "@effect/ui/html/HtmlServerHttp";
+import { document } from "virtual:@effect/ui/document";
+import { App } from "./App.ts";
+import { AppRoute } from "./routes.ts";
+
+export default layerHttp(App, { routes: AppRoute, document });
+
+export const prerender = ["/about", "/404"];
+```
+
+`index.html` marks where the page goes with `<!--app-html-->`. The
+browser entry hydrates the server's HTML instead of mounting a new app:
+
+```typescript
+// src/entry.client.ts
+import { Router } from "@effect/ui";
+import { BrowserRouter, HtmlHydrate } from "@effect/ui/html";
+import { Effect, Layer } from "effect";
+import { App } from "./App.ts";
+import { AppRoute } from "./routes.ts";
+
+const Main = HtmlHydrate.hydrate(
+  App,
+  Router.props(AppRoute),
+  document.getElementById("app")!,
+  JSON.parse(document.getElementById("state")!.textContent!),
+).pipe(Layer.provide(BrowserRouter.layer({ routes: AppRoute })));
+
+Layer.launch(Main).pipe(Effect.runFork);
+```
+
+## Prerender without a server
+
+Leave `serverOutDir` out and the build keeps only the prerendered pages.
+The site deploys as static files, and a prerendered `/404` is the page
+for paths that match nothing:
+
+```typescript
+// vite.config.ts
+import { plugin as htmlServer } from "@effect/ui/html/HtmlServerVite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [htmlServer({ entry: "/src/entry.server.ts" })],
+});
+```
+
+## Read bindings in server code
+
+Server code reads the Worker's bindings from `cloudflare:workers`. The build
+imports the server entry in Node to prerender, where that module doesn't
+exist, so import it when a request arrives:
+
+```typescript
+// src/entry.server.ts
+/// <reference types="@effect/ui/html/HtmlServerViteDocument" />
+import { layerHttp } from "@effect/ui/html/HtmlServerHttp";
+import { Effect, Layer } from "effect";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { document } from "virtual:@effect/ui/document";
+import type { WebsiteEnv } from "../alchemy.run.ts";
+import { App } from "./App.ts";
+import { AppRoute } from "./routes.ts";
+
+const Greeting = HttpRouter.add(
+  "GET",
+  "/api/greeting",
+  Effect.promise(() => import("cloudflare:workers")).pipe(
+    Effect.flatMap(({ env }) =>
+      Effect.promise(() => (env as WebsiteEnv).GREETINGS.get("hello")),
+    ),
+    Effect.map((greeting) => HttpServerResponse.text(greeting ?? "")),
+  ),
+);
+
+export default Layer.mergeAll(Greeting, layerHttp(App, { routes: AppRoute, document }));
+```
+
+A page the build prerenders can't read bindings, since it renders before the
+Worker exists.
+
+## Declare the Website
+
+Declare the site as a module-level const (rather than inline in the
+Stack) and derive the typed shape of its bindings from it:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+export const Greetings = Cloudflare.KV.Namespace("Greetings");
+
+export const Website = Cloudflare.Website.EffectUI("Website", {
+  env: { GREETINGS: Greetings },
+});
+
+export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
+```
+
+For an app in a subdirectory of a monorepo, point `rootDir` at it:
+
+```typescript
+export const Website = Cloudflare.Website.EffectUI("Website", {
+  rootDir: "applications/web",
+});
+```
+
+## Add it to the Stack
+
+Yield the Website Effect from your Stack and return its URL:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "CloudflareEffectUIExample",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const worker = yield* Website;
+
+    return {
+      url: worker.url,
+    };
+  }),
+);
+```
+
+## Asset routing
+
+GET and HEAD requests serve matching client assets and prerendered pages
+first. Every other request reaches the Worker, which renders the page,
+redirects, or answers with the app's not-found page.
+
+Browser-only builds use `notFoundHandling: "single-page-application"`. An
+unmatched path serves `index.html`, and the browser router resolves the URL.
+A prerendered build without a server serves its `404.html` for unmatched
+paths.
+
+Explicit `assets` settings override these defaults:
+
+```typescript
+export const Website = Cloudflare.Website.EffectUI("Website", {
+  assets: {
+    notFoundHandling: "404-page",
+  },
+});
+```
+
+## Add environment variables
+
+Pass browser configuration through `VITE_`-prefixed keys in `env`. Alchemy
+inlines these values into `import.meta.env.*` during the Vite build:
+
+```diff lang="typescript"
+// alchemy.run.ts
+export const Website = Cloudflare.Website.EffectUI("Website", {
++  env: {
++    VITE_API_URL: backend.url.as<string>(),
++  },
+});
+```
+
+Keep secrets out of `VITE_*` keys and the server-rendered state; both reach
+the browser. See [Environment](/cloudflare/frontend/vite#environment) for the
+full inlining semantics.
+
+## Custom Worker entry
+
+A browser-only app that must also do something at the edge points `main` at
+its own module. The client build is still reachable through the Worker's
+`ASSETS` binding, so the Worker answers its own routes and hands everything
+else back to the asset layer:
+
+```typescript
+// src/worker.ts
+import type { WebsiteEnv } from "../alchemy.run.ts";
+
+export default {
+  async fetch(request: Request, env: WebsiteEnv): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (url.pathname === "/api/greeting") {
+      return new Response(await env.GREETINGS.get("hello"));
+    }
+
+    return env.ASSETS.fetch(request);
+  },
+};
+```
+
+```typescript
+// alchemy.run.ts
+export const Website = Cloudflare.Website.EffectUI("Website", {
+  main: "src/worker.ts",
+  env: { GREETINGS: Greetings },
+  assets: {
+    runWorkerFirst: ["/api/*"],
+  },
+});
+```
+
+`main` can't be combined with `HtmlServerVite.plugin`, which generates the
+Worker itself. Add routes to a server-rendered app through its `HttpRouter`
+Layer instead, as in [Read bindings in server code](#read-bindings-in-server-code).
+
+## Local dev
+
+<PackageManagers run="alchemy dev" />
+
+`alchemy dev` runs the project's Vite dev server with the Worker in workerd.
+Every page renders on request, prerendered ones included, and server code
+reads the same bindings it does deployed.
+
+Pin the dev server's address when several apps run in one Stack:
+
+```typescript
+export const Website = Cloudflare.Website.EffectUI("Website", {
+  dev: { host: "127.0.0.1", port: 5180, strictPort: true },
+});
+```
+
+## Where next
+
+- [The Vite resource](/cloudflare/frontend/vite) — build model, env
+  inlining, runtime bindings, memo, dev mode.
+- [Effect UI](https://ui.effect.website) — components, routing, server
+  rendering and hydration.
+- [Frontend overview](/cloudflare/frontend/frontends) — the rest of
+  the Cloudflare frontend family.

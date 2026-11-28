@@ -23,7 +23,7 @@ export class DuplicateName extends Data.TaggedError("DuplicateName")<{
 
 /** The Domain lists the same aggregate, policy, projection or query twice. */
 export class DuplicateDefinition extends Data.TaggedError("DuplicateDefinition")<{
-  readonly kind: "aggregate" | "policy" | "projection" | "query";
+  readonly kind: "aggregate" | "policy" | "projection" | "query" | "rewrite" | "compaction";
   readonly entity: string;
 }> {
   override get message() {
@@ -283,6 +283,16 @@ export class ReservedOperation extends Data.TaggedError("ReservedOperation")<{
   }
 }
 
+/** A model's command, aggregate or view is named after a static of the model's class. */
+export class ReservedMember extends Data.TaggedError("ReservedMember")<{
+  readonly model: string;
+  readonly member: string;
+}> {
+  override get message() {
+    return `Model '${this.model}' cannot have a command, aggregate or view named '${this.member}': the name is a member of the model's class`;
+  }
+}
+
 /** The Domain has sagas, but the platform runs no workflows. */
 export class MissingWorkflowEngine extends Data.TaggedError("MissingWorkflowEngine")<{
   readonly sagas: ReadonlyArray<string>;
@@ -433,6 +443,49 @@ export class UnknownWait extends Data.TaggedError("UnknownWait")<{
   }
 }
 
+/** A rewrite or compaction is of an aggregate the Domain does not list. */
+export class UnknownAggregate extends Data.TaggedError("UnknownAggregate")<{
+  readonly owner: string;
+  readonly aggregate: string;
+}> {
+  override get message() {
+    return `${this.owner} is of ${this.aggregate}, which is not in the Domain`;
+  }
+}
+
+/** A rewrite or compaction is run that the Domain does not list. */
+export class UnlistedRewrite extends Data.TaggedError("UnlistedRewrite")<{
+  readonly kind: "rewrite" | "compaction";
+  readonly entity: string;
+}> {
+  override get message() {
+    return `The ${this.kind} ${this.entity} is not in the Domain: list it in the model's ${this.kind}s`;
+  }
+}
+
+/** A rewrite handler returned neither an event nor `null`. */
+export class InvalidRewrite extends Data.TaggedError("InvalidRewrite")<{
+  readonly rewrite: string;
+  readonly event: string;
+}> {
+  override get message() {
+    return `${this.rewrite} returned nothing for ${this.event}: return the event to keep it, another event to replace it, or null to remove it`;
+  }
+}
+
+/**
+ * A rewrite changes events a projection was given, and the projection's
+ * Layer has no `rewrite` handler to say what that means for its store.
+ */
+export class MissingRewriteHandler extends Data.TaggedError("MissingRewriteHandler")<{
+  readonly projection: string;
+  readonly rewrite: string;
+}> {
+  override get message() {
+    return `${this.rewrite} changes events ${this.projection} is given, and ${this.projection} has no rewrite handler: return { write, rewrite } from its Layer (a rewrite that does nothing is still written down)`;
+  }
+}
+
 /** Every reason a {@link DefinitionError} has. */
 export type Reason =
   | DuplicateEventTag
@@ -462,6 +515,7 @@ export type Reason =
   | UnknownEvent
   | UnknownRequestContext
   | ReservedOperation
+  | ReservedMember
   | MissingWorkflowEngine
   | ForeignAppend
   | NotInModel
@@ -476,7 +530,11 @@ export type Reason =
   | LazyViewNeedsOneSource
   | PagedWithoutSuccess
   | UnknownWait
-  | UnvalidatedRead;
+  | UnvalidatedRead
+  | UnknownAggregate
+  | UnlistedRewrite
+  | InvalidRewrite
+  | MissingRewriteHandler;
 
 /**
  * A domain definition error, found while the kernel is built or when a

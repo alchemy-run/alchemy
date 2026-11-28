@@ -2,7 +2,7 @@
 import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
 import * as ClusterCloudflare from "@alchemy.run/effect-cluster/Cloudflare";
 import * as Layer from "effect/Layer";
-import { ConformanceLive } from "../../../Domain/conformance/model.ts";
+import { ConformanceLive, RECEIPT_RETENTION } from "../../../Domain/conformance/model.ts";
 
 /** The entity that holds the model: its name is in every log line the host writes. */
 export const ENTITY = "DomainObjectsOnDurableObjects";
@@ -17,6 +17,7 @@ export const ConformanceDurableObjectsLive = ConformanceLive.pipe(
       main: import.meta.url,
       handler: "ConformanceDurableObjectsLive",
       pool: DomainDurableObjectPool,
+      retention: { receipts: RECEIPT_RETENTION },
     }),
   ),
 );

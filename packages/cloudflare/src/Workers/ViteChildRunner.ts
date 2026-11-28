@@ -60,6 +60,7 @@ const program = Effect.scoped(
       compatibility,
       main,
       viteEnvironments,
+      viteMode,
       hasAssets,
       bindingDescriptors,
       devRemote,
@@ -177,6 +178,7 @@ const program = Effect.scoped(
               entrypoints: selfEntrypoints,
             },
             { host: viteHost, port: vitePort, strictPort: false },
+            viteMode,
           ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));
     if (!url) {
       return yield* Effect.die("Dev server child started without a local URL");

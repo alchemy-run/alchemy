@@ -29,6 +29,14 @@ export interface InstanceStorage {
   readonly evictable: boolean;
   /** The durable callbacks of an evictable instance: what the harness registers its alarms with. */
   readonly callbacks?: Layer.Layer<Callbacks>;
+  /**
+   * Small values kept beside the sessions (who each acts as). Without it
+   * they are kept for the life of the instance.
+   */
+  readonly values?: {
+    readonly get: (key: string) => Effect.Effect<string | undefined>;
+    readonly put: (key: string, value: string) => Effect.Effect<void>;
+  };
 }
 
 /**

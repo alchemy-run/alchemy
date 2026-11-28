@@ -669,6 +669,18 @@ const textOf = (value: V | undefined): string | undefined =>
       ? value.term.text
       : undefined;
 
+/**
+ * The key an `AI.Process` declared by name carries. Nothing of
+ * `@alchemy.run/ai` is imported: a policy that holds a process is only
+ * recognised, so that telling a session something is known to change
+ * nothing by itself.
+ */
+const HostedTypeId = "~alchemy/AI/Hosted";
+
+/** Whether a yielded service is an AI process. */
+const isProcess = (host: unknown): host is { readonly processName: string } =>
+  typeof host === "function" && HostedTypeId in host;
+
 const walk = (node: unknown, visit: (node: Node) => void): void => {
   if (Array.isArray(node)) {
     for (const item of node) walk(item, visit);
@@ -1711,6 +1723,32 @@ export const search = Effect.fn(function* (
         ? Effect.succeed(value)
         : Effect.fail(new Value.Rejected({ rejection: value }));
     };
+    /**
+     * A process's client. What a session does with a message is the model's
+     * to say, not the caller's: the commands it may send are sent through the
+     * Apis like anyone's, so a call to a session changes nothing by itself.
+     */
+    const processes = new Map<unknown, V>();
+    const processOf = (cls: { readonly processName: string }): V => {
+      const told = (method: string) =>
+        native(`${cls.processName}.${method}`, () =>
+          Effect.succeed<V>({ _tag: "Effect", run: Effect.succeed<V>({ _tag: "Undef" }) }),
+        );
+      const session = Value.obj({
+        send: told("send"),
+        steer: told("steer"),
+        withdraw: told("withdraw"),
+        interrupt: { _tag: "Effect", run: Effect.succeed<V>({ _tag: "Undef" }) },
+      });
+      const made =
+        processes.get(cls) ??
+        Value.obj({
+          start: told("start"),
+          get: native(`${cls.processName}.get`, () => Effect.succeed(session)),
+        });
+      processes.set(cls, made);
+      return made;
+    };
     const systems = new Map<unknown, V>();
     const systemOf = (cls: SystemClass): V => {
       const made =
@@ -2402,6 +2440,7 @@ export const search = Effect.fn(function* (
         });
       const saga = sagaClients.get(host);
       if (saga) return saga;
+      if (isProcess(host)) return processOf(host);
       const kind =
         typeof host === "function" ? (host as { readonly kind?: unknown }).kind : undefined;
       return kind === "Saga"

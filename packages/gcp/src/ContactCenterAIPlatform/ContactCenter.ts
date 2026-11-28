@@ -1,4 +1,4 @@
-import * as ccaip from "@distilled.cloud/gcp/contactcenteraiplatform_v1alpha1";
+import * as ccaip from "@distilled.cloud/gcp/unstable/contactcenteraiplatform_v1alpha1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";

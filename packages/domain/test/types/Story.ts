@@ -6,7 +6,6 @@ import * as Domain from "@alchemy.run/domain";
 import { Story } from "@alchemy.run/domain/Story";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 
@@ -39,8 +38,8 @@ export const b = story(provided, reset, Story.rejected(Nope.make()));
 export const c = story(provided, reset, Story.then(Counter.ref("c"), Done.make()));
 // `provideWith` satisfies a `when`'s need for the service, as `provide` does.
 export const d = story(
-  Story.provideWith(Operator, ({ command }) => Effect.succeed(Option.some(command._tag))),
+  Story.provideWith(Operator, ({ command }) => Effect.succeed(command._tag)),
   reset,
 );
 // @ts-expect-error what `provideWith` makes is the service's own type
-export const e = Story.provideWith(Operator, () => Effect.succeed(Option.some(1)));
+export const e = Story.provideWith(Operator, () => Effect.succeed(1));

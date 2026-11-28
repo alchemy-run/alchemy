@@ -10,6 +10,7 @@ export {
   type Submission,
   type SubmissionDraft,
 } from "./Harness.ts";
+export { HarnessLive } from "./Process.ts";
 export { LocalEnv } from "./Sandbox.ts";
 export {
   block,

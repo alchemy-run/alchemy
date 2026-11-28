@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -15,6 +16,7 @@ import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import type * as Command from "./Command.ts";
+import type * as Compaction from "./Compaction.ts";
 import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
 import type * as Key from "./Key.ts";
@@ -22,6 +24,7 @@ import * as Model from "./Model.ts";
 import type * as Query from "./Query.ts";
 import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
+import { Vault, VaultTest } from "./Vault.ts";
 import type * as View from "./View.ts";
 
 /** How far a story got with one step. */
@@ -98,6 +101,27 @@ export type Step =
   | { readonly _tag: "Replied"; readonly reply: unknown }
   | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly expected: unknown }
   | {
+      readonly _tag: "Rewrite";
+      readonly ref: Aggregate.Ref;
+      readonly rewrite: { readonly _tag: string };
+      /** The next `then` sees nothing of it: see {@link quietly}. */
+      readonly quiet?: true;
+    }
+  | {
+      readonly _tag: "Compact";
+      readonly ref: Aggregate.Ref;
+      readonly compaction: Compaction.Any;
+      readonly quiet?: true;
+    }
+  | { readonly _tag: "Probe"; readonly run: (probed: Probed) => Effect.Effect<void, string> }
+  | { readonly _tag: "Loose" }
+  | {
+      readonly _tag: "Start";
+      readonly saga: Saga.Any;
+      readonly key: unknown;
+      readonly input: unknown;
+    }
+  | {
       readonly _tag: "View";
       readonly view: View.Any;
       /** A ref, or the value of a Schema key. */
@@ -148,6 +172,7 @@ export type Step =
     }
   | { readonly _tag: "Clock"; readonly at: string | number | DateTime.DateTime }
   | { readonly _tag: "Advance"; readonly by: Duration.Input }
+  | { readonly _tag: "Shred"; readonly subject: string }
   | {
       readonly _tag: "Signal";
       readonly saga: Saga.Any;
@@ -167,19 +192,35 @@ export type Step =
       readonly value: unknown;
       /**
        * Set by `provideWith`: computes the service for each `when`, in place of
-       * `value`. `Option.none()` provides nothing for that command.
+       * `value`.
        */
-      readonly make?: (
-        sent: Sent,
-      ) => Effect.Effect<Option.Option<unknown>, unknown, Model.Internals>;
+      readonly make?: (sent: Sent) => Effect.Effect<unknown, unknown>;
     };
 
-/** The command a `when` is about to send, as `provideWith` sees it. */
+/** The command a `when` is about to send, as {@link Story.provideWith} sees it. */
 export interface Sent {
-  /** The command, as the `when` step has it. */
+  /**
+   * The command, as the `when` step has it: what a middleware reads from the
+   * request's payload, e.g. to scope a capability to one command.
+   */
   readonly command: { readonly _tag: string };
-  /** The aggregate instances the model routes it to: the one its aggregate targets, or each one its decision reads. */
+  /**
+   * The aggregate instances the model routes the command to: the one its
+   * aggregate targets, or each one its decision reads. Use it to scope a
+   * service to the instances a command is for.
+   */
   readonly refs: ReadonlyArray<Aggregate.Ref>;
+}
+
+/**
+ * What a {@link probe} is given of the run so far.
+ *
+ * @internal
+ */
+export interface Probed {
+  readonly internals: Model.Internals["Service"];
+  /** Every instance that has committed, in the order each first did. */
+  readonly instances: ReadonlyArray<{ readonly aggregate: string; readonly id: string }>;
 }
 
 /** The step with this `_tag`. */
@@ -288,6 +329,26 @@ const given = <A extends Aggregate.Any>(
   ref,
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
+
+/**
+ * Run a `Domain.Rewrite` on one instance, and wait until every view and
+ * projection reflects it. The story fails when the rewrite would break one
+ * of the aggregate's invariants. A `then` after it sees only events
+ * committed later.
+ */
+const rewrite = <A extends Aggregate.Any>(
+  ref: Aggregate.Ref<A>,
+  rewrite: { readonly _tag: string },
+): StepOf<"Rewrite"> => ({ _tag: "Rewrite", ref, rewrite });
+
+/**
+ * Compact one instance with a `Domain.Compaction` now. The story fails when
+ * the roll-up would lose state. A `then` after it sees the roll-up's events.
+ */
+const compact = <A extends Aggregate.Any>(
+  ref: Aggregate.Ref<A>,
+  compaction: Compaction.Any,
+): StepOf<"Compact"> => ({ _tag: "Compact", ref, compaction });
 
 /**
  * Send a command. Whatever implements it in the model handles it: the
@@ -609,6 +670,12 @@ const clock = (at: string | number | DateTime.DateTime): StepOf<"Clock"> => ({ _
 /** Move the clock forward by a duration, like `"1 day"`: the same as `clock` at the current time plus `by`. */
 const advance = (by: Duration.Input): StepOf<"Advance"> => ({ _tag: "Advance", by });
 
+/**
+ * Shred a subject's key in the story's Vault: nothing sealed for them opens
+ * afterwards. A story runs with `Domain.VaultTest`.
+ */
+const shred = (subject: string): StepOf<"Shred"> => ({ _tag: "Shred", subject });
+
 type SagaClientOf<S> = S extends Context.Key<any, infer C> ? C : never;
 type SagaKeyOf<S> =
   SagaClientOf<S> extends Saga.Client<infer K, any, any, any> ? K | { readonly id: K } : never;
@@ -622,6 +689,17 @@ const signal = <S extends Saga.Any, Success extends Schema.Constraint>(
   deferred: DurableDeferred.DurableDeferred<Success, any>,
   value: Success["Type"],
 ): StepOf<"Signal"> => ({ _tag: "Signal", saga, key, deferred, value });
+
+/**
+ * Start a saga run from outside the model, as an operation of your own does
+ * (a policy starts the ones the model's events cause). It runs until it
+ * finishes or suspends, like a command's policies.
+ */
+const start = <S extends Saga.Any>(
+  saga: S,
+  key: SagaKeyOf<S>,
+  input: SagaClientOf<S> extends Saga.Client<any, infer Input, any, any> ? Input : never,
+): StepOf<"Start"> => ({ _tag: "Start", saga, key, input });
 
 /**
  * Check where a saga run is: running, completed with a result, rejected,
@@ -660,25 +738,44 @@ const provide = <I, S>(service: Context.Key<I, S>, value: S): ProvideStep<I> => 
 });
 
 /**
- * Provide a service computed for each command, as middleware does for each
- * request. `make` runs at every `when` that follows, with the command that is
- * about to be sent and the instances it is for, and may read the model's
- * stores. `Option.none()` provides nothing for that command. It is replaced,
- * like `provide`, by a later `provide` or `provideWith` of the same service.
- * A `query` step does not run it: give a query its service with `provide`.
+ * Provide a service computed for each command, as a middleware computes it
+ * for each request. `make` runs at every `when` after this step, with the
+ * command about to be sent and the aggregate instances it is for, and what it
+ * succeeds with is provided to that command only. If it fails, the `when`
+ * fails, naming the service. A later `provide` or `provideWith` of the same
+ * service replaces it. A `query` step does not run it: give a query its
+ * service with `provide`.
  *
- * ### Computing a stamp for each command
- * **Example:** A service that depends on what the command is for
+ * Use it when one value for the whole story cannot exercise the rule under
+ * test: the caller differs by instance, or a capability is scoped to the
+ * command or instance it was issued for.
+ *
+ * ### A caller that differs by instance
+ * **Example:** The owner of each account, from the instance the command is for
+ * ```typescript
+ * const owners: Record<string, string> = { "a-1": "sam", "a-2": "alex" };
+ *
+ * story(
+ *   Story.provideWith(Caller, ({ refs }) => Effect.succeed(owners[refs[0]!.id]!)),
+ *   Story.when(new Withdraw({ accountId: "a-1", amount: 5 })),
+ *   Story.then(Account.ref("a-1"), new Withdrawn({ by: "sam", amount: 5 })),
+ *   Story.when(new Withdraw({ accountId: "a-2", amount: 5 })),
+ *   Story.then(Account.ref("a-2"), new Withdrawn({ by: "alex", amount: 5 })),
+ * );
+ * ```
+ *
+ * ### A capability scoped to the command
+ * **Example:** A stamp naming the command and instances it authorizes
  * ```typescript
  * Story.provideWith(Stamp, ({ command, refs }) =>
- *   Effect.succeed(Option.some({ command: command._tag, instances: refs.map((ref) => ref.id) })),
+ *   Effect.succeed({ command: command._tag, instances: refs.map((ref) => ref.id) }),
  * ),
- * Story.when(new Deposit({ accountId: a, amount: 5 })),
+ * Story.when(new Deposit({ accountId: "a-1", amount: 100 })),
  * ```
  */
 const provideWith = <I, S, E>(
   service: Context.Key<I, S>,
-  make: (sent: Sent) => Effect.Effect<Option.Option<S>, E, Model.Internals>,
+  make: (sent: Sent) => Effect.Effect<S, E>,
 ): ProvideStep<I> => ({
   _tag: "Provide",
   service: service as unknown as Context.Key<unknown, unknown>,
@@ -746,6 +843,36 @@ const advanceDuration = (by: Duration.Input) =>
 const showDurationInput = (by: Duration.Input): string =>
   typeof by === "string" ? by : Formatter.format(by);
 
+/**
+ * Look at the model where a story has got to: `Verify` reads what its
+ * instances hold. It fails the story with the text it fails with.
+ *
+ * @internal
+ */
+export const probe = (run: (probed: Probed) => Effect.Effect<void, string>): Step => ({
+  _tag: "Probe",
+  run,
+});
+
+/**
+ * From here on a command may be rejected without a step that says so: the
+ * steps before changed what the ones after meet.
+ *
+ * @internal
+ */
+export const loose: Step = { _tag: "Loose" };
+
+/**
+ * A rewrite or a compaction the `then`s after it see nothing of: a story
+ * `Verify` found goes on as it was written.
+ *
+ * @internal
+ */
+export const quietly = (step: StepOf<"Rewrite"> | StepOf<"Compact">): Step => ({
+  ...step,
+  quiet: true,
+});
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
@@ -758,6 +885,8 @@ const describeStep = (s: Step): string => {
       const at = clockMillis(s.at);
       return Number.isNaN(at) ? String(s.at) : new Date(at).toISOString();
     }
+    case "Shred":
+      return s.subject;
     case "Provide":
       return s.make === undefined
         ? `${s.service.key} = ${summarize(s.value)}`
@@ -768,6 +897,13 @@ const describeStep = (s: Step): string => {
       return `${refName(s.ref)}: ${s.events.length === 0 ? "nothing new" : clip(briefExpected(s.events), 80)}`;
     case "When":
       return summarize(s.command);
+    case "Rewrite":
+      return `${refName(s.ref)}: ${summarize(s.rewrite)}`;
+    case "Compact":
+      return `${refName(s.ref)}: ${s.compaction.compactionName}`;
+    case "Probe":
+    case "Loose":
+      return "";
     case "Rejected":
       return summarize(s.rejection);
     case "Replied":
@@ -811,6 +947,8 @@ const describeStep = (s: Step): string => {
       }`;
     case "Signal":
       return `${s.saga.sagaName} ${summarize(s.key)}: ${summarize(s.value)}`;
+    case "Start":
+      return `${s.saga.sagaName} ${summarize(s.key)}`;
     case "Saga":
       return `${s.saga.sagaName} ${summarize(s.key)}: ${s.expected._tag}`;
   }
@@ -924,7 +1062,7 @@ interface ObservedCall {
 }
 
 /** Options for {@link make}. */
-interface StoryOptions<Policies, LE, LR, Systems> {
+interface StoryOptions<Policies, LE, LR, Systems, Provided = never, Hosted = never> {
   /** The policies' and projections' Layers. Required when the model has either. */
   readonly layer?: Layer.Layer<Policies, LE, LR>;
   /**
@@ -934,6 +1072,20 @@ interface StoryOptions<Policies, LE, LR, Systems> {
    * each call returned with `returned`, `failed` or `died`.
    */
   readonly stub?: ReadonlyArray<Systems>;
+  /**
+   * What the model's handlers need hosted beside the model: an AI process a
+   * policy holds. It is given the model as the story hosts it, which a
+   * process that mentions the model needs in turn.
+   *
+   * **Example:** A process played in memory
+   * ```typescript
+   * const story = Story.make(Board, {
+   *   layer: IssueWorkLive,
+   *   host: (board) => AI.layerInMemory(TriagePlayed.pipe(Layer.provide(board))),
+   * });
+   * ```
+   */
+  readonly host?: (model: Layer.Layer<Provided>) => Layer.Layer<Hosted>;
 }
 
 /**
@@ -1103,21 +1255,35 @@ const make =
     LR = never,
     Systems extends ExternalSystem.Any = never,
     Cmds extends Command.Any = never,
+    Hosted = never,
   >(
     // The model's command classes: each `when` is checked against the one with its tag.
     domain: Model.ModelClass<Name, Provided, Policies> & {
       readonly commands: ReadonlyArray<Cmds>;
     },
     ...[options = {}]: [Policies] extends [never]
-      ? [options?: StoryOptions<Policies, LE, LR, Systems>]
-      : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
+      ? [options?: StoryOptions<Policies, LE, LR, Systems, Provided, Hosted>]
+      : [
+          options: StoryOptions<Policies, LE, LR, Systems, Provided, Hosted> & {
+            readonly layer: unknown;
+          },
+        ]
   ) =>
   <const S extends ReadonlyArray<Step>>(
     ...steps: S & Checked<S, Cmds>
   ): Effect.Effect<
     void,
     StoryFailure | LE,
-    Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
+    // A story is a runtime of its own, in memory: its handlers need no other.
+    Exclude<
+      LR,
+      | Provided
+      | Hosted
+      | ExternalSystem.Identifier<Systems>
+      | WorkflowEngine.WorkflowEngine
+      | RuntimeContext
+      | Vault
+    >
   > =>
     explore(steps, (scheduler) =>
       Effect.gen(function* () {
@@ -1188,16 +1354,27 @@ const make =
         const systems = Layer.mergeAll(Layer.empty, ...systemLayers);
         const policies = (
           options.layer ?? (Layer.empty as unknown as Layer.Layer<Policies, LE, LR>)
-        ).pipe(Layer.provide(systems));
-        const hosted = domain
+        ).pipe(Layer.provide(Layer.mergeAll(systems, VaultTest)));
+        // A story seals with the test Vault, so what it seals can be expected.
+        const model = domain
           .layer(policies)
-          .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems)));
+          .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems, VaultTest)));
+        const hosted = Layer.mergeAll(
+          options.host === undefined
+            ? model
+            : model.pipe(
+                // The same Layer the story hosts: what is hosted beside the model reaches this model.
+                Layer.provide(options.host(model as unknown as Layer.Layer<Provided>)),
+              ),
+          VaultTest,
+        );
 
         // The aggregates the story touched, for the report's "events so far".
         const touched = new Map<string, Aggregate.Ref>();
 
         const run = Effect.gen(function* () {
           const internals = yield* Model.Internals;
+          const vault = yield* Vault;
           const cursors = new Map<string, number>();
           // The step that committed each event, by `Aggregate/id#index`.
           const committedAt = new Map<string, number>();
@@ -1227,6 +1404,8 @@ const make =
               readonly make: NonNullable<StepOf<"Provide">["make"]>;
             }
           >();
+          // Set by `loose`: a rejection no step asserts is no longer a failure.
+          let lenient = false;
           const assertedDeaths = new Set<string>();
 
           const storeOf = (ref: Aggregate.Ref) => internals.aggregates.get(ref.aggregate)!;
@@ -1241,19 +1420,14 @@ const make =
                   if (call.exit === undefined) yield* Deferred.await(call.done);
                 }
                 yield* platform.control.drain;
-                yield* Effect.yieldNow;
                 if (yield* platform.control.idle) {
-                  yield* Effect.yieldNow;
-                  yield* platform.control.drain;
-                  if (yield* platform.control.idle) {
-                    if (platform.control.failures.length > 0) {
-                      return yield* new StepFailed({
-                        step,
-                        message: `a policy or projection failed: ${String(platform.control.failures[0])}`,
-                      });
-                    }
-                    return;
+                  if (platform.control.failures.length > 0) {
+                    return yield* new StepFailed({
+                      step,
+                      message: `a policy or projection failed: ${String(platform.control.failures[0])}`,
+                    });
                   }
+                  return;
                 }
               }
               return yield* new StepFailed({
@@ -1323,6 +1497,11 @@ const make =
                 yield* settle(step);
                 break;
               }
+              case "Shred": {
+                yield* vault.shred(s.subject).pipe(Effect.orDie);
+                yield* settle(step);
+                break;
+              }
               case "Provide": {
                 if (s.make === undefined) {
                   computed.delete(s.service.key);
@@ -1344,6 +1523,54 @@ const make =
                 yield* settle(step);
                 break;
               }
+              case "Rewrite":
+              case "Compact": {
+                const client = yield* Aggregate.refClass(s.ref) as unknown as Context.Key<
+                  never,
+                  Aggregate.ClientImpl
+                >;
+                const stream = `${s.ref.aggregate}/${s.ref.id}`;
+                // The last event a `then` has seen: those after it are still new afterwards.
+                const before = yield* committed(s.ref);
+                const seen = before[(cursors.get(stream) ?? 0) - 1]?.envelope.seq ?? 0;
+                if (s._tag === "Rewrite") {
+                  const result = yield* client
+                    .rewrite(s.ref, s.rewrite, { rewriteId: `story:${step}` })
+                    .pipe(Effect.result);
+                  if (result._tag === "Failure") return yield* fail(result.failure.message);
+                  yield* settle(step);
+                  const settled = yield* client.rewritten(result.success).pipe(Effect.result);
+                  if (settled._tag === "Failure") {
+                    return yield* fail(
+                      `${settled.failure.view}(${settled.failure.key}) never took the rewrite`,
+                    );
+                  }
+                } else {
+                  const result = yield* client.compact(s.ref, s.compaction).pipe(Effect.result);
+                  if (result._tag === "Failure") return yield* fail(result.failure.message);
+                }
+                yield* settle(step);
+                const now = yield* committed(s.ref);
+                cursors.set(
+                  stream,
+                  s.quiet ? now.length : now.filter((event) => event.envelope.seq <= seen).length,
+                );
+                break;
+              }
+              case "Loose": {
+                lenient = true;
+                break;
+              }
+              case "Probe": {
+                const instances = new Map<string, { aggregate: string; id: string }>();
+                for (const { aggregate, id } of platform.control.commits)
+                  instances.set(`${aggregate}/${id}`, { aggregate, id });
+                const result = yield* s
+                  .run({ internals, instances: [...instances.values()] })
+                  .pipe(Effect.result);
+                if (result._tag === "Failure") return yield* fail(result.failure);
+                break;
+              }
               case "When": {
                 // Whatever implements the command in the model, as an Api sends it.
                 const client = internals.commands.get(s.command._tag);
@@ -1361,9 +1588,7 @@ const make =
                       `${key} could not be provided: ${String(Cause.squash(made.cause))}`,
                     );
                   }
-                  if (Option.isSome(made.value)) {
-                    context = Context.add(context, service, made.value.value);
-                  }
+                  context = Context.add(context, service, made.value);
                 }
                 const result = yield* client
                   .send(s.command, { commandId: s.commandId ?? `story:${step}` })
@@ -1375,7 +1600,7 @@ const make =
                     _tag: "Rejected",
                     rejection: result.failure as { readonly _tag: string },
                   };
-                  unassertedRejection = { step, rejection: last.rejection };
+                  if (!lenient) unassertedRejection = { step, rejection: last.rejection };
                 }
                 yield* settle(step);
                 break;
@@ -1702,6 +1927,15 @@ const make =
                 yield* settle(step);
                 break;
               }
+              case "Start": {
+                const client = yield* s.saga as unknown as Context.Key<
+                  never,
+                  Saga.Client<unknown, unknown, unknown, unknown>
+                >;
+                yield* client.start(s.key, s.input).pipe(Effect.provide(provided));
+                yield* settle(step);
+                break;
+              }
               case "Saga": {
                 const client = yield* s.saga as unknown as Context.Key<
                   never,
@@ -1915,7 +2149,16 @@ const make =
     ) as Effect.Effect<
       void,
       StoryFailure | LE,
-      Exclude<LR, Provided | ExternalSystem.Identifier<Systems> | WorkflowEngine.WorkflowEngine>
+      // A story is a runtime of its own, in memory: its handlers need no other.
+      Exclude<
+        LR,
+        | Provided
+        | Hosted
+        | ExternalSystem.Identifier<Systems>
+        | WorkflowEngine.WorkflowEngine
+        | RuntimeContext
+        | Vault
+      >
     >;
 
 /**
@@ -2039,6 +2282,8 @@ export const Story = {
   when,
   // oxlint-disable-next-line unicorn/no-thenable -- `then` is the given/when/then vocabulary
   then,
+  rewrite,
+  compact,
   anyOrder,
   inOrder,
   rejected,
@@ -2057,9 +2302,11 @@ export const Story = {
   died,
   clock,
   advance,
+  shred,
   provide,
   provideWith,
   signal,
+  start,
   saga,
   /** Marker for "the view key does not exist". */
   none,

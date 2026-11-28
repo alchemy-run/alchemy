@@ -25,7 +25,8 @@ export interface Counterexample {
   readonly command: unknown;
   /** What each request context the command read held. */
   readonly context: ReadonlyArray<{ readonly name: string; readonly value: unknown }>;
-  readonly now: DateTime.Utc;
+  /** Absent where no command ran: a roll-up is made at no time. */
+  readonly now?: DateTime.Utc;
   readonly events: ReadonlyArray<unknown>;
   readonly after: unknown;
 }
@@ -62,6 +63,49 @@ const functionOf = (application: { readonly term: string; readonly argument: str
   application.term.slice(1, application.term.length - application.argument.length - 2);
 
 /**
+ * Whether some inputs take this path and make `condition` true. The prover
+ * asks before it takes a side of a test: a side no inputs reach is not a
+ * path. A question the solver cannot answer counts as one they reach, so a
+ * path is only ever left out when it cannot occur.
+ */
+export const feasible = (solver: Smt.Solver) => {
+  // A path is run again for each path that starts as it does: each question is asked once.
+  // Paths share how they start, so a question is known by a number for the one before it and its last line.
+  const lines = new Map<string, number>();
+  const questions = new Map<string, number>();
+  const numbered = (known: Map<string, number>, text: string): number => {
+    const found = known.get(text);
+    if (found !== undefined) return found;
+    known.set(text, known.size + 1);
+    return known.size;
+  };
+  const answers = new Map<number, boolean>();
+  return (run: Run, condition: string): Effect.Effect<boolean> => {
+    const declarations = [...run.declarations.values()];
+    const assertions = [...run.conditions, condition, ...safe(run, declarations)];
+    const question = [...declarations, "", ...assertions].reduce(
+      (before, line) => numbered(questions, `${before} ${numbered(lines, line)}`),
+      0,
+    );
+    const known = answers.get(question);
+    if (known !== undefined) return Effect.succeed(known);
+    return solver.check({ declarations, assertions, values: [] }).pipe(
+      Effect.map((answer) => answer._tag !== "Unsat"),
+      // The checks of the path say what went wrong with the solver.
+      Effect.orElseSucceed(() => true),
+      Effect.tap((answer) => Effect.sync(() => answers.set(question, answer))),
+    );
+  };
+};
+
+/** A number in JavaScript is exact only this far: what holds of each whole number an input holds. */
+const safe = (run: Run, declarations: ReadonlyArray<string>): ReadonlyArray<string> =>
+  declarations.flatMap((declaration) => {
+    const match = /^\(declare-const (.+) Int\)$/.exec(declaration);
+    return match && !run.bigs.has(match[1]!) ? [`(<= (- ${SAFE}) ${match[1]} ${SAFE})`] : [];
+  });
+
+/**
  * Ask the solver for inputs on this path that make `condition` false: with an
  * invariant, inputs that break it; with `"false"`, any inputs that take the path. A function
  * the prover knows only by its implementation starts free; each answer that
@@ -78,7 +122,7 @@ export const solve = Effect.fn(function* (
   // What each tested result of an opaque function was called on: the real function is run on it.
   const tests = [...run.tests.values()].map((test) => {
     const terms = new Map<string, Smt.Term>();
-    computed(test.applied, terms);
+    computed(test.applied, terms, run.lists);
     return { ...test, terms: [...terms.values()] };
   });
   const wanted = new Map<string, Smt.Term>(reads.map((term) => [term.text, term]));
@@ -97,11 +141,7 @@ export const solve = Effect.fn(function* (
   const base = [
     ...run.conditions,
     Smt.not(condition),
-    // A number in JavaScript is exact only this far.
-    ...declarations.flatMap((declaration) => {
-      const match = /^\(declare-const (.+) Int\)$/.exec(declaration);
-      return match && !run.bigs.has(match[1]!) ? [`(<= (- ${SAFE}) ${match[1]} ${SAFE})`] : [];
-    }),
+    ...safe(run, declarations),
     ...named.map((read) => `(= ${read.name} ${read.term.text})`),
   ];
   // Equal results of a function that never repeats one mean equal arguments.
@@ -177,7 +217,10 @@ export const solve = Effect.fn(function* (
     ...tests.flatMap((test) => {
       const built = Symbolic.concretize(test.applied, model, run.lists);
       if (!("value" in built)) return [];
-      const truthy = Smt.bool(Boolean(built.value)).text;
+      const observed = test.read(built.value);
+      // The result is not of the kind the code took it for: the real code is what says so.
+      if (observed === undefined) return [];
+      const truthy = literalOf(test.term.sort, observed);
       const at = test.terms.flatMap((term) => {
         const value = model.get(term.text);
         return value === undefined ? [] : [`(= ${term.text} ${literalOf(term.sort, value)})`];
@@ -186,7 +229,7 @@ export const solve = Effect.fn(function* (
       const result = `(= ${test.term.text} ${truthy})`;
       return [
         {
-          agrees: model.get(test.term.text) === Boolean(built.value),
+          agrees: model.get(test.term.text) === observed,
           pin: [...at, result],
           fact:
             at.length === 0
@@ -405,7 +448,7 @@ const replay = Effect.fn(function* (
 });
 
 /** A value as text two values share only when they are the same data. */
-const canon = (value: unknown): string => {
+export const canon = (value: unknown): string => {
   if (typeof value === "bigint") return `${value}n`;
   if (typeof value === "string") return JSON.stringify(value);
   if (value === null || typeof value !== "object") return String(value);
@@ -445,8 +488,23 @@ const carries = (real: unknown, read: unknown): boolean =>
   );
 
 /** Every term a value is made of that is not an input: what the solver has to work out. */
-const computed = (value: V, into: Map<string, Smt.Term>): void => {
+const computed = (
+  value: V,
+  into: Map<string, Smt.Term>,
+  /** What the path chose for each field the code read. */
+  lists?: ReadonlyMap<string, V>,
+): void => {
   switch (value._tag) {
+    case "Pending": {
+      const chosen = lists?.get(`?${value.name}`);
+      if (chosen) computed(chosen, into, lists);
+      const held = chosen ? undefined : Symbolic.keptOf(value, lists);
+      if (held) {
+        into.set(held.present.text, held.present);
+        computed(held.value, into, lists);
+      }
+      return;
+    }
     case "Term":
       into.set(value.term.text, value.term);
       return;
@@ -454,13 +512,13 @@ const computed = (value: V, into: Map<string, Smt.Term>): void => {
       into.set(value.millis.text, value.millis);
       return;
     case "Obj":
-      for (const field of Object.values(value.fields)) computed(field, into);
+      for (const field of Object.values(value.fields)) computed(field, into, lists);
       return;
     case "Arr":
-      for (const item of value.items) computed(item, into);
+      for (const item of value.items) computed(item, into, lists);
       return;
     case "Applied":
-      for (const argument of value.args) computed(argument, into);
+      for (const argument of value.args) computed(argument, into, lists);
       return;
     default:
       return;
@@ -484,9 +542,11 @@ export type Agreement =
   | { readonly _tag: "Agreed" }
   /**
    * Nothing was compared. No inputs take the path, or with `taken`, the ones
-   * the solver found cannot be built as real values or run.
+   * the solver found cannot be built as real values or run. With `order`,
+   * the path takes the items of a hash set or a hash map in an order the real
+   * one does not give for the items the solver found.
    */
-  | { readonly _tag: "Skipped"; readonly taken: boolean }
+  | { readonly _tag: "Skipped"; readonly taken: boolean; readonly order?: boolean }
   | { readonly _tag: "Differs"; readonly reason: string };
 
 /** What the prover read a command to do on one path. */
@@ -510,10 +570,10 @@ export const agree = Effect.fn(function* (
 ) {
   const skipped: Agreement = { _tag: "Skipped", taken: true };
   const outputs = new Map<string, Smt.Term>();
-  if (read._tag === "Rejected") computed(read.rejection, outputs);
+  if (read._tag === "Rejected") computed(read.rejection, outputs, run.lists);
   if (read._tag === "Changed") {
-    computed(read.after, outputs);
-    for (const event of read.events) computed(event, outputs);
+    computed(read.after, outputs, run.lists);
+    for (const event of read.events) computed(event, outputs, run.lists);
   }
   const answer = yield* solve(
     solver,
@@ -623,7 +683,9 @@ export const agree = Effect.fn(function* (
   });
   const agreement = yield* tried.pipe(Effect.catch((agreement) => Effect.succeed(agreement)));
   if (agreement._tag !== "Differs") return agreement;
-  return (yield* ordered.pipe(Effect.orElseSucceed(() => true))) ? agreement : skipped;
+  return (yield* ordered.pipe(Effect.orElseSucceed(() => true)))
+    ? agreement
+    : ({ _tag: "Skipped", taken: true, order: true } as const);
 });
 
 /**

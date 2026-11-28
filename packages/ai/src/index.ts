@@ -25,6 +25,43 @@ export {
   type DeclaredNamespace,
   type DeclaredTool,
 } from "./Declarations.ts";
+export {
+  Harness,
+  HarnessError,
+  type Engine,
+  type EngineOptions,
+  type EngineSession,
+  type EngineSessionOptions,
+  type EngineValues,
+  HistoryOptions,
+  QueuedMessage,
+  type Reply,
+  type SendOptions,
+  SessionEntry,
+  SessionEvent,
+  SessionItem,
+  SessionPage,
+  SessionState,
+  SessionStatus,
+} from "./Harness.ts";
+export {
+  Acting,
+  DefaultModel,
+  isProcess,
+  NotStarted,
+  Process,
+  Self,
+  type AnyProcess,
+  type InlineProcess,
+  type Mentionable,
+  type ProcessClient,
+  type ProcessTag,
+  type Session,
+  type StartOptions,
+  type Stored,
+} from "./Process.ts";
+export { layerInMemory } from "./Host.ts";
+export { scripted, type Turn } from "./Scripted.ts";
 export { isModel, Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export {
   Sandbox,
@@ -34,7 +71,6 @@ export {
   type ExecResult,
   type SandboxHandle,
 } from "./Sandbox.ts";
-export { isSkill, Skill, type AnySkill, type SkillClass, type SkillSpec } from "./Skill.ts";
 export {
   isMcpServer,
   McpServer,

@@ -1,7 +1,10 @@
+import {
+  makeContainerBootstrap,
+  type ContainerRuntimeSettings,
+} from "@alchemy.run/docker/ContainerRuntime";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { hashDirectory } from "alchemy/Command/Memo";
 import type { ResourceBinding } from "alchemy/Resource";
-import { Self } from "alchemy/Self";
 import { unwrapRedacted } from "alchemy/Util/data";
 import { collectRedactedSecrets } from "alchemy/Util/Redaction";
 import { sha256Object } from "alchemy/Util/sha256";
@@ -9,8 +12,9 @@ import { sha256Object } from "alchemy/Util/sha256";
  * Internal helpers shared by the Kubernetes workload platforms
  * (`Kubernetes.Deployment`, `Kubernetes.Job`): image-source dispatch
  * through the cluster adapter, binding-env collection, connection
- * identity, and the platform-neutral generated container entries.
+ * identity, and container bootstrap selection.
  */
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -213,6 +217,50 @@ export const computeStaticWorkloadImageHash = Effect.fn(function* (
   return undefined;
 });
 
+/**
+ * Use the selected runtime's compatibility templates when provided. Cloud
+ * adapters can override those and supply a module for the shared path to
+ * wire workload identity.
+ */
+const workloadBootstrap = Effect.fnUntraced(function* (options: {
+  adapter: ClusterAdapterService;
+  source: WorkloadImageSource;
+  mode: "server" | "job";
+  isExternal?: boolean;
+  runtime: ContainerRuntimeSettings;
+}) {
+  const { adapter, mode, runtime, source } = options;
+  const handler = source.handler ?? "default";
+  const hostBootstrap = adapter.bootstrap?.[mode];
+  const compatibilityBootstrap = runtime.compatibilityBootstrap?.[mode];
+  if (compatibilityBootstrap !== undefined) {
+    return (hostBootstrap ?? compatibilityBootstrap)(handler);
+  }
+  // Static images and external programs do not use the generated entrypoint.
+  if (source.main === undefined || options.isExternal) {
+    return hostBootstrap?.(handler) ?? (() => "");
+  }
+  if (hostBootstrap !== undefined && adapter.runtimeBootstrap === undefined) {
+    return yield* Effect.die(
+      new ClusterAdapterMissingRuntimeBootstrap({
+        message:
+          "This Kubernetes cluster adapter has its own bootstrap but no runtimeBootstrap module, so it can only run Bun. Set the workload's runtime to bun, or give the adapter a runtimeBootstrap.",
+      }),
+    );
+  }
+  return makeContainerBootstrap(
+    runtime.platformModule,
+    adapter.runtimeBootstrap ?? "alchemy/Runtime/ContainerProcess",
+    handler,
+    mode,
+  );
+});
+
+/** A cluster adapter with its own entry can't start a program on the selected runtime. */
+export class ClusterAdapterMissingRuntimeBootstrap extends Data.TaggedError(
+  "ClusterAdapterMissingRuntimeBootstrap",
+)<{ readonly message: string }> {}
+
 export interface ResolveWorkloadImageOptions {
   adapter: ClusterAdapterService;
   /** The target connection — its `registry`, if any, receives builds. */
@@ -224,7 +272,8 @@ export interface ResolveWorkloadImageOptions {
   platform: string;
   port?: number | undefined;
   isExternal?: boolean | undefined;
-  bootstrap: (importPath: string) => string;
+  mode: "server" | "job";
+  runtime: ContainerRuntimeSettings;
   tags: Record<string, string>;
   /** Persisted registry state hints (legacy-shape tolerant). */
   state: Record<string, unknown> | undefined;
@@ -240,6 +289,7 @@ export interface ResolveWorkloadImageOptions {
  */
 export const resolveWorkloadImage = Effect.fn(function* (options: ResolveWorkloadImageOptions) {
   const { adapter, source } = options;
+  const bootstrap = yield* workloadBootstrap(options);
   if (adapter.registry !== undefined) {
     return yield* adapter.registry.resolve({
       id: options.id,
@@ -247,7 +297,8 @@ export const resolveWorkloadImage = Effect.fn(function* (options: ResolveWorkloa
       platform: options.platform,
       port: options.port,
       isExternal: options.isExternal,
-      bootstrap: options.bootstrap,
+      bootstrap,
+      runtime: options.runtime,
       tags: options.tags,
       state: options.state,
       session: options.session,
@@ -269,7 +320,8 @@ export const resolveWorkloadImage = Effect.fn(function* (options: ResolveWorkloa
       platform: options.platform,
       port: options.port,
       isExternal: options.isExternal,
-      bootstrap: options.bootstrap,
+      bootstrap,
+      runtime: options.runtime,
       state: options.state,
       session: options.session,
     });
@@ -296,24 +348,30 @@ export const workloadImageHash = Effect.fn(function* (options: {
   platform: string;
   port?: number | undefined;
   isExternal?: boolean | undefined;
-  bootstrap: (importPath: string) => string;
+  mode: "server" | "job";
+  runtime: ContainerRuntimeSettings;
 }) {
+  const bootstrap = yield* workloadBootstrap(options);
   if (options.adapter.registry !== undefined) {
     return yield* options.adapter.registry.hash({
       source: options.source,
       platform: options.platform,
       port: options.port,
       isExternal: options.isExternal,
-      bootstrap: options.bootstrap,
+      bootstrap,
+      runtime: options.runtime,
     });
   }
-  if (options.connection.registry !== undefined && imageSourceKind(options.source) === "main") {
+  // `resolveWorkloadImage` builds every non-`image` source through the
+  // connection registry and stores that hash, so the diff hashes there too.
+  if (options.connection.registry !== undefined && imageSourceKind(options.source) !== "image") {
     return yield* options.connectionRegistry.hash({
       source: options.source,
       platform: options.platform,
       port: options.port,
       isExternal: options.isExternal,
-      bootstrap: options.bootstrap,
+      bootstrap,
+      runtime: options.runtime,
     });
   }
   return yield* computeStaticWorkloadImageHash(options.source, options.platform);
@@ -322,178 +380,6 @@ export const workloadImageHash = Effect.fn(function* (options: {
 /** The identity-adapter state persisted on workload attributes. */
 // oxlint-disable-next-line typescript/no-redundant-type-constituents -- registry type is `never` until cloud packages augment it
 export type PersistedIdentityState = IdentityState | undefined;
-
-/**
- * Platform-neutral generated container entry for an Effect-native server
- * workload: resolves the program's registered runners and serves the
- * returned `{ fetch }` handler on `PORT`. Cloud adapters override this
- * through {@link ClusterAdapterService.bootstrap} to wire their runtime
- * credential chains (e.g. EKS Pod Identity).
- */
-export const makeServerBootstrap =
-  (handler: string) =>
-  (importPath: string): string =>
-    `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-import { Stack } from "alchemy/Stack";
-import { Stage } from "alchemy/Stage";
-import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
-import { provideProcessTelemetry } from "alchemy/Telemetry";
-import * as Context from "effect/Context";
-import * as Config from "effect/Config";
-import * as Effect from "effect/Effect";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-
-import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
-
-// Normalize the entrypoint export: an inline-effect class default export is
-// an Effect resolving the platform instance, while the tagged form
-// (X.make(props, impl)) exports a Layer providing the Self tag. Both fold
-// into a Layer via makeEntrypointLayer (same pattern as the ECS/Lambda/
-// Cloudflare Container bridges).
-const tag = Context.Service("${Self.key}");
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  SecureRandom.layerWebCrypto,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-// Resolve the bundled program (the runners registered via host.run / serve)
-// and run it with a Bun HTTP server bound to PORT, so a returned { fetch }
-// handler is served and host.run loops stay alive.
-const program = tag.pipe(
-  // Process-lifetime telemetry: built once into the root scope; exporters
-  // batch on their intervals and flush when the scope closes on graceful
-  // shutdown.
-  Effect.flatMap((host) =>
-    host.RuntimeContext.exports.pipe(
-      Effect.flatMap((exports) => exports.program),
-      provideProcessTelemetry(host.RuntimeContext),
-    ),
-  ),
-  Effect.provide(
-    layer.pipe(Layer.provideMerge(Layer.mergeAll(
-      Layer.effect(
-        Stack,
-        Effect.all([
-          Config.String("ALCHEMY_STACK_NAME"),
-          Config.String("ALCHEMY_STAGE")
-        ]).pipe(
-          Effect.map(([name, stage]) => ({
-            name,
-            stage,
-            bindings: {},
-            resources: {}
-          }))
-        )
-      ),
-      // Module-scope declarations shared with the Stack may read the stage.
-      Layer.effect(Stage, Config.String("ALCHEMY_STAGE")),
-    )),
-      Layer.provideMerge(BunHttpServer()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(RuntimeConfigProviderLive),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log(\`Kubernetes Deployment bootstrap starting on port \${process.env.PORT ?? 3000}...\`);
-await Effect.runPromise(program).catch((err) => {
-  console.error("Kubernetes Deployment bootstrap failed:", err);
-  process.exit(1);
-});
-`;
-
-/**
- * Platform-neutral generated container entry for an Effect-native one-shot
- * Job: resolves the program's `run` effect, executes it to completion, and
- * exits.
- */
-export const makeJobBootstrap =
-  (handler: string) =>
-  (importPath: string): string =>
-    `
-import { BunServices } from "@effect/platform-bun";
-import { Stack } from "alchemy/Stack";
-import { Stage } from "alchemy/Stage";
-import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
-import { provideProcessTelemetry } from "alchemy/Telemetry";
-import * as Context from "effect/Context";
-import * as Config from "effect/Config";
-import * as Effect from "effect/Effect";
-import * as SecureRandom from "effect/crypto/SecureRandom";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-
-import { ${handler} as entrypoint } from ${JSON.stringify(importPath)};
-
-// Normalize the entrypoint export (see the server bootstrap).
-const tag = Context.Service("${Self.key}");
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  BunServices.layer,
-  FetchHttpClient.layer,
-  SecureRandom.layerWebCrypto,
-  Logger.layer([Logger.consolePretty()]),
-);
-
-// Resolve the bundled program's registered one-shot runners (the shape's
-// \`run\` effect and any host.run work) and execute them to completion.
-const program = tag.pipe(
-  // Process-lifetime telemetry: built once into the root scope; exporters
-  // batch on their intervals and flush when the scope closes as the
-  // one-shot program completes.
-  Effect.flatMap((host) =>
-    host.RuntimeContext.exports.pipe(
-      Effect.flatMap((exports) => exports.program),
-      provideProcessTelemetry(host.RuntimeContext),
-    ),
-  ),
-  Effect.provide(
-    layer.pipe(Layer.provideMerge(Layer.mergeAll(
-      Layer.effect(
-        Stack,
-        Effect.all([
-          Config.String("ALCHEMY_STACK_NAME"),
-          Config.String("ALCHEMY_STAGE")
-        ]).pipe(
-          Effect.map(([name, stage]) => ({
-            name,
-            stage,
-            bindings: {},
-            resources: {}
-          }))
-        )
-      ),
-      // Module-scope declarations shared with the Stack may read the stage.
-      Layer.effect(Stage, Config.String("ALCHEMY_STAGE")),
-    )),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(RuntimeConfigProviderLive),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Kubernetes Job bootstrap starting...");
-await Effect.runPromise(program).catch((err) => {
-  console.error("Kubernetes Job bootstrap failed:", err);
-  process.exit(1);
-});
-// Run-to-completion semantics: exit 0 explicitly so lingering handles
-// (sockets, timers) never keep the pod alive after the work is done.
-process.exit(0);
-`;
 
 /** A container env entry read from elsewhere: a Secret key, a ConfigMap key, a field. */
 export interface EnvValueFrom {

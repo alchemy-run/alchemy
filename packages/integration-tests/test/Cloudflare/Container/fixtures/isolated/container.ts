@@ -29,7 +29,6 @@ export class IsolatedContainer extends Cloudflare.Container<
 export default IsolatedContainer.make(
   {
     main: project.main,
-    image: "oven/bun:latest",
   },
   Effect.gen(function* () {
     return {

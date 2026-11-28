@@ -13,13 +13,17 @@ The bot answers an issue once. A person who replies should reach the same sessio
 
 The bot's comments are comments too, and GitHub will deliver them. Mark each one with a hidden HTML comment, so the Worker can tell them apart:
 
-```typescript title="src/tools.ts"
-export const MARKER = "<!-- issue-bot -->";
+```diff lang="typescript" title="src/Repo.ts"
+  autoInit: true,
+});
++
++export const MARKER = "<!-- issue-bot -->";
 ```
 
 ```diff lang="typescript"
+-import { Repo } from "./Repo.ts";
++import { MARKER, Repo } from "./Repo.ts";
 import { Sandbox } from "./Sandbox.ts";
-+import { MARKER } from "./tools.ts";
 ```
 
 ```diff lang="typescript"
@@ -37,8 +41,8 @@ Subscribe to `issue_comment` as well. A reply is another `ask` on the same Durab
 
 ```diff lang="typescript"
 import Issue from "./Issue.ts";
-import { owner, repository } from "./Repo.ts";
-+import { MARKER } from "./tools.ts";
+-import { owner, repository } from "./Repo.ts";
++import { MARKER, owner, repository } from "./Repo.ts";
 ```
 
 ```diff lang="typescript"
@@ -75,27 +79,27 @@ yield* GitHub.consumeRepositoryEvents(
 
 The coding tools work in the sandbox. A tool of yours needs no sandbox: it runs in the Durable Object, where the GitHub token is. Declare one that searches the repository's issues:
 
-```diff lang="typescript"
-+import * as AI from "@alchemy.run/ai";
-+import * as Schema from "effect/Schema";
-+
-export const MARKER = "<!-- issue-bot -->";
-+
-+export class SearchIssues extends AI.Tool<SearchIssues>()("search_issues", {
-+  description:
-+    "Search this repository's issues and pull requests. Use it to find duplicates or related work.",
-+  parameters: Schema.Struct({ query: Schema.String }),
-+  success: Schema.Struct({
-+    issues: Schema.Array(
-+      Schema.Struct({ number: Schema.Number, title: Schema.String, state: Schema.String }),
-+    ),
-+  }),
-+}) {}
+```typescript title="src/SearchIssues.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export class SearchIssues extends AI.Tool<SearchIssues>()("search_issues", {
+  description:
+    "Search this repository's issues and pull requests. Use it to find duplicates or related work.",
+  parameters: Schema.Struct({ query: Schema.String }),
+  success: Schema.Struct({
+    issues: Schema.Array(
+      Schema.Struct({ number: Schema.Number, title: Schema.String, state: Schema.String }),
+    ),
+  }),
+}) {}
 ```
+
+A tool has a file of its own, named after it: its contract, and the Layer that implements it.
 
 ## Implement it with a GitHub binding
 
-```diff lang="typescript"
+```diff lang="typescript" title="src/SearchIssues.tool.ts"
 import * as AI from "@alchemy.run/ai";
 +import * as GitHub from "@alchemy.run/github";
 +import * as Effect from "effect/Effect";
@@ -134,8 +138,8 @@ import * as Schema from "effect/Schema";
 List it on the harness, provide its Layer, and add it to the session's tools:
 
 ```diff lang="typescript"
--import { MARKER } from "./tools.ts";
-+import { MARKER, SearchIssues, SearchIssuesLive } from "./tools.ts";
+import { Sandbox } from "./Sandbox.ts";
++import { SearchIssues, SearchIssuesLive } from "./SearchIssues.tool.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,

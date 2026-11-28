@@ -1,14 +1,16 @@
 ---
 title: AI
-description: Declare models, tools, skills, MCP servers and sandboxes once with @alchemy.run/ai, and run them on any agent harness.
+description: Model agentic processes in code with @alchemy.run/ai. A process is prose that mentions the tools, models, other processes and business domain it works on, and runs on any agent harness.
 ---
 
 import HubMap from "../../../components/HubMap.astro";
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-`@alchemy.run/ai` is what every agent harness shares: models, tools, skills, MCP servers and sandboxes. You declare each once and run it on any harness. A harness is the loop around a model that calls tools until a task is done; [Pi](/pi) and [OpenCode](/opencode) are the two Alchemy hosts today.
+`@alchemy.run/ai` models agentic processes in code. A **process** is prose that describes a piece of work, and everything it mentions is a real reference: a tool, an LLM, another process, a command of your [Domain model](/domain).
 
-**New to agent harnesses?** Start with [What is an agent harness?](/ai/what-is-a-harness).
+Processes, tools, your business rules and your infrastructure are one declarative program that the compiler checks and Alchemy deploys. The **harness** that runs a process, [Pi](/pi) or [OpenCode](/opencode), is one Layer.
+
+**New to this?** Start with [What is Alchemy AI?](/ai/what-is-alchemy-ai).
 
 ## A quick example
 
@@ -17,7 +19,6 @@ Name a model. Which LLM answers is the Layer behind the name:
 ```typescript title="src/models.ts"
 import * as AI from "@alchemy.run/ai";
 import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
-import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export class Fast extends AI.Model<Fast>()("fast") {}
 
@@ -28,7 +29,7 @@ export const FastLive = AICloudflare.Model(Fast, {
 
 Declare a tool: what it takes, what it returns, and a handler:
 
-```typescript title="src/tools.ts"
+```typescript title="src/Add.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Schema from "effect/Schema";
 
@@ -41,40 +42,54 @@ export class Add extends AI.Tool<Add>()("add", {
 export const AddLive = Add.make(({ a, b }) => ({ sum: a + b }));
 ```
 
-List both on a harness, here Pi in a Durable Object, and provide their Layers:
+Describe the work as a process: a name, and a Layer with its prose. Mentioning the tool gives it to the process:
 
-```typescript title="src/Session.ts"
-import * as Cloudflare from "@alchemy.run/cloudflare";
+```typescript title="src/Accountant.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Add } from "./Add.tool.ts";
+
+export class Accountant extends AI.Process<Accountant>()("Accountant", {}) {}
+
+export const AccountantLive = Accountant.toLayer({
+  description: "Add up the numbers it is given.",
+})`
+  Add the numbers you are given with ${Add}. Reply with only the total.
+`;
+```
+
+Host it. The Layers say what a session runs on, here Pi, and where: each session in a Durable Object of its own.
+
+```typescript title="src/Books.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
-import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { AccountantLive } from "./Accountant.process.ts";
+import { AddLive } from "./Add.tool.ts";
 import { Fast, FastLive } from "./models.ts";
-import { Add, AddLive } from "./tools.ts";
 
-const HarnessLive = Layer.mergeAll(FastLive, AddLive, PiCloudflare.DurableObjectStorage);
+const Agents = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast), AddLive).pipe(
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLive)),
+);
 
-export default class Session extends Cloudflare.DurableObject<Session>()(
-  "Session",
-  Effect.gen(function* () {
-    const harness = yield* Pi.Harness({ models: [Fast], tools: [Add] });
-
-    return Effect.gen(function* () {
-      return {
-        prompt: Effect.fn(function* (name: string, text: string, requestId: string) {
-          const conversation = yield* harness.createConversation({ name });
-          const submission = yield* conversation.submit({ type: "input", content: text, requestId });
-          return (yield* submission.wait).status;
-        }),
-      };
-    });
-  }).pipe(Effect.provide(HarnessLive)),
-) {}
+export const AccountantSessions = AICloudflare.layerDurableObjects(
+  AccountantLive.pipe(Layer.provide(Agents)),
+);
 ```
+
+A Worker given `AccountantSessions`, or a policy of a [Domain model](/domain), holds a session by its key:
+
+```typescript
+const accountant = yield* Accountant;
+const reply = yield* accountant.get("q3").prompt("12, 30 and 7");
+```
+
+Swap `Pi.HarnessLive` and its storage for OpenCode's, and the same process runs there.
 
 ## Where to start
 
-**Want to build?** Install the package and pick a harness: the [Pi tutorial](/pi/tutorial/part-1) or the [OpenCode tutorial](/opencode/tutorial/part-1) builds a bot that answers issues on a GitHub repository.
+**Want to build?** Install the package and follow the [tutorial](/ai/tutorial/part-1): an issue board whose policies start processes, on any harness.
 
 <PackageManagers add="@alchemy.run/ai" />
 

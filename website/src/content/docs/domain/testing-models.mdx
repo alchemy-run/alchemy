@@ -82,16 +82,17 @@ The checks after a `when` are type-checked against its command. `rejected` takes
 
 ### A service computed for each command
 
-Some middleware computes its service for every request, from the request itself: a stamp scoped to the command and the instance it is for, say. `provide` gives every command the same value, so use `Story.provideWith` for those. Its function runs at each `when` after it, with the command about to be sent and the aggregate instances it is for, and returns the service as an `Option`.
+`provide` gives every later command the same value. When the rule under test depends on which instance a command is for, one value can't exercise it. `Story.provideWith` computes the service at each `when`, as a middleware computes it for each request. Here each account's own customer withdraws from it:
 
 ```typescript
-Story.provideWith(Stamp, ({ command, refs }) =>
-  Effect.succeed(Option.some(stampFor(command._tag, refs))),
-),
-Story.when(new Deposit({ accountId: "a-1", amount: 100 })),
+const owners: Record<string, string> = { "a-1": "c-1", "a-2": "c-2" };
+
+Story.provideWith(CurrentActor, ({ refs }) => Effect.succeed(customer(owners[refs[0]!.id]!))),
+Story.when(new WithdrawMoney({ accountId: "a-1", amount: 30 })),
+Story.when(new WithdrawMoney({ accountId: "a-2", amount: 30 })),
 ```
 
-`Option.none()` provides nothing for that command. If the function fails, so does the `when` it was computed for, naming the service. A later `provide` or `provideWith` of the same service replaces it. A `query` step does not run it, so give a query its service with `provide`.
+`refs` are the instances the model routes the command to: the one its aggregate targets, or each one its decision reads. `command` is the command itself, for a service scoped to one command, like a stamp naming the command it authorizes. If the function fails, so does the `when`, naming the service. A later `provide` or `provideWith` of the same service replaces it. A `query` step does not run it, so give a query its service with `provide`.
 
 ## Answer outside systems
 

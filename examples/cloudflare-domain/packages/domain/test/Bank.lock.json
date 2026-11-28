@@ -61,6 +61,10 @@
       "Bank.ARegisteredCustomerHoldsTheirName": {
         "kind": "relation",
         "source": "({ customer, claim }) =>\n        customer.state._tag !== \"Registered\" ||\n        customer.state.username !== claim.id ||\n        (claim.state._tag === \"Claimed\" && claim.state.customerId === customer.id)"
+      },
+      "ContactDetails.AnAddressIsSealedForItsCustomer": {
+        "kind": "transition",
+        "source": "({ command, after }) =>\n      after.address === null || after.address.subject === command.customerId"
       }
     },
     "Account": {

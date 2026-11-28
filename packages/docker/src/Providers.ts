@@ -24,6 +24,9 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```typescript
  * providers: Docker.providers({ bin: "podman" }),
  * ```
+ *
+ * Bundled services run on Node.js 26 unless they set `runtime`, for example
+ * `runtime: "bun1.3"`.
  */
 export const providers = (options: DockerOptions = {}) =>
   Layer.effect(

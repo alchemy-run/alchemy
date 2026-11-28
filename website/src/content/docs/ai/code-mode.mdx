@@ -7,7 +7,21 @@ A model that calls one tool at a time reads every result, whether it needs it or
 
 ## Reach tools from a program
 
-Wrap the tools a program may call in `AI.CodeMode`:
+Wrap the tools a program may call in `AI.CodeMode`, and mention the group in a [process](/ai/processes):
+
+```typescript title="src/Teller.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Add } from "./Add.tool.ts";
+import { Withdraw } from "./Withdraw.tool.ts";
+
+export class Teller extends AI.Process<Teller>()("Teller", {
+  description: "Move money between accounts.",
+})`
+  Work out the amounts and move the money by writing a program over ${AI.CodeMode(Add, Withdraw)}.
+` {}
+```
+
+A harness takes the same group in its own list of tools:
 
 ```typescript
 const harness = yield* Pi.Harness({
@@ -16,7 +30,7 @@ const harness = yield* Pi.Harness({
 });
 ```
 
-Here the model calls files and shell directly, and reaches `add` and `withdraw` only from a program.
+Here the model calls files and shell directly, and reaches `add` and `withdraw` only from a program. The rest of this page lists tools on a harness; a process's mentions follow the same rules.
 
 ## Choose what goes through programs
 
@@ -58,7 +72,7 @@ Leaving the Layer out is a type error on the harness.
 
 The harness adds a TypeScript declaration of the tools to the system prompt. `tools` is a namespace, each tool a function in it. These two tools:
 
-```typescript title="src/tools.ts"
+```typescript title="src/Add.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Schema from "effect/Schema";
 

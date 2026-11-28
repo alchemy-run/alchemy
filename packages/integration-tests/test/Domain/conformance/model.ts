@@ -14,6 +14,7 @@ import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";
@@ -303,6 +304,45 @@ const TallyWriterV1Live = TallyWriterV1.toLayer(
   { version: 1 },
 );
 
+/** A backlog run's key, for a counter of the backlog case (`<run>.<n>`); other counters have none. */
+export const backlogKey = (counter: string): string | undefined =>
+  counter.startsWith("backlog-") && counter.includes(".") ? counter.split(".")[0] : undefined;
+
+export class BacklogHandled extends Domain.Event("BacklogHandled", { counter: Schema.String }) {}
+
+/** Which counters of a backlog run its key has handled, in the order it handled them. */
+export class Drained extends Domain.Stream("Drained", {
+  key: Schema.String,
+  entries: [BacklogHandled],
+}) {}
+
+/**
+ * Every counter of a backlog run feeds one key, which takes {@link BACKLOG_DELAY}
+ * over each input: a backlog that takes minutes to drain, with nothing else arriving.
+ */
+export class BacklogWriter extends Domain.Projection("BacklogWriter", {
+  from: [Counter],
+  key: Schema.String,
+  keyOf: { Incremented: ({ source }) => backlogKey(source.id) },
+  on: [Incremented],
+  writes: [Drained],
+}) {}
+
+/** How long the backlog's key takes over each input. */
+export const BACKLOG_DELAY = "1 second";
+
+const BacklogWriterLive = BacklogWriter.toLayer(
+  Effect.gen(function* () {
+    const drained = yield* Drained;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        yield* Effect.sleep(BACKLOG_DELAY);
+        yield* drained.append(input, new BacklogHandled({ counter: input.source.id }));
+      }
+    });
+  }),
+);
+
 /**
  * Mirrors a counter's first increment onto its Echo; one run per counter.
  * Its step fails its first attempt after it sends, so the step runs again:
@@ -348,6 +388,13 @@ const StartMirrorLive = StartMirror.toLayer(
 
 /** How long a hold lasts before it expires, unless it is released first. */
 export const HOLD_WINDOW = "4 seconds";
+
+/**
+ * How long every platform's front keeps command receipts: short, so the
+ * retention case sees one expire. Long enough that nothing else in the
+ * suite sends a command again after it.
+ */
+export const RECEIPT_RETENTION = "30 seconds";
 /** The command id a hold's expiry is scheduled under. */
 export const EXPIRY = "expire";
 
@@ -415,6 +462,74 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
   }),
 );
 
+// ---------------------------------------------------------------- a memo, rewritten and compacted
+
+const MemoState = Schema.Struct({ lines: Schema.Array(Schema.String) });
+export class Written extends Domain.Event("Written", { text: Schema.String }) {}
+export class MemoBroughtForward extends Domain.Event("MemoBroughtForward", {
+  state: MemoState,
+}) {}
+export class Write extends Domain.Command("Write", {
+  input: { id: Schema.String, text: Schema.String },
+  events: [Written],
+}) {}
+
+/** Lines of text: what the rewrite and compaction cases change the history of. */
+export class Memo extends Domain.Aggregate("Memo", {
+  id: Schema.String,
+  state: MemoState,
+  initial: { lines: [] },
+  commands: [Write],
+  events: [MemoBroughtForward],
+  keyOf: (command) => command.id,
+  decide: { Write: (_, { text }) => [new Written({ text })] },
+  evolve: {
+    Written: (memo, e) => ({ lines: [...memo.lines, e.text] }),
+    MemoBroughtForward: (_, e) => e.state,
+  },
+}) {}
+
+/** A memo as a client reads it: its lines, joined. */
+export class MemoText extends Domain.View("MemoText", {
+  from: [Memo],
+  key: Memo,
+  state: Schema.Struct({ text: Schema.String }),
+  initial: { text: "" },
+  evolve: {
+    Written: (memo, e) => ({ text: memo.text === "" ? e.text : `${memo.text}|${e.text}` }),
+    MemoBroughtForward: (_, e) => ({ text: e.state.lines.join("|") }),
+  },
+}) {}
+
+/** Blanks every line that mentions a word. */
+export class Redact extends Domain.Rewrite("Redact", {
+  of: Memo,
+  input: { word: Schema.String },
+  events: {
+    Written: (event, { word }) => (event.text.includes(word) ? new Written({ text: "" }) : event),
+    // What a compacted memo holds: the same lines, in its roll-up.
+    MemoBroughtForward: (event, { word }) =>
+      event.state.lines.some((line) => line.includes(word))
+        ? new MemoBroughtForward({
+            state: { lines: event.state.lines.map((line) => (line.includes(word) ? "" : line)) },
+          })
+        : event,
+  },
+}) {}
+
+/** Replaces a memo's history with one event carrying its lines. */
+export class MemoForward extends Domain.Compaction("MemoForward", {
+  of: Memo,
+  rollup: (memo) => [new MemoBroughtForward({ state: memo })],
+}) {}
+
+/** The replaced events go nowhere: the case checks what the instance keeps. */
+const MemoForwardLive = MemoForward.toLayer(
+  Effect.succeed(Effect.fn(function* (_batch: Domain.Compaction.Batch<typeof Memo>) {})),
+);
+
+// ---------------------------------------------------------------- a relay of hops
+
 export class Passed extends Domain.Event("Passed", { chain: Schema.String, left: Schema.Int }) {}
 
 export class Pass extends Domain.Command("Pass", {
@@ -448,13 +563,15 @@ const PassOnLive = PassOn.toLayer(
 );
 
 export class Conformance extends Domain.Model("Conformance", {
-  aggregates: [Counter, Echo, Hold, Hop, ...latencyAggregates],
+  aggregates: [Counter, Echo, Hold, Hop, Memo, ...latencyAggregates],
   decisions: [Giving],
-  views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, ...latencyViews],
-  projections: [TotalWriter, TallyWriter],
-  streams: [Recorded, Tallies],
+  views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, MemoText, ...latencyViews],
+  projections: [TotalWriter, TallyWriter, BacklogWriter],
+  streams: [Recorded, Tallies, Drained],
   policies: [StartMirror, HoldDeadline, PassOn],
   sagas: [MirrorFirst],
+  rewrites: [Redact],
+  compactions: [MemoForward],
 }) {}
 
 /**
@@ -462,13 +579,23 @@ export class Conformance extends Domain.Model("Conformance", {
  * and a view it adds, {@link CounterReplay}.
  */
 export class ConformanceV1 extends Domain.Model("Conformance", {
-  aggregates: [Counter, Echo, Hold, Hop, ...latencyAggregates],
+  aggregates: [Counter, Echo, Hold, Hop, Memo, ...latencyAggregates],
   decisions: [Giving],
-  views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, CounterReplay, ...latencyViews],
-  projections: [TotalWriter, TallyWriterV1],
-  streams: [Recorded, Tallies],
+  views: [
+    CounterTotal,
+    CounterTimes,
+    HiddenTotal,
+    TicketedTotal,
+    MemoText,
+    CounterReplay,
+    ...latencyViews,
+  ],
+  projections: [TotalWriter, TallyWriterV1, BacklogWriter],
+  streams: [Recorded, Tallies, Drained],
   policies: [StartMirror, HoldDeadline, PassOn],
   sagas: [MirrorFirst],
+  rewrites: [Redact],
+  compactions: [MemoForward],
 }) {}
 
 /** The model's Api: its counter and views, served at the front's `/api` (with {@link TicketLive}). */
@@ -493,13 +620,29 @@ const handlers = Layer.mergeAll(
   HiddenTotalLive,
   TicketedTotalLive,
   TotalWriterLive,
+  BacklogWriterLive,
+  MemoForwardLive,
+);
+
+/**
+ * A Vault whose keys live on the model's own host, one object per subject,
+ * each wrapped under a root key.
+ */
+const ConformanceVault = Domain.VaultLive.pipe(
+  Layer.provide(
+    Layer.merge(Domain.HostKeyStore, Domain.RootKeyWrap(Redacted.make("c0".repeat(32)))),
+  ),
 );
 
 /** The model's Layer, given the platform it runs on. */
-export const ConformanceLive = Conformance.layer(Layer.merge(handlers, TallyWriterLive));
+export const ConformanceLive = Conformance.layer(Layer.merge(handlers, TallyWriterLive)).pipe(
+  Layer.provideMerge(ConformanceVault),
+);
 
 /**
  * The next version's Layer: deployed over {@link ConformanceLive}, it rebuilds
  * the tallies and backfills {@link CounterReplay}.
  */
-export const ConformanceLiveV1 = ConformanceV1.layer(Layer.merge(handlers, TallyWriterV1Live));
+export const ConformanceLiveV1 = ConformanceV1.layer(Layer.merge(handlers, TallyWriterV1Live)).pipe(
+  Layer.provideMerge(ConformanceVault),
+);
