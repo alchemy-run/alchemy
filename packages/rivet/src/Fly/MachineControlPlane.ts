@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Cluster } from "../Cluster.ts";
 import { adminToken } from "../internal/AdminToken.ts";
+import { minSecretsVersion } from "../internal/FlySecrets.ts";
 import { Namespace } from "../Namespace.ts";
 
 /** The engine release `RivetFly.MachineControlPlane` runs by default. */
@@ -97,26 +98,34 @@ export const MachineControlPlane = (id: string, props: MachineControlPlaneProps 
       yield* Fly.IpAssignment(`${id}PublicV4`, { app, type: "shared_v4" });
       yield* Fly.IpAssignment(`${id}PublicV6`, { app, type: "v6" });
 
-      // Machine environment values are plain strings.
+      // The token and the bucket's secret key are App secrets, which Fly
+      // hands every Machine in the App as env; the Machine config holds
+      // neither.
+      const secrets = [
+        yield* Fly.Secret(`${id}AdminTokenSecret`, {
+          app,
+          name: "RIVET__AUTH__ADMIN_TOKEN",
+          value: token.text,
+        }),
+        yield* Fly.Secret(`${id}DataSecretKey`, {
+          app,
+          name: "RIVET__OBJECT_STORAGE__PRIMARY__S3__SECRET_ACCESS_KEY",
+          value: bucket.secretAccessKey.pipe(Output.map((key) => key ?? Redacted.make(""))),
+        }),
+      ];
       const env = Output.all(
-        token.text,
         bucket.bucketName,
         bucket.endpoint,
         bucket.region,
         bucket.accessKeyId,
-        bucket.secretAccessKey,
       ).pipe(
-        Output.map(([text, name, endpoint, region, keyId, secret]) => ({
-          RIVET__AUTH__ADMIN_TOKEN: Redacted.value(text),
+        Output.map(([name, endpoint, region, keyId]) => ({
           RIVET__STORAGE__LOG_DIRECTORY: DATA_PATH,
           RIVET__STORAGE__AUTO_PROVISION_PARTITIONS: "true",
           RIVET__OBJECT_STORAGE__PRIMARY__S3__BUCKET: name ? Redacted.value(name) : "",
           RIVET__OBJECT_STORAGE__PRIMARY__S3__ENDPOINT: endpoint ? Redacted.value(endpoint) : "",
           RIVET__OBJECT_STORAGE__PRIMARY__S3__REGION: region ? Redacted.value(region) : "auto",
           RIVET__OBJECT_STORAGE__PRIMARY__S3__ACCESS_KEY_ID: keyId ? Redacted.value(keyId) : "",
-          RIVET__OBJECT_STORAGE__PRIMARY__S3__SECRET_ACCESS_KEY: secret
-            ? Redacted.value(secret)
-            : "",
           // The private network is IPv6: listen for peers on it.
           RIVET__API_PEER__HOST: "::",
           RIVET__TELEMETRY__ENABLED: "false",
@@ -134,6 +143,8 @@ export const MachineControlPlane = (id: string, props: MachineControlPlaneProps 
             guest: props.guest ?? { cpus: 2, memoryMb: 4096 },
             mounts: [{ path: DATA_PATH, sizeGb: props.diskSize ?? 10 }],
             env,
+            // Engines start on the secrets' values, and restart when one changes.
+            minSecretsVersion: minSecretsVersion(secrets),
             restart: { policy: "always" },
             services: [
               {

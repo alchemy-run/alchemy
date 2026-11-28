@@ -244,7 +244,7 @@ Proceed?
 A lot just happened:
 
 1. `src/api.ts` was bundled with Rolldown into a single ESM file.
-2. Alchemy generated a Dockerfile (`FROM oven/bun:1`) and uploaded
+2. Alchemy generated a Dockerfile (`FROM node:26-slim`) and uploaded
    the context. Railway built the image.
 3. It created the Service, attached a `*.up.railway.app` domain, and
    pointed Railway's edge at port 3000.

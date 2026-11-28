@@ -59,7 +59,8 @@ Separately from your keys, Alchemy generates a **deploy key** for
 every server it creates and injects it at boot. That key (persisted
 redacted in state) is how [`Hetzner.Ssh`](#run-commands-over-ssh)
 and [`Hetzner.Service`](/hetzner/compute/services) reach the box
-with zero SSH configuration on your side.
+with zero SSH configuration on your side. To create a server without
+it, see [Plain servers](#plain-servers).
 
 ## Run commands over SSH
 
@@ -111,12 +112,13 @@ systemctl enable --now nginx
 });
 ```
 
-Alchemy has its own bootstrap script that pre-installs
-[Bun](https://bun.sh) for [Services](/hetzner/compute/services). Your
-`userData` does not replace it: the two are combined into a multipart
-cloud-init document and both run, Alchemy's first. To take over the
-whole payload, bootstrap included, pass a document that already starts
-with a `Content-Type:` header.
+Alchemy has its own bootstrap script that pre-installs Node 26 for
+[Services](/hetzner/compute/services). Your `userData` does not replace
+it: the two are combined into a multipart cloud-init document and both
+run, Alchemy's first. To take over the whole payload, bootstrap
+included, pass a document that already starts with a `Content-Type:`
+header, or skip the bootstrap entirely with
+[`bootstrap: false`](#plain-servers).
 
 The composed document is capped at 32 KiB (Hetzner's limit) — over that,
 the deploy fails with `Hetzner.ServerUserDataTooLarge`.
@@ -126,6 +128,34 @@ Cloud-init only runs once, on first boot, so **changing `userData`
 replaces the server**. Plan for it the way you would an `image` or
 `serverType` change: the new server is created, dependents are pointed
 at it, then the old one is deleted.
+:::
+
+## Plain servers
+
+If you provision servers with your own tooling, `bootstrap: false`
+skips both the bootstrap script and the deploy key. Only your
+`userData` and `sshKeys` are sent:
+
+```typescript
+const server = yield* Hetzner.Server("box", {
+  serverType: "cx22",
+  image: "ubuntu-24.04",
+  sshKeys: [key],
+  bootstrap: false,
+});
+```
+
+:::caution
+Without the deploy key, Alchemy can't reach the server:
+
+- **`Hetzner.Service` can't deploy to it.** The deploy fails with
+  `Hetzner.SshError` ("has no deploy SSH private key").
+- **`Hetzner.Ssh` needs a key from you**: pass `{ privateKey }` for one
+  of the `sshKeys` you injected.
+- **Pass `sshKeys`.** With no SSH key at all, Hetzner sets a root
+  password and emails it to the project owner.
+- **Changing `bootstrap` replaces the server**, like `userData`: both
+  only take effect on first boot.
 :::
 
 ## Attach infrastructure

@@ -1,4 +1,4 @@
-import type * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
+import type * as recommendationengine from "@distilled.cloud/gcp/unstable/recommendationengine_v1beta1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";

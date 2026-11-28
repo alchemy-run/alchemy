@@ -2,6 +2,7 @@ import * as Hetzner from "@alchemy.run/hetzner";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as servers from "@distilled.cloud/hetzner/servers";
+import * as sshKeys from "@distilled.cloud/hetzner/ssh_keys";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -54,6 +55,15 @@ test(
     // A caller-supplied MIME document owns the whole payload.
     const raw = 'Content-Type: multipart/mixed; boundary="x"\n\n--x--\n';
     expect(Hetzner.composeUserData(raw)).toEqual(raw);
+
+    // Without the bootstrap, only the caller's user data is sent.
+    expect(Hetzner.composeUserData(undefined, false)).toBeUndefined();
+    expect(Hetzner.composeUserData("  \n", false)).toBeUndefined();
+    expect(Hetzner.composeUserData("#cloud-config\npackages: []", false)).toEqual(
+      "#cloud-config\npackages: []",
+    );
+    expect(Hetzner.composeUserData("id", false)).toEqual("#!/bin/bash\nid");
+    expect(Hetzner.composeUserData(raw, false)).toEqual(raw);
   }),
   { tags: ["provider:hetzner", "provider:hetzner:server", "live"] },
 );
@@ -314,5 +324,54 @@ test.provider(
   {
     tags: ["provider:hetzner", "provider:hetzner:server", "provider:hetzner:service", "live"],
     timeout: 300_000,
+  },
+);
+
+test.provider(
+  "bootstrap: false creates no deploy key",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const server = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Server("PlainWeb", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            bootstrap: false,
+          });
+        }),
+      );
+
+      expect(server.privateKey).toBeUndefined();
+      expect(server.deploySshKeyId).toBeUndefined();
+      const { ssh_keys } = yield* sshKeys.listSshKeys({ name: `${server.name.slice(0, 55)}-d` });
+      expect(ssh_keys).toEqual([]);
+
+      // Turning the bootstrap back on replaces the Server with a deploy key.
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Server("PlainWeb", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+          });
+        }),
+      );
+      expect(replaced.id).not.toEqual(server.id);
+      expect(replaced.privateKey).toBeDefined();
+      expect(replaced.deploySshKeyId).toEqual(expect.any(Number));
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilGone(server.id)).toEqual("gone");
+      expect(yield* waitUntilGone(replaced.id)).toEqual("gone");
+      const leftover = yield* sshKeys.listSshKeys({ name: `${replaced.name.slice(0, 55)}-d` });
+      expect(leftover.ssh_keys).toEqual([]);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:hetzner", "provider:hetzner:server", "live"],
+    timeout: 180_000,
   },
 );

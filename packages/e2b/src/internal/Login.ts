@@ -186,6 +186,9 @@ export const refreshGrant = (grant: E2BGrant): Effect.Effect<E2BGrant, E2BLoginE
       expires: jwtExpiry(tokens.access_token),
     };
   }).pipe(
+    // Callers save the rotated token through refreshAndSave, which waits on
+    // this request, so it must end on its own.
+    Effect.timeout("30 seconds"),
     Effect.catchIf(
       (e): e is Exclude<typeof e, E2BLoginError> => e._tag !== "E2BLoginError",
       (cause) => Effect.fail(new E2BLoginError({ message: "E2B token refresh failed", cause })),

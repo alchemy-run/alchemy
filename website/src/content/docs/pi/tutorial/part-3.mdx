@@ -13,7 +13,7 @@ The bot answers over `curl`. Now GitHub starts it, and the agent replies where t
 
 A tool is a contract first: what the model sees, what it takes, what it returns.
 
-```typescript title="src/tools.ts"
+```typescript title="src/Comment.tool.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Schema from "effect/Schema";
 
@@ -91,7 +91,7 @@ List the tool on the harness, provide its Layer, and add it to the conversation:
 ```diff lang="typescript"
 import { Fast, FastLive } from "./models.ts";
 import { Sandbox } from "./Sandbox.ts";
-+import { Comment, CommentLive } from "./tools.ts";
++import { Comment, CommentLive } from "./Comment.tool.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,

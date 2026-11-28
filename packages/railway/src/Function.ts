@@ -20,7 +20,7 @@ import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import type * as Redacted from "effect/Redacted";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as Types from "effect/Types";
 import {
@@ -727,7 +727,9 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
     }),
   );
 
-const asVariableMap = (value: unknown): Record<string, string> => {
+const asVariableMap = (variables: unknown): Record<string, string> => {
+  // distilled marks the variables map sensitive, so it arrives as Redacted.
+  const value = Redacted.isRedacted(variables) ? Redacted.value(variables) : variables;
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }

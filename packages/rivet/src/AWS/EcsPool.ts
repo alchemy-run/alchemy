@@ -6,7 +6,7 @@ import {
   nodeDockerfile,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
-import { nodeEnvironment, poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
+import { poolNetworkOf, resolvePoolNetwork, secretNodeEnvironment } from "./internal/Pool.ts";
 
 export interface EcsPoolOptions extends PoolSettings {
   /**
@@ -49,6 +49,11 @@ export interface EcsPoolOptions extends PoolSettings {
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.
  *
+ * The control plane's token, and every secret a class reads as config,
+ * are kept in Secrets Manager secrets of the pool's own. The task
+ * definition only names them, and only the tasks' execution role may
+ * read them.
+ *
  * ### Running Durable Objects on ECS
  * **Example:** A pool of two nodes
  * ```typescript
@@ -81,6 +86,9 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
         const { program } = nodes;
         const network = yield* resolvePoolNetwork(id, nodes.network, options.cidrBlock);
         const cluster = yield* ECS.Cluster(`${id}Cluster`, {});
+        // The token and the classes' secrets come from Secrets Manager,
+        // never the task definition.
+        const { env, secrets } = yield* secretNodeEnvironment(id, nodes);
         // Every class the pool hosts is bundled into its node image.
         // A Rust program is its own image, built from its staged crate.
         yield* ECS.Service(`${id}Nodes`, {
@@ -104,7 +112,8 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
           subnets: [...network.subnetIds],
           securityGroups: [network.securityGroupId],
           assignPublicIp: true,
-          env: nodeEnvironment(nodes),
+          env,
+          secrets,
         });
       }),
   });

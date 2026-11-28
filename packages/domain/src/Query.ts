@@ -17,6 +17,7 @@ import type * as Projection from "./Projection.ts";
 import type * as Rejection from "./Rejection.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
+import { memo, type Thunk } from "./Thunk.ts";
 import * as View from "./View.ts";
 
 /** A write to read at least: a command's `stream` and `version`, as its receipt carries them. */
@@ -307,7 +308,7 @@ export const make = <
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<F, P, S, From, Ms, Rejects>,
+  definition: Thunk<Definition<F, P, S, From, Ms, Rejects>>,
   annotations: Annotations = {},
 ): QueryClass<
   Name,
@@ -318,36 +319,48 @@ export const make = <
   Aggregate.InstanceOf<Rejects[number]>,
   Ms
 > => {
-  const rejects = definition.rejects ?? [];
-  const errors: ReadonlyArray<Schema.Top> = [
-    ...rejects,
-    ...((definition.waitsFor ?? []).length > 0 ? [View.ConsistencyTimeout] : []),
-  ];
-  const middleware = definition.middleware ?? [];
-  const rpc = Rpc.make(name, {
-    payload: {
-      input: inputSchema(definition.input),
-      atLeast: Schema.optional(AtLeastJson),
-      ...(definition.paged
-        ? { after: Schema.optional(Schema.String), take: Schema.optional(Schema.Number) }
-        : {}),
-    },
-    success: definition.paged
-      ? Schema.Struct({
-          entries: Schema.Array(definition.success ?? Schema.Void),
-          cursor: Schema.NullOr(Schema.String),
-        })
-      : (definition.success ?? Schema.Void),
-    error: errors.length === 0 ? Schema.Never : Schema.Union(errors),
+  const given = memo(definition);
+  const rpcOf = memo(() => {
+    const read = given();
+    const rejects = read.rejects ?? [];
+    const errors: ReadonlyArray<Schema.Top> = [
+      ...rejects,
+      ...((read.waitsFor ?? []).length > 0 ? [View.ConsistencyTimeout] : []),
+    ];
+    return Middleware.apply(
+      Rpc.make(name, {
+        payload: {
+          input: inputSchema(read.input),
+          atLeast: Schema.optional(AtLeastJson),
+          ...(read.paged
+            ? { after: Schema.optional(Schema.String), take: Schema.optional(Schema.Number) }
+            : {}),
+        },
+        success: read.paged
+          ? Schema.Struct({
+              entries: Schema.Array(read.success ?? Schema.Void),
+              cursor: Schema.NullOr(Schema.String),
+            })
+          : (read.success ?? Schema.Void),
+        error: errors.length === 0 ? Schema.Never : Schema.Union(errors),
+      }),
+      read.middleware ?? [],
+    );
   });
   const Tag = Context.Service<QueryKey<Name>, Implementation>()(`alchemy/Domain/Query/${name}`);
   return class extends Tag {
     static readonly kind = "Query" as const;
     static readonly annotations: Annotations = annotations;
     static readonly queryName: Name = name;
-    static readonly definition = definition;
-    static readonly middleware = middleware;
-    static readonly rpc = Middleware.apply(rpc, middleware);
+    static get definition() {
+      return given();
+    }
+    static get middleware() {
+      return given().middleware ?? [];
+    }
+    static get rpc() {
+      return rpcOf();
+    }
     static toLayer<E, R>(
       build: Effect.Effect<Implementation["handle"], E, R>,
       options: LayerOptions = {},

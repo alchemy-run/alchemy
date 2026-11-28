@@ -7,3 +7,4 @@ export * from "./EcsControlPlane.ts";
 export * from "./EcsPool.ts";
 export * from "./Ec2Pool.ts";
 export * from "./ServicesPool.ts";
+export * from "./Network.ts";

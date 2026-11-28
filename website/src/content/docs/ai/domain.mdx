@@ -1,0 +1,187 @@
+---
+title: Processes and Domain models
+description: Mention a Domain model's commands and views in a process's prose, say who each session acts as, and let a policy hand it work. A process belongs to no model, can work with several, and reports by sending their commands.
+---
+
+A process has no output, so it needs somewhere to report, and something has to decide when there is work for it. A [Domain model](/domain) is both. Write the rules as models: commands, aggregates, events, policies and views. A process is defined beside them: its prose mentions the models it works with, and a model's policies hand it work. Neither package knows the other: a mention becomes tools, and a policy holds an ordinary service. Workers and webhooks only bring the outside world in as commands, and Layers underneath say where it all runs.
+
+## Declare the process
+
+A process is declared by name. It is a member of no model:
+
+```typescript title="src/Assistant.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { CurrentActor } from "./CurrentActor.ts";
+
+export class Assistant extends AI.Process<Assistant>()("Assistant", { as: [CurrentActor] }) {}
+```
+
+A host gives each of its sessions an instance of its own: see [Where sessions run](/ai/hosting).
+
+## Mention a command or a view
+
+A model's commands and views are members of its class. Mention one in the process's prose, and a session may use it. The prose is a Layer, written beside the declaration:
+
+```typescript title="src/Assistant.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Bank } from "./Bank.ts";
+import { CurrentActor } from "./CurrentActor.ts";
+
+export class Assistant extends AI.Process<Assistant>()("Assistant", { as: [CurrentActor] }) {}
+
+export const AssistantLive = Assistant.toLayer({
+  description: "Help one customer with their account.",
+})`
+  Take a deposit with ${() => Bank.DepositMoney}. Pay money out with ${() => Bank.WithdrawMoney}.
+  Read the balance with ${() => Bank.AccountSummary}.
+`;
+```
+
+Each mention is a tool: `Bank_DepositMoney_send`, `Bank_WithdrawMoney_send` and `Bank_AccountSummary_get`, with the command's or the view's own schemas. Nothing else in the bank is within the session's reach. A rejection comes back to the model as the tool's failure, so it can read why and try again.
+
+The prose requires the model it mentions: provide `AssistantLive` with the bank's Layer where you [host the process](/ai/hosting#host-the-process). Prose that mentions two models requires both.
+
+## Break the cycle with thunks
+
+The prose mentions `Bank`. Once a policy of `Bank` holds `Assistant`, the files import each other in a cycle: the prose imports the model, the model imports the policy, and the policy imports the process. Whichever loads first reads another before it exists. A thunk delays the read until the declaration is first used, when all have loaded.
+
+Write each mention as a thunk, `${() => Bank.DepositMoney}`, as above. Give the model its members as a thunk too:
+
+```typescript title="src/Bank.ts"
+export class Bank extends Domain.Model("Bank", () => ({
+  aggregates: [Account],
+  views: [AccountSummary],
+  policies: [Assist],
+})) {}
+```
+
+Every declaration takes its props directly or as a thunk, and its type is the same either way. Use a thunk only where a cycle needs one: props given directly are checked as the file loads, which reports a mistake sooner. [Import cycles](/domain/model#break-an-import-cycle) says which declarations take one.
+
+## Mention an aggregate
+
+An aggregate is every command it takes:
+
+```typescript
+`Do what the customer asks with ${Bank.Account}.`
+```
+
+Mention a single command where you can. An aggregate grows, and what a session may do grows with it.
+
+## Say who a session acts as
+
+A command says which middleware guards it. `DepositMoney` is behind `Session`, which says who is calling by providing `CurrentActor`:
+
+```typescript
+export class DepositMoney extends Domain.Command("DepositMoney", {
+  middleware: [Session],
+  input: { accountId: AccountId, amount: Schema.Int },
+  events: [Deposited],
+  rejects: [NotOwner],
+}) {}
+```
+
+A session has no cookie to show. It is started as someone, and that answers every middleware which only says who is calling:
+
+```typescript
+yield* assistant.start(customer.customerId, { as: CurrentActor.context(customer) });
+```
+
+`as` is required: `start` does not compile without a `CurrentActor`, because `Assistant` declares that its sessions act as one. The declaration says so with `as: [CurrentActor]`, since its prose, which mentions a command that needs one, is a Layer and not part of the class. It is kept with the session and never shown to the model. Every command the session sends runs as that customer, so the model's own rules decide what happens: a session started as Ada cannot touch Bob's account, because `decide` rejects it.
+
+Authenticate the person where you already do, in your Worker, and start the session as them:
+
+```typescript
+const customer = actorOf(request.headers);
+if (customer === undefined) return HttpServerResponse.text("sign in", { status: 401 });
+yield* assistant.start(customer.customerId, { as: CurrentActor.context(customer) });
+const answer = yield* assistant.get(customer.customerId).prompt(yield* request.text);
+```
+
+## Answer a middleware that checks something
+
+`WithdrawMoney` is also behind `MfaChallenge`, which provides nothing: it checks a second factor on each call. What a session is started as cannot answer that. Say what the check means for a session, as a Layer where the process runs:
+
+```typescript
+/** A session can't pass a second factor, so it may not make a call that needs one. */
+const MfaForSessions = Layer.succeed(MfaChallenge, () => Effect.fail(new MfaRequired()));
+```
+
+`Assistant` does not compile without a Layer for `MfaChallenge`, because it mentions `WithdrawMoney`. With this one, the model is told `MfaRequired` when it tries to withdraw.
+
+A middleware that has a Layer where the process runs is run with it. So do not provide your HTTP `Session` Layer there: it would look for a cookie on a session's call and refuse it.
+
+## A command's id is not the model's
+
+A command sent by a session takes its id from the tool call that asked for it. A call that runs again after a crash sends its command once, and the model cannot make two commands look like one.
+
+## Prove what a session can't break
+
+A session chooses which commands to send, so you can't test every path it might take. State the rules on the aggregate, and [verify](/domain/verifying-models) them: a proved rule holds for every state and every command, whoever sends it.
+
+```typescript
+transitions: {
+  OnlyLabelingChangesTheLabel: ({ before, after, command }) =>
+    before._tag !== "Open" ||
+    after._tag !== "Open" ||
+    before.label === after.label ||
+    command._tag === "LabelIssue",
+},
+```
+
+[Part 5 of the tutorial](/ai/tutorial/part-5) states and proves the issue board's rules.
+
+## Let a policy hand it work
+
+A policy decides when there is work, and holds the process's client. `yield* Triage` gives it, and `get` reaches the session of a key:
+
+```typescript title="src/Board/IssueWork.policy.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
+import { Triage } from "../Triage.process.ts";
+import { IssueCommented } from "./CommentOnIssue.command.ts";
+import { Issue } from "./Issue.aggregate.ts";
+import { IssueReported } from "./ReportIssue.command.ts";
+
+export class IssueWork extends Domain.Policy("IssueWork", {
+  from: Issue,
+  on: [IssueReported, IssueCommented],
+}) {}
+
+export const IssueWorkLive = IssueWork.toLayer(
+  Effect.gen(function* () {
+    const triage = yield* Triage;
+    return Effect.fn(function* ({ source, event }) {
+      const session = triage.get(source.id);
+      yield* Match.valueTags(event, {
+        IssueReported: () =>
+          session.send(`The issue is ${source.id}.`, { requestId: "start" }),
+        IssueCommented: ({ body, commentId }) => session.send(body, { requestId: commentId }),
+      }).pipe(Effect.orDie);
+    });
+  }),
+);
+```
+
+The policy's Layer requires `Triage`, and so does the model it is given to. A policy never waits for a session: `send` returns once the message is stored. A policy can run twice for one event, and `requestId` keeps a message from being sent twice. `Triage` reports by sending `LabelIssue`, which is an event another policy can react to.
+
+A [saga](/domain/saga) holds the client the same way, and may `prompt` a session inside an activity when a step needs its answer.
+
+## A session reports with commands
+
+A model never reads a session. What it knows of the work is what the session sends it: `Triage` reports by sending `LabelIssue`, which is an event the board's views show and its policies can react to. When the model should know more (that a session gave up, or what it found), declare a command for it and mention it in the prose.
+
+To show a session itself, its status and its transcript, read them from the session: see [Read a session from outside](/ai/hosting#read-a-session-from-outside) and [Connect a front end](/ai/front-end).
+
+## The outside world comes in as commands
+
+Nothing outside the model starts a session. A webhook, a queue or a form turns what happened into a command, and the model's policies decide what follows:
+
+```typescript
+yield* issues.send(
+  new ReportIssue({ issueId, title: payload.issue.title, body: payload.issue.body ?? "" }),
+  { commandId: event.id },
+);
+```
+
+The [tutorial](/ai/tutorial/part-3) builds this one step at a time, and [`examples/cloudflare-ai-issues`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-ai-issues) is the whole of it.

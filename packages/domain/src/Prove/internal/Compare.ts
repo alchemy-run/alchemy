@@ -49,6 +49,7 @@ export const truth = (v: V): Known => {
           ? `(not (= ${v.term.text} ""))`
           : `(not (= ${v.term.text} ${v.term.sort === "Int" ? "0" : "0.0"}))`;
     case "Opaque":
+    case "Pending":
       return undefined;
     default:
       return true;
@@ -87,6 +88,8 @@ export const same = (a: V, b: V): Known => {
     return a._tag === "Applied" && b._tag === "Applied" && a.key === b.key ? true : undefined;
   if (a._tag === "Opaque" || b._tag === "Opaque" || a._tag === "Time" || b._tag === "Time")
     return a === b ? true : undefined;
+  // A field no code has chosen yet is not a value: nothing is known of it.
+  if (a._tag === "Pending" || b._tag === "Pending") return undefined;
   if (isPrimitive(a) && isPrimitive(b))
     return (
       a._tag === b._tag && (a as { value?: unknown }).value === (b as { value?: unknown }).value
@@ -231,6 +234,8 @@ export const equals = (a: V, b: V, force: (list: V) => V = (list) => list): Know
 
 /** An object or an array next to something else: never equal, unless the prover cannot see the other. */
 const unlike = (a: V, b: V): Known =>
-  [a, b].some((v) => v._tag === "Opaque" || v._tag === "Applied" || v._tag === "List")
+  [a, b].some(
+    (v) => v._tag === "Opaque" || v._tag === "Applied" || v._tag === "List" || v._tag === "Pending",
+  )
     ? undefined
     : false;

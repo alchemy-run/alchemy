@@ -31,7 +31,41 @@ const unixServers = new Map<number, NodeNet.Server>();
  */
 export const usesUnixSocketLoopback = () => process.platform === "linux";
 
-export const loopbackSocketDir = () => NodePath.join(NodeOs.tmpdir(), "alchemy-dev-loopback");
+/**
+ * Per-uid loopback socket directory under the system tmp dir. The uid suffix
+ * keeps two users on one host from colliding on a shared, world-writable
+ * `/tmp` entry; {@link ensureSecureLoopbackDir} then proves we own it before
+ * writing the forwarder script into it.
+ */
+export const loopbackSocketDir = () => {
+  const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
+  const suffix = uid === undefined ? "" : `-${uid}`;
+  return NodePath.join(NodeOs.tmpdir(), `alchemy-dev-loopback${suffix}`);
+};
+
+/**
+ * Create the loopback dir owner-only and verify we own it. `forward.mjs` is
+ * written here and then executed inside the dev container, so a dir an
+ * attacker pre-planted in the shared `/tmp` (or a symlink out of it) would be
+ * code execution as the developer. `mkdirSync` is a no-op on an existing dir
+ * and keeps its permissions, so lstat afterwards and refuse anything that
+ * isn't a real directory we own.
+ */
+const ensureSecureLoopbackDir = (dir: string) => {
+  NodeFs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const stat = NodeFs.lstatSync(dir);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
+    throw new Error(`Refusing to use loopback dir ${dir}: not a regular directory`);
+  }
+  const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
+  if (uid !== undefined && stat.uid !== uid) {
+    throw new Error(
+      `Refusing to use loopback dir ${dir}: owned by uid ${stat.uid}, expected ${uid}`,
+    );
+  }
+  // Tighten in case it pre-existed with looser permissions.
+  if ((stat.mode & 0o077) !== 0) NodeFs.chmodSync(dir, 0o700);
+};
 
 const addPort = (ports: Set<number>, raw: string) => {
   const port = Number(raw);
@@ -151,7 +185,19 @@ for (const port of ports) {
 
 const writeForwarderScript = (dir: string) => {
   const file = NodePath.join(dir, "forward.mjs");
-  NodeFs.writeFileSync(file, FORWARDER_SOURCE);
+  // Write a fresh inode. If `forward.mjs` was pre-planted (or hard-linked)
+  // while the dir was briefly writable, someone may still hold a handle to that
+  // inode; truncating it in place would let them mutate the script the dev
+  // container then executes. Unlink first, then create exclusively (0600), so
+  // the mounted file is an inode only we have ever written. The enclosing dir
+  // is already 0700 and owned by us (see `ensureSecureLoopbackDir`), so no one
+  // else can re-create the entry afterwards.
+  try {
+    NodeFs.unlinkSync(file);
+  } catch {
+    // not there yet
+  }
+  NodeFs.writeFileSync(file, FORWARDER_SOURCE, { flag: "wx", mode: 0o600 });
   return file;
 };
 
@@ -164,7 +210,7 @@ export const ensureLoopbackUnixSockets = (ports: readonly number[]) => {
   const unique = [...new Set(ports.filter((port) => Number.isInteger(port) && port > 0))];
   if (unique.length === 0) return;
   const dir = loopbackSocketDir();
-  NodeFs.mkdirSync(dir, { recursive: true });
+  ensureSecureLoopbackDir(dir);
   writeForwarderScript(dir);
   for (const port of unique) {
     if (unixServers.has(port)) continue;
@@ -204,4 +250,17 @@ export const isContainerStartPath = (url: string | undefined) =>
 export const containerIdFromPath = (url: string | undefined) => {
   if (url === undefined) return undefined;
   return /\/containers\/([^/?]+)/.exec(url)?.[1];
+};
+
+/**
+ * Returns the name of the networking sidecar for the container that a
+ * `POST /containers/create?name=<name>` request creates. workerd names the
+ * sidecar `<name>-proxy` and encodes both names the same way, so the result
+ * matches the id that {@link containerIdFromPath} reads from the sidecar's
+ * start path.
+ */
+export const sidecarNameFromCreatePath = (url: string | undefined) => {
+  if (url === undefined) return undefined;
+  const name = /[?&]name=([^&]+)/.exec(url)?.[1];
+  return name === undefined || name.endsWith("-proxy") ? undefined : `${name}-proxy`;
 };

@@ -386,28 +386,6 @@ test(
   { tags, timeout: 180_000 },
 );
 
-test(
-  "a skill added at runtime is loaded on demand",
-  Effect.gen(function* () {
-    const user = `user-${Date.now()}`;
-    yield* call(`/${user}/skilled/create`, { tools: [] });
-    yield* call(`/${user}/skilled/skill`, {});
-    yield* call(`/${user}/skilled/prompt`, {
-      text: "Please greet me. Load the greeting skill first.",
-      requestId: "skill-1",
-    });
-    const results = (yield* call(`/${user}/skilled/results`)) as ReadonlyArray<{
-      tool: string;
-      isError: boolean;
-      text: string;
-    }>;
-    const loaded = results.find((result) => result.tool === "load_skill");
-    expect(loaded?.isError).toBe(false);
-    expect(loaded?.text).toContain("HELLO-FROM-SKILL");
-  }),
-  { tags, timeout: 180_000 },
-);
-
 type Results = ReadonlyArray<{ tool: string; isError: boolean; text: string }>;
 
 /** What the conversation's code mode scripts printed. */

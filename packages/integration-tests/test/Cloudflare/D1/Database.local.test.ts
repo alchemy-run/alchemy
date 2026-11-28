@@ -169,6 +169,59 @@ test.provider(
 );
 
 /**
+ * Regression test for #1872 and #3758: each local Worker runs in a workerd
+ * of its own, and two of them binding one database used to open its SQLite
+ * file from two processes, so concurrent writes failed with `SQLITE_BUSY`.
+ * Every write from both Workers must land.
+ */
+test.provider(
+  "D1 shared by two local Workers takes concurrent writes from both",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const db = yield* Cloudflare.D1.Database("SharedLocalDB");
+          const main = pathe.resolve(import.meta.dirname, "fixtures/d1-local-worker.ts");
+          const a = yield* Cloudflare.Worker("d1-shared-a", { main, env: { DB: db } });
+          const b = yield* Cloudflare.Worker("d1-shared-b", { main, env: { DB: db } });
+          return { db, a, b };
+        }),
+      );
+      expect(deployed.db.databaseId).toMatch(/^dev:/);
+
+      // Both Workers serve before the writes start, so the writes overlap.
+      yield* getJsonReady(`${deployed.a.url}/tables`);
+      yield* getJsonReady(`${deployed.b.url}/tables`);
+
+      const [a, b] = (yield* Effect.all(
+        [
+          getJsonReady(`${deployed.a.url}/concurrent?who=a&count=200`),
+          getJsonReady(`${deployed.b.url}/concurrent?who=b&count=200`),
+        ],
+        { concurrency: "unbounded" },
+      )) as [{ errors: string[] }, { errors: string[] }];
+      expect(a.errors).toEqual([]);
+      expect(b.errors).toEqual([]);
+
+      const writes = (yield* getJsonReady(`${deployed.a.url}/writes`)) as {
+        writes: Array<{ who: string; n: number }>;
+      };
+      expect(writes.writes).toEqual([
+        { who: "a", n: 200 },
+        { who: "b", n: 200 },
+      ]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
+);
+
+/**
  * Migrations apply against the local simulator: reconcile boots an
  * ephemeral gateway workerd and drives the same migration flow the live
  * provider uses (Alchemy's `__alchemy_migrations` table, idempotent

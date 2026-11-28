@@ -70,12 +70,12 @@ const make = (
 ): Effect.Effect<Context.Context<Credentials | Team>, never, HttpClient.HttpClient> =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
+    // `Credentials` and `Team` are typed as never failing, so a credentials
+    // failure dies here; the engine still reports it as `CredentialsRequired`.
     const credentials = Effect.map(resolve, (creds) => ({
       token: creds.accessToken,
       apiBaseUrl: creds.apiBaseUrl,
-    }));
-    // `Team` is typed as never failing, so a credentials failure dies here;
-    // the engine still reports it as `CredentialsRequired`.
+    })).pipe(Effect.orDie);
     const team = yield* resolve.pipe(
       Effect.orDie,
       Effect.flatMap((creds) =>
