@@ -44,7 +44,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
-    const app = yield* Cloudflare.Website.Foldkit("BankApp", {
+    const app = yield* Cloudflare.Website.EffectUI("BankApp", {
       main: "src/web/worker.ts",
       env: { BANK: bank },
       assets: { runWorkerFirst: ["/api", "/api/*"] },
@@ -268,6 +268,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 ```diff lang="typescript"
 // src/web/entry.ts
 import * as Domain from "@alchemy.run/domain";
+import { BrowserHost } from "@effect/ui/html";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -276,22 +277,10 @@ import * as Layer from "effect/Layer";
 +import * as OtlpSerialization from "effect/observability/OtlpSerialization";
 +import * as OtlpTracer from "effect/observability/OtlpTracer";
 import * as Socket from "effect/socket/Socket";
-import { Runtime } from "foldkit";
 import { BankApi } from "../BankApi.api.ts";
 import { CustomerId } from "../Customer.id.ts";
-import { Flags, init, Model, subscriptions, update, view } from "./Bank.ts";
-
-// A stand-in for a login page: `?customer=c-2` picks who you are.
-const customerId = CustomerId.make(new URLSearchParams(location.search).get("customer") ?? "c-1");
-
-// Sign in, so the browser holds the session cookie for every call and watch.
-const signIn = Effect.gen(function* () {
-  const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-  yield* client.execute(
-    HttpClientRequest.post("/api/session").pipe(HttpClientRequest.bodyJsonUnsafe({ customerId })),
-  );
-});
-
+import { Bank } from "./Bank.ts";
+// ...
 const BankConnection = Layer.unwrap(
   signIn.pipe(
     Effect.orDie,
@@ -310,28 +299,15 @@ const BankConnection = Layer.unwrap(
 +  url: `${location.origin}/api/telemetry/v1/traces`,
 +  resource: { serviceName: "bank-web" },
 +}).pipe(Layer.provide(OtlpSerialization.layerJson));
-+
-+const Resources = Layer.mergeAll(BankConnection, Tracing).pipe(
-+  Layer.provide(FetchHttpClient.layer),
-+);
 
-Runtime.run(
-  Runtime.makeApplication({
-    Model,
-    Flags,
-    init,
-    update,
-    view,
-    subscriptions,
--    resources: BankConnection,
-+    resources: Resources,
-    container: document.getElementById("root"),
-  }),
-  { flags: Effect.succeed({ customerId }) },
+const Main = BrowserHost.mount(Bank, { customerId }, document.getElementById("root")!).pipe(
+-  Layer.provide(BankConnection),
++  Layer.provide(Layer.mergeAll(BankConnection, Tracing)),
++  Layer.provide(FetchHttpClient.layer),
 );
 ```
 
-`Tracing` is a standard OpenTelemetry exporter pointed at the relay. foldkit records a span for every command it runs, and every Api call carries the current trace to the bank.
+`Tracing` is a standard OpenTelemetry exporter pointed at the relay. Effect UI runs every Command in a span of its own, and every Api call carries the current trace to the bank.
 
 ## Follow a click
 

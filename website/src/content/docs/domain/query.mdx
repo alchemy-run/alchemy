@@ -134,7 +134,7 @@ const page = yield* bank.AccountLedger({ account: accountId }, { take: 20 });
 
 The result is decoded from the `success` schema. The error type lists the query's rejections, its middleware's errors, `ConsistencyTimeout` when it has `waitsFor`, and `RpcClientError`, so `Effect.catchTag` handles each.
 
-A Foldkit app asks a query through a Command from `@alchemy.run/domain/Foldkit`. See [Integrate with Foldkit: Ask a query](/domain/foldkit#ask-a-query).
+An Effect UI app declares a query in a component's `queries`, from `@alchemy.run/domain/EffectUI`. See [Integrate with Effect UI: Ask a query](/domain/effect-ui#ask-a-query). A Foldkit app asks it through a Command: see [Integrate with Foldkit: Ask a query](/domain/foldkit#ask-a-query).
 
 List the query's name in `expose` to publish it beyond the typed client: as `QUERY /AccountLedger` with [`toHttpApi`](/domain/http-api#paths-and-methods), as `bank account-ledger --account a-1` with [`toCli`](/domain/cli#ask-a-query), or as a read-only tool with [`toToolkit`](/domain/mcp#tools-from-an-api).
 

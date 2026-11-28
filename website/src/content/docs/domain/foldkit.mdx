@@ -3,6 +3,10 @@ title: Integrate with Foldkit
 description: Derive Foldkit Commands from an Api, ask its queries, follow View snapshots, and seed the Model from Flags.
 ---
 
+:::note
+[Effect UI](/domain/effect-ui) continues the work of Foldkit 0.x and is the recommended [frontend](/domain/frontends) for new apps. This adapter stays supported.
+:::
+
 [Foldkit](https://foldkit.dev) changes its Model through Messages. Commands perform side effects. Subscriptions follow live data. The optional `@alchemy.run/domain/Foldkit` adapter connects these parts to a Domain Api.
 
 Install `foldkit` in the web package. Domain's root entry does not import it. The adapter targets the workspace's Foldkit `^0.169.0`.

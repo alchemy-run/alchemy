@@ -1,6 +1,6 @@
 ---
 title: Project layout
-description: How to lay out an @alchemy.run/domain project. One file per building block, named after its noun and its kind; folders per subdomain; a pure domain package, a server package that hosts it, and a foldkit web package, wired in one stack.
+description: How to lay out an @alchemy.run/domain project. One file per building block, named after its noun and its kind; folders per subdomain; a pure domain package, a server package that hosts it, and an Effect UI web package, wired in one stack.
 ---
 
 A domain grows into many small pieces: commands, events, rejections, views, policies. Lay them out so a file's name tells you what it holds before you open it, and so the model never depends on how it's hosted.
@@ -76,7 +76,7 @@ The domain package imports only `@alchemy.run/domain` and `effect`. Its stories 
 packages/
   domain/   @bank/domain   the model, its Apis and its stories
   server/   @bank/server   hosts the model and implements what it depends on
-  web/      @bank/web      the foldkit app
+  web/      @bank/web      the Effect UI app
 alchemy.run.ts             deploys the server and the web app together
 ```
 
@@ -103,7 +103,7 @@ const BankLive = Layer.mergeAll(
 
 ## Build the frontend in a web package
 
-The foldkit app imports the Api and its ids from the domain package, so the browser gets typed commands and live views with no hand-written client:
+The web app imports the Api and its ids from the domain package, so the browser gets typed commands and live views with no hand-written client:
 
 ```typescript title="packages/web/src/entry.ts"
 import { CustomerId } from "@bank/domain/Customer/Customer.id";

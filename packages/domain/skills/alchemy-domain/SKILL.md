@@ -1,6 +1,6 @@
 ---
 name: alchemy-domain
-description: Build backends with @alchemy.run/domain (domain-driven design on Effect) - turn requirements into aggregates, commands, events, rejections, views, policies, sagas, projections, streams, queries, external systems and Apis; lay them out in a monorepo (domain / server / web packages, kind-suffixed files); test them with stories; host them on Durable Objects (Cloudflare, Rivet or Effect Cluster) with alchemy; and drive them from a foldkit frontend. Use when designing or changing an @alchemy.run/domain model, adding a building block, wiring hosting or a frontend, or reviewing such code.
+description: Build backends with @alchemy.run/domain (domain-driven design on Effect) - turn requirements into aggregates, commands, events, rejections, views, policies, sagas, projections, streams, queries, external systems and Apis; lay them out in a monorepo (domain / server / web packages, kind-suffixed files); test them with stories; host them on Durable Objects (Cloudflare, Rivet or Effect Cluster) with alchemy; and drive them from an Effect UI (or Foldkit) frontend. Use when designing or changing an @alchemy.run/domain model, adding a building block, wiring hosting or a frontend, or reviewing such code.
 ---
 
 # Building with @alchemy.run/domain
@@ -18,7 +18,7 @@ Work in this order. Each step has a reference file with templates.
 3. **Write each block** from its template. See [references/building-blocks.md](references/building-blocks.md).
 4. **Specify behavior with stories** before and while you implement it, and **state each rule that must always hold** as an invariant that `Verify` checks. See [references/testing.md](references/testing.md).
 5. **Host the model** on Cloudflare from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
-6. **Drive it from foldkit** in the web package. See [references/frontend.md](references/frontend.md).
+6. **Drive it from a frontend** (Effect UI, or Foldkit) in the web package. See [references/frontend.md](references/frontend.md).
 7. **Add agents**, if a language model does part of the work: follow the `alchemy-ai` skill, which builds on this model and returns here for the front end.
 
 More: [Tutorial, part 1](https://alchemy.run/domain/tutorial/part-1).

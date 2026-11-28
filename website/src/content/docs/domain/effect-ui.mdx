@@ -7,13 +7,13 @@ description: Derive Effect UI Command and Query services from an Api, read Views
 `@alchemy.run/domain/EffectUI` is experimental, and its API can change in any release. `@effect/ui` is not on npm yet. Until it is, install it from a pkg.pr.new snapshot: the workspace pins `https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab`.
 :::
 
-[Effect UI](https://ui.effect.website) [continues the work of Foldkit 0.x](https://ui.effect.website/article.md). A component changes its Model through Messages, runs side effects as Commands, loads and follows data through queries, and receives feeds with Subscriptions. The `@alchemy.run/domain/EffectUI` adapter connects each of these to a Domain Api. It follows the [Foldkit adapter](/domain/foldkit): the failures and read rules are the same.
+[Effect UI](https://github.com/Effect-TS/ui) [continues the work of Foldkit 0.x](https://ui.effect.website/article.md), and is the recommended [frontend](/domain/frontends) for a Domain model. A component changes its Model through Messages, runs side effects as Commands, loads and follows data through Queries, and receives feeds with Subscriptions. The optional `@alchemy.run/domain/EffectUI` adapter connects these parts to a Domain Api. It follows the [Foldkit adapter](/domain/foldkit): the failures and read rules are the same.
 
-Install `@effect/ui` in the web package. Domain's root entry does not import it. The examples below use the [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain)'s `CustomerApi`.
+Install `@effect/ui` in the web package. Domain's root entry does not import it.
 
 ## Derive the services
 
-```typescript title="src/Bank.ts"
+```typescript
 import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 
@@ -26,70 +26,42 @@ export const Bank = DomainEffectUI.make(CustomerApi);
 
 Each Command takes `{ input, commandId?, headers? }`. It succeeds with `{ commandId, reply, receipt, commits }`, and fails with `Rejected`, `Denied`, or `Unknown`, each with its `commandId`. Map both channels where the component issues the Command:
 
-```typescript title="src/Deposit.ts"
-import { AccountId } from "@bank/domain/Account/Account.id";
-import { Command, UiSchema } from "@effect/ui";
-import { Html } from "@effect/ui/html";
-import * as Schema from "effect/Schema";
-import { Bank } from "./Bank.ts";
+```typescript
+import { Command } from "@effect/ui";
 
-export const DepositMessage = UiSchema.TaggedEnum({
-  ClickedDeposit: {},
-  ClickedRetry: { commandId: Schema.String },
-  SucceededDeposit: { balance: Schema.Number },
-  FailedDeposit: { failure: Bank.DepositMoney.error },
-});
-
-// Deposit 10.00. Pass the `commandId` of an `Unknown` failure to retry that write.
-const deposit = (accountId: AccountId, commandId?: string) =>
-  Bank.DepositMoney.make({ input: { accountId, amount: 1_000 }, commandId }).pipe(
-    Command.match({
-      onSuccess: ({ reply }) => DepositMessage.SucceededDeposit({ balance: reply.balance }),
-      onFailure: (failure) => DepositMessage.FailedDeposit({ failure }),
-    }),
-  );
-
-export const Deposit = Html.component({
-  name: "Deposit",
-  props: Schema.Struct({ accountId: AccountId }),
-  model: Schema.Struct({
-    balance: Schema.NullOr(Schema.Number),
-    failure: Schema.NullOr(Bank.DepositMoney.error),
-  }),
-  message: DepositMessage,
-}).make({
-  init: () => ({ balance: null, failure: null }),
-  update: {
-    ClickedDeposit: ($) => $.run(deposit($.props.accountId)),
-    ClickedRetry: ($, { commandId }) => $.run(deposit($.props.accountId, commandId)),
-    SucceededDeposit: ($, { balance }) => $.evolve({ balance, failure: null }),
-    FailedDeposit: ($, { failure }) => $.evolve({ failure }),
-  },
-  view: (h, model) =>
-    h.div(
-      h.button.on("click", DepositMessage.ClickedDeposit()).children("Deposit 10.00"),
-      model.balance !== null && h.p.attr("aria-label", "Balance").children(String(model.balance)),
-      model.failure?._tag === "Unknown"
-        ? h.button
-            .on("click", DepositMessage.ClickedRetry({ commandId: model.failure.commandId }))
-            .children("Retry")
-        : model.failure !== null && h.p.attr("role", "alert").children(model.failure._tag),
+ClickedDeposit: ($) =>
+  $.run(
+    Bank.DepositMoney.make({ input: { accountId, amount: 1_000 } }).pipe(
+      Command.match({
+        onSuccess: ({ receipt }) => Message.SucceededDeposit({ version: receipt.version }),
+        onFailure: (failure) => Message.FailedDeposit({ failure }),
+      }),
     ),
-});
+  ),
 ```
 
-Leave `commandId` out. The Command makes a new id each time it runs, so two instances that hydrate one server page, or an instance that history restore brings back, never send the same id twice. A Command defect produces `Unknown`. Retry `Unknown` with the id it returns, because the write can have committed: the Retry button above sends it back.
+Leave `commandId` out. The Command makes a new id each time it runs, so two instances that hydrate one server page, or an instance that history restore brings back, never send the same id twice. A Command defect produces `Unknown`. Retry `Unknown` with the id it returns, because the write can have committed:
 
-`Bank.DepositMoney.error` is the Schema of the failure, so a Message and the Model can hold it. Interruption ends the Command without a failure.
+```typescript
+ClickedRetry: ($, { failure }) =>
+  $.run(
+    Bank.DepositMoney.make({ input: { accountId, amount: 1_000 }, commandId: failure.commandId }).pipe(
+      Command.match({ onSuccess, onFailure }),
+    ),
+  ),
+```
+
+`Bank.DepositMoney.error` is the Schema of the failure, so a Message or the Model can hold it. Interruption ends the Command without a failure. In a test, provide `DomainEffectUI.NewCommandId` under `Bank.layer` to pin the ids:
+
+```typescript
+Bank.layer.pipe(Layer.provide(Layer.succeed(DomainEffectUI.NewCommandId, Effect.succeed("test:0"))))
+```
 
 ## Wait for the views
 
 A command answers when its events are committed. To answer once every view its events reach has applied them, set `consistency` per command:
 
-```typescript title="src/Bank.ts"
-import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
-import { CustomerApi } from "@bank/domain/CustomerApi.api";
-
+```typescript
 export const Bank = DomainEffectUI.make(CustomerApi, {
   commands: { DepositMoney: { consistency: "strong" } },
 });
@@ -101,35 +73,23 @@ A strong command can also fail with `TimedOut { commandId, receipt }`: the comma
 
 By default, a command invalidates each query whose `waitsFor` reads its events, and no other query. A View's stream entry is not invalidated: its open stream sends the change. Declare what a command does to the cache with `commands`. Each callback receives the Command args and the Api's queries and Views:
 
-```typescript title="src/Bank.ts"
-import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
-import { CustomerApi } from "@bank/domain/CustomerApi.api";
-import * as Option from "effect/Option";
-
+```typescript
 export const Bank = DomainEffectUI.make(CustomerApi, {
-  queries: { AccountLedger: { take: 20, key: (row) => row.id } },
   commands: {
     DepositMoney: {
-      // The ledger gains a row: fetch it again.
-      invalidates: ({ input }, queries) => [
-        queries.AccountLedger.entry({ input: { account: input.accountId } }),
-      ],
-      // Show the deposit in the summary while it runs.
+      invalidates: ({ input }, queries) => [queries.AccountLedger.entry({ input: { account: input.accountId } })],
       optimistic: ({ input }, queries) => [
-        queries.AccountSummary.patch({ key: input.accountId }, (snapshot) => ({
-          ...snapshot,
-          state: Option.map(snapshot.state, (summary) => ({
-            ...summary,
-            balance: summary.balance + input.amount,
-          })),
-        })),
+        queries.Balance.patch({ input: { account: input.accountId } }, (balance) => balance + input.amount),
+      ],
+      writes: ({ reply }, { input }, queries) => [
+        queries.Balance.set({ input: { account: input.accountId } }, reply.balance),
       ],
     },
   },
 });
 ```
 
-`invalidates` replaces the default, and `optimistic` patches an entry while the run is queued or running. `writes` stores entries from a success without a refetch. Add `Command.afterRefetch("2 seconds")` to a Command to hold its success Message until the invalidated queries have refetched.
+`invalidates` replaces the default. Add `Command.afterRefetch("2 seconds")` to hold the success Message until the invalidated queries have refetched.
 
 The adapter keeps the receipts of this client's commands. A query with `waitsFor`, and each View stream when it opens, sends them as `atLeast`, so the result includes this client's writes. The receipts are not part of the args, so they do not split the cache.
 
@@ -137,78 +97,19 @@ The adapter keeps the receipts of this client's commands. A query with `waitsFor
 
 A query is a `Query.Service`, so the Effect UI cache shares and refreshes its result. Its args are `{ input }`. Declare it in a component's `queries`:
 
-```typescript title="src/Address.ts"
-import { CustomerId } from "@bank/domain/Customer/Customer.id";
-import { UiSchema } from "@effect/ui";
-import { Html } from "@effect/ui/html";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Schema from "effect/Schema";
-import { Bank } from "./Bank.ts";
-
-export const Address = Html.component({
-  name: "Address",
-  props: Schema.Struct({ customerId: CustomerId }),
-  model: Schema.Struct({}),
-  message: UiSchema.TaggedEnum({}),
-  queries: {
-    address: {
-      query: Bank.CustomerAddress,
-      args: ({ props }) => ({ input: { customerId: props.customerId } }),
-    },
-  },
-}).make({
-  init: () => ({}),
-  update: {},
-  view: (h) =>
-    AsyncResult.match(h.queries.address, {
-      onInitial: () => h.p("Loading"),
-      onFailure: ({ cause }) => h.p.attr("role", "alert").children(String(cause)),
-      onSuccess: ({ value }) => h.p(value.address ?? "No address on file"),
-    }),
-});
+```typescript
+queries: {
+  balance: { query: Bank.Balance, args: ({ props }) => ({ input: { account: props.accountId } }) },
+},
 ```
 
 A query fails with `Rejected`, `Denied`, `TimedOut` (only for a query with `waitsFor`), or `Unknown`. `make(api, { staleTime })` sets how long a result stays fresh. The default is 0: the cache shows a stored result at once and fetches again.
 
-## Page through a query
+A paged query is a `Query.InfiniteService`: its value is the page array, `loadMore` loads the next page, and `items(pages)` gives the entries in order. Set the page size and the entry key per query:
 
-A paged query is a `Query.InfiniteService`. `take` sets the page size and `key` identifies an entry, in the `queries` option of `make` (see [Update the query cache](#update-the-query-cache)). Its value holds the entries in order, and `$.loadMore` loads the next page:
-
-```typescript title="src/Ledger.ts"
-import { AccountId } from "@bank/domain/Account/Account.id";
-import { UiSchema } from "@effect/ui";
-import { Html } from "@effect/ui/html";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Schema from "effect/Schema";
-import { Bank } from "./Bank.ts";
-
-export const LedgerMessage = UiSchema.TaggedEnum({ ClickedMore: {} });
-
-export const Ledger = Html.component({
-  name: "Ledger",
-  props: Schema.Struct({ accountId: AccountId }),
-  model: Schema.Struct({}),
-  message: LedgerMessage,
-  queries: {
-    rows: {
-      query: Bank.AccountLedger,
-      args: ({ props }) => ({ input: { account: props.accountId } }),
-    },
-  },
-}).make({
-  init: () => ({}),
-  update: { ClickedMore: ($) => $.loadMore("rows") },
-  view: (h) =>
-    AsyncResult.match(h.queries.rows, {
-      onInitial: () => h.p("Loading"),
-      onFailure: () => h.p.attr("role", "alert").children("Ledger unavailable"),
-      onSuccess: ({ value: { items, more } }) =>
-        h.div(
-          h.ul(...items.map((row) => h.li.key(row.id).children(`${row.kind} ${row.amount}`))),
-          more._tag === "Available" &&
-            h.button.on("click", LedgerMessage.ClickedMore()).children("More"),
-        ),
-    }),
+```typescript
+export const Bank = DomainEffectUI.make(CustomerApi, {
+  queries: { AccountLedger: { take: 20, key: (entry) => entry.id } },
 });
 ```
 
@@ -216,170 +117,96 @@ With `key`, an entry that a later page repeats is left out. Without it, every en
 
 ## Show a View
 
-A View is a stream query keyed by its read key. Its args are `{ key }`, and its value is the `{ state, cursor }` snapshot, with absent state as `Option.none()`:
+A View is a stream query keyed by its read key. Its args are `{ key }`, and its value is the `{ state, cursor }` snapshot, with absent state as `Option.none()`. Declare it in a component's `queries` and read it with `AsyncResult`:
 
-```typescript title="src/Summary.ts"
-import { AccountId } from "@bank/domain/Account/Account.id";
-import { UiSchema } from "@effect/ui";
-import { Html } from "@effect/ui/html";
-import * as Option from "effect/Option";
+```typescript
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Schema from "effect/Schema";
-import { Bank } from "./Bank.ts";
 
-export const Summary = Html.component({
-  name: "Summary",
-  props: Schema.Struct({ accountId: AccountId }),
-  model: Schema.Struct({}),
-  message: UiSchema.TaggedEnum({}),
-  queries: {
-    summary: { query: Bank.AccountSummary, args: ({ props }) => ({ key: props.accountId }) },
-  },
-}).make({
-  init: () => ({}),
-  update: {},
-  view: (h) =>
-    Option.match(AsyncResult.value(h.queries.summary), {
-      onNone: () =>
-        h.p(h.queries.summary._tag === "Failure" ? "Not available" : "Loading"),
-      onSome: ({ state }) =>
-        h.p.attr("aria-label", "Balance").children(
-          Option.match(state, { onNone: () => "No account", onSome: (s) => String(s.balance) }),
-        ),
-    }),
-});
+queries: {
+  summary: { query: Bank.AccountSummary, args: ({ props }) => ({ key: props.accountId }) },
+},
+view: (h) =>
+  Option.match(AsyncResult.value(h.queries.summary), {
+    onNone: () => h.p.children(h.queries.summary._tag === "Failure" ? "Not available" : "Loading"),
+    onSome: ({ state }) =>
+      h.p.children(Option.match(state, { onNone: () => "No account", onSome: (s) => `${s.balance}` })),
+  }),
 ```
 
 `AsyncResult.value` gives the last Success, also when a later failure keeps it as its `previousSuccess`. `h.queries.summary.waiting` is `true` while the stream opens again.
 
-Each stream starts with `snapshot(key)`, with this client's receipts as `atLeast`, so its first element includes this client's writes. Then it follows `watch(key)`. The adapter does not fold `events`: a View that declares `events` can change its state without an event. Every component that reads the same key shares one entry and one open stream. The stream closes when the entry is collected: by default 5 minutes after the last component that reads it unmounts. Set a shorter time per View with `views: { AccountSummary: { idleTimeToLive: "30 seconds" } }` in the options of `make`.
+Each stream starts with `snapshot(key)`, with this client's receipts as `atLeast`, so its first element includes this client's writes. Then it follows `watch(key)`. The adapter does not fold `events`: a View that declares `events` can change its state without an event. Every component that reads the same key shares one entry and one open stream. The stream closes when the entry is collected: by default 5 minutes after the last component that reads it unmounts. Set a shorter time per View:
+
+```typescript
+export const Bank = DomainEffectUI.make(CustomerApi, {
+  views: { AccountSummary: { idleTimeToLive: "30 seconds" } },
+});
+```
 
 A View read fails with `Rejected` (the View's `validate`), `Denied` (its middleware), `TimedOut` (the View did not apply this client's writes in time), or `Unknown` (transport or a defect). The entry keeps the last value as `previousSuccess`. A failure closes the stream. It opens again when the entry is asked for again (a `get`, a new component, a refetch of a stale entry) or after `invalidate`.
 
 ### Patch a View before the command answers
 
-The `optimistic` patch in [Update the query cache](#update-the-query-cache) shows a deposit in `AccountSummary` at once. Effect UI applies the patch over each element while the run is queued or running. When the run succeeds, it closes the stream and opens it again, and the first element of the new stream drops the patch. A Domain View applies a command's events a short time after the command answers, so a plain `watch` can send the old state first, and the value goes back for a moment. The adapter prevents this: the new stream starts with a `snapshot` that waits for the run's receipt.
+An optimistic patch on a View entry shows the write at once:
 
-Each optimistic run still opens the stream again, which costs one more subscription and one more read of the key's state. And while the run is still running, the open stream can send an element that already holds the write: the patch applies to it again, so a patch that adds shows the deposit twice until the run ends. Where you can, write patches that set a value, not ones that add to it ([our comment on Effect-TS/ui#454](https://github.com/Effect-TS/ui/pull/454#issuecomment-7208510587)).
-
-## Follow a View with Subscriptions
-
-`watch` is the lower-level form of the stream query. It copies each snapshot into the Model through a Message, opens one stream per component, and has no data in a server render. Use it when `update` must handle each snapshot as a Message. `events` follows an event feed after the cursor `after`:
-
-```typescript title="src/Statement.ts"
-import { AccountId } from "@bank/domain/Account/Account.id";
-import { StatementLine } from "@bank/domain/Account/Statement.view";
-import { UiSchema } from "@effect/ui";
-import { Html } from "@effect/ui/html";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import { Bank } from "./Bank.ts";
-
-export const StatementMessage = UiSchema.TaggedEnum({
-  ReceivedBalance: { balance: Schema.Option(Schema.Number) },
-  ReceivedLine: { line: StatementLine, cursor: Schema.Number },
-  CaughtUp: { cursor: Schema.Number },
-  FailedRead: { reason: Schema.String },
-});
-type StatementMessage = typeof StatementMessage.Type;
-
-export const Statement = Html.component({
-  name: "Statement",
-  props: Schema.Struct({ accountId: AccountId }),
-  model: Schema.Struct({
-    balance: Schema.Option(Schema.Number),
-    lines: Schema.Array(StatementLine),
-    cursor: Schema.Option(Schema.Number),
-  }),
-  message: StatementMessage,
-}).make({
-  init: () => ({ balance: Option.none(), lines: [], cursor: Option.none() }),
-  update: {
-    ReceivedBalance: ($, { balance }) => $.evolve({ balance }),
-    ReceivedLine: ($, { line, cursor }) =>
-      $.evolve({ lines: (lines) => [...lines, line], cursor: Option.some(cursor) }),
-    CaughtUp: ($, { cursor }) => $.evolve({ cursor: Option.some(cursor) }),
-    FailedRead: ($) => $.model,
+```typescript
+export const Bank = DomainEffectUI.make(CustomerApi, {
+  commands: {
+    DepositMoney: {
+      optimistic: ({ input }, queries) => [
+        queries.AccountSummary.patch({ key: input.accountId }, (snapshot) => ({
+          ...snapshot,
+          state: Option.map(snapshot.state, (summary) => ({ ...summary, balance: summary.balance + input.amount })),
+        })),
+      ],
+    },
   },
-  subscriptions: ({ props, model }) => [
-    // Each snapshot of the account's summary, as a Message.
-    Bank.AccountSummary.watch<StatementMessage>(props.accountId, {
-      onSnapshot: ({ state }) =>
-        StatementMessage.ReceivedBalance({ balance: Option.map(state, (s) => s.balance) }),
-      onFailure: (error) => StatementMessage.FailedRead({ reason: error._tag }),
-      onDefect: () => StatementMessage.FailedRead({ reason: "Read defect" }),
-    }),
-    // Each statement line after the last one applied.
-    Bank.Statement.events<StatementMessage>(props.accountId, {
-      after: model.cursor,
-      onEntry: ({ event, envelope }) =>
-        StatementMessage.ReceivedLine({ line: event, cursor: envelope.seq }),
-      onCaughtUp: (cursor) => StatementMessage.CaughtUp({ cursor }),
-      onFailure: (error) => StatementMessage.FailedRead({ reason: error._tag }),
-      onDefect: () => StatementMessage.FailedRead({ reason: "Read defect" }),
-    }),
-  ],
-  view: (h, model) =>
-    h.div(
-      h.p(Option.match(model.balance, { onNone: () => "No account", onSome: String })),
-      h.ul(...model.lines.map((line) => h.li(`${line.kind} ${line.amount}`))),
-    ),
 });
 ```
 
-A new key or `restartKey` restarts a Subscription. Read defects call `onDefect`, typed read failures call `onFailure`, and interruption ends the Subscription without a Message.
+Effect UI applies the patch over each element while the run is queued or running. When the run succeeds, it closes the stream and opens it again, and the first element of the new stream drops the patch. A Domain View applies a command's events a short time after the command answers, so a plain `watch` can send the old state first, and the value goes back for a moment. The adapter prevents this: the new stream starts with a `snapshot` that waits for the run's receipt. Two limits stay ([our comment on Effect-TS/ui#454](https://github.com/Effect-TS/ui/pull/454#issuecomment-7208510587)):
 
-The feed reads `after` when it starts, so a new cursor does not restart it. Change `restartKey` to restart it, for example after a failure. The feed drops repeated entries and allows gaps. A Stream has only these two Subscriptions.
+- Each optimistic run opens the stream again: one more subscription, and one more read of the key's state.
+- The open stream can send an element that already holds the write while the run is still running. The patch then applies to it again, and a patch that adds shows the deposit twice until the run ends. Where you can, write patches that set a value, not ones that add to it.
+
+### Follow a View with Subscriptions
+
+`watch` is the lower-level form of the stream query. It copies each snapshot into the Model through a Message, opens one stream per component, and has no data in a server render. Use it when `update` must handle each snapshot as a Message, such as a Model that keeps several keys:
+
+```typescript
+subscriptions: ({ props, model }) => [
+  Bank.AccountSummary.watch(props.accountId, {
+    restartKey: model.signIns,
+    onSnapshot: ({ state, cursor }) => Message.ReceivedSummary({ state, cursor }),
+    onFailure: (error) => Message.FailedWatchSummary({ reason: error._tag }),
+    onDefect: () => Message.FailedWatchSummary({ reason: "Read defect" }),
+  }),
+],
+```
+
+A new key or `restartKey` restarts the watch. Read defects call `onDefect`, typed read failures call `onFailure`, and interruption ends the Subscription without a Message.
+
+`events(key, { after, restartKey, onEntry, onCaughtUp, onFailure, onDefect })` follows an event feed after the cursor `after`. A feed is a list of messages, not state, so it stays a Subscription for Views and Streams. The feed reads `after` when it starts, so a new cursor does not restart it. Change `restartKey` to restart it, for example after a failure. The feed drops repeated entries and allows gaps. A Stream has only these two Subscriptions.
 
 ## Restart a read after the session ends
 
-When the session ends, the server ends each live read with the middleware error ([#3458](https://github.com/alchemy-run/alchemy/issues/3458)). A View entry fails with `Denied` and its stream closes. Sign in again, then invalidate the View: the target covers all its entries, so each entry a component shows opens its stream again:
+When the session ends, the server ends each live read with the middleware error ([#3458](https://github.com/alchemy-run/alchemy/issues/3458)). A View entry fails with `Denied` and its stream closes. Sign in again, and list the View in the `invalidates` of the command that signs in. The View's query is a target for all its entries, so each entry that a component shows opens its stream again:
 
-```typescript title="src/SignIn.ts"
-import { AccountId } from "@bank/domain/Account/Account.id";
-import { CustomerId } from "@bank/domain/Customer/Customer.id";
-import { Command, UiSchema } from "@effect/ui";
-import { Html } from "@effect/ui/html";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import * as Schema from "effect/Schema";
-import { Bank } from "./Bank.ts";
-
-export const SessionMessage = UiSchema.TaggedEnum({
-  ClickedSignIn: {},
-  SignedIn: {},
-});
-
-// Sign in again, then reopen every AccountSummary entry the page shows.
-export const SignIn = Command.make("bank/SignIn", { args: { customerId: CustomerId } }, ({ customerId }) =>
-  Effect.promise(() =>
-    fetch("/api/session", { method: "POST", body: JSON.stringify({ customerId }) }),
-  ).pipe(Effect.andThen(Bank.AccountSummary.invalidate()), Effect.as(SessionMessage.SignedIn())),
-);
-
-export const Session = Html.component({
-  name: "Session",
-  props: Schema.Struct({ customerId: CustomerId, accountId: AccountId }),
-  model: Schema.Struct({}),
-  message: SessionMessage,
-  queries: {
-    summary: { query: Bank.AccountSummary, args: ({ props }) => ({ key: props.accountId }) },
-  },
-}).make({
-  init: () => ({}),
-  update: {
-    ClickedSignIn: ($) => $.run(SignIn.make({ customerId: $.props.customerId })),
-    SignedIn: ($) => $.model,
-  },
-  view: (h) =>
-    h.queries.summary._tag === "Failure" && Option.isNone(AsyncResult.value(h.queries.summary))
-      ? h.button.on("click", SessionMessage.ClickedSignIn()).children("Sign in again")
-      : h.p("Signed in"),
+```typescript
+export const Bank = DomainEffectUI.make(CustomerApi, {
+  commands: { SignIn: { invalidates: (_, queries) => [queries.AccountSummary] } },
 });
 ```
 
-A Subscription calls `onFailure` and stops. Change its `restartKey` after the new sign-in to start it again. A query that failed with `Denied` keeps its failure until it fetches again: invalidate it too, or name it in the `invalidates` of a command that signs in.
+A Subscription calls `onFailure` and stops. Change `restartKey` to start it again:
+
+```typescript
+FailedWatchSummary: ($, { reason }) =>
+  reason === "Unauthenticated" ? $.evolve({ signedIn: false }) : $.model,
+SignedIn: ($) => $.evolve({ signedIn: true, signIns: $.model.signIns + 1 }),
+```
+
+A query that failed with `Denied` keeps its failure until it fetches again. Name it in the `invalidates` of the sign-in Command, so it fetches again after the sign-in.
 
 ## Seed the first paint
 
@@ -389,161 +216,66 @@ A server render does not run Subscriptions. A component that follows a View with
 
 ## Test a component with the model
 
-Mount the component with `HtmlPlay`, and build the adapter and the Api client inside the component tree:
+Mount the component with `HtmlPlay` and build the adapter and the Api client inside the component tree:
 
-```typescript title="test/Deposit.test.ts"
-import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
-import { AccountId } from "@bank/domain/Account/Account.id";
+```typescript
 import { Component } from "@effect/ui";
 import { HtmlLocator, HtmlPlay } from "@effect/ui/html/testing";
 import { TestHost } from "@effect/ui/testing";
-import { it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { Client } from "./Client.ts";
-import { Bank } from "../src/Bank.ts";
-import { Deposit } from "../src/Deposit.ts";
 
-// Every command id this test sends is "test:0", so a retry is easy to assert.
-const PinnedIds = Layer.succeed(DomainEffectUI.NewCommandId, Effect.succeed("test:0"));
-
-it.effect("a deposit to an account that isn't open is refused", () =>
+it.effect("adds to the balance", () =>
   Effect.gen(function* () {
     const play = yield* HtmlPlay.make(
-      Deposit.pipe(
-        // The adapter and the in-memory client are built inside the tree, so the test
-        // host waits for their work.
-        Component.provide(Bank.layer.pipe(Layer.provide(PinnedIds), Layer.provideMerge(Client))),
-      ),
-      { accountId: AccountId.make("c-1-main") },
+      Panel.pipe(Component.provide(Bank.layer.pipe(Layer.provideMerge(Client)))),
+      {},
     );
-    yield* play.click(HtmlLocator.role("button", { name: "Deposit 10.00" }));
-    yield* play.expect(HtmlLocator.role("alert")).toHaveText("Rejected");
+    yield* play.click(HtmlLocator.role("button", { name: "Deposit" }));
+    yield* play.expect(HtmlLocator.label("Balance")).toHaveText("1000");
   }).pipe(Effect.scoped, Effect.provide(TestHost.layer())),
 );
 ```
 
-`Client` is the Api's in-process client over `Domain.InMemory`. `TestHost.settle` waits only for the fibers of the component tree, so a client provided beside `TestHost` runs outside it, and under the `TestClock` the View can still show the old value after a click ([Effect-TS/ui#411](https://github.com/Effect-TS/ui/issues/411)). A command that the model schedules for later also needs the in-memory platform on the test clock: until [#3690](https://github.com/alchemy-run/alchemy/issues/3690) lands, build it with `InMemory.make({ now })` from `@alchemy.run/domain/InMemory`. `NewCommandId` pins the ids the Commands make.
+`Client` is the Api's in-process client over `Domain.InMemory`. `TestHost.settle` waits only for the fibers of the component tree. A client provided beside `TestHost` runs outside the tree, so under the `TestClock` the View can still show the old value after a click ([Effect-TS/ui#411](https://github.com/Effect-TS/ui/issues/411)). A command that the model schedules for later also needs the in-memory platform on the test clock: until [#3690](https://github.com/alchemy-run/alchemy/issues/3690) lands, build it with `InMemory.make({ now })` from `@alchemy.run/domain/InMemory`.
 
 ## Provide the client and headers
 
 Provide `Bank.layer` and the Api client where the app mounts. Provide `DomainEffectUI.CommandHeaders` under `Bank.layer`:
 
-```typescript title="src/entry.ts"
-import * as Domain from "@alchemy.run/domain";
-import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
-import { AccountId } from "@bank/domain/Account/Account.id";
-import { CustomerApi } from "@bank/domain/CustomerApi.api";
-import { Component } from "@effect/ui";
-import { BrowserHost } from "@effect/ui/html";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Socket from "effect/socket/Socket";
-import { Bank } from "./Bank.ts";
-import { Summary } from "./Summary.ts";
-
-// Read on every call and every query fetch: pass headers the app owns.
+```typescript
 const Headers = Layer.succeed(DomainEffectUI.CommandHeaders, {
-  get: () => Effect.succeed({ "x-app-version": "1.0.0" }),
+  get: () => Effect.succeed({ "x-app-version": version }),
 });
-
-// The browser sends the session cookie on every call and every WebSocket.
 const Connection = CustomerApi.layerClient.pipe(
   Layer.provide(Domain.protocolWebSocket(`${location.origin}/api`)),
-  Layer.provide(Layer.merge(FetchHttpClient.layer, Socket.layerWebSocketConstructorGlobal)),
+  Layer.provide(Socket.layerWebSocketConstructorGlobal),
 );
-
-const App = Summary.pipe(Component.provide(Bank.layer.pipe(Layer.provide(Headers))));
-
-const Main = BrowserHost.mount(App, { accountId: AccountId.make("c-1-main") }, document.getElementById("app")!).pipe(
-  Layer.provide(Connection),
+const Main = BrowserHost.mount(App, {}, document.getElementById("app")!).pipe(
+  Layer.provide(Bank.layer.pipe(Layer.provide(Headers))),
+  Layer.provideMerge(Connection),
 );
-
-Layer.launch(Main).pipe(Effect.runFork);
 ```
 
 `CommandHeaders.get` receives the command tag or query name, and runs on each call. A Command also finds headers provided beside `Bank.layer`, but a query fetch can run outside the component that asked for it, so only headers under `Bank.layer` reach every query. Never put credentials in Command input or in the Model. The rules for cookies and protocols are in [Integrate with Foldkit](/domain/foldkit#provide-the-client-and-headers).
 
-### Send a secret with one command
-
 A secret that the user types, such as an MFA code, goes in the Command's `headers` arg. It is `Redacted`, so the Effect UI message log does not show it. Its headers replace the `CommandHeaders` headers with the same name:
 
-```typescript title="src/Withdraw.ts"
-import { AccountId } from "@bank/domain/Account/Account.id";
-import { Command, UiSchema } from "@effect/ui";
-import { Html } from "@effect/ui/html";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
-import { Bank } from "./Bank.ts";
-
-export const WithdrawMessage = UiSchema.TaggedEnum({
-  // Redacted, so the message log never shows the code.
-  SubmittedWithdrawal: { code: Schema.Redacted(Schema.String) },
-  SucceededWithdrawal: {},
-  FailedWithdrawal: { reason: Schema.String },
-});
-
-export const Withdraw = Html.component({
-  name: "Withdraw",
-  props: Schema.Struct({ accountId: AccountId }),
-  model: Schema.Struct({ error: Schema.NullOr(Schema.String) }),
-  message: WithdrawMessage,
-}).make({
-  init: () => ({ error: null }),
-  update: {
-    SubmittedWithdrawal: ($, { code }) =>
-      $.run(
-        Bank.WithdrawMoney.make({
-          input: { accountId: $.props.accountId, amount: 500 },
-          headers: Redacted.make({ "x-mfa-code": Redacted.value(code) }),
-        }).pipe(
-          Command.match({
-            onSuccess: () => WithdrawMessage.SucceededWithdrawal(),
-            onFailure: (failure) => WithdrawMessage.FailedWithdrawal({ reason: failure._tag }),
-          }),
-        ),
-      ),
-    SucceededWithdrawal: ($) => $.evolve({ error: null }),
-    FailedWithdrawal: ($, { reason }) => $.evolve({ error: reason }),
-  },
-  view: (h, model) =>
-    h.form
-      .on("submit", ({ entries }) =>
-        WithdrawMessage.SubmittedWithdrawal({
-          code: Redacted.make(entries.find(([name]) => name === "code")?.[1] ?? ""),
-        }),
-      )
-      .children(
-        h.input.attrs({ name: "code", "aria-label": "MFA code", autocomplete: "one-time-code" }),
-        h.button.attr("type", "submit").children("Withdraw 5.00"),
-        model.error !== null && h.p.attr("role", "alert").children(model.error),
-      ),
-});
+```typescript
+Bank.WithdrawMoney.make({
+  input: { accountId, amount: 500 },
+  headers: Redacted.make({ "x-mfa-code": Redacted.value(code) }),
+})
 ```
+
+Carry `code` as `Schema.Redacted(Schema.String)` in the Message too.
 
 ## Render signed-in pages on the server
 
 `HtmlServerHttp.layerHttp` renders each request with its own query cache. A fetch runs in the request, so `CommandHeaders.get` can read the request's cookie:
 
-```typescript title="src/entry.server.ts"
-/// <reference types="@effect/ui/html/HtmlServerViteDocument" />
-import * as Domain from "@alchemy.run/domain";
-import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
-import { CustomerApi } from "@bank/domain/CustomerApi.api";
-import { Query } from "@effect/ui";
-import { layerHttp } from "@effect/ui/html/HtmlServerHttp";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
+```typescript
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
-import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import { document } from "virtual:@effect/ui/document";
-import { App } from "./App.ts";
-import { Bank } from "./Bank.ts";
-import { AppRoute } from "./routes.ts";
+import { layerHttp } from "@effect/ui/html/HtmlServerHttp";
 
-// A fetch runs in the request it renders, so each page's reads carry its visitor's cookie.
 const RequestHeaders = Layer.succeed(DomainEffectUI.CommandHeaders, {
   get: () =>
     Effect.serviceOption(HttpServerRequest.HttpServerRequest).pipe(
@@ -555,15 +287,9 @@ const RequestHeaders = Layer.succeed(DomainEffectUI.CommandHeaders, {
       ),
     ),
 });
-
-const Connection = CustomerApi.layerClient.pipe(
-  Layer.provide(Domain.protocolHttp("https://bank.example.com/api")),
-  Layer.provide(FetchHttpClient.layer),
-);
-
-export default layerHttp(App, { routes: AppRoute, document }).pipe(
+const Pages = layerHttp(App, { routes: AppRoute, document }).pipe(
   Layer.provide(Layer.merge(Bank.layer.pipe(Layer.provide(RequestHeaders)), Query.layer())),
-  Layer.provide(Connection),
+  Layer.provide(CustomerApi.layerClient.pipe(Layer.provide(Domain.protocolHttp(apiUrl)))),
 );
 ```
 

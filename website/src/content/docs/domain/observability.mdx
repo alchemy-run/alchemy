@@ -41,7 +41,7 @@ A [query](/domain/query) is a `Domain.query <Name>` span in the Worker, with `do
 
 ## Trace the browser
 
-foldkit traces every Command it runs, and every Api call carries the caller's trace on, so the browser can start the trace: a click, the commands it sends, and everything they cause on the server. Give the app a tracer that exports to its own origin:
+Effect UI runs every Command in a span, and every Api call carries the caller's trace on, so the browser can start the trace: a click, the commands it sends, and everything they cause on the server. Give the app a tracer that exports to its own origin:
 
 ```typescript title="packages/web/src/entry.ts"
 const Tracing = OtlpTracer.layer({
