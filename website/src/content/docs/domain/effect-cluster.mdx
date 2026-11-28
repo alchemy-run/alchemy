@@ -24,8 +24,7 @@ const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(Layer.p
 export default Bank.layer(BankHandlers).pipe(
   Layer.provide(
     Layer.mergeAll(
-      DomainCluster.layerEntities({
-        name: "Bank",
+      DomainCluster.layerEntities("Bank", {
         main: import.meta.url,
         pool: Default,
       }),
@@ -125,8 +124,7 @@ Every event reaches the views, projections and policies that consume it, at leas
 Some rows exist only to drop repeats: the receipt of each accepted command and committed decision, the mark that a policy ran a delivery, a cancelled scheduled command, and Effect Cluster's processed messages to the model's entity. Every runner deletes them once they are older than `retention`, each hour:
 
 ```typescript
-DomainCluster.layerEntities({
-  name: "Bank",
+DomainCluster.layerEntities("Bank", {
   main: import.meta.url,
   handler: "BankLive",
   pool: Default,

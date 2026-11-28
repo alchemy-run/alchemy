@@ -320,8 +320,6 @@ const workflowName = Effect.map(EffectEntity.CurrentAddress, (address) =>
 
 /** Options for {@link layerEntities}. */
 export interface EntitiesOptions<PoolReq> {
-  /** The entity that hosts the model: its type in the cluster. */
-  readonly name: string;
   /**
    * The module that exports the model's Layer (the one this platform is
    * provided to), usually `import.meta.url`. The pool's runners load it to
@@ -392,8 +390,7 @@ export interface EntitiesOptions<PoolReq> {
  *
  * export const BankLive = Bank.layer(BankHandlers).pipe(
  *   Layer.provide(
- *     DomainCluster.layerEntities({
- *       name: "Bank",
+ *     DomainCluster.layerEntities("Bank", {
  *       main: import.meta.url,
  *       handler: "BankLive",
  *       pool: Default,
@@ -416,6 +413,8 @@ export interface EntitiesOptions<PoolReq> {
  * @provides WorkflowEngine
  */
 export const layerEntities = <PoolReq>(
+  /** The entity that hosts the model: its type in the cluster. */
+  name: string,
   options: EntitiesOptions<PoolReq>,
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
@@ -424,7 +423,6 @@ export const layerEntities = <PoolReq>(
 > =>
   Layer.unwrap(
     Effect.gen(function* () {
-      const name = options.name;
       const objects = yield* ObjectHost;
       const cluster = yield* ClusterObjects;
       const lookup = (cls: string): Namespace => objects.lookup!(cls)!;
@@ -553,9 +551,7 @@ export const layerEntities = <PoolReq>(
       ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
     }),
   ).pipe(
-    Layer.provide(
-      layerObjectHost(options.name, { ...options, attachmentHeader: SUBSCRIPTION_HEADER }),
-    ),
+    Layer.provide(layerObjectHost(name, { ...options, attachmentHeader: SUBSCRIPTION_HEADER })),
   ) as Layer.Layer<
     Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
     never,

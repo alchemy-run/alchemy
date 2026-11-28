@@ -8,8 +8,7 @@ import { HostedPool } from "./cluster.ts";
 /** The desk. Its policy holds the Helper, so it still needs one. */
 const DeskLive = Desk.layer(HandoverLive).pipe(
   Layer.provide(
-    DomainCluster.layerEntities({
-      name: "DeskObjects",
+    DomainCluster.layerEntities("DeskObjects", {
       main: import.meta.url,
       handler: "HostedClusterLive",
       pool: HostedPool,

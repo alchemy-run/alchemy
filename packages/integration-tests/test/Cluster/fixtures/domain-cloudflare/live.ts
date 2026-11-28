@@ -12,8 +12,7 @@ export const DomainDurableObjectPool = ClusterCloudflare.DurableObjectPool("Doma
 
 export const ConformanceDurableObjectsLive = ConformanceLive.pipe(
   Layer.provide(
-    DomainCluster.layerEntities({
-      name: ENTITY,
+    DomainCluster.layerEntities(ENTITY, {
       main: import.meta.url,
       handler: "ConformanceDurableObjectsLive",
       pool: DomainDurableObjectPool,

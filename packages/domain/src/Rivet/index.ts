@@ -102,8 +102,6 @@ const connectTo = (namespace: Namespace, key: string, subscription: Subscription
 
 /** Options for {@link layerDurableObjects}. */
 export interface DurableObjectsOptions<PoolReq> extends ObjectHostOptions<PoolReq> {
-  /** The Rivet Durable Object class that hosts the model: its actors' name. */
-  readonly name: string;
   /**
    * How long each actor keeps the rows that only dedupe needs: command and
    * decision receipts, policy delivery marks, and cancelled scheduled
@@ -153,8 +151,7 @@ export interface DurableObjectsOptions<PoolReq> extends ObjectHostOptions<PoolRe
  *
  * export const BankLive = Bank.layer(BankHandlers).pipe(
  *   Layer.provide(
- *     DomainRivet.layerDurableObjects({
- *       name: "Bank",
+ *     DomainRivet.layerDurableObjects("Bank", {
  *       main: import.meta.url,
  *       handler: "BankLive",
  *       pool: Default,
@@ -189,8 +186,7 @@ export interface DurableObjectsOptions<PoolReq> extends ObjectHostOptions<PoolRe
  *
  * export const BankLive = Bank.layer(BankHandlers).pipe(
  *   Layer.provide(
- *     DomainRivet.layerDurableObjects({
- *       name: "Bank",
+ *     DomainRivet.layerDurableObjects("Bank", {
  *       main: import.meta.url,
  *       handler: "BankLive",
  *       pool: Default,
@@ -205,6 +201,8 @@ export interface DurableObjectsOptions<PoolReq> extends ObjectHostOptions<PoolRe
  * @provides WorkflowEngine
  */
 export const layerDurableObjects = <PoolReq>(
+  /** The Rivet Durable Object class that hosts the model: its actors' name. */
+  name: string,
   options: DurableObjectsOptions<PoolReq>,
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
@@ -220,7 +218,7 @@ export const layerDurableObjects = <PoolReq>(
         declare: ({ modelName }, cls, impl) => objects.declare(className(modelName, cls), impl),
         lookup: ({ modelName }, cls) => objects.lookup?.(className(modelName, cls)),
         connect: connectTo,
-        claimKey: runtimeClaim(options.name),
+        claimKey: runtimeClaim(name),
       };
       // Sagas run on the workflow engine over the same class: each execution
       // is the instance `<Workflow>/<executionId>`, its journal in that
@@ -242,7 +240,7 @@ export const layerDurableObjects = <PoolReq>(
         Layer.provideMerge(SecureRandom.layerWebCrypto),
       );
     }),
-  ).pipe(Layer.provide(layerObjectHost(options.name, options))) as Layer.Layer<
+  ).pipe(Layer.provide(layerObjectHost(name, options))) as Layer.Layer<
     Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
     never,
     PoolReq | Providers

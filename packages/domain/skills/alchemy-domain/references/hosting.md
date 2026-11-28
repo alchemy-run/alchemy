@@ -57,8 +57,7 @@ Every platform is one Layer provided to the model: `DomainCloudflare.layerDurabl
 // packages/server/src/BankLive.ts — provide BankLive wherever the Api is served
 export default Bank.layer(BankHandlers).pipe(
   Layer.provide(
-    DomainRivet.layerDurableObjects({
-      name: "Bank",
+    DomainRivet.layerDurableObjects("Bank", {
       main: import.meta.url,
       pool: Default,
     }),

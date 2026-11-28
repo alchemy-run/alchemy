@@ -8,8 +8,7 @@ import { HostedPool } from "./cluster.ts";
 /** The desk. Its policy holds the Helper, so it still needs one. */
 const DeskLive = Desk.layer(HandoverLive).pipe(
   Layer.provide(
-    DomainRivet.layerDurableObjects({
-      name: "DeskObjects",
+    DomainRivet.layerDurableObjects("DeskObjects", {
       main: import.meta.url,
       handler: "HostedRivetLive",
       pool: HostedPool,

@@ -10,8 +10,7 @@ import { DomainPool } from "./domain-cluster.ts";
 
 export const ConformanceRivetLive = ConformanceLive.pipe(
   Layer.provide(
-    DomainRivet.layerDurableObjects({
-      name: "DomainObjects",
+    DomainRivet.layerDurableObjects("DomainObjects", {
       main: import.meta.url,
       handler: "ConformanceRivetLive",
       pool: DomainPool,
@@ -23,8 +22,7 @@ export const ConformanceRivetLive = ConformanceLive.pipe(
 /** The model at its next version, for the rebuild case. */
 export const ConformanceRivetLiveV1 = ConformanceLiveV1.pipe(
   Layer.provide(
-    DomainRivet.layerDurableObjects({
-      name: "DomainObjects",
+    DomainRivet.layerDurableObjects("DomainObjects", {
       main: import.meta.url,
       handler: "ConformanceRivetLiveV1",
       pool: DomainPool,

@@ -10,8 +10,7 @@ import { DomainPool } from "./cluster.ts";
 
 export const ConformanceClusterLive = ConformanceLive.pipe(
   Layer.provide(
-    DomainCluster.layerEntities({
-      name: "DomainObjects",
+    DomainCluster.layerEntities("DomainObjects", {
       main: import.meta.url,
       handler: "ConformanceClusterLive",
       pool: DomainPool,
@@ -24,8 +23,7 @@ export const ConformanceClusterLive = ConformanceLive.pipe(
 /** The model at its next version, for the rebuild case. */
 export const ConformanceClusterLiveV1 = ConformanceLiveV1.pipe(
   Layer.provide(
-    DomainCluster.layerEntities({
-      name: "DomainObjects",
+    DomainCluster.layerEntities("DomainObjects", {
       main: import.meta.url,
       handler: "ConformanceClusterLiveV1",
       pool: DomainPool,

@@ -33,8 +33,7 @@ export class Tickers extends Domain.Model("Tickers", { aggregates: [Ticker] }) {
 
 export const TickersClusterLive = Tickers.layer(Layer.empty).pipe(
   Layer.provide(
-    DomainCluster.layerEntities({
-      name: "DomainTickers",
+    DomainCluster.layerEntities("DomainTickers", {
       main: import.meta.url,
       handler: "TickersClusterLive",
       pool: DomainPool,

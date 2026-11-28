@@ -24,8 +24,7 @@ const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane
 export default Bank.layer(BankHandlers).pipe(
   Layer.provide(
     Layer.mergeAll(
-      DomainRivet.layerDurableObjects({
-        name: "Bank",
+      DomainRivet.layerDurableObjects("Bank", {
         main: import.meta.url,
         pool: Default,
       }),
@@ -128,8 +127,7 @@ const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane
 
 export default Bank.layer(BankHandlers).pipe(
   Layer.provide(
-    DomainRivet.layerDurableObjects({
-      name: "Bank",
+    DomainRivet.layerDurableObjects("Bank", {
       main: import.meta.url,
       pool: Default,
       retention: {

@@ -23,7 +23,7 @@ export const Database = ClusterDocker.Database("BankCluster");
 export const Pool = ClusterDocker.SwarmPool("Runners", { replicas: 2 }).pipe(Layer.provide(Database));
 
 export default hostBank(
-  DomainCluster.layerEntities({ name: "Bank", main: import.meta.url, pool: Pool }),
+  DomainCluster.layerEntities("Bank", { main: import.meta.url, pool: Pool }),
 );
 ```
 
@@ -33,7 +33,7 @@ export const Database = ClusterAWS.Database("BankCluster");
 export const Pool = ClusterAWS.EcsPool("Runners", { replicas: 2 }).pipe(Layer.provide(Database));
 
 export default hostBank(
-  DomainCluster.layerEntities({ name: "Bank", main: import.meta.url, pool: Pool }),
+  DomainCluster.layerEntities("Bank", { main: import.meta.url, pool: Pool }),
 );
 ```
 
@@ -102,7 +102,7 @@ On Cloudflare, Effect Cluster runs each entity instance in a Durable Object, whi
 export const Pool = ClusterCloudflare.DurableObjectPool("Runners");
 
 export default hostBank(
-  DomainCluster.layerEntities({ name: "Bank", main: import.meta.url, pool: Pool }),
+  DomainCluster.layerEntities("Bank", { main: import.meta.url, pool: Pool }),
 );
 ```
 

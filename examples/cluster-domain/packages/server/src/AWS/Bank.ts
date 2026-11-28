@@ -14,6 +14,4 @@ export const Pool = ClusterAWS.EcsPool("Runners", { replicas: 2 }).pipe(Layer.pr
  * this module's default export to host the model; callers reach it through
  * the pool's gateway.
  */
-export default hostBank(
-  DomainCluster.layerEntities({ name: "Bank", main: import.meta.url, pool: Pool }),
-);
+export default hostBank(DomainCluster.layerEntities("Bank", { main: import.meta.url, pool: Pool }));

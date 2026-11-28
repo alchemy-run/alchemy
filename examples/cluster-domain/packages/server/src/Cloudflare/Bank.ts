@@ -14,6 +14,4 @@ export const Pool = ClusterCloudflare.DurableObjectPool("Runners");
  * pool's Worker imports this module's default export to host the model;
  * callers reach it through the pool's gateway.
  */
-export default hostBank(
-  DomainCluster.layerEntities({ name: "Bank", main: import.meta.url, pool: Pool }),
-);
+export default hostBank(DomainCluster.layerEntities("Bank", { main: import.meta.url, pool: Pool }));

@@ -239,8 +239,7 @@ const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane
 
 const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(
   Layer.provide(
-    DomainRivet.layerDurableObjects({
-      name: "Workshop",
+    DomainRivet.layerDurableObjects("Workshop", {
       main: import.meta.url,
       handler: "Live",
       pool: Default,
