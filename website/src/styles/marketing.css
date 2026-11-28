@@ -2036,40 +2036,29 @@ body.alc-root,
 }
 /* In dark mode `multiply` collapses the strokes into the page (cream × dark
    walnut ≈ dark walnut). Flip to `screen` so the same stroke reads as a
-   light highlight on the dark page. Color is bumped to pure white and
-   opacity raised so the screen-blended markings sit a notch above
-   light-mode visibility — they otherwise read as muted warm cream. */
+   light highlight on the dark page. Brightness, opacity and a tight mask
+   keep the strokes faint so the headline and subtitle stay readable. */
 [data-theme="dark"] .alc-hero__bg-graph {
   mix-blend-mode: screen;
   color: #ffffff;
-  opacity: 1;
-  /* Strokes are drawn at low alpha by the JS (cap ~0.32). Boost the
-     compositing brightness so they read clearly above the dark page. */
-  filter: brightness(3.6);
+  filter: brightness(1.6);
+  opacity: 0.45;
+  -webkit-mask-image: radial-gradient(
+    ellipse 80% 70% at var(--alc-bg-cx) var(--alc-bg-cy),
+    #000 35%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse 80% 70% at var(--alc-bg-cx) var(--alc-bg-cy),
+    #000 35%,
+    transparent 100%
+  );
 }
 /* On phones the hero canvas takes up a much larger fraction of the
-   viewport than on desktop, so the same brightness multiplier plus
-   wide mask makes the mandala bloom over the headline / subtitle and
-   reads as harsher than the desktop view. Pull the brightness back,
-   drop opacity well below desktop in both themes, and tighten the mask
-   so strokes stay faint behind the type. */
+   viewport, so light mode drops opacity too. */
 @media (max-width: 640px) {
   .alc-hero__bg-graph {
     opacity: 0.45;
-  }
-  [data-theme="dark"] .alc-hero__bg-graph {
-    filter: brightness(1.6);
-    opacity: 0.45;
-    -webkit-mask-image: radial-gradient(
-      ellipse 80% 70% at var(--alc-bg-cx) var(--alc-bg-cy),
-      #000 35%,
-      transparent 100%
-    );
-    mask-image: radial-gradient(
-      ellipse 80% 70% at var(--alc-bg-cx) var(--alc-bg-cy),
-      #000 35%,
-      transparent 100%
-    );
   }
 }
 .alc-hero__inner {
