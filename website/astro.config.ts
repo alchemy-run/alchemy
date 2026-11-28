@@ -2526,13 +2526,22 @@ export default defineConfig({
                 { label: "MCP server", link: "/ai/mcp-servers" },
                 { label: "Code mode", link: "/ai/code-mode" },
                 { label: "Harness", link: "/ai/harnesses" },
+                { label: "Session host", link: "/ai/hosting" },
                 { label: "Sandbox", link: "/ai/sandboxes" },
               ],
             },
             {
               label: "Platforms",
               items: [
-                { label: "Where sessions run", link: "/ai/hosting" },
+                { label: "Cloudflare", link: "/ai/cloudflare" },
+                { label: "Rivet", link: "/ai/rivet" },
+                { label: "Effect Cluster", link: "/ai/effect-cluster" },
+                { label: "In memory", link: "/ai/in-memory" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
                 { label: "Sandbox platforms", link: "/ai/sandbox-platforms" },
                 { label: "Build your own sandbox", link: "/ai/custom-sandboxes" },
               ],

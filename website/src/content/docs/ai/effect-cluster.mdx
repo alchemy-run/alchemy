@@ -1,0 +1,96 @@
+---
+title: Effect Cluster
+description: Host a process on Effect Cluster entities. Each session is an entity id, with its state in the cluster's Postgres, on runners in the pool you give it.
+---
+
+Host a process on [Effect Cluster](/cluster), and each of its sessions is an entity id of one entity, on whichever runner holds its shard. Its state lives in the cluster's Postgres, and its runners run in the pool you give it.
+
+## Host the process
+
+`AI.layerObjects` hosts the process's Layer on an object host. `Cluster.layerObjectHost` is that host: it names the entity that holds the sessions, points `main` at this file, and takes the pool that runs it. Provide it once, to the Layer the file exports as its default.
+
+```typescript title="src/Live.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
+import * as Layer from "effect/Layer";
+import { Agents } from "./Agents.ts";
+import { EngineerLive } from "./Engineer.process.ts";
+
+export const Database = ClusterDocker.Database("Cluster");
+const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
+
+export default AI.layerObjects(EngineerLive.pipe(Layer.provide(Agents))).pipe(
+  Layer.provide(Cluster.layerObjectHost("Workshop", { main: import.meta.url, pool: Default })),
+);
+```
+
+The pool's nodes load this file's default export and run the sessions. Each session is one entity id of that entity, named after the session's key.
+
+## Host a model beside it
+
+A [Domain model](/domain/effect-cluster) goes on the same host. Its policy holds `Engineer`, so its Layer still needs one, and the hosted process is what it gets:
+
+```typescript title="src/Live.ts"
+import * as AI from "@alchemy.run/ai";
+import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
+import * as Layer from "effect/Layer";
+import { Agents } from "./Agents.ts";
+import { EngineerLive } from "./Engineer.process.ts";
+import { TaskWorkLive } from "./Workshop/TaskWork.policy.ts";
+import { Workshop } from "./Workshop/Workshop.model.ts";
+
+export const Database = ClusterDocker.Database("Cluster");
+const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
+
+const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainCluster.layerObjects()));
+
+const EngineerSessions = AI.layerObjects(
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
+);
+
+export default WorkshopLive.pipe(
+  Layer.provideMerge(EngineerSessions),
+  Layer.provide(Cluster.layerObjectHost("Workshop", { main: import.meta.url, pool: Default })),
+);
+```
+
+The model's objects and the sessions are entity ids of the one entity. The host is written once, and neither Layer above it names a file or a pool.
+
+## Serve it from anywhere
+
+Whatever serves the app imports the default export and provides it:
+
+```typescript title="src/Api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Engineer } from "./Engineer.process.ts";
+import Live from "./Live.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const engineer = yield* Engineer;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const id = new URL(request.url, "http://api").pathname.slice(1);
+        const reply = yield* engineer.get(id).prompt(yield* request.text);
+        return HttpServerResponse.text(reply.text);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+There the Layer deploys the entity and reaches it through the pool's gateway. See [Reach a session](/ai/hosting#reach-a-session) for what the client does.
+
+## Bring a harness
+
+A session needs a harness that keeps its conversation where the session runs. `PiCloudflare.DurableObjectStorage` and OpenCode's storage are for a Cloudflare Durable Object, and neither harness has a storage Layer for an Effect Cluster entity yet. On Effect Cluster, `Agents` provides a harness of your own, or the process is played by [`AI.scripted`](/ai/in-memory).

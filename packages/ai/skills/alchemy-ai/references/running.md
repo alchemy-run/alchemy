@@ -43,14 +43,14 @@ const Live = BoardLive.pipe(Layer.provideMerge(TriageSessions));
 
 Provide `Live` to the Worker. The model needs the process and the process needs the model: the host closes that loop, so no thunk and no second build of the model is needed. The prose's Layer is built again inside each session's object, so the harness and its storage belong to that one session.
 
-More: [Host the process](https://alchemy.run/ai/hosting#host-the-process), [One object for each session](https://alchemy.run/ai/hosting#one-object-for-each-session).
+More: [Cloudflare](https://alchemy.run/ai/cloudflare#host-the-process), [One object for each session](https://alchemy.run/ai/hosting#one-object-for-each-session).
 
-## Host it on Rivet or Effect Cluster
+## Host it on Rivet
 
-The process's Layer does not change. `AI.layerObjects` hosts it on the platform's object host, which the model shares. The host is the file's entrypoint: provide it once, to the default export.
+The process's Layer does not change. `AI.layerObjects` hosts it on `Rivet.layerObjectHost`, which the model shares. The host is the file's entrypoint: it names the class, holds the one `import.meta.url`, and is provided once, to the default export.
 
 ```typescript
-// src/Live.ts, on Rivet
+// src/Live.ts
 const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainRivet.layerObjects()));
 
 const TriageSessions = AI.layerObjects(
@@ -63,11 +63,31 @@ export default BoardLive.pipe(
 );
 ```
 
-On Effect Cluster it is `DomainCluster.layerObjects()` and `Cluster.layerObjectHost("App", { main: import.meta.url, pool: Default })`. The pool's nodes load the default export of `main`; a caller imports it and provides it. Pi and OpenCode have a storage Layer for a Cloudflare Durable Object only: on Rivet and Effect Cluster, provide a harness of your own.
+The pool's nodes load the default export; a caller imports it and provides it. Pi and OpenCode have no storage Layer for a Rivet actor: provide a harness of your own.
 
-`AICloudflare.layerDurableObjects` is `AI.layerObjects` on `Cloudflare.layerObjectHost`. A process with no model does not need `@alchemy.run/domain`.
+More: [Rivet](https://alchemy.run/ai/rivet).
 
-More: [Host it on Rivet or Effect Cluster](https://alchemy.run/ai/hosting#host-it-on-rivet-or-effect-cluster).
+## Host it on Effect Cluster
+
+The same file, on `Cluster.layerObjectHost` from `@alchemy.run/effect-cluster`, with the model on `DomainCluster.layerObjects()`.
+
+```typescript
+// src/Live.ts
+const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainCluster.layerObjects()));
+
+const TriageSessions = AI.layerObjects(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+);
+
+export default BoardLive.pipe(
+  Layer.provideMerge(TriageSessions),
+  Layer.provide(Cluster.layerObjectHost("App", { main: import.meta.url, pool: Default })),
+);
+```
+
+Each session is an entity id on whichever runner holds its shard. Pi and OpenCode have no storage Layer for an entity: provide a harness of your own.
+
+More: [Effect Cluster](https://alchemy.run/ai/effect-cluster).
 
 ## Reach a session
 
@@ -105,7 +125,7 @@ const TriageInMemory = AI.layerInMemory(TriagePlayed.pipe(Layer.provide(BoardInM
 const Live = BoardInMemory.pipe(Layer.provideMerge(TriageInMemory));
 ```
 
-More: [Run it in memory](https://alchemy.run/ai/hosting#run-it-in-memory).
+More: [In memory](https://alchemy.run/ai/in-memory).
 
 ## Without a host
 
