@@ -21,7 +21,7 @@ import {
   Workflow,
   type WorkflowImpl,
 } from "@alchemy.run/cloudflare/Workflows/Workflow";
-import { own } from "alchemy/CapabilityGraph";
+import { hostedBy, own } from "alchemy/CapabilityGraph";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine, provideCallbacks } from "alchemy/Workers/DurableObjectEngine";
 import { StorageName } from "alchemy/Workflows";
@@ -298,6 +298,14 @@ const retiring = (
         });
       });
 
+/** For a plan: a route's old classes, and their retirement, are resources of its model. */
+const ownLegacy = (modelName: string, route: string, legacy: ReadonlyArray<LegacyClass>) =>
+  Effect.forEach(
+    [...legacy.map((each) => each.binding), `${route}.Retiring`],
+    (binding) => own("Model", modelName, binding),
+    { discard: true },
+  );
+
 /**
  * A saga's run objects, listed in their model's directory as they start, like
  * every other object of the model: a later layout change finds each run
@@ -389,13 +397,26 @@ const cloudflareHost = (
       const host: Host<Worker> = {
         // Every kind of object is declared through here, so none is left
         // outside the jurisdiction or the location hint.
-        declare: ({ modelName, legacyData }, name, impl) =>
-          // For a plan: this object's class is a resource of the model.
+        declare: ({ modelName, legacyData }, name, impl, runs) =>
+          // For a plan: this object's class is a resource of the model, and
+          // what it runs is listed under the piece's own binding.
           Effect.andThen(
-            own(
-              "Model",
-              modelName,
-              oneClass === undefined ? named(modelName, name) : domainClassName(modelName),
+            Effect.all(
+              [
+                own(
+                  "Model",
+                  modelName,
+                  oneClass === undefined ? named(modelName, name) : domainClassName(modelName),
+                ),
+                runs === undefined
+                  ? Effect.void
+                  : hostedBy(
+                      runs.kind,
+                      runs.name,
+                      oneClass === undefined ? named(modelName, name) : className(modelName, name),
+                    ),
+              ],
+              { discard: true },
             ),
             oneClass === undefined
               ? Effect.map(
@@ -412,12 +433,7 @@ const cloudflareHost = (
                   // The old classes stay declared while their objects move over.
                   const legacy = yield* legacyClasses(modelName, route, legacyData, name);
                   yield* retiring(modelName, route, legacy, backfillTimeoutSeconds);
-                  // For a plan: the old classes, and their retirement, are the model's too.
-                  yield* Effect.forEach(
-                    [...legacy.map((each) => each.binding), `${route}.Retiring`],
-                    (binding) => own("Model", modelName, binding),
-                    { discard: true },
-                  );
+                  yield* ownLegacy(modelName, route, legacy);
                   const namespace = yield* shared.object(route, onCloudflare(impl), legacy);
                   return placed(namespace, placement);
                 }),
@@ -795,6 +811,7 @@ const sagaEngine = (
         const shared = yield* sharedOf(oneClass, saga.modelName);
         const legacy = yield* legacyClasses(saga.modelName, name, saga.legacyData, saga.legacyName);
         yield* retiring(saga.modelName, name, legacy, timeoutSeconds);
+        yield* ownLegacy(saga.modelName, name, legacy);
         const namespace = yield* shared.object(
           name,
           listedRuns(oneClass, saga.modelName, saga.saga, cloudflareImpl),
