@@ -410,6 +410,8 @@ export class Docker extends Context.Service<
         secret?: string[];
         config?: string[];
         "read-only"?: boolean;
+        /** Sends the CLI's registry credentials to swarm agents. */
+        "with-registry-auth"?: boolean;
         publish?: string[];
         label?: Record<string, string>;
         env?: Record<string, string>;
@@ -465,6 +467,8 @@ export class Docker extends Context.Service<
         /** Config names to remove; applied before `config-add`. */
         "config-rm"?: string[];
         "read-only"?: boolean;
+        /** Sends the CLI's registry credentials to swarm agents. */
+        "with-registry-auth"?: boolean;
         "publish-add"?: string[];
         /** Published ports to remove, as `target=<port>,protocol=<p>,mode=<m>`. */
         "publish-rm"?: string[];
