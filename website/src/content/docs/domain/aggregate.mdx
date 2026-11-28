@@ -357,6 +357,17 @@ const receipt = yield* accounts.import(
 
 Retrying with the same `commandId` returns the first receipt and commits nothing. By default an import expects an instance with no events and fails with `UnexpectedVersion` otherwise. To import a long history in batches, pass the previous receipt's version as `expectedVersion`. Wait for a [projection](/domain/projection) with `caughtUp(receipt)`, or read a view with `atLeast: receipt`.
 
+## Fold the state again after a fix
+
+An instance stores its state next to its events, so a command doesn't fold its whole history first. When a deploy's `evolve` was wrong, the states it folded stay wrong after the fix is deployed. `rebuild` folds an instance's state again from its events, with the code running now, and stores it in place of the old one.
+
+```typescript title="src/RebuildAccount.ts"
+const receipt = yield* accounts.rebuild(accountId);
+receipt.changed; // true when the stored state was wrong
+```
+
+The events, the version and every view and projection stay as they are: they are built from the events, which were right all along. A command sent meanwhile waits for the rebuild to finish. Run it over each instance the bug reached, from a script or a [saga](/domain/saga); running it again changes nothing.
+
 Clients outside the model send commands through an [Api](/domain/api). They never read an aggregate's state directly: a [view](/domain/view) projects what they may see of it, so the aggregate's state stays free to change with its rules.
 
 Next, [Decision](/domain/decision): a command decided across several instances at once.

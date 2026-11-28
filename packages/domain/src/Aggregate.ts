@@ -516,7 +516,26 @@ export interface Client<Def extends AnyDefinition> {
     target: Target<Def>,
     compaction: Compaction.Any,
   ) => Effect.Effect<Compaction.Receipt, Compaction.CompactionLossy>;
+  /**
+   * Fold an instance's state again from its events, with the code running
+   * now, and store it in place of the state it has. For a state a bug left
+   * wrong: a deploy whose `evolve` was wrong, fixed by the next one. Its
+   * events, its version and every view and projection stay as they are,
+   * since they are built from the events. A command waits for it to finish.
+   */
+  readonly rebuild: (target: Target<Def>) => Effect.Effect<RebuildReceipt>;
 }
+
+/** What `client.rebuild` returns. */
+export const RebuildReceipt = Schema.Struct({
+  /** The stream that was rebuilt, e.g. `Account/a-1`. */
+  stream: Schema.String,
+  /** The stream's version: a rebuild never changes it. */
+  version: Schema.Number,
+  /** Whether the stored state differed from what the events fold to, and was replaced. */
+  changed: Schema.Boolean,
+});
+export type RebuildReceipt = typeof RebuildReceipt.Type;
 
 /** The commands of a definition that never reject, so can be scheduled. */
 export type Schedulable<Def extends AnyDefinition> = Extract<
@@ -561,6 +580,7 @@ export interface ClientImpl {
     target: unknown,
     compaction: Compaction.Any,
   ) => Effect.Effect<Compaction.Receipt, Compaction.CompactionLossy>;
+  readonly rebuild: (target: unknown) => Effect.Effect<RebuildReceipt>;
 }
 
 /**

@@ -392,6 +392,22 @@ export type CompactResult =
   | { readonly _tag: "Compacted"; readonly version: number; readonly compacted: number }
   | { readonly _tag: "Lossy" };
 
+/** Result of {@link AggregateStore.rebuild}. */
+export interface RebuildResult {
+  /** The instance's version, unchanged by a rebuild. */
+  readonly version: number;
+  /** Whether the stored state differed from what its events fold to. */
+  readonly changed: boolean;
+}
+
+/** Input to {@link AggregateKit.fold}. */
+export interface FoldRun {
+  /** The state folded from the runs before this one: `null` at the start. */
+  readonly state: Json;
+  /** A run of the instance's stored events, in order. */
+  readonly events: ReadonlyArray<StoredEvent>;
+}
+
 /** Input to {@link AggregateKit.rewrite}. */
 export interface RewriteRun {
   readonly id: string;
@@ -498,6 +514,12 @@ export interface AggregateKit {
     readonly state: Json;
     readonly changes: ReadonlyArray<Change<StoredEvent>>;
   }>;
+  /**
+   * Fold a run of an instance's stored events with the code running now,
+   * purely, from the state the runs before it left. An instance's whole log
+   * goes through in order.
+   */
+  readonly fold: (run: FoldRun) => Effect.Effect<Json>;
   /** Whether the rewrite removes the instance: its receipts and scheduled commands go too. */
   readonly deletes: (name: string) => boolean;
   /** The first of the aggregate's invariants an encoded state breaks, if any. */
@@ -811,6 +833,14 @@ export interface AggregateStore {
    * it runs. Nothing changes when the roll-up would lose state.
    */
   readonly compact?: (id: string, name: string) => Effect.Effect<CompactResult>;
+  /**
+   * Fold an instance's state again from its stored events, with the code
+   * running now, and store it in place of the state it has. Its events and
+   * version don't change, and nothing is delivered. Leaves an instance with
+   * no events as it is. Single writer per id, like a command. Optional: a
+   * client fails with a defect on a platform without it.
+   */
+  readonly rebuild?: (id: string) => Effect.Effect<RebuildResult>;
 }
 
 /** How much history has reached a consumer: see `View.History`. */
