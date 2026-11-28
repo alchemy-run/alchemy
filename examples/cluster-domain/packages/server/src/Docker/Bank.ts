@@ -1,4 +1,5 @@
 import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
 import { hostBank } from "../BankLive.ts";
@@ -16,4 +17,8 @@ export const Pool = ClusterDocker.SwarmPool("Runners", { replicas: 2 }).pipe(
  * this module's default export to host the model; callers reach it through
  * the pool's gateway.
  */
-export default hostBank(DomainCluster.layerEntities("Bank", { main: import.meta.url, pool: Pool }));
+export default hostBank(
+  DomainCluster.layerObjects().pipe(
+    Layer.provide(Cluster.layerObjectHost("Bank", { main: import.meta.url, pool: Pool })),
+  ),
+);

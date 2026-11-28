@@ -5,7 +5,7 @@ import { SessionLive } from "./Session.ts";
 /**
  * The bank's model, with the Session middleware its Api needs, on the
  * platform you give it. The platform is the one Layer that changes between
- * targets: `Domain.InMemory` in tests, `DomainCluster.layerEntities` with a
+ * targets: `Domain.InMemory` in tests, `DomainCluster.layerObjects()` on a host with a
  * Docker or AWS pool when deployed.
  */
 export const hostBank = <ROut, E, RIn>(platform: Layer.Layer<ROut, E, RIn>) =>

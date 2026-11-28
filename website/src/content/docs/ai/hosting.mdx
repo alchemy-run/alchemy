@@ -227,38 +227,36 @@ export const Live = WorkshopInMemory.pipe(Layer.provideMerge(EngineerInMemory));
 
 ## Host it on Rivet or Effect Cluster
 
-The process's Layer is the same on every platform. Only the host changes. On Rivet it takes the Durable Object class that holds the sessions and the pool that runs it:
+The process's Layer is the same on every platform. On Rivet and Effect Cluster, `AI.layerObjects` hosts it on the platform's object host, which the model shares. The host is the file's entrypoint: it names the class, and the pool's nodes load this file's default export.
 
-```typescript title="src/Workshop.ts"
-import * as AIRivet from "@alchemy.run/ai/Rivet";
+```typescript title="src/Live.ts"
+import * as AI from "@alchemy.run/ai";
 import * as DomainRivet from "@alchemy.run/domain/Rivet";
+import * as Rivet from "@alchemy.run/rivet";
 import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+import { Agents } from "./Agents.ts";
+import { EngineerLive } from "./Engineer.process.ts";
+import { TaskWorkLive, Workshop } from "./Workshop.model.ts";
 
 const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
 const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
 
-const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(
-  Layer.provide(
-    DomainRivet.layerDurableObjects("Workshop", {
-      main: import.meta.url,
-      handler: "Live",
-      pool: Default,
-    }),
-  ),
-);
+const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainRivet.layerObjects()));
 
-const EngineerSessions = AIRivet.layerDurableObjects(
-  "Sessions",
+const EngineerSessions = AI.layerObjects(
   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
-  { main: import.meta.url, handler: "Live", pool: Default },
 );
 
-export const Live = WorkshopLive.pipe(Layer.provideMerge(EngineerSessions));
+export default WorkshopLive.pipe(
+  Layer.provideMerge(EngineerSessions),
+  Layer.provide(Rivet.layerObjectHost("Workshop", { main: import.meta.url, pool: Default })),
+);
 ```
 
-On [Effect Cluster](/domain/effect-cluster) it is `AICluster.layerEntities` from `@alchemy.run/ai/EffectCluster`, beside `DomainCluster.layerEntities`, with the same options. Each session is then an entity id on whichever runner holds its shard.
+On [Effect Cluster](/domain/effect-cluster) the file is the same with `DomainCluster.layerObjects()` and `Cluster.layerObjectHost`. Each session is then an entity id on whichever runner holds its shard.
 
-`main` and `handler` name the export the pool's nodes load to run the sessions: the Layer that holds the host. Give the model and the sessions different names, since each is a class of its own. A process with no model needs neither `@alchemy.run/domain` nor its Layer: the host is the platform package's own.
+Whatever serves the app (a Worker, a container) imports the default export and provides it. A process with no model needs no `@alchemy.run/domain`: leave the model's two lines out.
 
 A session needs a harness that keeps its conversation where the session runs. `PiCloudflare.DurableObjectStorage` and OpenCode's are for a Cloudflare Durable Object. Neither harness has a storage Layer for a Rivet actor or an Effect Cluster entity yet, so on those two platforms a process runs with a harness you provide, or played by `AI.scripted`.
 

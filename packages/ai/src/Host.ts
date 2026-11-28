@@ -231,24 +231,26 @@ export const layerInMemory = <A, E, R>(
  * every session one object of it, named after the session's key. Each object
  * builds the Layer for itself, so a harness opens on that object's storage.
  *
- * `AICloudflare.layerDurableObjects`, `AIRivet.layerDurableObjects` and
- * `AICluster.layerEntities` are this, given their platform's object host.
- * Use it directly to host a process on an object host of your own.
+ * Provide the platform's object host once, to the Layer the module exports
+ * as its default: `Rivet.layerObjectHost`, `Cluster.layerObjectHost`, or one
+ * of your own. `AICloudflare.layerDurableObjects` is this on
+ * `Cloudflare.layerObjectHost`.
  *
- * **Example:** Sessions on Rivet, spelled out
+ * **Example:** A process's sessions on Rivet
  * ```typescript
+ * // src/Live.ts
  * import * as AI from "@alchemy.run/ai";
  * import * as Rivet from "@alchemy.run/rivet";
+ * import * as RivetDocker from "@alchemy.run/rivet/Docker";
  * import * as Layer from "effect/Layer";
+ * import { Agents } from "./Agents.ts";
+ * import { EngineerLive } from "./Engineer.process.ts";
  *
- * export const EngineerSessions = AI.layerObjects(EngineerLive.pipe(Layer.provide(Agents))).pipe(
- *   Layer.provide(
- *     Rivet.layerObjectHost("Sessions", {
- *       main: import.meta.url,
- *       handler: "EngineerSessions",
- *       pool: Default,
- *     }),
- *   ),
+ * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
+ * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
+ *
+ * export default AI.layerObjects(EngineerLive.pipe(Layer.provide(Agents))).pipe(
+ *   Layer.provide(Rivet.layerObjectHost("Sessions", { main: import.meta.url, pool: Default })),
  * );
  * ```
  *

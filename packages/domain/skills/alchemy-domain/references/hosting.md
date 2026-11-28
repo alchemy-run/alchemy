@@ -51,22 +51,18 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 
 ## Hosting on Rivet or Effect Cluster
 
-Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerDurableObjects(options)`, `DomainCluster.layerEntities(options)`. On Rivet and Effect Cluster, the Layer declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the Layer deploys that class and reaches it through the gateway; the pool's nodes load the default export of `main` and host the model.
+Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerObjects()`, `DomainCluster.layerObjects()`. On Rivet and Effect Cluster, that Layer runs on the platform's object host (`Rivet.layerObjectHost`, `Cluster.layerObjectHost`), which declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the host deploys that class and reaches it through the gateway; the pool's nodes load the default export of `main` and host the model.
 
 ```ts
 // packages/server/src/BankLive.ts — provide BankLive wherever the Api is served
 export default Bank.layer(BankHandlers).pipe(
-  Layer.provide(
-    DomainRivet.layerDurableObjects("Bank", {
-      main: import.meta.url,
-      pool: Default,
-    }),
-    // on Effect Cluster: DomainCluster.layerEntities, with the same options
-  ),
+  Layer.provide(DomainRivet.layerObjects()),
+  Layer.provide(Rivet.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
+  // on Effect Cluster: DomainCluster.layerObjects() and Cluster.layerObjectHost
 );
 ```
 
-- Make the model's Layer the default export of `main`; set `handler` only when another export holds it.
+- Make the model's Layer the default export of `main`: that is what the pool's nodes load.
 - Callers build the same model Layer, so they need the handlers' services too.
 - Both platforms push live reads over `Domain.protocolWebSocket`: the runtime that serves the Api holds the caller's socket, and the owner of the key pushes each commit. Over `Domain.protocolHttp`, live reads poll instead.
 - A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.

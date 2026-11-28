@@ -26,8 +26,8 @@ import { layerObjects } from "../Host.ts";
  *
  * The options are `Cloudflare.layerObjectHost`'s: where the objects are
  * kept (`jurisdiction`, `locationHint`). To move the sessions to another
- * platform, use `AIRivet.layerDurableObjects` or `AICluster.layerEntities`
- * with the same Layer.
+ * platform, give the same Layer to `AI.layerObjects` and provide that
+ * platform's object host.
  *
  * The Layer may need the process it provides, as a Domain model whose
  * policy holds it does: this provides it, inside each object and out.

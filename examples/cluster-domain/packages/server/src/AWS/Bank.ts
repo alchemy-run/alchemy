@@ -1,4 +1,5 @@
 import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
 import * as Layer from "effect/Layer";
 import { hostBank } from "../BankLive.ts";
@@ -14,4 +15,8 @@ export const Pool = ClusterAWS.EcsPool("Runners", { replicas: 2 }).pipe(Layer.pr
  * this module's default export to host the model; callers reach it through
  * the pool's gateway.
  */
-export default hostBank(DomainCluster.layerEntities("Bank", { main: import.meta.url, pool: Pool }));
+export default hostBank(
+  DomainCluster.layerObjects().pipe(
+    Layer.provide(Cluster.layerObjectHost("Bank", { main: import.meta.url, pool: Pool })),
+  ),
+);

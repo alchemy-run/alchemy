@@ -47,27 +47,25 @@ More: [Host the process](https://alchemy.run/ai/hosting#host-the-process), [One 
 
 ## Host it on Rivet or Effect Cluster
 
-The process's Layer does not change. Swap the host, and give it the class that holds the sessions and the pool that runs it:
+The process's Layer does not change. `AI.layerObjects` hosts it on the platform's object host, which the model shares. The host is the file's entrypoint: provide it once, to the default export.
 
 ```typescript
-// Rivet: @alchemy.run/ai/Rivet
-const TriageSessions = AIRivet.layerDurableObjects(
-  "Sessions",
+// src/Live.ts, on Rivet
+const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainRivet.layerObjects()));
+
+const TriageSessions = AI.layerObjects(
   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
-  { main: import.meta.url, handler: "Live", pool: Default },
 );
 
-// Effect Cluster: @alchemy.run/ai/EffectCluster
-const TriageSessions = AICluster.layerEntities(
-  "Sessions",
-  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
-  { main: import.meta.url, handler: "Live", pool: Default },
+export default BoardLive.pipe(
+  Layer.provideMerge(TriageSessions),
+  Layer.provide(Rivet.layerObjectHost("App", { main: import.meta.url, pool: Default })),
 );
 ```
 
-`handler` is the export of `main` that holds the host, which the pool's nodes load. Give the model and the sessions different names. Pi and OpenCode have a storage Layer for a Cloudflare Durable Object only: on Rivet and Effect Cluster, provide a harness of your own.
+On Effect Cluster it is `DomainCluster.layerObjects()` and `Cluster.layerObjectHost("App", { main: import.meta.url, pool: Default })`. The pool's nodes load the default export of `main`; a caller imports it and provides it. Pi and OpenCode have a storage Layer for a Cloudflare Durable Object only: on Rivet and Effect Cluster, provide a harness of your own.
 
-Each host is built on its platform package's object host (`Cloudflare.layerObjectHost`, `Rivet.layerObjectHost`, `@alchemy.run/effect-cluster/ObjectHost`), which `@alchemy.run/domain`'s platform Layers are built on too. A process with no model does not need `@alchemy.run/domain`.
+`AICloudflare.layerDurableObjects` is `AI.layerObjects` on `Cloudflare.layerObjectHost`. A process with no model does not need `@alchemy.run/domain`.
 
 More: [Host it on Rivet or Effect Cluster](https://alchemy.run/ai/hosting#host-it-on-rivet-or-effect-cluster).
 

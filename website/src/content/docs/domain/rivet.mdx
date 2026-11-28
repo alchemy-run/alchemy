@@ -8,12 +8,13 @@ Host your model on [Rivet](/rivet), and every aggregate instance, view key and p
 
 ## Host the model
 
-Provide `DomainRivet.layerDurableObjects` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the class that holds the model, point `main` at the file whose default export the nodes load, and give it a pool.
+Provide `DomainRivet.layerObjects()` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Then provide `Rivet.layerObjectHost` to the Layer the file exports as its default: it names the class that holds the model, points `main` at this file, and takes a pool.
 
 ```typescript
 // packages/server/src/BankLive.ts
-import * as RivetDocker from "@alchemy.run/rivet/Docker";
 import * as DomainRivet from "@alchemy.run/domain/Rivet";
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import * as Layer from "effect/Layer";
 import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
@@ -22,15 +23,8 @@ const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
 const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
 
 export default Bank.layer(BankHandlers).pipe(
-  Layer.provide(
-    Layer.mergeAll(
-      DomainRivet.layerDurableObjects("Bank", {
-        main: import.meta.url,
-        pool: Default,
-      }),
-      SiftFraudCheck,
-    ),
-  ),
+  Layer.provide(Layer.mergeAll(DomainRivet.layerObjects(), SiftFraudCheck)),
+  Layer.provide(Rivet.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
 );
 ```
 
@@ -118,6 +112,7 @@ Some rows exist only to drop repeats: the receipt of each accepted command and c
 
 ```typescript
 import * as DomainRivet from "@alchemy.run/domain/Rivet";
+import * as Rivet from "@alchemy.run/rivet";
 import * as RivetDocker from "@alchemy.run/rivet/Docker";
 import * as Layer from "effect/Layer";
 import { Bank, BankHandlers } from "./Bank.ts";
@@ -127,9 +122,7 @@ const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane
 
 export default Bank.layer(BankHandlers).pipe(
   Layer.provide(
-    DomainRivet.layerDurableObjects("Bank", {
-      main: import.meta.url,
-      pool: Default,
+    DomainRivet.layerObjects({
       retention: {
         receipts: "30 days", // a command or decision sent again after this is decided again
         deliveries: "7 days", // a delivery that arrives again after this runs again
@@ -137,6 +130,7 @@ export default Bank.layer(BankHandlers).pipe(
       },
     }),
   ),
+  Layer.provide(Rivet.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
 );
 ```
 
