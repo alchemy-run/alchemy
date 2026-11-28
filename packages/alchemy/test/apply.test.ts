@@ -1954,6 +1954,55 @@ describe("circularity via bindings", { tags: ["unit", "local"] }, () => {
       }),
     );
 
+    // Two separate cycles, `A <-> APeer` and `B <-> BPeer`, where `B` reads
+    // `A`'s changing `string`. `A` and `B` are both cycle members, but not of
+    // the same cycle: `B` must wait for `A`'s update instead of starting
+    // against the previous output `A` publishes early for its own peer.
+    test.provider("an update in one cycle waits for its upstream in another cycle", (stack) =>
+      Effect.gen(function* () {
+        const program = (version: string) =>
+          Effect.gen(function* () {
+            const A = yield* BindingTarget("A", { name: "a", string: `a-${version}` });
+            const APeer = yield* BindingTarget("APeer", { name: "ap", string: A.string });
+            yield* A.bind("FromAPeer", { env: { PEER: APeer.string } });
+            const B = yield* BindingTarget("B", { name: "b", string: A.string });
+            const BPeer = yield* BindingTarget("BPeer", { name: "bp", string: B.string });
+            yield* B.bind("FromBPeer", { env: { PEER: BPeer.string } });
+            return { A, B };
+          });
+
+        yield* stack.deploy(program("v1"));
+
+        const plan = yield* stack.plan(program("v2"));
+        expect([...plan.cycleMembers].sort()).toEqual(["A", "APeer", "B", "BPeer"]);
+
+        let aUpdated = false;
+        const bSaw: Array<{ aUpdated: boolean; string: unknown }> = [];
+        const output = yield* program("v2").pipe(
+          stack.deploy,
+          hook({
+            update: (id, props) =>
+              id === "A"
+                ? // Give B every chance to run first if nothing orders it.
+                  Effect.sleep("50 millis").pipe(
+                    Effect.andThen(
+                      Effect.sync(() => {
+                        aUpdated = true;
+                      }),
+                    ),
+                  )
+                : id === "B"
+                  ? Effect.sync(() => void bSaw.push({ aUpdated, string: props.string }))
+                  : Effect.void,
+          }),
+        );
+
+        // B's first update ran after A's, against A's new output.
+        expect(bSaw[0]).toEqual({ aUpdated: true, string: "a-v2" });
+        expect(output.B.string).toEqual("a-v2");
+      }),
+    );
+
     describe("from replacing state", () => {
       test.provider("replacing noop recovery creates downstream resources", (stack) =>
         Effect.gen(function* () {
@@ -10741,6 +10790,42 @@ describe("replacement ownership admission", { tags: ["unit", "local"] }, () => {
       yield* stack.destroy();
     }),
   );
+
+  // Like the cases above and below, but `Name` sits in a cycle of its own (a
+  // self-binding). It is still outside `Subject`'s cycle, so `Subject` waits
+  // for it and checks the resolved name before precreate (and before a
+  // delete-first replacement deletes the previous generation).
+  for (const deleteFirst of [false, true]) {
+    test.provider(
+      `a cyclic replacement checks a name from another cycle first (deleteFirst=${deleteFirst})`,
+      (stack) =>
+        Effect.gen(function* () {
+          const crossCycle = (name: string) =>
+            Effect.gen(function* () {
+              const source = yield* BindingTarget("Name", { string: name });
+              yield* source.bind("Self", { env: { SELF: source.string } });
+              return yield* named({ name: source.string }, true);
+            });
+          const cloud = yield* Cloud;
+          yield* stack.destroy();
+          cloud.owners.clear();
+          cloud.crash.clear();
+          cloud.deleteFirst = false;
+          yield* stack.deploy(crossCycle("old"));
+          cloud.events.length = 0;
+          cloud.outputs.length = 0;
+          cloud.deleteFirst = deleteFirst;
+
+          yield* stack.deploy(crossCycle("fresh"));
+          expect(cloud.events).toEqual(
+            deleteFirst
+              ? ["read fresh", "delete old", "precreate fresh", "reconcile fresh"]
+              : ["read fresh", "precreate fresh", "reconcile fresh", "delete old"],
+          );
+          yield* stack.destroy();
+        }),
+    );
+  }
 
   test.provider(
     "a cyclic delete-first replacement checks a name from outside its cycle first",

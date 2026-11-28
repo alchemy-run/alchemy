@@ -709,6 +709,7 @@ export const plan = (stack: {
         actionDeletions: {},
         output: undefined,
         cycleMembers: new Set<string>(),
+        cycles: new Map(),
       },
     } satisfies DriftPlan;
   }).pipe(

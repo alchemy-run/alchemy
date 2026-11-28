@@ -91,4 +91,5 @@ export const planWith = (resources: Apply[] = [], deletions: Delete[] = []): Pla
   actionDeletions: {},
   output: undefined,
   cycleMembers: new Set<string>(),
+  cycles: new Map(),
 });
