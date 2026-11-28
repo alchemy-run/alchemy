@@ -8,7 +8,7 @@ import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import { app } from "../desk.ts";
 import { HostedDatabase } from "./cluster.ts";
-import { HostedClusterLive } from "./live.ts";
+import HostedClusterLive from "./live.ts";
 
 export default class HostedClusterFront extends Docker.Service<HostedClusterFront>()(
   "ClusterHostedFront",

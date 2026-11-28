@@ -4,12 +4,12 @@
  *
  * @module
  */
-import { PgClient } from "@effect/sql-pg";
 import type { HttpEffect } from "alchemy/Http";
 import { decodeRpcArgs, encodeRpcArgs } from "alchemy/Rpc";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { type InputGateShape, makeInputGate } from "alchemy/Workers/InputGate";
 import {
+  ATTACHMENT_HEADER,
   type ListOptions,
   type Namespace,
   type ObjectImpl,
@@ -331,6 +331,8 @@ const storagePool = makeStoragePools((url) => {
   const scope = Scope.makeUnsafe();
   return Effect.gen(function* () {
     const maxConnections = yield* databaseMaxConnections;
+    // Loaded only on a runner with a database: a caller never opens one.
+    const { PgClient } = yield* Effect.promise(() => import("@effect/sql-pg"));
     const context = yield* Layer.buildWithScope(
       PgClient.layer({ url, maxConnections }),
       scope,
@@ -386,22 +388,12 @@ const remote =
 /** Options for {@link layerObjectHost}. */
 export interface ObjectHostOptions<PoolReq> {
   /**
-   * The module that exports the Layer built on this host, usually
-   * `import.meta.url`. The pool's runners load it to run the objects.
+   * The module whose default export is the Layer built on this host,
+   * usually `import.meta.url`. The pool's runners load it to run the objects.
    */
   readonly main: string;
-  /**
-   * The export of {@link main} that holds that Layer.
-   * @default "default"
-   */
-  readonly handler?: string;
   /** The pool whose runners run the objects, e.g. `ClusterDocker.SwarmPool("Default")`. */
   readonly pool: PoolLayer<PoolReq>;
-  /**
-   * The header an object's `fetch` reads a live read's attachment from.
-   * @default "x-object-attachment"
-   */
-  readonly attachmentHeader?: string;
 }
 
 /** What a runner of the pool has, once it has joined the cluster. */
@@ -457,20 +449,34 @@ export class ClusterObjects extends Context.Service<
  * pool's runners load the Layer built on this one from `main`, and there the
  * same Layer holds the entity.
  *
- * `@alchemy.run/domain/EffectCluster` and `@alchemy.run/ai/EffectCluster`
- * are built on it. Provide it yourself only to put something of your own on
- * the same objects.
+ * It is the entrypoint of everything built on objects: provide it once, to
+ * the Layer the module exports as its default. `DomainCluster.layerObjects()`
+ * puts a Domain model on it, and `AI.layerObjects` a process's sessions.
  *
- * **Example:** Objects on a Docker Swarm pool
+ * **Example:** A model and a process's sessions on one entity
  * ```typescript
- * const Database = ClusterDocker.Database("Cluster");
+ * import * as AI from "@alchemy.run/ai";
+ * import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+ * import * as Cluster from "@alchemy.run/effect-cluster";
+ * import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
+ * import * as Layer from "effect/Layer";
+ * import { Agents } from "./Agents.ts";
+ * import { Board, IssueWorkLive } from "./Board.model.ts";
+ * import { TriageLive } from "./Triage.process.ts";
+ *
+ * export const Database = ClusterDocker.Database("Cluster");
  * const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
  *
- * const Objects = layerObjectHost("App", {
- *   main: import.meta.url,
- *   handler: "Live",
- *   pool: Default,
- * });
+ * const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainCluster.layerObjects()));
+ *
+ * const TriageSessions = AI.layerObjects(
+ *   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+ * );
+ *
+ * export default BoardLive.pipe(
+ *   Layer.provideMerge(TriageSessions),
+ *   Layer.provide(Cluster.layerObjectHost("App", { main: import.meta.url, pool: Default })),
+ * );
  * ```
  *
  * @layer
@@ -484,7 +490,6 @@ export const layerObjectHost = <PoolReq>(
   // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the entity is declared dynamically; its requirements are the pool's and the providers'
   Layer.effectContext(
     Effect.gen(function* () {
-      const attachmentHeader = options.attachmentHeader ?? "x-object-attachment";
       // In this pool's shard group, as the runner registers its entities.
       const shardGroup = () =>
         (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env
@@ -497,7 +502,7 @@ export const layerObjectHost = <PoolReq>(
         storagePool,
       );
       const provide = (host: ObjectHost["Service"], runner: ClusterObjects["Service"]["runner"]) =>
-        Context.make(ObjectHost, host).pipe(
+        Context.make(ObjectHost, { ...host, name }).pipe(
           Context.add(ClusterObjects, { name, shardGroup, runner }),
         );
 
@@ -624,7 +629,7 @@ export const layerObjectHost = <PoolReq>(
                 }
                 const request = ServerRequest.fromWeb(
                   new Request("http://object/", {
-                    headers: { upgrade: "websocket", [attachmentHeader]: payload.attachment },
+                    headers: { upgrade: "websocket", [ATTACHMENT_HEADER]: payload.attachment },
                   }),
                 );
                 const response = yield* gate.call(
@@ -660,7 +665,7 @@ export const layerObjectHost = <PoolReq>(
               if (fetch === undefined) return 501;
               const request = ServerRequest.fromWeb(
                 new Request("http://object/", {
-                  headers: { upgrade: "websocket", [attachmentHeader]: payload.attachment },
+                  headers: { upgrade: "websocket", [ATTACHMENT_HEADER]: payload.attachment },
                 }),
               );
               const response = yield* gate.call(
@@ -688,7 +693,7 @@ export const layerObjectHost = <PoolReq>(
         objects,
         {
           main: options.main,
-          handler: options.handler ?? "default",
+          handler: "default",
           // The objects call each other, and a call can come back to
           // the instance that made it; each instance's input gate keeps its
           // storage consistent.

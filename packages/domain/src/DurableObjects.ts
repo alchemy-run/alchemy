@@ -13,6 +13,7 @@ import { makeCallback } from "alchemy/Callback";
 import type { HttpEffect } from "alchemy/Http";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import {
+  ATTACHMENT_HEADER,
   bindState,
   callOnce,
   type ObjectImpl,
@@ -643,7 +644,7 @@ const decodeAttachment = Schema.decodeUnknownOption(Schema.fromJsonString(Attach
  * the {@link Attachment} as JSON. The host sets it, overwriting any a client
  * sent, so the object can trust it.
  */
-export const SUBSCRIPTION_HEADER = "x-domain-subscription";
+export const SUBSCRIPTION_HEADER = ATTACHMENT_HEADER;
 
 /** Send a push to its socket; close it when the read ended or could not be judged. */
 const deliverPush = <R>(socket: ObjectSocket, key: string, push: Effect.Effect<Push, never, R>) =>

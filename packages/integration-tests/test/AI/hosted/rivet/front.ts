@@ -8,7 +8,7 @@ import * as Rivet from "@alchemy.run/rivet";
 import * as Effect from "effect/Effect";
 import { app } from "../desk.ts";
 import { HostedControlPlane } from "./cluster.ts";
-import { HostedRivetLive } from "./live.ts";
+import HostedRivetLive from "./live.ts";
 
 export default class HostedRivetFront extends Docker.Service<HostedRivetFront>()(
   "RivetHostedFront",

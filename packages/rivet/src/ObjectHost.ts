@@ -139,15 +139,10 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, ObjectImpl>) 
 /** Options for {@link layerObjectHost}. */
 export interface ObjectHostOptions<PoolReq> {
   /**
-   * The module that exports the Layer built on this host, usually
-   * `import.meta.url`. The pool's nodes load it to run the objects.
+   * The module whose default export is the Layer built on this host,
+   * usually `import.meta.url`. The pool's nodes load it to run the objects.
    */
   readonly main: string;
-  /**
-   * The export of {@link main} that holds that Layer.
-   * @default "default"
-   */
-  readonly handler?: string;
   /** The pool whose nodes run the objects, e.g. `RivetDocker.SwarmPool("Default")`. */
   readonly pool: Layer.Layer<PoolHost, never, PoolReq>;
 }
@@ -162,19 +157,34 @@ export interface ObjectHostOptions<PoolReq> {
  * nodes load the Layer built on this one from `main`, and there the same
  * Layer holds the class.
  *
- * `@alchemy.run/domain/Rivet` and `@alchemy.run/ai/Rivet` are built on it.
- * Provide it yourself only to put something of your own on the same objects.
+ * It is the entrypoint of everything built on objects: provide it once, to
+ * the Layer the module exports as its default. `DomainRivet.layerObjects()`
+ * puts a Domain model on it, and `AI.layerObjects` a process's sessions.
  *
  * **Example:** A model and a process's sessions on one class
  * ```typescript
+ * import * as AI from "@alchemy.run/ai";
+ * import * as DomainRivet from "@alchemy.run/domain/Rivet";
+ * import * as Rivet from "@alchemy.run/rivet";
+ * import * as RivetDocker from "@alchemy.run/rivet/Docker";
+ * import * as Layer from "effect/Layer";
+ * import { Agents } from "./Agents.ts";
+ * import { Board, IssueWorkLive } from "./Board.model.ts";
+ * import { TriageLive } from "./Triage.process.ts";
+ *
  * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
  * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
  *
- * const Objects = Rivet.layerObjectHost("App", {
- *   main: import.meta.url,
- *   handler: "Live",
- *   pool: Default,
- * });
+ * const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainRivet.layerObjects()));
+ *
+ * const TriageSessions = AI.layerObjects(
+ *   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+ * );
+ *
+ * export default BoardLive.pipe(
+ *   Layer.provideMerge(TriageSessions),
+ *   Layer.provide(Rivet.layerObjectHost("App", { main: import.meta.url, pool: Default })),
+ * );
  * ```
  *
  * @layer
@@ -192,7 +202,7 @@ export const layerObjectHost = <PoolReq>(
       const classes = new Map<string, ObjectImpl>();
       const Objects = (DurableObject as any)()(
         name,
-        { main: options.main, handler: options.handler ?? "default" },
+        { main: options.main, handler: "default" },
         hostClassPhase(name, classes).pipe(Effect.provide(options.pool)),
       );
       const remote = (namespace: DurableObjectNamespace<any>, cls: string): Namespace => ({
@@ -219,6 +229,7 @@ export const layerObjectHost = <PoolReq>(
           }).pipe(Effect.orDie),
         );
         return ObjectHost.of({
+          name,
           declare: (cls, impl) =>
             Effect.sync(() => {
               classes.set(cls, impl);
@@ -230,6 +241,7 @@ export const layerObjectHost = <PoolReq>(
       // A caller: deploy the class, and reach it through the gateway.
       const namespace = (yield* Objects) as DurableObjectNamespace<any>;
       return ObjectHost.of({
+        name,
         declare: (cls) => Effect.succeed(remote(namespace, cls)),
         lookup: (cls) => remote(namespace, cls),
       });

@@ -139,8 +139,20 @@ export class ObjectHost extends Context.Service<
      * declares what it calls.
      */
     readonly lookup?: (name: string) => Namespace | undefined;
+    /**
+     * What the host is called, where every class it holds shares one
+     * deployable of that name (a Rivet class, a cluster entity).
+     */
+    readonly name?: string;
   }
 >()("alchemy/Workers/ObjectHost") {}
+
+/**
+ * The header an object's `fetch` reads a live read's attachment from. A host
+ * that builds the upgrade request itself sets it. The value is Domain's,
+ * from before the contract moved here.
+ */
+export const ATTACHMENT_HEADER = "x-domain-subscription";
 
 /** The key a defect travels under, as data. */
 export const DefectTag = "alchemy/Workers/Defect";

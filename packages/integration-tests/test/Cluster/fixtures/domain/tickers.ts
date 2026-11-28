@@ -5,6 +5,7 @@
  */
 import * as Domain from "@alchemy.run/domain";
 import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -31,13 +32,10 @@ export class Ticker extends Domain.Aggregate("Ticker", {
 
 export class Tickers extends Domain.Model("Tickers", { aggregates: [Ticker] }) {}
 
-export const TickersClusterLive = Tickers.layer(Layer.empty).pipe(
+export default Tickers.layer(Layer.empty).pipe(
+  Layer.provide(DomainCluster.layerObjects()),
   Layer.provide(
-    DomainCluster.layerEntities("DomainTickers", {
-      main: import.meta.url,
-      handler: "TickersClusterLive",
-      pool: DomainPool,
-    }),
+    Cluster.layerObjectHost("DomainTickers", { main: import.meta.url, pool: DomainPool }),
   ),
 );
 

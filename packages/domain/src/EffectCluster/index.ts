@@ -1,13 +1,10 @@
 import {
   ClusterObjects,
   CONNECT_METHOD,
-  layerObjectHost,
   LIVE_METHOD,
   type LiveFrame,
   ObjectClassNotHosted,
 } from "@alchemy.run/effect-cluster/ObjectHost";
-import type { PoolLayer } from "@alchemy.run/effect-cluster/Pool";
-import type { Providers } from "@alchemy.run/effect-cluster/Providers";
 /**
  * Host a domain model (`@alchemy.run/domain`) on Effect Cluster entities.
  *
@@ -48,7 +45,6 @@ import {
   type Namespace,
   type ObjectImpl,
   runtimeClaim,
-  SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
 import type { Platform, Subscription } from "../Platform.ts";
 import { type Retention, sweep } from "./internal.ts";
@@ -318,21 +314,8 @@ const workflowName = Effect.map(EffectEntity.CurrentAddress, (address) =>
   address.entityId.slice(WORKFLOWS.length + 1),
 );
 
-/** Options for {@link layerEntities}. */
-export interface EntitiesOptions<PoolReq> {
-  /**
-   * The module that exports the model's Layer (the one this platform is
-   * provided to), usually `import.meta.url`. The pool's runners load it to
-   * run the model.
-   */
-  readonly main: string;
-  /**
-   * The export of {@link main} that holds the model's Layer.
-   * @default "default"
-   */
-  readonly handler?: string;
-  /** The pool whose runners run the model, e.g. `ClusterDocker.SwarmPool("Default")`. */
-  readonly pool: PoolLayer<PoolReq>;
+/** Options for {@link layerObjects}. */
+export interface ObjectsOptions {
   /**
    * How long the host keeps rows that only dedupe needs: command receipts,
    * policy delivery marks, cancelled scheduled commands, and Effect
@@ -348,16 +331,24 @@ export interface EntitiesOptions<PoolReq> {
 }
 
 /**
+ * The workflows a host's runner serves, across every model on the host:
+ * one `~workflows` class answers for all of them.
+ */
+const hostWorkflows = new WeakMap<object, Map<string, Workflow.Any>>();
+
+/**
  * Host a domain model on Effect Cluster entities. Provide it to the model's
- * Layer, as `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()` would be, in
- * every runtime that serves the model: a container, a Lambda, a Worker.
+ * Layer, as `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()`
+ * would be, and provide `Cluster.layerObjectHost` to the Layer the module
+ * exports as its default: that is the entity the model's objects are entity
+ * ids of, and the pool that runs it.
  *
  * The model's aggregate instances, view keys, policies and projection keys
- * are entity ids of one entity, `name`, each named after what it holds
- * (`Bank.AccountAggregate/a-1`). Built in a caller, the Layer deploys that
- * entity to `pool` and reaches it through the pool's gateway. The pool's
- * runners load the model's Layer from `main`, and there the same Layer
- * hosts the entity.
+ * are entity ids of that one entity, each named after what it holds
+ * (`Bank.AccountAggregate/a-1`). Built in a caller (a container, a Lambda, a
+ * Worker), the host deploys the entity and reaches it through the pool's
+ * gateway. The pool's runners load the module's default export, and there
+ * the same Layer hosts the entity.
  *
  * Commands to one aggregate instance run one at a time, through each
  * instance's input gate. Every instance's events, state and outbox live in
@@ -373,30 +364,33 @@ export interface EntitiesOptions<PoolReq> {
  * responses that poll the owning instance.
  *
  * ### Hosting a model on Effect Cluster
- * **Example:** The model's Layer, served from a container
+ * **Example:** The model's Layer, the module's default export
  * ```typescript
- * import * as Docker from "@alchemy.run/docker";
- * import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
+ * // src/BankLive.ts
  * import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
- * import * as Effect from "effect/Effect";
+ * import * as Cluster from "@alchemy.run/effect-cluster";
+ * import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankHandlers } from "./Bank.model.ts";
- * import { CustomerApi } from "./CustomerApi.api.ts";
  *
- * const Database = ClusterDocker.Database("Cluster");
+ * export const Database = ClusterDocker.Database("Cluster");
  * const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
  *   Layer.provide(Database),
  * );
  *
- * export const BankLive = Bank.layer(BankHandlers).pipe(
- *   Layer.provide(
- *     DomainCluster.layerEntities("Bank", {
- *       main: import.meta.url,
- *       handler: "BankLive",
- *       pool: Default,
- *     }),
- *   ),
+ * export default Bank.layer(BankHandlers).pipe(
+ *   Layer.provide(DomainCluster.layerObjects()),
+ *   Layer.provide(Cluster.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
  * );
+ * ```
+ *
+ * **Example:** Serving it from a container
+ * ```typescript
+ * // src/Api.ts
+ * import * as Docker from "@alchemy.run/docker";
+ * import * as Effect from "effect/Effect";
+ * import BankLive from "./BankLive.ts";
+ * import { CustomerApi } from "./CustomerApi.api.ts";
  *
  * export default class BankApi extends Docker.Service<BankApi>()(
  *   "BankApi",
@@ -412,19 +406,18 @@ export interface EntitiesOptions<PoolReq> {
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const layerEntities = <PoolReq>(
-  /** The entity that hosts the model: its type in the cluster. */
-  name: string,
-  options: EntitiesOptions<PoolReq>,
+export const layerObjects = (
+  options: ObjectsOptions = {},
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
   never,
-  PoolReq | Providers
+  ObjectHost | ClusterObjects
 > =>
   Layer.unwrap(
     Effect.gen(function* () {
       const objects = yield* ObjectHost;
       const cluster = yield* ClusterObjects;
+      const name = cluster.name;
       const lookup = (cls: string): Namespace => objects.lookup!(cls)!;
       // The sagas' runs too: a run is routed by its workflow's shard group.
       const placed = <W extends Workflow.Any>(workflow: W): W =>
@@ -443,10 +436,14 @@ export const layerEntities = <PoolReq>(
       };
       const runner = cluster.runner;
       if (runner !== undefined) {
-        const workflows = new Map<string, Workflow.Any>();
+        // Models on one host share its `~workflows` class.
+        let workflows = hostWorkflows.get(cluster);
+        const first = workflows === undefined;
+        if (workflows === undefined) hostWorkflows.set(cluster, (workflows = new Map()));
+        const served = workflows;
         // A call made before the runner has joined the cluster waits for it.
         const started = Effect.map(runner.joined, ({ engine }) => engine);
-        yield* objects.declare(WORKFLOWS, workflowsObject(workflows, started));
+        if (first) yield* objects.declare(WORKFLOWS, workflowsObject(served, started));
         // The runner's scope: the runs it begins live as long as it does.
         const scope = yield* Effect.scope;
         const registrations = yield* Ref.make<
@@ -494,7 +491,7 @@ export const layerEntities = <PoolReq>(
             execute: (payload: any, id: string) => Effect.Effect<any, any, any>,
           ) =>
             Effect.andThen(
-              Effect.sync(() => workflows.set(workflow._tag, placed(workflow))),
+              Effect.sync(() => served.set(workflow._tag, placed(workflow))),
               Ref.update(registrations, (all) => [...all, [placed(workflow), execute] as const]),
             )) as never,
           execute: ((workflow: any, opts: any) =>
@@ -550,10 +547,4 @@ export const layerEntities = <PoolReq>(
         Layer.succeed(WorkflowEngine.WorkflowEngine, remoteEngine(lookup(WORKFLOWS))),
       ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
     }),
-  ).pipe(
-    Layer.provide(layerObjectHost(name, { ...options, attachmentHeader: SUBSCRIPTION_HEADER })),
-  ) as Layer.Layer<
-    Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
-    never,
-    PoolReq | Providers
-  >;
+  );

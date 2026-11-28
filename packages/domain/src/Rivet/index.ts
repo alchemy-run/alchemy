@@ -3,8 +3,6 @@ import {
   DurableObjectState,
   type DurableObjectStorage,
 } from "@alchemy.run/rivet/DurableObjectState";
-import { layerObjectHost, type ObjectHostOptions } from "@alchemy.run/rivet/ObjectHost";
-import type { Providers } from "@alchemy.run/rivet/Providers";
 import type { HttpEffect } from "alchemy/Http";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
 import { ObjectHost } from "alchemy/Workers/ObjectHost";
@@ -100,8 +98,8 @@ const connectTo = (namespace: Namespace, key: string, subscription: Subscription
     return yield* stub.fetch(forwarded).pipe(Effect.orDie);
   }) as HttpEffect;
 
-/** Options for {@link layerDurableObjects}. */
-export interface DurableObjectsOptions<PoolReq> extends ObjectHostOptions<PoolReq> {
+/** Options for {@link layerObjects}. */
+export interface ObjectsOptions {
   /**
    * How long each actor keeps the rows that only dedupe needs: command and
    * decision receipts, policy delivery marks, and cancelled scheduled
@@ -116,15 +114,17 @@ export interface DurableObjectsOptions<PoolReq> extends ObjectHostOptions<PoolRe
 
 /**
  * Host a domain model on Rivet Durable Objects. Provide it to the model's
- * Layer, as `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()` would be, in
- * every runtime that serves the model: a Worker, a Lambda, a container.
+ * Layer, as `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()`
+ * would be, and provide `Rivet.layerObjectHost` to the Layer the module
+ * exports as its default: that is the Durable Object class the model's
+ * objects are instances of, and the pool that runs it.
  *
  * The model's aggregate instances, view keys, policies and saga runs are
- * instances of one Durable Object class, `name`, each named after what it
- * holds (`Bank.AccountAggregate/a-1`). Built in a caller, the Layer deploys
- * that class to `pool` and reaches it through the control plane's gateway.
- * The pool's nodes load the model's Layer from `main`, and there the same
- * Layer hosts the class.
+ * instances of that one class, each named after what it holds
+ * (`Bank.AccountAggregate/a-1`). Built in a caller (a Worker, a Lambda, a
+ * container), the host deploys the class and reaches it through the control
+ * plane's gateway. The pool's nodes load the module's default export, and
+ * there the same Layer holds the class.
  *
  * Commands to one aggregate instance run one at a time. Events, state and
  * the outbox commit together in the instance's SQLite, and deliveries to
@@ -136,28 +136,31 @@ export interface DurableObjectsOptions<PoolReq> extends ObjectHostOptions<PoolRe
  * responses that poll the owning instance.
  *
  * ### Hosting a model on Rivet
- * **Example:** The model's Layer, served from a Worker
+ * **Example:** The model's Layer, the module's default export
  * ```typescript
- * import * as Cloudflare from "@alchemy.run/cloudflare";
- * import * as RivetDocker from "@alchemy.run/rivet/Docker";
+ * // src/BankLive.ts
  * import * as DomainRivet from "@alchemy.run/domain/Rivet";
- * import * as Effect from "effect/Effect";
+ * import * as Rivet from "@alchemy.run/rivet";
+ * import * as RivetDocker from "@alchemy.run/rivet/Docker";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankHandlers } from "./Bank.model.ts";
- * import { CustomerApi } from "./CustomerApi.api.ts";
  *
  * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
  * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
  *
- * export const BankLive = Bank.layer(BankHandlers).pipe(
- *   Layer.provide(
- *     DomainRivet.layerDurableObjects("Bank", {
- *       main: import.meta.url,
- *       handler: "BankLive",
- *       pool: Default,
- *     }),
- *   ),
+ * export default Bank.layer(BankHandlers).pipe(
+ *   Layer.provide(DomainRivet.layerObjects()),
+ *   Layer.provide(Rivet.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
  * );
+ * ```
+ *
+ * **Example:** Serving it from a Worker
+ * ```typescript
+ * // src/Worker.ts
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import BankLive from "./BankLive.ts";
+ * import { CustomerApi } from "./CustomerApi.api.ts";
  *
  * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
  *   "BankWorker",
@@ -176,23 +179,11 @@ export interface DurableObjectsOptions<PoolReq> extends ObjectHostOptions<PoolRe
  *
  * **Example:** Receipts for a year, delivery marks forever
  * ```typescript
- * import * as RivetDocker from "@alchemy.run/rivet/Docker";
- * import * as DomainRivet from "@alchemy.run/domain/Rivet";
- * import * as Layer from "effect/Layer";
- * import { Bank, BankHandlers } from "./Bank.model.ts";
- *
- * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
- * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
- *
- * export const BankLive = Bank.layer(BankHandlers).pipe(
+ * export default Bank.layer(BankHandlers).pipe(
  *   Layer.provide(
- *     DomainRivet.layerDurableObjects("Bank", {
- *       main: import.meta.url,
- *       handler: "BankLive",
- *       pool: Default,
- *       retention: { receipts: "365 days", deliveries: "forever" },
- *     }),
+ *     DomainRivet.layerObjects({ retention: { receipts: "365 days", deliveries: "forever" } }),
  *   ),
+ *   Layer.provide(Rivet.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
  * );
  * ```
  *
@@ -200,16 +191,14 @@ export interface DurableObjectsOptions<PoolReq> extends ObjectHostOptions<PoolRe
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const layerDurableObjects = <PoolReq>(
-  /** The Rivet Durable Object class that hosts the model: its actors' name. */
-  name: string,
-  options: DurableObjectsOptions<PoolReq>,
+export const layerObjects = (
+  options: ObjectsOptions = {},
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
   never,
-  PoolReq | Providers
+  ObjectHost
 > =>
-  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- built on the object host, which is provided below
+  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- built on the object host alone
   Layer.unwrap(
     Effect.gen(function* () {
       const objects = yield* ObjectHost;
@@ -218,7 +207,8 @@ export const layerDurableObjects = <PoolReq>(
         declare: ({ modelName }, cls, impl) => objects.declare(className(modelName, cls), impl),
         lookup: ({ modelName }, cls) => objects.lookup?.(className(modelName, cls)),
         connect: connectTo,
-        claimKey: runtimeClaim(name),
+        // The host's class: models on one host share its claim.
+        claimKey: runtimeClaim(objects.name ?? "Rivet"),
       };
       // Sagas run on the workflow engine over the same class: each execution
       // is the instance `<Workflow>/<executionId>`, its journal in that
@@ -240,8 +230,8 @@ export const layerDurableObjects = <PoolReq>(
         Layer.provideMerge(SecureRandom.layerWebCrypto),
       );
     }),
-  ).pipe(Layer.provide(layerObjectHost(name, options))) as Layer.Layer<
+  ) as Layer.Layer<
     Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
     never,
-    PoolReq | Providers
+    ObjectHost
   >;
