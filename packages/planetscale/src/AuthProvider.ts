@@ -13,6 +13,7 @@ import { browserOAuth } from "alchemy/Auth/BrowserOAuth";
 import { displayRedacted } from "alchemy/Auth/Credentials";
 import { getEnvRedactedRequired, getEnvRequired, mapPromptCancellation } from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
+import { refreshAndSave } from "alchemy/Auth/Refresh";
 import {
   storedSecret,
   storedValueText,
@@ -356,32 +357,31 @@ export const PlanetscaleAuth = AuthProviderLayer<
               const fresh =
                 creds.expires > now + 10_000
                   ? creds
-                  : yield* OAuthClient.refresh(creds).pipe(
-                      // Only the refresh round-trip maps to NeedsReauth — a
-                      // failed persist afterwards is a local I/O AuthError and
-                      // passes through untouched.
-                      Effect.mapError((e) =>
-                        NeedsReauth.make({
-                          provider: PLANETSCALE_AUTH_PROVIDER_NAME,
-                          profile: profileName,
-                          message: `Planetscale OAuth refresh failed. ${reauth}`,
-                          cause: e,
-                        }),
+                  : yield* refreshAndSave(
+                      OAuthClient.refresh(creds).pipe(
+                        // Only the refresh round-trip maps to NeedsReauth — a
+                        // failed persist afterwards is a local I/O AuthError
+                        // and passes through untouched.
+                        Effect.mapError((e) =>
+                          NeedsReauth.make({
+                            provider: PLANETSCALE_AUTH_PROVIDER_NAME,
+                            profile: profileName,
+                            message: `Planetscale OAuth refresh failed. ${reauth}`,
+                            cause: e,
+                          }),
+                        ),
                       ),
+                      (fresh) =>
+                        updateConfig?.({
+                          method: "oauth",
+                          organization: cfg.organization,
+                          clientId: fresh.clientId,
+                          access: Redacted.value(fresh.access),
+                          refresh: Redacted.value(fresh.refresh),
+                          expires: fresh.expires,
+                          scopes: fresh.scopes,
+                        }) ?? Effect.void,
                     );
-              if (fresh !== creds) {
-                yield* (
-                  updateConfig?.({
-                    method: "oauth",
-                    organization: cfg.organization,
-                    clientId: fresh.clientId,
-                    access: Redacted.value(fresh.access),
-                    refresh: Redacted.value(fresh.refresh),
-                    expires: fresh.expires,
-                    scopes: fresh.scopes,
-                  }) ?? Effect.void
-                );
-              }
               return {
                 type: "oauth" as const,
                 accessToken: fresh.access,
@@ -442,26 +442,27 @@ export const PlanetscaleAuth = AuthProviderLayer<
                   return { type: "browser" as const };
                 }
                 return yield* Interaction.info("Planetscale: refreshing OAuth credentials...").pipe(
-                  Effect.andThen(OAuthClient.refresh(currentCredentials)),
-                  Effect.flatMap((credentials) => {
-                    const config = {
-                      ...current,
-                      clientId: credentials.clientId,
-                      access: Redacted.value(credentials.access),
-                      refresh: Redacted.value(credentials.refresh),
-                      expires: credentials.expires,
-                      scopes: credentials.scopes,
-                    };
-                    // Saved here, under the lock, when the caller can take it;
-                    // otherwise handed back for the caller to save.
-                    const unsaved: Effect.Effect<typeof config | undefined, AuthError> =
-                      updateConfig === undefined
-                        ? Effect.succeed(config)
-                        : Effect.as(updateConfig(config), undefined);
-                    return unsaved.pipe(
-                      Effect.map((config) => ({ type: "refreshed" as const, config })),
-                    );
-                  }),
+                  Effect.andThen(
+                    refreshAndSave(
+                      OAuthClient.refresh(currentCredentials).pipe(
+                        Effect.map((credentials) => ({
+                          ...current,
+                          clientId: credentials.clientId,
+                          access: Redacted.value(credentials.access),
+                          refresh: Redacted.value(credentials.refresh),
+                          expires: credentials.expires,
+                          scopes: credentials.scopes,
+                        })),
+                      ),
+                      (config) => updateConfig?.(config) ?? Effect.void,
+                    ),
+                  ),
+                  // Saved above, under the lock, when the caller can take it;
+                  // otherwise handed back for the caller to save.
+                  Effect.map((config) => ({
+                    type: "refreshed" as const,
+                    config: updateConfig === undefined ? config : undefined,
+                  })),
                   Effect.tap(() =>
                     Interaction.success("Planetscale: OAuth credentials refreshed."),
                   ),

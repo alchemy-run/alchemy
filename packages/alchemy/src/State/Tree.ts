@@ -210,14 +210,17 @@ export const readState = Effect.fn("readState")(function* ({ path, recursive = f
       "path is a directory; set recursive to read its descendants",
     );
   }
-  return yield* Effect.forEach(target.files, (file) =>
-    (file.kind === "output" ? state.getOutput(file) : state.get(file)).pipe(
-      Effect.map((value): StateEntry => ({
-        path: file.path,
-        kind: file.kind,
-        value: encodeState(value) ?? null,
-      })),
-    ),
+  return yield* Effect.forEach(
+    target.files,
+    (file) =>
+      (file.kind === "output" ? state.getOutput(file) : state.get(file)).pipe(
+        Effect.map((value): StateEntry => ({
+          path: file.path,
+          kind: file.kind,
+          value: encodeState(value) ?? null,
+        })),
+      ),
+    { concurrency: 32 },
   );
 });
 

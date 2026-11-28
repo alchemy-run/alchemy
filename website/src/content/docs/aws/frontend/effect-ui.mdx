@@ -1,0 +1,323 @@
+---
+title: Effect UI
+description: Deploy Effect UI SPA, SSR, SSG, and hybrid applications to AWS with native local development.
+sidebar:
+  order: 4
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`AWS.Website.EffectUI` deploys an [Effect UI](https://ui.effect.website) app
+to AWS. It supports browser-only SPAs, server-side rendering (SSR), static
+site generation (SSG), and hybrid rendering. `HtmlServerVite.plugin` in your
+Vite config renders the pages and emits the handler; Alchemy packages them
+for deployment.
+
+## Install
+
+The build integration is not bundled with alchemy. Install
+`@alchemy.run/frontend-frameworks`; the resource loads its `/effect-ui`
+and ``/effect-ui/aws`` exports from your project at deploy time. It is only
+used at build time, so a dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+Effect UI is in public preview and isn't on npm yet. Install a snapshot
+build of `@effect/ui` as its
+[README](https://github.com/Effect-TS/ui#snapshots) describes.
+
+## Configure Vite
+
+A browser-only app needs no plugin. Its Vite config stays what the
+[Effect UI quick start](https://github.com/Effect-TS/ui#start-a-new-app)
+gives you, and the build deploys as static files.
+
+## Render pages on the server
+
+Add `HtmlServerVite.plugin` and point it at a server entry. With
+`serverOutDir`, the build also emits a request handler, which answers
+every request that matches no file:
+
+```typescript
+// vite.config.ts
+import { plugin as htmlServer } from "@effect/ui/html/HtmlServerVite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  build: { outDir: "dist/client" },
+  plugins: [
+    htmlServer({
+      entry: "/src/entry.server.ts",
+      serverOutDir: "dist/server",
+    }),
+  ],
+});
+```
+
+The server output must not overlap the client's, so the client builds
+to `dist/client`.
+
+The server entry's default export is a Layer that adds the app's routes
+to `HttpRouter`. `prerender` lists the pages the build renders ahead of
+time. They are served as files, and the server renders everything else:
+
+```typescript
+// src/entry.server.ts
+/// <reference types="@effect/ui/html/HtmlServerViteDocument" />
+import { layerHttp } from "@effect/ui/html/HtmlServerHttp";
+import { document } from "virtual:@effect/ui/document";
+import { App } from "./App.ts";
+import { AppRoute } from "./routes.ts";
+
+export default layerHttp(App, { routes: AppRoute, document });
+
+export const prerender = ["/about", "/404"];
+```
+
+`index.html` marks where the page goes with `<!--app-html-->`. The
+browser entry hydrates the server's HTML instead of mounting a new app:
+
+```typescript
+// src/entry.client.ts
+import { Router } from "@effect/ui";
+import { BrowserRouter, HtmlHydrate } from "@effect/ui/html";
+import { Effect, Layer } from "effect";
+import { App } from "./App.ts";
+import { AppRoute } from "./routes.ts";
+
+const Main = HtmlHydrate.hydrate(
+  App,
+  Router.props(AppRoute),
+  document.getElementById("app")!,
+  JSON.parse(document.getElementById("state")!.textContent!),
+).pipe(Layer.provide(BrowserRouter.layer({ routes: AppRoute })));
+
+Layer.launch(Main).pipe(Effect.runFork);
+```
+
+## Prerender without a server
+
+Leave `serverOutDir` out and the build keeps only the prerendered pages.
+The site deploys as static files, and a prerendered `/404` is the page
+for paths that match nothing:
+
+```typescript
+// vite.config.ts
+import { plugin as htmlServer } from "@effect/ui/html/HtmlServerVite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [htmlServer({ entry: "/src/entry.server.ts" })],
+});
+```
+
+## Choose the deployment
+
+AWS chooses its deployment resources before building. Keep the default for a
+browser-only SPA; select `output: "server"` when the build emits a handler:
+
+```typescript
+// alchemy.run.ts
+export const Website = AWS.Website.EffectUI("Website", {
+  output: "server",
+});
+```
+
+CloudFront serves assets and prerendered pages from S3. Requests that match no
+file, and methods other than GET or HEAD, reach the server: a Lambda Web
+Function by default, or a Lambda Function with `server: "function"`.
+
+For prerendered pages without a server, deploy the client output alone:
+
+```typescript
+// alchemy.run.ts
+export const Website = AWS.Website.EffectUI("Website", {
+  output: "static",
+  errorPage: "404.html",
+});
+```
+
+Prerender `/404` so the build writes `404.html`. A server build with no
+`output` choice fails rather than discarding its handler. `spa` and
+`errorPage` apply only to assets-only deployments.
+
+## Declare the Website
+
+Declare the site as a module-level const (rather than inline in the
+Stack):
+
+```typescript
+// alchemy.run.ts
+import * as AWS from "@alchemy.run/aws";
+
+export const Website = AWS.Website.EffectUI("Website");
+```
+
+For an app in a subdirectory of a monorepo, point `rootDir` at it:
+
+```typescript
+export const Website = AWS.Website.EffectUI("Website", {
+  rootDir: "applications/web",
+});
+```
+
+## Add it to the Stack
+
+Yield the site from your Stack and return its URL:
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyEffectUISite",
+  {
+    providers: AWS.providers(),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const site = yield* Website;
+    return { url: site.url };
+  }),
+);
+```
+
+One declaration expands into the whole stack — an S3 bucket, the asset
+upload, a CloudFront KeyValueStore holding the file manifest, a
+viewer-request CloudFront Function, and the distribution itself.
+
+<PackageManagers run="alchemy deploy" />
+
+## Deep links
+
+A browser-only app routes on the client, so a deep link like
+`/counter/42` arrives at the edge as a request for a file that does not
+exist.
+
+`EffectUI` sets `spa` by default, which answers those misses with
+`index.html` and a `200`; the app's router resolves the route once it
+boots.
+
+An app that ships a real 404 page opts out with `errorPage`. The two are
+mutually exclusive:
+
+```typescript
+export const Website = AWS.Website.EffectUI("Website", {
+  spa: false,
+  errorPage: "404.html",
+});
+```
+
+## Add environment variables
+
+Set server environment variables through `env` when deploying a server build:
+
+```typescript
+// alchemy.run.ts
+export const Website = AWS.Website.EffectUI("Website", {
+  output: "server",
+  env: { API_BASE: "https://api.example.com" },
+});
+```
+
+Server code reads these values from `process.env`. Alchemy applies them to the
+native dev server under `alchemy dev` and to the server on deploy.
+
+An Output from another resource can be passed inside the Stack generator:
+
+```typescript
+Effect.gen(function* () {
+  const api = yield* Api;
+  const site = yield* AWS.Website.EffectUI("Website", {
+    output: "server",
+    env: { API_BASE: api.url },
+  });
+  return { url: site.url };
+});
+```
+
+## Read the environment in client code
+
+Vite inlines `VITE_*` values as `import.meta.env.VITE_*` during the build.
+Set browser configuration in the app's `.env` file or the deployment environment:
+
+```sh
+# .env
+VITE_API_URL=https://api.example.com
+```
+
+```typescript
+const apiUrl = import.meta.env.VITE_API_URL;
+```
+
+Values forwarded through `env` are also available to the build. A `VITE_*` key
+becomes public browser configuration; keep credentials in unprefixed server
+variables. The server-rendered state also reaches the browser.
+
+## Build configuration
+
+Vite configuration, `HtmlServerVite.plugin` included, lives in your
+project's own `vite.config.*`. The `vite` bag is for deploy-time
+overrides merged *over* that file, for values decided by the
+deployment (config files can't consume alchemy `Output`s):
+
+```typescript
+export const Website = AWS.Website.EffectUI("Docs", {
+  vite: {
+    outDir: "build",
+  },
+});
+```
+
+`outDir` is relative to `rootDir`. For server builds, Alchemy places client and
+server outputs under `client/` and `server/` in this directory. Without an
+override, the app's resolved output directories are used. `config` selects an
+alternate Vite configuration file relative to `rootDir`.
+
+## Local dev
+
+`alchemy dev` runs the app's own Vite dev server, where `HtmlServerVite`
+renders every page. `site.url` is
+the local address and no AWS resources are created. Wrap the site in
+`Alchemy.remote()` to deploy the real infrastructure even during dev.
+
+Pin the dev server's address when several apps run in one Stack:
+
+```typescript
+export const Website = AWS.Website.EffectUI("Website", {
+  dev: { host: "127.0.0.1", port: 5180, strictPort: true },
+});
+```
+
+## Custom domain
+
+```typescript
+// alchemy.run.ts
+export const Website = AWS.Website.EffectUI("Website", {
+  domain: { name: "app.example.com" },
+});
+```
+
+The hosted zone is inferred from the hostname. Pass `hostedZoneId` to
+pin it when several zones could match.
+
+Serve several sites under one distribution by pointing `domain.router`
+at an existing
+[`AWS.Website.Router`](/aws/frontend/static-site#compose-sites-with-a-router).
+The site takes the Router's outputs, so both are yielded inside the
+Stack generator:
+
+```typescript
+Effect.gen(function* () {
+  const router = yield* AWS.Website.Router("Router", {});
+
+  const site = yield* AWS.Website.EffectUI("Website", {
+    domain: { router, name: "app.example.com" },
+  });
+
+  return { url: site.url };
+});
+```

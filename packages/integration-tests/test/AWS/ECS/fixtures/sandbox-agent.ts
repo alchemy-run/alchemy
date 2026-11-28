@@ -18,9 +18,6 @@ export default class SandboxAgent extends AWS.ECS.Task<
   "EcsSandboxAgent",
   {
     main: import.meta.filename,
-    // Docker Hub's `oven/bun` image; the public.ecr.aws default mirror
-    // rate-limits anonymous pulls (429) during local builds.
-    image: "oven/bun:1",
     port: 3000,
     cpu: 1024,
     memory: 2048,

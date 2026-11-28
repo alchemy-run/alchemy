@@ -101,7 +101,6 @@ import * as Endpoint from "./Endpoint.ts";
 import * as EntityResolution from "./EntityResolution/index.ts";
 import { providedOrDefault } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
-import * as FinSpace from "./FinSpace/index.ts";
 import * as Firehose from "./Firehose/index.ts";
 import * as FIS from "./FIS/index.ts";
 import * as FMS from "./FMS/index.ts";
@@ -587,10 +586,6 @@ export const providers = () =>
         FIS.ExperimentTemplate,
         FIS.TargetAccountConfiguration,
         FMS.AdminAccount,
-        FinSpace.Environment,
-        FinSpace.KxCluster,
-        FinSpace.KxDatabase,
-        FinSpace.KxEnvironment,
         Firehose.DeliveryStream,
         FSx.FileSystem,
         Forecast.Dataset,
@@ -714,6 +709,10 @@ export const providers = () =>
         Lambda.MicrovmImage,
         Lambda.NetworkConnector,
         Lambda.Permission,
+        Lambda.ResourcePolicy,
+        Lambda.Runtime,
+        Lambda.RuntimeAlias,
+        Lambda.RuntimeVersion,
         Lambda.WebFunction,
         Lambda.WebFunctionEndpoint,
         Lambda.WebFunctionPermission,
@@ -1433,6 +1432,14 @@ export const providers = () =>
           // Dual: glue onto the (dual) Lambda Function — a live addPermission
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
+          // Dual: floci stores a runtime's policy (and answers
+          // ResourceNotFoundException for other resources, like Permission).
+          flociDual(Lambda.ResourcePolicy, () => Lambda.ResourcePolicyProvider()),
+          // Dual: in dev the version's image is built and pushed to floci's
+          // ECR, and a dev Function on the alias runs in that image.
+          flociDual(Lambda.Runtime, () => Lambda.RuntimeProvider()),
+          flociDual(Lambda.RuntimeAlias, () => Lambda.RuntimeAliasProvider()),
+          flociDual(Lambda.RuntimeVersion, () => Lambda.RuntimeVersionProvider()),
           // Requires the alchemy floci fork ≥ 2.4.0-alchemy.1, which serves
           // the Web Function API (web functions, revisions, endpoints).
           flociDual(Lambda.WebFunction, () => Lambda.WebFunctionProvider()),
@@ -1851,10 +1858,6 @@ export const providers = () =>
           flociDual(SSMIncidents.ResponsePlan, () => SSMIncidents.ResponsePlanProvider()),
         ),
         Layer.mergeAll(
-          flociDual(FinSpace.Environment, () => FinSpace.EnvironmentProvider()),
-          flociDual(FinSpace.KxCluster, () => FinSpace.KxClusterProvider()),
-          flociDual(FinSpace.KxDatabase, () => FinSpace.KxDatabaseProvider()),
-          flociDual(FinSpace.KxEnvironment, () => FinSpace.KxEnvironmentProvider()),
           flociDual(ControlTower.EnabledBaseline, () => ControlTower.EnabledBaselineProvider()),
           flociDual(ControlTower.EnabledControl, () => ControlTower.EnabledControlProvider()),
           flociDual(ControlTower.LandingZone, () => ControlTower.LandingZoneProvider()),

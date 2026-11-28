@@ -3,17 +3,18 @@ import * as ClusterKubernetes from "@alchemy.run/effect-cluster/Kubernetes";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Layer from "effect/Layer";
 
-export const FRONT_PORT = 18620;
 export const FRONT_NODE_PORT = 30644;
 
+// Named from the stack and stage, with its registry and the front's node
+// port on free host ports: the suite runs beside itself in
+// other worktrees.
 export const Kind = Kubernetes.LocalCluster("ClusterKind", {
-  name: "alchemy-test-cluster",
-  registryPort: 5072,
+  registryPort: 0,
   kubeconfig: ".alchemy/test-cluster.kubeconfig",
   nodes: [
     {
       role: "control-plane",
-      extraPortMappings: [{ containerPort: FRONT_NODE_PORT, hostPort: FRONT_PORT }],
+      extraPortMappings: [{ containerPort: FRONT_NODE_PORT, hostPort: 0 }],
     },
   ],
 });

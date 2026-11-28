@@ -1,6 +1,6 @@
 ---
 title: Websites
-description: Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Fly with first-class Website resources.
+description: Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Effect UI, Vocs, or any static build to Fly with first-class Website resources.
 sidebar:
   label: Overview
   order: 1
@@ -44,6 +44,7 @@ container integration on top.
 - [`Octane`](/fly/frontend/octane) — OctaneJS SSR. Alchemy wraps
   native Node output; no hosting adapter is needed in `octane.config.ts`.
 - [`Foldkit`](/fly/frontend/foldkit) — Foldkit SPA, SSR, and prerendered apps;
+- [`EffectUI`](/fly/frontend/effect-ui) — Effect UI SPA, SSR, and prerendered apps;
   browser-only deep links fall back to `index.html`.
 - [`Vocs`](/fly/frontend/vocs) — prerendered Vocs docs; extensionless
   pages (`/about` → `about/index.html`).
@@ -79,6 +80,7 @@ unchanged project skips the build.
 | Waku | `Waku` | [Waku](/fly/frontend/waku) |
 | OctaneJS | `Octane` | [Octane](/fly/frontend/octane) |
 | Foldkit | `Foldkit` | [Foldkit](/fly/frontend/foldkit) |
+| Effect UI | `EffectUI` | [Effect UI](/fly/frontend/effect-ui) |
 | Vocs | `Vocs` | [Vocs](/fly/frontend/vocs) |
 | Zola, Hugo, or any static generator | `StaticSite` | [Static sites](/fly/frontend/static-site) |
 
@@ -90,7 +92,7 @@ for a Vite SPA next to a Fly Service API.
 
 Use the resource named after your framework. `Astro`, `Nextjs`,
 `Nuxt`, `ReactRouter`, `SolidStart`, `SvelteKit`,
-`TanStackStart`, `Waku`, `Octane`, `Foldkit`, and `Vocs` each
+`TanStackStart`, `Waku`, `Octane`, `Foldkit`, `EffectUI`, and `Vocs` each
 drive that framework's programmatic build and know its output
 layout, config surface, and dev server.
 
@@ -171,6 +173,7 @@ const site = yield* Fly.Website.Astro("Web", {
   [Waku](/fly/frontend/waku),
   [Octane](/fly/frontend/octane),
   [Foldkit](/fly/frontend/foldkit),
+  [Effect UI](/fly/frontend/effect-ui),
   [Vocs](/fly/frontend/vocs).
 - [Services](/fly/compute/services) — the Node process these
   resources deploy.

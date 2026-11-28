@@ -21,6 +21,7 @@ import { Stack } from "alchemy/Stack";
 import { tarGzipDirectory } from "alchemy/Util/tarGzip";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
@@ -705,7 +706,9 @@ const upsertVariable = (input: {
     skipDeploys: true,
   });
 
-const asVariableMap = (value: unknown): Record<string, string> => {
+const asVariableMap = (variables: unknown): Record<string, string> => {
+  // distilled marks the variables map sensitive, so it arrives as Redacted.
+  const value = Redacted.isRedacted(variables) ? Redacted.value(variables) : variables;
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }

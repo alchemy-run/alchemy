@@ -125,6 +125,36 @@
       "import": "./dist/astro/runtime/entrypoints/image-passthrough-endpoint.js"
     },
     "./astro/types.d.ts": "./src/astro/types.d.ts",
+    "./effect-ui": {
+      "types": "./dist/effect-ui/index.d.ts",
+      "bun": "./dist/effect-ui/index.js",
+      "worker": "./dist/effect-ui/index.js",
+      "import": "./dist/effect-ui/index.js"
+    },
+    "./effect-ui/aws": {
+      "types": "./dist/effect-ui/aws.d.ts",
+      "bun": "./dist/effect-ui/aws.js",
+      "worker": "./dist/effect-ui/aws.js",
+      "import": "./dist/effect-ui/aws.js"
+    },
+    "./effect-ui/node": {
+      "types": "./dist/effect-ui/node.d.ts",
+      "bun": "./dist/effect-ui/node.js",
+      "worker": "./dist/effect-ui/node.js",
+      "import": "./dist/effect-ui/node.js"
+    },
+    "./effect-ui/cloudflare": {
+      "types": "./dist/effect-ui/cloudflare.d.ts",
+      "bun": "./dist/effect-ui/cloudflare.js",
+      "worker": "./dist/effect-ui/cloudflare.js",
+      "import": "./dist/effect-ui/cloudflare.js"
+    },
+    "./effect-ui/source": {
+      "types": "./dist/effect-ui/source.d.ts",
+      "bun": "./dist/effect-ui/source.js",
+      "worker": "./dist/effect-ui/source.js",
+      "import": "./dist/effect-ui/source.js"
+    },
     "./foldkit": {
       "types": "./dist/foldkit/index.d.ts",
       "bun": "./dist/foldkit/index.js",

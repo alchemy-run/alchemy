@@ -9,6 +9,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -95,7 +96,7 @@ test.provider.skipIf(!configured)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const childTriggers = yield* SDK.listProjectBranchTriggers({
+      const childTriggers = yield* SDKUnstable.listProjectBranchTriggers({
         project_id: process.env.PARENT_PROJECT_ID!,
         branch_id: process.env.PREVIEW_BRANCH_ID!,
       });
@@ -123,11 +124,11 @@ test.provider.skipIf(!configured)(
       const child = { project_id: projectId, branch_id: childId };
       const observedChild = yield* SDK.getProjectBranch(child);
       expect(observedChild.branch.parent_id).toBe(parentId);
-      const parentFunctions = yield* SDK.listProjectBranchFunctions({
+      const parentFunctions = yield* SDKUnstable.listProjectBranchFunctions({
         ...parent,
         limit: 1000,
       });
-      const childFunctions = yield* SDK.listProjectBranchFunctions({
+      const childFunctions = yield* SDKUnstable.listProjectBranchFunctions({
         ...child,
         limit: 1000,
       });
@@ -136,13 +137,13 @@ test.provider.skipIf(!configured)(
       expect(childFunctions.pagination?.next).toBeUndefined();
       for (const fn of parentFunctions.functions)
         expect(childFunctions.functions.some((inherited) => inherited.slug === fn.slug)).toBe(true);
-      const parentTriggers = yield* SDK.listProjectBranchTriggers(parent);
-      const childTriggers = yield* SDK.listProjectBranchTriggers(child);
+      const parentTriggers = yield* SDKUnstable.listProjectBranchTriggers(parent);
+      const childTriggers = yield* SDKUnstable.listProjectBranchTriggers(child);
       const inherited = childTriggers.triggers.filter((trigger) => trigger.inherited);
       expect(inherited.length).toBeGreaterThan(0);
       expect(inherited.every((trigger) => !trigger.enabled)).toBe(true);
-      const parentDomains = yield* SDK.listProjectBranchCustomDomains(parent);
-      const childDomains = yield* SDK.listProjectBranchCustomDomains(child);
+      const parentDomains = yield* SDKUnstable.listProjectBranchCustomDomains(parent);
+      const childDomains = yield* SDKUnstable.listProjectBranchCustomDomains(child);
       expect(childDomains.custom_domains).toEqual([]);
       const credentials = yield* stack.deploy(
         Effect.gen(function* () {
@@ -158,8 +159,8 @@ test.provider.skipIf(!configured)(
           };
         }),
       );
-      const parentStorage = yield* SDK.getProjectBranchStorage(parent);
-      const childStorage = yield* SDK.getProjectBranchStorage(child);
+      const parentStorage = yield* SDKUnstable.getProjectBranchStorage(parent);
+      const childStorage = yield* SDKUnstable.getProjectBranchStorage(child);
       const parentFiles = yield* makeStorageClient(
         {
           endpoint: parentStorage.s3_endpoint,
@@ -211,8 +212,8 @@ test.provider.skipIf(!configured)(
         expect(yield* parentSql`SELECT id, object_key, status FROM uploads ORDER BY id`).toEqual(
           baseline,
         );
-        expect(yield* SDK.listProjectBranchTriggers(parent)).toEqual(parentTriggers);
-        expect(yield* SDK.listProjectBranchCustomDomains(parent)).toEqual(parentDomains);
+        expect(yield* SDKUnstable.listProjectBranchTriggers(parent)).toEqual(parentTriggers);
+        expect(yield* SDKUnstable.listProjectBranchCustomDomains(parent)).toEqual(parentDomains);
       }).pipe(
         Effect.ensuring(
           Effect.gen(function* () {
@@ -222,7 +223,7 @@ test.provider.skipIf(!configured)(
         ),
       );
       yield* stack.destroy();
-      const active = (yield* SDK.listCredentials(child)).credentials.filter(
+      const active = (yield* SDKUnstable.listCredentials(child)).credentials.filter(
         (credential) => !credential.revoked_at,
       );
       expect(active.some((credential) => credential.token_id === credentials.child.tokenId)).toBe(

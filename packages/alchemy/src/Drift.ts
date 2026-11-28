@@ -320,6 +320,8 @@ const runDrift = (
           output: undefined,
           session: scopedSession,
           bindings: [] as never,
+          // Drift runs without the program: the stored policy is the declared one.
+          protected: old.removalPolicy === "protect",
         })
         .pipe(instrumentLifecycle("create", fqn, resourceType, logicalId, instanceId));
       yield* commit("created", attr, []);
@@ -352,6 +354,7 @@ const runDrift = (
           output: live as never,
           session: scopedSession,
           bindings: old.bindings as never,
+          protected: old.removalPolicy === "protect",
         })
         .pipe(
           instrumentLifecycle(

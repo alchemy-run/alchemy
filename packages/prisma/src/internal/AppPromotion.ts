@@ -2,7 +2,7 @@ import {
   getService,
   createServicePromote,
   createServiceRollback,
-} from "@distilled.cloud/prisma/management";
+} from "@distilled.cloud/prisma/unstable/management";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";

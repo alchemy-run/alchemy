@@ -36,7 +36,7 @@ import {
   payloadCodec,
 } from "alchemy/WorkflowEncoding";
 import type * as Cause from "effect/Cause";
-import { ClusterSchema, DeliverAt, Entity as EffectEntity } from "effect/cluster";
+import { ClusterSchema, DeliverAt, Entity as EffectEntity, Sharding } from "effect/cluster";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -563,11 +563,11 @@ export interface EntitiesOptions<PoolReq> {
   /**
    * How long the host keeps rows that only dedupe needs: command receipts,
    * policy delivery marks, cancelled scheduled commands, and Effect
-   * Cluster's processed messages to the entity. Every runner sweeps them
-   * each `interval`. Only pools with a cluster database sweep: on
-   * `ClusterCloudflare.DurableObjectPool`, each instance keeps these rows in
-   * its own storage, where only `receipts` applies (an instance prunes them
-   * as it commits) and the other rows are kept.
+   * Cluster's processed messages to the entity. On a pool with a cluster
+   * database, every runner sweeps them each `interval`. On
+   * `ClusterCloudflare.DurableObjectPool`, each instance keeps its rows in
+   * its own storage and deletes a few past their window each time it
+   * commits; `messages` and `interval` don't apply there.
    *
    * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days", messages: "7 days", interval: "1 hour" }
    */
@@ -877,6 +877,12 @@ export const layerEntities = <PoolReq>(
 
       const runner = yield* Effect.serviceOption(RunnerHost);
       if (Option.isSome(runner)) {
+        // A pool with a cluster database keeps every instance's rows in it,
+        // and its runners sweep them there. The Durable Object pool has none:
+        // each instance keeps its rows in its own storage, and prunes them itself.
+        const database = yield* Config.option(Config.Redacted("CLUSTER_DATABASE_URL")).pipe(
+          Effect.orDie,
+        );
         // A runner of the pool: host the entity, as the bootstrap hosts an
         // exported one, with the classes the model declares here.
         const context = yield* Layer.build(entrypointLayer(Objects[PlatformDeclaration]));
@@ -888,6 +894,11 @@ export const layerEntities = <PoolReq>(
             new HasNoPool({ message: `${name} did not finish its Construction phase.` }),
           );
         }
+        // The runner's Sharding, once it has joined the cluster: a call the model
+        // makes on its own (not inside an entity's handler) routes through it.
+        const joined = yield* Deferred.make<Sharding.Sharding["Service"]>();
+        // The runner's scope: the runs it begins live as long as it does.
+        const scope = yield* Effect.scope;
         const registrations = yield* Ref.make<
           ReadonlyArray<
             readonly [Workflow.Any, (payload: any, id: string) => Effect.Effect<any, any, any>]
@@ -903,12 +914,7 @@ export const layerEntities = <PoolReq>(
             for (const [workflow, execute] of yield* Ref.get(registrations))
               yield* sagas.register(workflow as never, execute as never);
             yield* Deferred.succeed(engine, clusterEngine);
-            // Retention sweeps the rows of the cluster's database. A pool with
-            // none (the Durable Object pool) keeps them in each instance's own
-            // storage, and its runners have nothing to sweep.
-            const database = yield* Config.option(Config.Redacted("CLUSTER_DATABASE_URL")).pipe(
-              Effect.orDie,
-            );
+            yield* Deferred.succeed(joined, yield* Sharding.Sharding);
             if (Option.isSome(database)) {
               // Each runner sweeps on its own; a sweep that fails runs at the next interval.
               yield* Effect.forkScoped(
@@ -968,10 +974,27 @@ export const layerEntities = <PoolReq>(
             }),
           lookup: ({ modelName }, cls) => self(className(modelName, cls)),
           connect: connectTo,
+          // A deploy's new runs begin once the runner has joined, not on the
+          // first call a caller makes: a model that nothing calls still catches up.
+          begin: (runs) =>
+            Deferred.await(joined).pipe(
+              Effect.flatMap((sharding) =>
+                runs.pipe(
+                  Effect.provideService(Sharding.Sharding, sharding),
+                  Effect.retry({ schedule: Schedule.spaced("1 second"), times: 60 }),
+                ),
+              ),
+              // Still pending: the next call begins them.
+              Effect.ignore,
+              Effect.forkIn(scope),
+              Effect.asVoid,
+            ),
           claimKey: runtimeClaim(name),
         };
         return Layer.merge(
-          makePlatform(host, { retention: options.retention }),
+          makePlatform(host, {
+            retention: Option.isSome(database) ? false : (options.retention ?? {}),
+          }),
           Layer.succeed(WorkflowEngine.WorkflowEngine, deferredEngine),
         ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
       }
@@ -985,7 +1008,7 @@ export const layerEntities = <PoolReq>(
         claimKey: runtimeClaim(name),
       };
       return Layer.merge(
-        makePlatform(host, { retention: options.retention }),
+        makePlatform(host),
         Layer.succeed(WorkflowEngine.WorkflowEngine, remoteEngine(self(WORKFLOWS))),
       ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
     }),

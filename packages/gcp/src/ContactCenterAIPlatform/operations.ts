@@ -1,4 +1,4 @@
-import * as ccaip from "@distilled.cloud/gcp/contactcenteraiplatform_v1alpha1";
+import * as ccaip from "@distilled.cloud/gcp/unstable/contactcenteraiplatform_v1alpha1";
 import * as Effect from "effect/Effect";
 import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 

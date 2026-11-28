@@ -17,10 +17,16 @@
       "path": "../alchemy/tsconfig.json"
     },
     {
+      "path": "../aws/tsconfig.json"
+    },
+    {
       "path": "../cloudflare/tsconfig.json"
     },
     {
       "path": "../effect-cluster/tsconfig.json"
+    },
+    {
+      "path": "../gcp/tsconfig.json"
     },
     {
       "path": "../rivet/tsconfig.json"

@@ -865,6 +865,7 @@ Choose the deployment-based pattern that fits the behavior under test:
 Keep regression cases in the relevant existing resource or binding suite. A Worker lifecycle feature belongs in `test/Cloudflare/Workers/Worker.test.ts`; binding fixtures belong beside their owning suite in `fixtures/`.
 
 - Assume Docker is installed. Never `skipIf`-gate a test on Docker availability; a missing daemon fails the test.
+- Never bind a fixed host port, cluster name, or other machine-wide name in a local test: two worktrees, or two suites in one run, collide on it. Publish on a port the platform picks (`ports: [{ internal: 3000 }]`, `port: 0`, `registryPort: 0`, `hostPort: 0`), read it back from the deployed resource's attributes, and let the engine name the resource from the stack and stage.
 - Tag every test with its kind — `unit` (no I/O beyond the machine), `local` (runs on this machine: emulators, `dev: true`, Docker) or `live` (touches a real cloud, including `stack.plan`, which reads) — on the test or an enclosing `describe`, alongside `provider:<cloud>` / `provider:<cloud>:<service>`. `pnpm lint:tests` enforces it.
 - Start and end `test.provider` cases with `stack.destroy()`. Fixture suites deploy in `beforeAll` and destroy in `afterAll`. Use deterministic resource identities and verify deletion through the cloud API.
 - Exercise create, update, redeploy, and removal through the stack. **Do not mock HTTP or SDK responses, invoke provider lifecycle methods directly, or call extracted reconciliation helpers as a substitute for a deployment.**
@@ -1390,6 +1391,20 @@ A package can ship an agent skill under `packages/{package}/skills/{name}/` (e.g
 When you automatically open a PR, it MUST follow this structure:
 
 - **Title**: Use conventional commit format (e.g. `fix(website): mobile theme metas`, `feat(aws/s3): add bucket lifecycle rules`).
+- **Breaking changes**: When a PR removes, renames or reshapes a public API, or changes behavior users rely on, mark the title with `!` (`feat(effect-cluster)!: …`) and put a `> [!CAUTION]` callout right after the opening summary. The callout must show how to adapt, as a ` ```diff ` of the old and new usage, and list what to look out for: behavior that changes without a type error, and defaults that differ from before. Say which usages are unaffected.
+
+  ````md
+  > [!CAUTION]
+  > **Breaking:** `EcsPool`'s `securityGroupId` became `securityGroup`. To keep the same group, look it up by id:
+  >
+  > ```diff
+  > -  securityGroupId,
+  > +  securityGroup: EC2.SecurityGroup.lookup({ groupId: securityGroupId }),
+  > ```
+  >
+  > Look out for:
+  > - **Leaving `securityGroup` out** creates a new group, which your database doesn't admit yet.
+  ````
 - **Description heading levels**: NEVER use `#` or `##` in the PR description. The smallest heading allowed is `###`. The PR description must NOT begin with its own title heading — GitHub already renders the PR title above it.
 - **Content**: Aim for the minimal content needed to convey the idea.
   - Use simple sentences. If there are multiple discrete changes, use bullet points.

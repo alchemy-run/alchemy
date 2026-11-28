@@ -1,6 +1,6 @@
-import { ConfigError } from "@distilled.cloud/core/errors";
 import { Credentials } from "@distilled.cloud/digitalocean/Credentials";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
   DIGITALOCEAN_AUTH_PROVIDER_NAME,
@@ -25,7 +25,9 @@ export {
 export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
-    lazyCredentials<DigitalOceanResolvedCredentials, ConfigError>()(
+    // `Credentials` has no error channel: a failed resolution dies, and the
+    // engine reports it as `CredentialsRequired`.
+    lazyCredentials<DigitalOceanResolvedCredentials>()(
       DIGITALOCEAN_AUTH_PROVIDER_NAME,
       (creds) => ({
         apiKey: creds.apiToken,
@@ -33,5 +35,5 @@ export const fromAuthProvider = () =>
         spacesAccessKeyId: creds.spacesAccessKeyId,
         spacesSecretAccessKey: creds.spacesSecretAccessKey,
       }),
-    ),
+    ).pipe(Effect.map(Effect.orDie)),
   );

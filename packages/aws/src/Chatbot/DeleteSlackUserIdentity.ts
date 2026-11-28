@@ -1,4 +1,5 @@
 import type * as chatbot from "@distilled.cloud/aws/chatbot";
+import type { ProviderError } from "@distilled.cloud/aws/Credentials";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
@@ -30,7 +31,10 @@ export interface DeleteSlackUserIdentity extends Binding.Service<
   () => Effect.Effect<
     (
       request: chatbot.DeleteSlackUserIdentityRequest,
-    ) => Effect.Effect<chatbot.DeleteSlackUserIdentityResult, chatbot.DeleteSlackUserIdentityError>
+    ) => Effect.Effect<
+      chatbot.DeleteSlackUserIdentityResult,
+      chatbot.DeleteSlackUserIdentityError | ProviderError
+    >
   >
 > {}
 

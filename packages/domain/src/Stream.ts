@@ -12,6 +12,7 @@ import type * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
+import { memo, type Thunk } from "./Thunk.ts";
 import type { ConsistencyTimeout, Page } from "./View.ts";
 
 /**
@@ -109,6 +110,13 @@ export interface Host<Key extends Key.Any, E> {
    * a replayed or redelivered input appends nothing twice.
    */
   readonly append: (origin: Origin<Key>, ...events: ReadonlyArray<E>) => Effect.Effect<void>;
+  /**
+   * In a projection's `rewrite` handler: replace what was appended for the
+   * input being rewritten with these entries. Each takes the place of one
+   * appended before, in order, and keeps its `seq`; passing fewer removes
+   * the rest, and passing none removes them all.
+   */
+  readonly rewrite: (origin: Origin<Key>, ...events: ReadonlyArray<E>) => Effect.Effect<void>;
 }
 
 /**
@@ -221,7 +229,7 @@ export const make = <
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<Key, Entries, Ms, Rejects>,
+  definition: Thunk<Definition<Key, Entries, Ms, Rejects>>,
   annotations: Annotations = {},
 ): StreamClass<
   Name,
@@ -229,6 +237,7 @@ export const make = <
   Key,
   Aggregate.InstanceOf<Entries[number]>
 > => {
+  const given = memo(definition);
   const Tag = Context.Service<StreamKey<Name>, Host<Key, Aggregate.InstanceOf<Entries[number]>>>()(
     `alchemy/Domain/Stream/${name}`,
   );
@@ -246,7 +255,9 @@ export const make = <
     static readonly kind = "Stream" as const;
     static readonly annotations: Annotations = annotations;
     static readonly streamName: Name = name;
-    static readonly definition = definition;
+    static get definition() {
+      return given();
+    }
   } as unknown as StreamClass<
     Name,
     Definition<Key, Entries, Ms, Rejects>,

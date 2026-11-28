@@ -10,6 +10,7 @@ import { makePgMigrationExecutor } from "@alchemy.run/sql/Migrations";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import { adopt, Unowned } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
@@ -377,7 +378,7 @@ test.provider(
         project_id: existing.branch.projectId,
         branch_id: existing.branch.branchId,
       };
-      yield* SDK.createNeonAuth({ ...request, auth_provider: "better_auth" });
+      yield* SDKUnstable.createNeonAuth({ ...request, auth_provider: "better_auth" });
       const application = (takeOwnership: boolean) =>
         Effect.gen(function* () {
           const { branch } = yield* base;
@@ -391,9 +392,9 @@ test.provider(
       const refusal = yield* stack.deploy(application(false)).pipe(Effect.result);
       expect(Result.isFailure(refusal)).toBe(true);
       yield* stack.deploy(application(true));
-      expect((yield* SDK.getNeonAuth(request)).name).toBe("Owned managed auth");
+      expect((yield* SDKUnstable.getNeonAuth(request)).name).toBe("Owned managed auth");
       expect((yield* SDK.getNeonAuthAllowLocalhost(request)).allow_localhost).toBe(false);
-      yield* SDK.disableNeonAuth(request);
+      yield* SDKUnstable.disableNeonAuth(request);
       const refused = yield* stack.deploy(application(false)).pipe(
         Effect.as(undefined),
         Effect.catchTag("Conflict", (error) => Effect.succeed(error.message)),
@@ -403,7 +404,7 @@ test.provider(
       );
       yield* stack.destroy();
       expect(
-        yield* SDK.getNeonAuth(request).pipe(
+        yield* SDKUnstable.getNeonAuth(request).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         ),
@@ -567,11 +568,11 @@ previewTest.provider(
       const usersSql = 'SELECT id, email FROM neon_auth."user" ORDER BY id';
       const parentUsers = yield* query(parentUri, usersSql);
       expect(parentUsers.length).toBe(1);
-      const parentAuth = yield* SDK.getNeonAuth(parentRequest);
+      const parentAuth = yield* SDKUnstable.getNeonAuth(parentRequest);
       const parentSettings = yield* SDK.getNeonAuthEmailAndPasswordConfig(parentRequest);
       const parentLocalhost = yield* SDK.getNeonAuthAllowLocalhost(parentRequest);
       const verifyParent = Effect.gen(function* () {
-        const survivingAuth = yield* SDK.getNeonAuth(parentRequest);
+        const survivingAuth = yield* SDKUnstable.getNeonAuth(parentRequest);
         expect(survivingAuth.base_url).toBe(parentAuth.base_url);
         expect(survivingAuth.name).toBe(parentAuth.name);
         expect(yield* SDK.getNeonAuthEmailAndPasswordConfig(parentRequest)).toEqual(parentSettings);
@@ -601,7 +602,7 @@ previewTest.provider(
       expect(child.auth.branchId).not.toBe(first.auth.branchId);
       expect(child.auth.baseUrl).not.toBe(first.auth.baseUrl);
       const childRequest = { project_id: child.auth.projectId, branch_id: child.auth.branchId };
-      expect((yield* SDK.getNeonAuth(childRequest)).name).toBe("Deferred adoption child");
+      expect((yield* SDKUnstable.getNeonAuth(childRequest)).name).toBe("Deferred adoption child");
       expect((yield* SDK.getNeonAuthAllowLocalhost(childRequest)).allow_localhost).toBe(false);
       const childUri = Redacted.make(child.branch.connectionUri);
       expect(yield* query(childUri, usersSql)).toEqual(parentUsers);
@@ -617,7 +618,7 @@ previewTest.provider(
       expect(unchanged.auth.baseUrl).toBe(child.auth.baseUrl);
       yield* stack.deploy(parent);
       expect(
-        yield* SDK.getNeonAuth(childRequest).pipe(
+        yield* SDKUnstable.getNeonAuth(childRequest).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         ),
@@ -631,7 +632,7 @@ previewTest.provider(
       yield* verifyParent;
       yield* stack.destroy();
       expect(
-        yield* SDK.getNeonAuth(parentRequest).pipe(
+        yield* SDKUnstable.getNeonAuth(parentRequest).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         ),
@@ -678,7 +679,7 @@ test.provider(
       expect(replaced.domain.branchId).toBe(replaced.b!.branchId);
       expect(replaced.a.branchId).toBe(first.a.branchId);
       expect(
-        yield* SDK.getNeonAuth({
+        yield* SDKUnstable.getNeonAuth({
           project_id: first.auth.projectId,
           branch_id: first.auth.branchId,
         }).pipe(

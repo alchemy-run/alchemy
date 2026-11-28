@@ -7,6 +7,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
@@ -41,7 +42,7 @@ test.provider(
           return { read, write, both };
         }),
       );
-      const storage = yield* SDK.getProjectBranchStorage({
+      const storage = yield* SDKUnstable.getProjectBranchStorage({
         project_id: read.projectId,
         branch_id: read.branchId,
       });
@@ -131,7 +132,7 @@ test.provider(
           };
         }),
       );
-      const storage = yield* SDK.getProjectBranchStorage({
+      const storage = yield* SDKUnstable.getProjectBranchStorage({
         project_id: credential.projectId,
         branch_id: credential.branchId,
       });

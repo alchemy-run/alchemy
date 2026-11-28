@@ -1,4 +1,3 @@
-import type { ConfigError } from "@distilled.cloud/core/errors";
 import * as App from "@distilled.cloud/github/App";
 import {
   Credentials,
@@ -132,10 +131,12 @@ export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
         options?.baseUrl !== undefined
           ? { baseUrl: yield* normalizeGitHubBaseUrl(options.baseUrl) }
           : undefined;
-      return yield* lazyCredentials<GitHubResolvedCredentials, ConfigError>()(
+      // `Credentials` has no error channel: a failed resolution dies, and the
+      // engine reports it as `CredentialsRequired`.
+      return yield* lazyCredentials<GitHubResolvedCredentials>()(
         GITHUB_AUTH_PROVIDER_NAME,
         (creds) =>
           config(creds.token, fixedBaseUrl !== undefined ? fixedBaseUrl.baseUrl : creds.baseUrl),
-      );
+      ).pipe(Effect.map(Effect.orDie));
     }).pipe(Effect.orDie),
   );

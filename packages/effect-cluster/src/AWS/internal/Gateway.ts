@@ -1,41 +1,90 @@
 /**
- * What the AWS runners share: the database's VPC, and a load balancer that
- * serves each pool's gateway to callers anywhere.
+ * What the AWS runners share: the database's VPC, and the front door that
+ * serves each pool's gateway to its callers: a load balancer, or CloudFront
+ * in front of an internal one.
  *
  * @internal
  */
+import * as CloudFront from "@alchemy.run/aws/CloudFront";
+import {
+  MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+  MANAGED_CACHING_DISABLED_POLICY_ID,
+} from "@alchemy.run/aws/CloudFront/ManagedPolicies";
+import { domainCertificate, isRoute53Dns, resolveDomainDns } from "@alchemy.run/aws/CustomDomain";
 import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ELBv2 from "@alchemy.run/aws/ELBv2";
+import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { findPublicHostedZoneId } from "@alchemy.run/aws/Route53/HostedZoneLookup";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { ClusterNetwork, DatabaseShape } from "../../Database.ts";
 import { GATEWAY_PORT } from "../../internal/Gateway.ts";
+import type { CloudFrontGateway } from "../CloudFrontGateway.ts";
+import type { Gateway } from "../Gateway.ts";
+import type { GatewayDomain, GatewayIngress, LoadBalancerGateway } from "../LoadBalancerGateway.ts";
 
 export type AwsNetwork = Extract<ClusterNetwork, { kind: "aws" }>;
 
 export const awsNetworkOf = (database: DatabaseShape): AwsNetwork | undefined =>
   database.network?.kind === "aws" ? database.network : undefined;
 
+/** A gateway's domain has no public Route 53 hosted zone. */
+export class GatewayHostedZoneNotFound extends Data.TaggedError("GatewayHostedZoneNotFound")<{
+  readonly domainName: string;
+  readonly message: string;
+}> {}
+
+/** An internal gateway with no `ingress`, in a network with no `cidrBlock` to admit. */
+export class GatewayIngressRequired extends Data.TaggedError("GatewayIngressRequired")<{
+  readonly message: string;
+}> {}
+
+/** Every method a gateway call may use: RPCs are POSTs, `/health` a GET. */
+const ALL_METHODS = ["GET", "HEAD", "OPTIONS", "PUT", "PATCH", "POST", "DELETE"] as const;
+
+interface BalancerOptions {
+  readonly scheme: "internet-facing" | "internal";
+  readonly ingress: ReadonlyArray<GatewayIngress>;
+  readonly port: number;
+  readonly https?: { readonly certificateArn: Input<string>; readonly sslPolicy: string };
+}
+
 /**
- * An internet-facing load balancer in front of the pool's gateway. It is
- * declared before the pool, so the gateway's URL never depends on it.
+ * A load balancer in front of the pool's gateway, on `port`, admitting
+ * `ingress`. Runners take gateway traffic only from it.
  */
-export const makeAwsGateway = Effect.fn(function* (
+const makeBalancer = Effect.fn(function* (
   id: string,
   network: AwsNetwork,
   targetType: "ip" | "instance",
+  options: BalancerOptions,
 ) {
   // The database's network, as the EC2 identifiers it holds.
   const vpcId = network.vpcId as Input<EC2.VpcId>;
-  const subnetIds = network.subnetIds as Input<EC2.SubnetId>[];
+  // An internet-facing load balancer needs subnets routed to the internet.
+  const subnetIds = (
+    options.scheme === "internet-facing"
+      ? (network.publicSubnetIds ?? network.subnetIds)
+      : network.subnetIds
+  ) as Input<EC2.SubnetId>[];
+  const { port } = options;
   const balancerGroup = yield* EC2.SecurityGroup(`${id}GatewayBalancerGroup`, {
     vpcId,
     description: "Effect Cluster gateway load balancer",
-    ingress: [{ ipProtocol: "tcp", fromPort: 80, toPort: 80, cidrIpv4: "0.0.0.0/0" }],
+    ingress: options.ingress.map((source) => ({
+      ipProtocol: "tcp",
+      fromPort: port,
+      toPort: port,
+      ...("cidrIpv4" in source
+        ? { cidrIpv4: source.cidrIpv4 }
+        : "prefixListId" in source
+          ? { prefixListId: source.prefixListId as string }
+          : { referencedGroupId: source.securityGroupId as EC2.SecurityGroupId }),
+    })),
     egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
   });
-  // Runners take gateway traffic only from their load balancer.
   const gatewayGroup = yield* EC2.SecurityGroup(`${id}GatewayGroup`, {
     vpcId,
     description: "Effect Cluster gateway",
@@ -59,24 +108,227 @@ export const makeAwsGateway = Effect.fn(function* (
   });
   const balancer = yield* ELBv2.LoadBalancer(`${id}GatewayBalancer`, {
     type: "application",
-    scheme: "internet-facing",
+    scheme: options.scheme,
     subnets: subnetIds,
     securityGroups: [balancerGroup.groupId],
-    // Streaming calls stay open.
+    // Calls wait on entities and streams stay open.
     attributes: { "idle_timeout.timeout_seconds": "3600" },
   });
   const listener = yield* ELBv2.Listener(`${id}GatewayListener`, {
     loadBalancerArn: balancer.loadBalancerArn,
-    port: 80,
-    protocol: "HTTP",
+    port,
+    protocol: options.https ? "HTTPS" : "HTTP",
+    ...(options.https
+      ? {
+          certificateArn: options.https.certificateArn as string,
+          sslPolicy: options.https.sslPolicy,
+        }
+      : {}),
     targetGroupArn: targets.targetGroupArn,
   });
+  // ECS registers a service only with a target group a load balancer
+  // forwards to: hand the group out once the listener does.
+  const targetGroupArn = Output.all(targets.targetGroupArn, listener.listenerArn).pipe(
+    Output.map(([arn]) => arn),
+  );
+  return { balancer, balancerGroup, listener, targets: { targetGroupArn }, gatewayGroup };
+});
+
+const domainOf = (domain: string | GatewayDomain | undefined): GatewayDomain | undefined =>
+  typeof domain === "string" ? { name: domain } : domain;
+
+const makeLoadBalancerGateway = Effect.fn(function* (
+  id: string,
+  network: AwsNetwork,
+  targetType: "ip" | "instance",
+  gateway: LoadBalancerGateway,
+) {
+  const scheme = gateway.scheme ?? "internet-facing";
+  if (scheme === "internal" && gateway.ingress === undefined && network.cidrBlock === undefined) {
+    return yield* new GatewayIngressRequired({
+      message: `The internal gateway of pool "${id}" admits the VPC's range by default, and its network has no \`cidrBlock\`: give the network its \`cidrBlock\`, or the gateway its \`ingress\`.`,
+    });
+  }
+  const ingress =
+    gateway.ingress ??
+    (scheme === "internal"
+      ? [{ cidrIpv4: network.cidrBlock as unknown as string }]
+      : [{ cidrIpv4: "0.0.0.0/0" }]);
+  const domain = domainOf(gateway.domain);
+  if (domain === undefined) {
+    const { balancer, listener, targets, gatewayGroup } = yield* makeBalancer(
+      id,
+      network,
+      targetType,
+      { scheme, ingress, port: 80 },
+    );
+    return {
+      // Ordered after the listener, so callers use it once it serves.
+      url: Output.all(balancer.dnsName, listener.listenerArn).pipe(
+        Output.map(([dns]) => `http://${dns}`),
+      ),
+      targetGroupArn: targets.targetGroupArn,
+      securityGroupId: gatewayGroup.groupId,
+    };
+  }
+  const names = [domain.name, ...(domain.aliases ?? [])];
+  // Route 53 (the default) needs each name's hosted zone up front; other DNS
+  // hosts find their zone while deploying.
+  const route53 = isRoute53Dns(domain.dns);
+  const pinnedZone = domain.dns?.zone as string | undefined;
+  const zones = new Map<string, string>();
+  for (const name of route53 ? names : []) {
+    const zone = pinnedZone ?? (yield* findPublicHostedZoneId(name));
+    if (zone === undefined) {
+      return yield* new GatewayHostedZoneNotFound({
+        domainName: name,
+        message: `The gateway of pool "${id}": no public Route 53 hosted zone contains '${name}'. Create the hosted zone, or pass the domain's \`dns\`.`,
+      });
+    }
+    zones.set(name, zone);
+  }
+  const certificateArn =
+    domain.cert ??
+    (yield* domainCertificate(
+      `${id}GatewayCertificate`,
+      {
+        domainName: domain.name,
+        subjectAlternativeNames: domain.aliases,
+        ...(route53 ? { hostedZoneId: zones.get(domain.name)! } : {}),
+        // A load balancer listener takes a certificate in its own region.
+        region: (yield* AWSEnvironment.current).region,
+      },
+      domain.dns,
+    )).certificateArn;
+  const { balancer, listener, targets, gatewayGroup } = yield* makeBalancer(
+    id,
+    network,
+    targetType,
+    {
+      scheme,
+      ingress,
+      port: 443,
+      https: {
+        certificateArn,
+        sslPolicy: gateway.sslPolicy ?? "ELBSecurityPolicy-TLS13-1-2-2021-06",
+      },
+    },
+  );
+  const records: Output.Output<unknown>[] = [];
+  for (const name of names) {
+    const dns = yield* resolveDomainDns(route53 ? undefined : domain.dns, zones.get(name));
+    const record = yield* dns.alias(
+      `${id}GatewayDomain-${name.replaceAll(/[^a-zA-Z0-9-]/g, "-")}`,
+      {
+        name,
+        ipv6: false,
+        target: {
+          hostname: balancer.dnsName,
+          route53Alias: {
+            hostedZoneId: balancer.canonicalHostedZoneId,
+            evaluateTargetHealth: false,
+          },
+        },
+      },
+    );
+    if (Output.isOutput(record)) records.push(record);
+  }
   return {
-    // Ordered after the listener, so callers use it once it serves.
-    url: Output.all(balancer.dnsName, listener.listenerArn).pipe(
-      Output.map(([dns]) => `http://${dns}`),
+    // Ordered after the listener and the domain's records.
+    url: Output.all(listener.listenerArn, ...records).pipe(
+      Output.map(() => `https://${domain.name}`),
     ),
     targetGroupArn: targets.targetGroupArn,
     securityGroupId: gatewayGroup.groupId,
   };
 });
+
+const makeCloudFrontGateway = Effect.fn(function* (
+  id: string,
+  network: AwsNetwork,
+  targetType: "ip" | "instance",
+  gateway: CloudFrontGateway,
+) {
+  // Only CloudFront reaches the load balancer (see the rule below).
+  const { balancer, balancerGroup, listener, targets, gatewayGroup } = yield* makeBalancer(
+    id,
+    network,
+    targetType,
+    { scheme: "internal", ingress: [], port: 80 },
+  );
+  const origin = yield* CloudFront.VpcOrigin(`${id}GatewayOrigin`, {
+    arn: balancer.loadBalancerArn,
+    httpPort: 80,
+    httpsPort: 443,
+    originProtocolPolicy: "http-only",
+  });
+  // CloudFront connects from network interfaces in the security group AWS
+  // creates in the VPC with its first VPC origin; an origin admits that
+  // group, not the interfaces' addresses.
+  const cloudFrontGroup = EC2.SecurityGroup.lookup({
+    // Looked up once the origin exists (the VPC's id is an Output).
+    vpcId: Output.all(network.vpcId as Output.Output<string>, origin.vpcOriginId).pipe(
+      Output.map(([vpcId]) => vpcId),
+    ),
+    groupName: "CloudFront-VPCOrigins-Service-SG",
+  });
+  const fromCloudFront = yield* EC2.SecurityGroupRule(`${id}GatewayFromCloudFront`, {
+    groupId: balancerGroup.groupId,
+    type: "ingress",
+    ipProtocol: "tcp",
+    fromPort: 80,
+    toPort: 80,
+    referencedGroupId: cloudFrontGroup.groupId,
+  });
+  const distribution = yield* CloudFront.Distribution(`${id}GatewayDistribution`, {
+    comment: `Effect Cluster gateway of pool ${id}`,
+    priceClass: gateway.priceClass,
+    origins: [
+      {
+        id: "gateway",
+        domainName: balancer.dnsName,
+        vpcOriginConfig: {
+          vpcOriginId: origin.vpcOriginId,
+          originReadTimeout: gateway.originReadTimeout ?? "60 seconds",
+          originKeepaliveTimeout: gateway.originKeepaliveTimeout ?? "60 seconds",
+        },
+      },
+    ],
+    defaultCacheBehavior: {
+      targetOriginId: "gateway",
+      viewerProtocolPolicy: "https-only",
+      allowedMethods: [...ALL_METHODS],
+      cachedMethods: ["GET", "HEAD"],
+      compress: false,
+      // Nothing is cached, and every header but `Host` reaches the gateway
+      // (CloudFront always forwards `Authorization` on a POST).
+      cachePolicyId: MANAGED_CACHING_DISABLED_POLICY_ID,
+      originRequestPolicyId: MANAGED_ALL_VIEWER_EXCEPT_HOST_HEADER_POLICY_ID,
+    },
+  });
+  return {
+    // Ordered after the listener, CloudFront's way in, and the distribution.
+    url: Output.all(
+      listener.listenerArn,
+      fromCloudFront.securityGroupRuleId,
+      distribution.domainName,
+    ).pipe(Output.map(([, , domainName]) => `https://${domainName}`)),
+    targetGroupArn: targets.targetGroupArn,
+    securityGroupId: gatewayGroup.groupId,
+  };
+});
+
+/**
+ * The pool's gateway. It is declared before the pool, so the gateway's URL
+ * never depends on it.
+ */
+export const makeAwsGateway = (
+  id: string,
+  network: AwsNetwork,
+  targetType: "ip" | "instance",
+  gateway: Gateway = { kind: "LoadBalancer" },
+) =>
+  gateway.kind === "CloudFront"
+    ? makeCloudFrontGateway(id, network, targetType, gateway)
+    : // A domain without a hosted zone fails the deploy.
+      makeLoadBalancerGateway(id, network, targetType, gateway).pipe(Effect.orDie);

@@ -59,7 +59,9 @@ export const workerBundleOptions = (options: {
  * rule's type, instead of being loaded by rolldown. Globs match the path
  * relative to the entry's directory (`../` included), or an absolute path;
  * `!` globs exclude across all user rules, as in the prebuilt
- * (`bundle: false`) walk. JavaScript, TypeScript and JSON are always bundled.
+ * (`bundle: false`) walk. JavaScript and TypeScript are always bundled; JSON
+ * is bundled unless a rule matches it, so a large document (an OpenAPI spec)
+ * can upload as a Text module instead of an object literal built at startup.
  */
 const toModuleRules = (main: string, rules: readonly ModuleRule[] | undefined) => {
   const globs = rules?.flatMap((rule) => rule.globs) ?? [];
@@ -83,7 +85,7 @@ const toModuleRules = (main: string, rules: readonly ModuleRule[] | undefined) =
       {
         type: rule.type,
         test: (id: string) => {
-          if (/\.([cm]?[jt]sx?|json)$/.test(id)) return false;
+          if (/\.[cm]?[jt]sx?$/.test(id)) return false;
           const targets = targetsOf(id);
           return (
             targets.some((target) => isIncluded(target)) &&

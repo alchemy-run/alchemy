@@ -56,7 +56,7 @@ See [Servers](/hetzner/compute/servers).
 
 ## SSH keys
 
-Servers are reached over SSH. An **SSH key** registered in the project is installed on a Server when it's created, so you can log in with it. Alchemy also installs a deploy key of its own on every Server it manages, which it uses to deploy your code.
+Servers are reached over SSH. An **SSH key** registered in the project is installed on a Server when it's created, so you can log in with it. Alchemy also installs a deploy key of its own on every Server it manages, which it uses to deploy your code, unless you opt a Server out with `bootstrap: false`.
 
 ## Services: your program on a Server
 

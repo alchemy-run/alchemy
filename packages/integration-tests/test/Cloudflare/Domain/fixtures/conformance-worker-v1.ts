@@ -7,7 +7,7 @@ import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { app } from "../../../Domain/conformance/app.ts";
-import { ConformanceLiveV1 } from "../../../Domain/conformance/model.ts";
+import { ConformanceLiveV1, RECEIPT_RETENTION } from "../../../Domain/conformance/model.ts";
 
 export default class DomainConformanceWorker extends Cloudflare.Worker<DomainConformanceWorker>()(
   "DomainConformanceWorker",
@@ -15,6 +15,12 @@ export default class DomainConformanceWorker extends Cloudflare.Worker<DomainCon
   Effect.gen(function* () {
     return { fetch: yield* app };
   }).pipe(
-    Effect.provide(ConformanceLiveV1.pipe(Layer.provide(DomainCloudflare.layerDurableObjects()))),
+    Effect.provide(
+      ConformanceLiveV1.pipe(
+        Layer.provide(
+          DomainCloudflare.layerDurableObjects({ retention: { receipts: RECEIPT_RETENTION } }),
+        ),
+      ),
+    ),
   ),
 ) {}

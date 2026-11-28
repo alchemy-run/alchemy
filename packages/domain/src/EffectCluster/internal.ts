@@ -11,7 +11,13 @@ import * as Snowflake from "effect/cluster/Snowflake";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { SqlClient } from "effect/sql/SqlClient";
-import type { ListOptions, ObjectStorage } from "../DurableObjects.ts";
+import {
+  type ListOptions,
+  type ObjectStorage,
+  type Retention as ObjectRetention,
+  retentionMillis,
+  retentionWindows,
+} from "../DurableObjects.ts";
 
 /** Where every instance keeps its storage: one row per key, in the cluster's database. */
 export const TABLE = "alchemy_domain_objects";
@@ -84,9 +90,25 @@ export const objectStorage = (
           Effect.map((rows) => new Map(rows.map((row) => [row.key, decode<T>(row.value)]))),
         ),
       ),
-    // Held across the whole transaction, as Cloudflare's gate is.
+    // Held across the whole transaction, as Cloudflare's gate is. The gate
+    // is this process's: a runner that stalled past its shard lock and
+    // resumed still runs the instance while another runner runs it too. So
+    // the transaction first takes the instance's lock in Postgres, and one
+    // instance's transactions run one at a time across runners. What a
+    // transaction then reads is what the last one committed, so a write
+    // decided from an earlier version sees that and writes nothing (see
+    // `stillAt` in `DurableObjects.ts`).
     transaction: (effect) =>
-      gate.exclusive(sql.withTransaction(effect).pipe(Effect.orDie)) as never,
+      gate.exclusive(
+        sql
+          .withTransaction(
+            Effect.andThen(
+              run(sql`SELECT pg_advisory_xact_lock(hashtextextended(${object}, 0))`),
+              effect,
+            ),
+          )
+          .pipe(Effect.orDie),
+      ) as never,
   };
 };
 
@@ -132,27 +154,7 @@ const migrateLocked = (sql: SqlClient) =>
  * How long the host keeps rows that only dedupe needs. `"forever"` keeps
  * them.
  */
-export interface Retention {
-  /**
-   * Receipts of accepted commands and committed decisions. A command or
-   * decision sent again after this time is decided again.
-   * @default "30 days"
-   */
-  readonly receipts?: Duration.Input | "forever";
-  /**
-   * The marks that a policy instance ran a delivery, one per delivery. A
-   * delivery that arrives again after this time runs again. A source's
-   * next delivery replaces its marks with one that holds the last seq the
-   * instance ran, and that one is never swept.
-   * @default "7 days"
-   */
-  readonly deliveries?: Duration.Input | "forever";
-  /**
-   * Cancelled scheduled commands. After this time, `unschedule` answers
-   * `NotScheduled` instead of `AlreadyCancelled`.
-   * @default "7 days"
-   */
-  readonly cancelled?: Duration.Input | "forever";
+export interface Retention extends ObjectRetention {
   /**
    * Processed cluster messages to the host's entity (its persisted wakes)
    * and their replies. Effect Cluster never deletes them. Saga messages are
@@ -170,18 +172,10 @@ export interface Retention {
 /** Rows one sweep statement deletes at a time. */
 const BATCH = 1_000;
 
-const millis = (value: Duration.Input | "forever" | undefined, fallback: Duration.Input) => {
-  if (value === "forever") return undefined;
-  const duration = Duration.fromInputUnsafe(value ?? fallback);
-  return Duration.isFinite(duration) ? Duration.toMillis(duration) : undefined;
-};
-
 /** The windows a sweep applies, in milliseconds; `undefined` keeps rows forever. */
 export const windows = (retention: Retention = {}) => ({
-  receipts: millis(retention.receipts, "30 days"),
-  deliveries: millis(retention.deliveries, "7 days"),
-  cancelled: millis(retention.cancelled, "7 days"),
-  messages: millis(retention.messages, "7 days"),
+  ...retentionWindows(retention),
+  messages: retentionMillis(retention.messages, "7 days"),
 });
 
 /** The value of `scheduled:<name>` once that command is cancelled, as stored. */

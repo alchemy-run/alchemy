@@ -25,6 +25,9 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Kuberne
  *   state: AWS.state(),
  * });
  * ```
+ *
+ * Bundled Deployments and Jobs run on Node.js 26 unless they set `runtime`,
+ * for example `runtime: "bun1.3"`.
  */
 export const providers = () =>
   Layer.effect(

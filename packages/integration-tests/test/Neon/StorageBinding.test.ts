@@ -4,6 +4,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
@@ -28,7 +29,7 @@ test.provider(
           return { fn, bucket };
         }),
       );
-      const credentials = yield* SDK.listCredentials({
+      const credentials = yield* SDKUnstable.listCredentials({
         project_id: bucket.projectId,
         branch_id: bucket.branchId,
       });

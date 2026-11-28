@@ -10,7 +10,7 @@ import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import { DOMAIN_DATABASE_CONNECTIONS, DOMAIN_RUNNERS as RUNNERS } from "./cluster.ts";
-import { docker } from "./crash.ts";
+import { clusterPostgres, type DeployedStack, psql } from "./database.ts";
 
 type TestFn = (
   name: string,
@@ -20,8 +20,9 @@ type TestFn = (
 
 export interface ConnectionsOptions {
   readonly test: TestFn;
-  readonly url: string;
-  readonly stack: { readonly name: string; readonly stage: string };
+  /** The front's URL, known once the suite deploys it. */
+  readonly url: () => string;
+  readonly stack: DeployedStack;
 }
 
 /** A route answered with an error. */
@@ -30,57 +31,26 @@ class RouteFailed extends Data.TaggedError("RouteFailed")<{
   readonly status: number;
 }> {}
 
-/** The container of the cluster's Postgres service. */
-const postgres = Effect.fn(function* (stack: ConnectionsOptions["stack"]) {
-  const service = yield* docker([
-    "service",
-    "ls",
-    "--filter",
-    "label=alchemy::id=ClusterDomainPostgres",
-    "--filter",
-    `label=alchemy::stack=${stack.name}`,
-    "--filter",
-    `label=alchemy::stage=${stack.stage}`,
-    "--format",
-    "{{.Name}}",
-  ]);
-  const [container] = (yield* docker([
-    "ps",
-    "--filter",
-    `label=com.docker.swarm.service.name=${service}`,
-    "--format",
-    "{{.ID}}",
-  ])).split("\n");
-  return container!;
-});
-
 /**
  * The connections clients hold to the cluster's database. Swarm's load
  * balancer gives every runner's connection the same source address, so
  * this counts them all: the front opens none, so they are the runners'.
  */
 const databaseConnections = (container: string) =>
-  docker([
-    "exec",
+  psql(
     container,
-    "psql",
-    "-U",
-    "postgres",
-    "-d",
-    "cluster",
-    "-tAc",
     "SELECT count(*) FROM pg_stat_activity WHERE datname = 'cluster' AND client_addr IS NOT NULL",
-  ]).pipe(Effect.map(Number));
+  ).pipe(Effect.map(([count]) => Number(count)));
 
 export const connections = ({ test, url, stack }: ConnectionsOptions) =>
   test(
     "a runner hosting two models holds one storage pool, sized by the pool's databaseConnections",
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
-      const container = yield* postgres(stack);
+      const container = yield* clusterPostgres(stack);
       const run = crypto.randomUUID().slice(0, 8);
       const send = (path: string) =>
-        client.get(`${url}${path}`).pipe(
+        client.get(`${url()}${path}`).pipe(
           Effect.flatMap((response) =>
             response.status === 200
               ? Effect.void

@@ -1,5 +1,8 @@
 import type { Conflict } from "@distilled.cloud/prisma";
-import { createDeploymentStart, createDeploymentStop } from "@distilled.cloud/prisma/management";
+import {
+  createDeploymentStart,
+  createDeploymentStop,
+} from "@distilled.cloud/prisma/unstable/management";
 import * as Effect from "effect/Effect";
 import { observeDeployment } from "./DeploymentObserve.ts";
 

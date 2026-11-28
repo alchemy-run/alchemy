@@ -1,6 +1,6 @@
 ---
 title: What is Pi?
-description: The concepts behind Pi Durable — the harness and its storage, conversations and submissions, tools, extensions, skills, code mode and sandboxes — and how @alchemy.run/pi models each of them.
+description: The concepts behind Pi Durable — the harness and its storage, conversations and submissions, tools, extensions, code mode and sandboxes — and how @alchemy.run/pi models each of them.
 ---
 
 import Tree from "../../../components/diagrams/Tree.astro";
@@ -92,11 +92,17 @@ A Durable Object can't run a process, so the coding tools work in a **sandbox**.
 
 See [Sandboxes](/pi/sandboxes).
 
-## Extensions and skills
+## Extensions
 
-An **extension** adds prompt sections, tools and hooks that a conversation selects by name. A **skill** is instructions the model loads when a task calls for them.
+An **extension** adds prompt sections, tools and hooks that a conversation selects by name.
 
-See [Extensions](/pi/extensions) and [Skills](/pi/skills).
+See [Extensions](/pi/extensions).
+
+## Processes
+
+An [`AI.Process`](/ai/processes) describes work as prose and names no harness. `Pi.HarnessLive` runs its sessions as Pi conversations.
+
+See [Processes on Pi](/pi/processes).
 
 ## Code mode
 
@@ -112,6 +118,6 @@ See [Surviving a crash](/pi/durability).
 
 ## How @alchemy.run/pi models these concepts
 
-`Pi.Harness` is an Effect you yield where its Layers are provided. Models, tools, MCP servers, skills and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `Pi.Extension` is Pi's own. The storage, the coding tools and the code mode runtime are Layers, so the same harness moves from a Durable Object to a machine by changing them.
+`Pi.Harness` is an Effect you yield where its Layers are provided. Models, tools, MCP servers and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `Pi.HarnessLive` is the same harness as a Layer, for [processes](/pi/processes). `Pi.Extension` is Pi's own. The storage, the coding tools and the code mode runtime are Layers, so the same harness moves from a Durable Object to a machine by changing them.
 
 Next: [Setup](/pi/setup), then the [tutorial](/pi/tutorial/part-1).

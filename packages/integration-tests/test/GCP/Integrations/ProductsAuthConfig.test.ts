@@ -72,10 +72,8 @@ test.provider.skipIf(runProductAuthLifecycle)(
       const error = yield* Effect.flip(
         integrations.createProjectsLocationsProductsAuthConfigs({
           parent: `projects/${project}/locations/us-central1/products/IP`,
-          body: {
-            displayName: "alchemy-product-probe",
-            decryptedCredential: credential,
-          },
+          displayName: "alchemy-product-probe",
+          decryptedCredential: credential,
         }),
       );
       expect(error._tag).toEqual("Forbidden");

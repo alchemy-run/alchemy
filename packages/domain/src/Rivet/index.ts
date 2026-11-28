@@ -42,17 +42,19 @@ import {
   type ListOptions,
   makePlatform,
   type Namespace,
+  type Retention,
   type ObjectImpl,
   ObjectState,
   type ObjectStateShape,
   type ObjectStorage,
   parseMultiplexedName,
-  type Retention,
   runtimeClaim,
   type Stub,
   SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
 import type { Platform, Subscription } from "../Platform.ts";
+
+export type { Retention } from "../DurableObjects.ts";
 
 /** Built for one instance: an object's methods. */
 type InstanceBuild = Effect.Effect<
@@ -228,7 +230,7 @@ const multiplexed = (
     // The engine reads only `toArray` from its cursors, which Rivet's have.
     state: EngineState as never,
   });
-  return Layer.merge(makePlatform(host, { retention }), engine).pipe(
+  return Layer.merge(makePlatform(host, { retention: retention ?? {} }), engine).pipe(
     // The model's Layer needs it too.
     Layer.provideMerge(SecureRandom.layerWebCrypto),
   );
@@ -252,10 +254,13 @@ export interface DurableObjectsOptions<PoolReq> {
   /** The pool whose nodes run the model, e.g. `RivetDocker.SwarmPool("Default")`. */
   readonly pool: Layer.Layer<PoolHost, never, PoolReq>;
   /**
-   * How long the Durable Objects keep what only dedupe needs. Each instance
-   * prunes its own storage as it commits.
+   * How long each actor keeps the rows that only dedupe needs: command and
+   * decision receipts, policy delivery marks, and cancelled scheduled
+   * commands. An actor deletes a few rows past their window each time it
+   * commits, so an instance stops growing with its traffic. `"forever"`
+   * keeps a kind of row.
    *
-   * @default { receipts: "30 days" }
+   * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days" }
    */
   readonly retention?: Retention;
 }
@@ -349,6 +354,34 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
  *     return { fetch: api.fetch };
  *   }).pipe(Effect.provide(BankLive)),
  * ) {}
+ * ```
+ *
+ * ### Keeping dedupe rows for a while
+ * Receipts, policy delivery marks and cancelled scheduled commands exist only
+ * to drop repeats. Each actor deletes a few that are past their window every
+ * time it commits.
+ *
+ * **Example:** Receipts for a year, delivery marks forever
+ * ```typescript
+ * import * as RivetDocker from "@alchemy.run/rivet/Docker";
+ * import * as DomainRivet from "@alchemy.run/domain/Rivet";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankHandlers } from "./Bank.model.ts";
+ *
+ * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
+ * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
+ *
+ * export const BankLive = Bank.layer(BankHandlers).pipe(
+ *   Layer.provide(
+ *     DomainRivet.layerDurableObjects({
+ *       name: "Bank",
+ *       main: import.meta.url,
+ *       handler: "BankLive",
+ *       pool: Default,
+ *       retention: { receipts: "365 days", deliveries: "forever" },
+ *     }),
+ *   ),
+ * );
  * ```
  *
  * @layer

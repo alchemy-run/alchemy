@@ -4,6 +4,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -87,7 +88,7 @@ test.provider(
     Effect.gen(function* () {
       const { host, bare } = yield* stack;
       const service = `neon-function/${host.slug}`;
-      const record = (second: number): SDK.ProjectBranchLogRecord => ({
+      const record = (second: number): SDKUnstable.ProjectBranchLogRecord => ({
         timestamp: `2026-09-17T00:00:0${second}Z`,
         message: `fixture-${second}`,
         source: "function",
@@ -96,7 +97,7 @@ test.provider(
         attributes: {},
       });
       const requests: Record<string, unknown>[] = [];
-      const fixture = (respond: (page: number) => SDK.ProjectBranchLogsQueryResponse) =>
+      const fixture = (respond: (page: number) => SDKUnstable.ProjectBranchLogsQueryResponse) =>
         HttpClient.make((request) =>
           Effect.sync(() => {
             if (request.body._tag !== "Uint8Array") throw new Error("Expected JSON log query");
@@ -174,7 +175,7 @@ test.provider(
         }),
         Effect.timeout("2 minutes"),
       );
-      const observed = yield* SDK.queryProjectBranchLogs({
+      const observed = yield* SDKUnstable.queryProjectBranchLogs({
         project_id: host.projectId,
         branch_id: host.branchId,
         source: "function",
@@ -200,7 +201,7 @@ test.provider(
         }),
       );
       expect(lines.some((line) => line.message.includes(marker))).toBe(true);
-      const functions = yield* SDK.listProjectBranchFunctions({
+      const functions = yield* SDKUnstable.listProjectBranchFunctions({
         project_id: host.projectId,
         branch_id: host.branchId,
       });

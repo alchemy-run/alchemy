@@ -119,9 +119,6 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
             return yield* HttpServerResponse.json(yield* session.offered(name!));
           case "section":
             return yield* HttpServerResponse.json({ section: yield* session.section(name!) });
-          case "skill":
-            yield* session.addSkill(name!);
-            return yield* HttpServerResponse.json({ ok: true });
           case "results":
             return yield* HttpServerResponse.json(yield* session.toolResults(name!));
           case "disable":

@@ -6,6 +6,9 @@ import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
 
 const REF: Value.Brand = { kind: "Ref", cls: undefined };
+/** The functions of a `Ref` that a `SynchronizedRef` and a `SubscriptionRef` have too. */
+const SHARED =
+  "make get getUnsafe set setAndGet getAndSet update updateAndGet getAndUpdate modify".split(" ");
 const REDACTED: Value.Brand = { kind: "Redacted", cls: undefined };
 
 /**
@@ -120,6 +123,62 @@ export const make = (
 
   const result = (held: boolean, input: V): V =>
     held ? Brands.success(input) : Brands.failure(input);
+
+  /** What the function gives for what the cell holds, where it gives an effect. */
+  const changedBy = (name: string, fn: V | undefined, fields: Record<string, V>, site: Site) =>
+    Effect.flatMap(changed(name, fn, fields, site), (made) =>
+      made._tag === "Effect" ? made.run : wrongArguments(site, name),
+    );
+
+  /**
+   * A `Ref` whose changes may be effects. A handler is the only one that
+   * holds it and nothing runs beside a handler, so it is the same cell: a
+   * change that fails leaves it as it was.
+   */
+  const synchronized = (module: string): Models => ({
+    ...Object.fromEntries(
+      SHARED.concat(module === "SynchronizedRef" ? ["makeUnsafe"] : []).map(
+        (name): [string, Model] => [
+          `effect/${module}:${name}`,
+          (args, site) => call(`effect/Ref:${name}`, args, site),
+        ],
+      ),
+    ),
+    [`effect/${module}:updateEffect`]: onRef(`${module}.updateEffect`, 2, (fields, [fn], site) =>
+      Effect.map(changedBy(`${module}.updateEffect`, fn, fields, site), (after) => {
+        fields.value = after;
+        return Value.undef;
+      }),
+    ),
+    [`effect/${module}:updateAndGetEffect`]: onRef(
+      `${module}.updateAndGetEffect`,
+      2,
+      (fields, [fn], site) =>
+        Effect.map(changedBy(`${module}.updateAndGetEffect`, fn, fields, site), (after) => {
+          fields.value = after;
+          return after;
+        }),
+    ),
+    [`effect/${module}:getAndUpdateEffect`]: onRef(
+      `${module}.getAndUpdateEffect`,
+      2,
+      (fields, [fn], site) => {
+        const before = held(fields);
+        return Effect.map(changedBy(`${module}.getAndUpdateEffect`, fn, fields, site), (after) => {
+          fields.value = after;
+          return before;
+        });
+      },
+    ),
+    [`effect/${module}:modifyEffect`]: onRef(`${module}.modifyEffect`, 2, (fields, [fn], site) =>
+      Effect.flatMap(changedBy(`${module}.modifyEffect`, fn, fields, site), (made) => {
+        const pair = kit.itemsOf(made);
+        if (!pair || pair.length !== 2) return wrongArguments(site, `${module}.modifyEffect`);
+        fields.value = pair[1]!;
+        return Effect.succeed(pair[0]!);
+      }),
+    ),
+  });
 
   const models: Models = {
     "effect/MutableRef:make": ([value]) => Effect.succeed(cell(value ?? Value.undef)),
@@ -341,6 +400,8 @@ export const make = (
         return Effect.succeed(pair[0]!);
       }),
     ),
+    ...synchronized("SynchronizedRef"),
+    ...synchronized("SubscriptionRef"),
     "effect/Ordering:reverse": ([ordering], site) =>
       ordering
         ? host.arithmetic("-", Value.num(0), ordering, site)

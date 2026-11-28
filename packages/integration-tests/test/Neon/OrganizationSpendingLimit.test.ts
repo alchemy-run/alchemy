@@ -7,6 +7,7 @@ import { providers } from "@alchemy.run/neon/Providers";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import { adopt, stripUnowned, Unowned } from "alchemy/AdoptPolicy";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
@@ -203,7 +204,8 @@ test.provider.skipIf(!enabled)(
       yield* stack.destroy();
       const organization = orgId!;
       const request = { org_id: organization };
-      const original = (yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents;
+      const original = (yield* SDKUnstable.getOrganizationSpendingLimit(request))
+        .spending_limit_cents;
       const application = (value: number, takeOwnership = false) =>
         OrganizationSpendingLimit("Alert", { orgId: organization, spendingLimitCents: value }).pipe(
           adopt(takeOwnership),
@@ -217,51 +219,58 @@ test.provider.skipIf(!enabled)(
           initialSpendingLimitCents: null,
           managedSpendingLimitCents: null,
         });
-        expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBeNull();
+        expect(
+          (yield* SDKUnstable.getOrganizationSpendingLimit(request)).spending_limit_cents,
+        ).toBeNull();
         const created = yield* stack.deploy(application(threshold));
         expect(created.initialSpendingLimitCents).toBeNull();
-        expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
-          threshold,
-        );
+        expect(
+          (yield* SDKUnstable.getOrganizationSpendingLimit(request)).spending_limit_cents,
+        ).toBe(threshold);
         yield* stack.deploy(application(threshold + 1));
-        yield* SDK.setOrganizationSpendingLimit({
+        yield* SDKUnstable.setOrganizationSpendingLimit({
           ...request,
           spending_limit_cents: threshold + 2,
         });
         expect(Result.isFailure(yield* stack.destroy().pipe(Effect.result))).toBe(true);
-        expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
-          threshold + 2,
-        );
-        yield* SDK.setOrganizationSpendingLimit({
+        expect(
+          (yield* SDKUnstable.getOrganizationSpendingLimit(request)).spending_limit_cents,
+        ).toBe(threshold + 2);
+        yield* SDKUnstable.setOrganizationSpendingLimit({
           ...request,
           spending_limit_cents: threshold + 1,
         });
         yield* stack.destroy();
-        expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBeNull();
+        expect(
+          (yield* SDKUnstable.getOrganizationSpendingLimit(request)).spending_limit_cents,
+        ).toBeNull();
       }
 
       const baseline = original ?? threshold + 100;
       if (original === null)
-        yield* SDK.setOrganizationSpendingLimit({ ...request, spending_limit_cents: baseline });
+        yield* SDKUnstable.setOrganizationSpendingLimit({
+          ...request,
+          spending_limit_cents: baseline,
+        });
       expect(Result.isFailure(yield* stack.plan(application(threshold)).pipe(Effect.result))).toBe(
         true,
       );
-      expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
+      expect((yield* SDKUnstable.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
         baseline,
       );
       const adopted = yield* stack.deploy(application(threshold, true));
       expect(adopted.initialSpendingLimitCents).toBe(baseline);
-      expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
+      expect((yield* SDKUnstable.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
         threshold,
       );
       const updated = yield* stack.deploy(application(threshold + 1));
       expect(updated.initialSpendingLimitCents).toBe(baseline);
       yield* stack.destroy();
-      expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
+      expect((yield* SDKUnstable.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
         baseline,
       );
-      if (original === null) yield* SDK.deleteOrganizationSpendingLimit(request);
-      expect((yield* SDK.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
+      if (original === null) yield* SDKUnstable.deleteOrganizationSpendingLimit(request);
+      expect((yield* SDKUnstable.getOrganizationSpendingLimit(request)).spending_limit_cents).toBe(
         original,
       );
       yield* stack.destroy();
