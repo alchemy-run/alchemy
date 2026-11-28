@@ -4030,7 +4030,15 @@ const rest: ReadonlyArray<Group> = [
       `Effect.fail(new Cause.UnknownError(a, "what")).pipe(Effect.catch((error) => Effect.succeed([Cause.isUnknownError(error), error._tag, error.message, error.cause])))`,
       `Effect.head(Effect.succeed([])).pipe(Effect.catch((error) => Effect.succeed(Cause.isNoSuchElementError(error))))`,
       `Effect.succeed([Result.isSuccess(Cause.findDie(Cause.die(a))), Result.isSuccess(Cause.findDie(Cause.fail(b)))])`,
+      `Effect.succeed([Exit.filterValue({ _tag: "Success" }), Result.isSuccess(Cause.findError({ reasons: [{ _tag: "Fail" }] })), a])`,
+      `Effect.succeed([Exit.isFailure(Exit.mapError({ _tag: "Failure", cause: { reasons: [{ _tag: "Fail" }] } }, (e) => [e, a])), Cause.squash({ reasons: [{ _tag: "Fail" }] }), Result.isSuccess(Exit.findError({ _tag: "Failure", cause: { reasons: [{ _tag: "Fail" }] } }))])`,
+      `Effect.succeed([Result.isSuccess(Exit.findDefect({ _tag: "Failure", cause: { reasons: [{ _tag: "Die" }] } })), Cause.hasFails(Cause.map({ reasons: [{ _tag: "Fail" }] }, (e) => [e, a]))])`,
+      `Effect.succeed([Exit.isFailure(Exit.mapBoth({ _tag: "Failure", cause: { reasons: [{ _tag: "Fail" }] } }, { onFailure: (e) => [e, a], onSuccess: (v) => v })), Exit.isFailure(Exit.mapBoth(Exit.die(a), { onFailure: (e) => e, onSuccess: (v) => v }))])`,
+      `Effect.succeed([Result.isFailure(Exit.filterSuccess(Exit.fail(a))), Result.isFailure(Exit.filterValue(Exit.fail(a))), Result.isSuccess(Exit.filterFailure(Exit.fail(b))), b])`,
+      `Effect.map(Effect.exit(Effect.failCause(Cause.die(a))), Exit.hasDies)`,
+      `Effect.onInterrupt(Effect.interrupt, () => Effect.die(a)).pipe(Effect.exit, Effect.map((exit) => exit.cause.reasons.map((reason) => reason._tag)))`,
     ],
+    unread: [[`Exit.mapError()(Exit.fail(a))`, /is called in a way the prover has no model for/]],
   },
   {
     // More of Stream, each the library's own on the handler's clock.
