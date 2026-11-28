@@ -365,16 +365,28 @@ describe(
         yield* ensureDockerSwarm;
         yield* stack.destroy();
         yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const docker = yield* Docker.Docker;
         const fqn = "recover-overlay";
         const network = (attachable: boolean) =>
           Effect.gen(function* () {
             const overlay = yield* Docker.Network(fqn, { driver: "overlay", attachable });
-            // Rivet services also depend on the overlay's name.
-            yield* Docker.Network("overlay-consumer", { labels: { "overlay-name": overlay.name } });
-            return overlay;
+            const service = yield* Docker.Service("overlay-consumer", {
+              image: "nginx:alpine",
+              networks: [{ name: overlay.name, aliases: ["app"] }],
+              replicas: 0,
+            });
+            return { overlay, service };
           });
         const resource = network(true);
-        const original = yield* stack.deploy(resource);
+        const { overlay: original, service } = yield* stack.deploy(resource);
+        const serviceInspect = (format: string) =>
+          docker
+            .run(["service", "inspect", service.id, "--format", format])
+            .pipe(Effect.map((output) => output.stdout));
+        expect(
+          yield* serviceInspect("{{range .Spec.TaskTemplate.Networks}}{{println .Target}}{{end}}"),
+        ).toBe(original.id);
+        const serviceVersion = yield* serviceInspect("{{.Version.Index}}");
         const state = yield* yield* State;
         const key = { stack: stack.name, stage: stack.stage, fqn };
         const row = yield* state.get(key);
@@ -393,11 +405,15 @@ describe(
         const plan = yield* stack.plan(resource);
         expect(plan.resources[fqn]?.action).toBe("update");
         expect(plan.resources["overlay-consumer"]?.action).toBe("noop");
-        const refreshed = yield* stack.deploy(resource);
+        const { overlay: refreshed, service: unchanged } = yield* stack.deploy(resource);
         expect(refreshed.id).toBe(original.id);
         expect(refreshed.driver).toBe("overlay");
         expect(refreshed.ipam.driver).toBe("default");
-        expect((yield* stack.plan(resource)).resources[fqn]?.action).toBe("noop");
+        expect(unchanged.id).toBe(service.id);
+        expect(yield* serviceInspect("{{.Version.Index}}")).toBe(serviceVersion);
+        const settled = yield* stack.plan(resource);
+        expect(settled.resources[fqn]?.action).toBe("noop");
+        expect(settled.resources["overlay-consumer"]?.action).toBe("noop");
       }),
     );
 
