@@ -518,7 +518,8 @@ export class Instant<T = number> {
         let next = this.sleepers[0]!;
         for (const sleeper of this.sleepers.slice(1)) {
           const order = this.time.order(sleeper.at, next.at);
-          if (order === 0) this.tied = true;
+          // Two waits that never end do not end at the same moment: they do not end.
+          if (order === 0 && next.at !== Infinity) this.tied = true;
           if (order < 0) next = sleeper;
         }
         this.sleepers.splice(this.sleepers.indexOf(next), 1);

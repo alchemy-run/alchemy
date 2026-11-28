@@ -126,9 +126,9 @@ export const errorOf = (error: unknown): V => {
   if (typeof tag !== "string") return { _tag: "Opaque", what: "an error of the library" };
   // What the library marks its own errors with is kept: `Cause.isTimeoutError` looks for it.
   const marks: Record<string, V> = {};
-  if (typeof error === "object" && error !== null)
-    for (const [key, mark] of Object.entries(error))
-      if (key.startsWith("~effect/") && typeof mark === "string") marks[key] = Value.str(mark);
+  // An error with a tag is an object: what holds a tag is one.
+  for (const [key, mark] of Object.entries(error as object))
+    if (key.startsWith("~effect/") && typeof mark === "string") marks[key] = Value.str(mark);
   return Value.obj({ ...marks, _tag: Value.str(tag) });
 };
 
@@ -176,8 +176,8 @@ export const back = <A, B = V>(
         Cause.fromReasons(
           cause.reasons.flatMap((reason): ReadonlyArray<Cause.Reason<Stop>> => {
             if (Cause.isInterruptReason(reason)) return [reason];
-            const one = stopOf(timeline, Cause.fromReasons([reason]));
-            return one ? [Cause.makeFailReason(one)] : [];
+            // A failure or a defect on its own is always a stop.
+            return [Cause.makeFailReason(stopOf(timeline, Cause.fromReasons([reason]))!)];
           }),
         ),
       );

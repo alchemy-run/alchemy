@@ -335,7 +335,8 @@ export const make = (kit: Kit) => {
     "effect/HashMap:modify": onMap("HashMap.modify", 3, (entries, [key, fn], site, self) =>
       Effect.gen(function* () {
         const f = yield* fnOf("HashMap.modify", fn, site);
-        const at = yield* find(entries, key ?? Value.undef, site);
+        // The function is given after the key: with it, the key is there.
+        const at = yield* find(entries, key!, site);
         if (at < 0) return self;
         const [own, value] = entries[at]!;
         return map([
@@ -349,7 +350,8 @@ export const make = (kit: Kit) => {
     "effect/HashMap:modifyAt": onMap("HashMap.modifyAt", 3, (entries, [key, fn], site, self) =>
       Effect.gen(function* () {
         const f = yield* fnOf("HashMap.modifyAt", fn, site);
-        const wanted = key ?? Value.undef;
+        // The function is given after the key: with it, the key is there.
+        const wanted = key!;
         const at = yield* find(entries, wanted, site);
         const made = Value.optionOf(
           yield* host.call(f, [at < 0 ? Value.none : Value.some(entries[at]![1])], site),

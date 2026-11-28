@@ -15,6 +15,25 @@ const AFTER: ReadonlyArray<string> = [``, `"x"`, `a, b`, `{}`, `() => b`, `[a]`,
 
 /** A value of a module's own kind, made in a handler: `self` in the calls of its functions. */
 const SELF: Readonly<Record<string, string>> = {
+  Combiner: `Combiner.make((x, y) => x + y)`,
+  Data: `Data.struct({ x: a })`,
+  Equal: `a`,
+  Equivalence: `Equivalence.Number`,
+  Filter: `Filter.fromPredicate((n) => n > b)`,
+  Function: `(n) => n + a`,
+  Hash: `a`,
+  Ordering: `-1`,
+  Pool: `yield* Pool.make({ acquire: Effect.succeed(a), size: 1 })`,
+  Predicate: `(n) => n > b`,
+  RcMap: `yield* RcMap.make({ lookup: (key) => Effect.succeed(key) })`,
+  RcRef: `yield* RcRef.make({ acquire: Effect.succeed(a) })`,
+  Redacted: `Redacted.make(a)`,
+  Reducer: `Reducer.make((x, y) => x + y, 0)`,
+  Request: `Request.tagged("Asked")({ n: a })`,
+  RequestResolver: `RequestResolver.fromEffect((entry) => Effect.succeed(entry.request.n))`,
+  Resource: `yield* Resource.manual(Effect.succeed(a))`,
+  ScopedRef: `yield* ScopedRef.make(() => a)`,
+  SynchronizedRef: `yield* SynchronizedRef.make(a)`,
   Array: `[a, b]`,
   BigDecimal: `BigDecimal.fromBigInt(1n)`,
   BigInt: `1n`,
@@ -92,10 +111,11 @@ const numbers = {
 
 /**
  * A call, made in a scope with a value of the module's own first: what it
- * gives is called when it is a function, and run when it is an effect.
+ * gives is called when it is a function, with nothing and then with that
+ * value, and run when it is an effect.
  */
 const ran = (self: string | undefined, call: string): string =>
-  `Effect.scoped(Effect.gen(function* () { ${self ? `const self = ${self}; ` : ""}const made = ${call}; const out = typeof made === "function" ? made() : made; if (Effect.isEffect(out)) yield* Effect.exit(out); return 1; }))`;
+  `Effect.scoped(Effect.gen(function* () { ${self ? `const self = ${self}; ` : ""}const made = ${call}; const out = typeof made === "function" ? made() : made; ${self ? `const last = typeof out === "function" ? out(self) : out; ` : "const last = out; "}if (Effect.isEffect(last)) yield* Effect.exit(last); return 1; }))`;
 
 /** One table for each module the prover has models of, named after it. */
 export const misuseGroups = (only?: ReadonlyArray<string>): ReadonlyArray<Group> => {

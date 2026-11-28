@@ -426,8 +426,19 @@ const base: ReadonlyArray<Group> = [
       `Match.typeTags()({ Up: () => 1, Down: () => 2 })({ _tag: a > 0 ? "Up" : "Down" })`,
       `Match.value(a > 0 ? a : null).pipe(Match.when(Match.defined, (n) => n), Match.when(Match.any, () => -1), Match.exhaustive)`,
       `Match.value(a).pipe(Match.withReturnType(), Match.when((n) => n > 0, () => "up"), Match.orElse(() => "down"))`,
+      `[Predicate.mapInput((n) => n === undefined, (n) => n)(), a]`,
     ],
     unread: [
+      [`compose()((n) => n + a)`, /is called in a way the prover has no model for/],
+      [`dual(2, (x, y) => x + y)(a)()`, /is called in a way the prover has no model for/],
+      [`Equal.equals()(a)`, /is called in a way the prover has no model for/],
+      [`Order.min(Order.Number)()(a)`, /is called in a way the prover has no model for/],
+      [`Order.clamp(Order.Number)(a, 5)`, /is called in a way the prover has no model for/],
+      [`Order.isBetween(Order.Number)(a, 5)`, /is called in a way the prover has no model for/],
+      [
+        `Equivalence.mapInput(Equivalence.Number, (n) => n)()(a)`,
+        /is called in a way the prover has no model for/,
+      ],
       [
         `Match.value(a).pipe(Match.when(100, () => "many"), Match.exhaustive)`,
         /meets a value none of its cases takes/,
@@ -1393,6 +1404,10 @@ const base: ReadonlyArray<Group> = [
       `Equal.equals(HashMap.set(scores, "q", a), HashMap.union(scores, HashMap.make(["q", a])))`,
       `(() => { const held = MutableHashMap.fromIterable(scores); MutableHashMap.set(held, "q", a); MutableHashMap.modify(held, "q", (n) => n + 1); MutableHashMap.remove(held, "a"); return [MutableHashMap.get(held, "q"), MutableHashMap.has(held, "a"), MutableHashMap.size(held), MutableHashMap.isEmpty(held)]; })()`,
       `(() => { const held = MutableHashMap.make(["a", a]); MutableHashMap.modifyAt(held, "b", () => Option.some(1)); const size = MutableHashMap.size(held); MutableHashMap.clear(held); return [size, MutableHashMap.size(held), MutableHashMap.size(MutableHashMap.empty())]; })()`,
+      `HashMap.size(HashMap.modifyAt(scores, "missing", () => Option.none())) + a`,
+    ],
+    unread: [
+      [`HashMap.modifyAt(scores, "a", () => a)`, /is called in a way the prover has no model for/],
     ],
   },
   {
