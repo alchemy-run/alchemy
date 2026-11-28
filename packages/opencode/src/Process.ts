@@ -1,7 +1,6 @@
 import {
   HarnessError,
   makeHarness,
-  memoryValues,
   type Engine,
   type EngineSession,
   type Harness as AiHarness,
@@ -14,7 +13,7 @@ import type * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import type { NotOnHarness, OpenCodeError } from "./Errors.ts";
 import { Harness } from "./Harness.ts";
-import { Storage } from "./Storage.ts";
+import type { Storage } from "./Storage.ts";
 import type { Enabled, Listed, ToolRef } from "./Tool.ts";
 
 const failed = (error: OpenCodeError | NotOnHarness) =>
@@ -58,10 +57,10 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
           models: options.models as ReadonlyArray<AnyModel>,
           tools: options.tools as ReadonlyArray<Listed>,
         }),
-        Effect.flatMap(Storage, (storage) => storage.instance),
       ]),
-      ([harness, storage]): Engine => ({
-        values: storage.values ?? memoryValues(),
+      ([harness]): Engine => ({
+        // The values the harness gives its tool calls their state from.
+        values: harness["~values"],
         toolName: (tool) => harness.toolName(tool as ToolRef),
         session: (name, session): EngineSession => {
           const opencode = harness.session(name);

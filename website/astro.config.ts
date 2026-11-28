@@ -2533,6 +2533,7 @@ export default defineConfig({
                 { label: "Model", link: "/ai/models" },
                 { label: "Tool", link: "/ai/tools" },
                 { label: "Coding tools", link: "/ai/coding-tools" },
+                { label: "State", link: "/ai/state" },
                 { label: "MCP server", link: "/ai/mcp-servers" },
                 { label: "Code mode", link: "/ai/code-mode" },
                 { label: "Harness", link: "/ai/harnesses" },

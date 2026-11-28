@@ -6,6 +6,7 @@ import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import type { ProcessService, ProcessTag, Session } from "./Process.ts";
 import type { SessionEntry, SessionEvent, SessionItem, SessionState } from "./Session.ts";
+import { StateStore, stateStoreOf } from "./State.ts";
 
 /** One message a scripted session is answering. */
 export interface Turn {
@@ -23,7 +24,8 @@ export interface Turn {
  * harness, model or sandbox is needed.
  *
  * `answer` is where the test does what a session would have done with its
- * tools: send the commands the prose mentions.
+ * tools: send the commands the prose mentions, and read and write the
+ * session's state (`AI.State`).
  *
  * **Example:** A Triage that labels every issue a bug
  * ```typescript
@@ -48,14 +50,27 @@ export interface Turn {
  */
 export const scripted = <Service, R = never>(
   process: ProcessTag<Service, string, any>,
-  build: Effect.Effect<(turn: Turn) => Effect.Effect<string, never, RuntimeContext>, never, R>,
+  build: Effect.Effect<
+    (turn: Turn) => Effect.Effect<string, never, RuntimeContext | StateStore>,
+    never,
+    R
+  >,
 ): Layer.Layer<Service, never, R> =>
   Layer.effect(
     process as unknown as Context.Key<Service, ProcessService<any>>,
     Effect.gen(function* () {
       const answer = yield* build;
       const sessions = new Map<string, Session>();
+      // Every session's state, for as long as the Layer lives.
+      const stored = new Map<string, string>();
+      const values = {
+        get: (key: string) => Effect.sync(() => stored.get(key)),
+        put: (key: string, value: string) => Effect.sync(() => void stored.set(key, value)),
+      };
       const make = (key: string): Session => {
+        const store = stateStoreOf(values, key);
+        const state = <A>(declared: { readonly in: (store: StateStore["Service"]) => A }) =>
+          declared.in(store);
         const items: Array<SessionEntry> = [];
         const seen = new Set<string>();
         let working = 0;
@@ -70,7 +85,7 @@ export const scripted = <Service, R = never>(
           status: working > 0 ? "working" : "idle",
           queued: [],
         });
-        const store = (item: SessionItem) =>
+        const keep = (item: SessionItem) =>
           Effect.suspend(() => {
             const entry = { seq: items.length + 1, item };
             items.push(entry);
@@ -83,9 +98,10 @@ export const scripted = <Service, R = never>(
             if (requestId !== undefined) seen.add(requestId);
             working++;
             yield* publish(status());
-            yield* store({ type: "user", text });
-            const reply = yield* answer({ key, text });
-            yield* store({ type: "assistant", text: reply, toolCalls: [] });
+            yield* keep({ type: "user", text });
+            // `answer` stands in for the session's tools, so it has the session's state.
+            const reply = yield* Effect.provideService(answer({ key, text }), StateStore, store);
+            yield* keep({ type: "assistant", text: reply, toolCalls: [] });
             working--;
             yield* publish(status());
             return reply;
@@ -97,6 +113,7 @@ export const scripted = <Service, R = never>(
             Effect.map(turn(text, options?.requestId), (reply) => ({ text: reply })),
           withdraw: () => Effect.void,
           interrupt: Effect.void,
+          state: state as Session["state"],
           events: (options) =>
             Stream.callback<SessionEvent>((queue) =>
               Effect.acquireRelease(
@@ -141,6 +158,7 @@ export const scripted = <Service, R = never>(
           return session;
         },
         "~exists": (key: string) => Effect.sync(() => sessions.has(key)),
+        "~state": (key: string) => Effect.succeed(stateStoreOf(values, key)),
       } satisfies ProcessService<any>;
     }),
   );

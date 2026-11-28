@@ -1,0 +1,137 @@
+---
+title: State
+description: Declare typed state a session keeps beside its transcript with AI.State. Tools read and write it, the code that holds the session reads and writes it from outside, and the model never sees it.
+---
+
+A session's transcript is what the model said and read. Its state is what your code knows about the session: the phase it is in, what it has already done. `AI.State` declares one piece of it.
+
+## Declare a state
+
+A state has a name, a schema, and the value a new session starts with:
+
+```typescript title="src/Phase.state.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export class Phase extends AI.State("phase", {
+  schema: Schema.Struct({ phase: Schema.Literals(["research", "draft", "publish"]) }),
+  initial: { phase: "research" },
+}) {}
+```
+
+Every session has its own value. Nothing is created ahead of time: a session that never wrote the state has `initial`.
+
+## Write it from a tool
+
+A tool call belongs to one session, so `Phase.set` writes that session's value. No id is passed:
+
+```typescript title="src/Advance.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Phase } from "./Phase.state.ts";
+
+export class Advance extends AI.Tool<Advance>()("advance", {
+  description: "Say the research is done, so drafting can start.",
+  parameters: Schema.Struct({}),
+  success: Schema.Void,
+}) {}
+
+export const AdvanceLive = Advance.make(
+  Effect.fn(function* () {
+    yield* Phase.set({ phase: "draft" });
+  }),
+);
+```
+
+A tool is where the model decides something, so it is where a decision becomes state.
+
+## Read it in a tool
+
+`Phase.get` is the value of the calling session. A tool that only works in one phase checks it:
+
+```typescript title="src/Publish.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Phase } from "./Phase.state.ts";
+
+export class NotReady extends Schema.TaggedError<NotReady>()("NotReady", {
+  phase: Schema.String,
+}) {}
+
+export class Publish extends AI.Tool<Publish>()("publish", {
+  description: "Publish the draft.",
+  parameters: Schema.Struct({ title: Schema.String }),
+  success: Schema.Struct({ url: Schema.String }),
+  failure: NotReady,
+}) {}
+
+export const PublishLive = Publish.make(
+  Effect.fn(function* ({ title }) {
+    const { phase } = yield* Phase.get;
+    if (phase !== "publish") return yield* new NotReady({ phase });
+    return { url: `https://example.com/${title}` };
+  }),
+);
+```
+
+The model reads `NotReady` as the tool's error and can do the earlier phase first.
+
+## Change it from what it is
+
+`update` changes the value from the one stored now, and gives the new one:
+
+```typescript title="src/Count.tool.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+export class Sources extends AI.State("sources", {
+  schema: Schema.Struct({ found: Schema.Number }),
+  initial: { found: 0 },
+}) {}
+
+export class Found extends AI.Tool<Found>()("found", {
+  description: "Record that another source was found.",
+  parameters: Schema.Struct({}),
+  success: Schema.Struct({ found: Schema.Number }),
+}) {}
+
+export const FoundLive = Found.make(
+  Effect.fn(function* () {
+    return yield* Sources.update((state) => ({ found: state.found + 1 }));
+  }),
+);
+```
+
+Two updates to one session's value never interleave, so two tool calls of one turn both count.
+
+## Read and write it from outside
+
+The code that holds a process names the session:
+
+```typescript title="src/Review.ts"
+import * as Effect from "effect/Effect";
+import { Phase } from "./Phase.state.ts";
+import { Writer } from "./Writer.process.ts";
+
+/** Let a piece a person approved be published. */
+export const approve = Effect.fn(function* (pieceId: string) {
+  const writer = yield* Writer;
+  const phase = writer.get(pieceId).state(Phase);
+
+  const { phase: now } = yield* phase.get;
+  if (now === "draft") yield* phase.set({ phase: "publish" });
+});
+```
+
+It is the same value the session's tools read: the next `publish` call finds the phase `approve` set. A session [hosted on its own object](/ai/hosting) is read and written there, so the call crosses to it.
+
+## Where it is kept
+
+State is stored in the harness's own storage, beside the sessions: on Cloudflare, the session's Durable Object. It lasts as long as the session does, and an evicted object reads the same value when it starts again.
+
+The model never reads state. To tell it something, return it from a tool, or put it in the prompt: on Pi, [a section of an extension](/pi/extensions#read-a-conversations-state) reads state before each request.
+
+State is not part of the transcript, so starting a session over or compacting it leaves the state as it is.

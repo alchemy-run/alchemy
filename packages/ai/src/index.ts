@@ -80,6 +80,15 @@ export {
 } from "./McpServer.ts";
 export { Bash, CodingTools, Edit, Glob, Grep, Read, Write } from "./CodingTools.ts";
 export {
+  isState,
+  State,
+  StateStore,
+  type AnyState,
+  type StateClass,
+  type StateOf,
+  type StateSpec,
+} from "./State.ts";
+export {
   isTool,
   isToolTag,
   Tool,

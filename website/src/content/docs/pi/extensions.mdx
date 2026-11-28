@@ -71,6 +71,40 @@ export class Clock extends Pi.Extension<Clock>()(
 ) {}
 ```
 
+## Read a conversation's state
+
+A section and a hook each run for one conversation, so an [`AI.State`](/ai/state) is that conversation's value. A section that says which phase the conversation is in:
+
+```typescript title="src/extensions.ts"
+import * as Pi from "@alchemy.run/pi";
+import * as Effect from "effect/Effect";
+import { Phase } from "./Phase.state.ts";
+
+export class Phases extends Pi.Extension<Phases>()(
+  "phases",
+  {},
+  Effect.gen(function* () {
+    return {
+      sections: {
+        phase: Effect.fn(function* () {
+          return `You are in the ${(yield* Phase.get).phase} phase.`;
+        }),
+      },
+      hooks: {
+        beforeTool: Effect.fn(function* (call) {
+          const { phase } = yield* Phase.get;
+          return call.name === "publish" && phase !== "publish"
+            ? Pi.block(`Finish the ${phase} phase first.`)
+            : undefined;
+        }),
+      },
+    };
+  }),
+) {}
+```
+
+A section is sent again only when its text changes, so one that follows a phase costs a prompt-cache miss per phase, not per request.
+
 ## The other hooks
 
 `afterTool` replaces a call's result. `beforeRequest` replaces the messages of one model request. `afterResponse` sees each answer. `onYield` runs when the model stops, and can keep the run going with another message:

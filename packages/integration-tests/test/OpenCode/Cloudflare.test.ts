@@ -294,6 +294,32 @@ test(
 );
 
 test(
+  "a session's state is written by a tool, read from outside, and kept when its object is evicted",
+  Effect.gen(function* () {
+    const name = `oc-phase-${Date.now()}`;
+    // A session that never wrote the state has what the declaration starts it with.
+    expect(yield* call(`/${name}/phase`)).toEqual({ phase: "research" });
+
+    // The model's tool call writes the state of its own session.
+    yield* call(`/${name}/prompt`, {
+      text: "The research is done. Use the alchemy_advance tool.",
+      tools: ["advance"],
+      requestId: "phase-1",
+    });
+    expect((yield* usedBy(name, "alchemy_advance")).length).toBeGreaterThan(0);
+    expect(yield* call(`/${name}/phase`)).toEqual({ phase: "draft" });
+    // Another session has a value of its own.
+    expect(yield* call(`/${name}-other/phase`)).toEqual({ phase: "research" });
+
+    // Written from outside, and kept in the object's storage: a fresh instance reads it.
+    expect(yield* call(`/${name}/phase`, { phase: "publish" })).toEqual({ phase: "publish" });
+    yield* call(`/${name}/crash`, {}).pipe(Effect.ignore);
+    expect(yield* call(`/${name}/phase`)).toEqual({ phase: "publish" });
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
   "a prompt's requestId makes it exactly-once, across a restart of the instance",
   Effect.gen(function* () {
     const name = `oc-once-${Date.now()}`;

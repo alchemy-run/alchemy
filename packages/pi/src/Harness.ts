@@ -1,5 +1,6 @@
 import { CodeModeConvention, isCodeMode, type CodeModeGroup } from "@alchemy.run/ai/CodeMode";
 import type { JsonSchema } from "@alchemy.run/ai/Declarations";
+import { memoryValues, type EngineValues } from "@alchemy.run/ai/Harness";
 import {
   isMcpServer,
   type AnyMcpServer,
@@ -8,6 +9,7 @@ import {
 } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { Sandboxes } from "@alchemy.run/ai/Sandbox";
+import { StateStore, stateStoreOf, type AnyState, type StateOf } from "@alchemy.run/ai/State";
 import type { ToolSpec, ToolTagService } from "@alchemy.run/ai/Tool";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -243,6 +245,12 @@ export interface Conversation {
    * tool call opens a new one. Does nothing on a harness without a sandbox.
    */
   readonly removeSandbox: Effect.Effect<void, PiError, RuntimeContext>;
+  /**
+   * The conversation's value of a declared state (`AI.State`): what its
+   * tools, and an extension's sections and hooks, read and write as
+   * `Phase.get` and `Phase.set`.
+   */
+  readonly state: <S extends AnyState>(state: S) => StateOf<S["spec"]["initial"]>;
   /** Pi's own handle, for what this view doesn't cover. */
   readonly raw: Effect.Effect<PiConversation, PiError, RuntimeContext>;
 }
@@ -307,6 +315,8 @@ export interface Harness {
   readonly waitForIdle: Effect.Effect<void, PiError, RuntimeContext>;
   /** Pi's harness, for what this view doesn't cover. */
   readonly raw: Effect.Effect<PiHarness, PiError, RuntimeContext>;
+  /** @internal Where each conversation's state is kept. */
+  readonly "~values": EngineValues;
 }
 
 type ModelServices<Models extends ReadonlyArray<AnyModel>> = Models[number] extends infer M
@@ -372,6 +382,9 @@ export const Harness = <
   Effect.gen(function* () {
     const prefix = `${options.name ?? "pi"}_`;
     const storage = yield* (yield* Storage).instance;
+    // Where each conversation's state is kept: beside the harness's tables.
+    const values: EngineValues = storage.values ?? memoryValues();
+    const stateOf = (conversationId: string) => stateStoreOf(values, conversationId);
     // Where tools find files and a shell: the harness's own `AI.Sandboxes`,
     // or the one a coding tool's Layer was given. A harness without either
     // runs only tools that need neither.
@@ -578,9 +591,18 @@ export const Harness = <
         const compile = ({ tool, handler }: { tool: ToolRef; handler: any }): ToolRegistration =>
           handler === undefined
             ? (tool as unknown as { registration: ToolRegistration }).registration
-            : toRegistration(tool.toolName, (tool as { spec: any }).spec, handler, runTool);
-        const runHook = <A>(effect: Effect.Effect<A, never, any>) =>
-          Effect.runPromiseWith(base as Context.Context<any>)(effect);
+            : toRegistration(
+                tool.toolName,
+                (tool as { spec: any }).spec,
+                handler,
+                runTool,
+                stateOf,
+              );
+        /** Run a section or a hook for one conversation: `AI.State` is that conversation's. */
+        const runHook = <A>(effect: Effect.Effect<A, never, any>, conversationId: unknown) =>
+          Effect.runPromiseWith(
+            Context.add(base as Context.Context<any>, StateStore, stateOf(String(conversationId))),
+          )(effect);
 
         const baseExtension: PiExtension = {
           name: BASE_EXTENSION,
@@ -595,7 +617,9 @@ export const Harness = <
               section(key, () => text),
             ),
             ...Object.entries(impl?.sections ?? {}).map(([key, render]) =>
-              section(key, (input) => runHook(render({ conversationId: input.conversationId }))),
+              section(key, (input) =>
+                runHook(render({ conversationId: input.conversationId }), input.conversationId),
+              ),
             ),
           ];
           const hooks: HookRegistration[] = [];
@@ -604,10 +628,16 @@ export const Harness = <
             hooks.push(
               hook(ToolTask, {
                 ...(toolHooks.beforeTool
-                  ? { beforeTool: (call) => runHook(toolHooks.beforeTool!(call)) }
+                  ? {
+                      beforeTool: (call, api) =>
+                        runHook(toolHooks.beforeTool!(call), api.conversationId),
+                    }
                   : {}),
                 ...(toolHooks.afterTool
-                  ? { afterTool: (call, result) => runHook(toolHooks.afterTool!(call, result)) }
+                  ? {
+                      afterTool: (call, result, api) =>
+                        runHook(toolHooks.afterTool!(call, result), api.conversationId),
+                    }
                   : {}),
               }),
             );
@@ -617,15 +647,21 @@ export const Harness = <
               hook(GenerationTask, {
                 ...(toolHooks.beforeRequest
                   ? {
-                      beforeRequest: (request) =>
-                        runHook(toolHooks.beforeRequest!(request)) as never,
+                      beforeRequest: (request, api) =>
+                        runHook(toolHooks.beforeRequest!(request), api.conversationId) as never,
                     }
                   : {}),
                 ...(toolHooks.afterResponse
-                  ? { afterResponse: (message) => runHook(toolHooks.afterResponse!(message)) }
+                  ? {
+                      afterResponse: (message, api) =>
+                        runHook(toolHooks.afterResponse!(message), api.conversationId),
+                    }
                   : {}),
                 ...(toolHooks.onYield
-                  ? { onYield: (answer) => runHook(toolHooks.onYield!(answer)) }
+                  ? {
+                      onYield: (answer, api) =>
+                        runHook(toolHooks.onYield!(answer), api.conversationId),
+                    }
                   : {}),
               }),
             );
@@ -1000,6 +1036,7 @@ export const Harness = <
       return {
         id,
         sandboxKey: sandboxKey(storage.id, id),
+        state: (declared) => declared.in(stateOf(String(id))),
         raw: Effect.map(raw, ({ conversation }) => conversation),
         suspendSandbox: onSandbox((sandbox, key) => sandbox.suspend(key)),
         removeSandbox: onSandbox((sandbox, key) => sandbox.remove(key)),
@@ -1125,6 +1162,7 @@ export const Harness = <
 
     return {
       raw: open,
+      "~values": values,
       conversationByName,
       submit: (name, draft) =>
         Effect.flatMap(conversationByName(name), (conversation) => conversation.submit(draft)),

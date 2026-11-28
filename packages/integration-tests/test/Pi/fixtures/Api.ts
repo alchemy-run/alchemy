@@ -110,6 +110,9 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
           case "crash":
             yield* session.crash().pipe(Effect.ignore);
             return yield* HttpServerResponse.json({ ok: true });
+          case "phase":
+            if (body.phase !== undefined) yield* session.setPhase(name!, body.phase);
+            return yield* HttpServerResponse.json(yield* session.phase(name!));
           case "answered":
             return yield* HttpServerResponse.json({ answered: yield* session.answered(name!) });
           case "codemode":

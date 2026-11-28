@@ -1,7 +1,6 @@
 import {
   HarnessError,
   makeHarness,
-  memoryValues,
   type Engine,
   type EngineSession,
   type Harness as AiHarness,
@@ -23,7 +22,7 @@ import type * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import type { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 import { Harness, type Conversation, type Enabled, type Listed } from "./Harness.ts";
-import { Storage } from "./Storage.ts";
+import type { Storage } from "./Storage.ts";
 
 const failed = (error: PiError | NotOnHarness | ConversationNotFound) =>
   new HarnessError({
@@ -142,10 +141,10 @@ export const HarnessLive: Layer.Layer<AiHarness, never, Storage> = makeHarness<S
           models: options.models as ReadonlyArray<AnyModel>,
           tools: options.tools as ReadonlyArray<Listed>,
         }),
-        Effect.flatMap(Storage, (storage) => storage.instance),
       ]),
-      ([harness, storage]): Engine => ({
-        values: storage.values ?? memoryValues(),
+      ([harness]): Engine => ({
+        // The values the harness gives its tool calls their state from.
+        values: harness["~values"],
         toolName: (tool) => (tool as { readonly toolName: string }).toolName,
         session: (name, session): EngineSession => {
           const found = harness.conversationByName(name).pipe(

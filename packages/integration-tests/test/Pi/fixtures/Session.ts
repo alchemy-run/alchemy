@@ -6,12 +6,14 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { Guard } from "./extensions.ts";
+import { Guard, Phases } from "./extensions.ts";
 import { Gateway } from "./infra.ts";
 import { Fast } from "./models.ts";
 import {
   Add,
   AddLive,
+  Advance,
+  Phase,
   codemodeSection,
   GlobLive,
   SaveNote,
@@ -55,8 +57,8 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
     const harness = yield* Pi.Harness({
       models: [Fast],
       // `add` and `withdraw` are offered both ways: as direct calls, and from programs.
-      tools: [Add, SaveNote, Withdraw, AI.Glob, Explode, Programs],
-      extensions: [Guard],
+      tools: [Add, SaveNote, Withdraw, AI.Glob, Explode, Advance, Programs],
+      extensions: [Guard, Phases],
     });
 
     return Effect.gen(function* () {
@@ -74,6 +76,16 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
         }),
         // Kill this instance; the next call or the alarm builds a fresh one.
         crash: () => state.abort("crash"),
+        /** The conversation's phase, read from outside it. */
+        phase: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          return yield* conversation.state(Phase).get;
+        }),
+        /** Move the conversation to a phase, from outside it. */
+        setPhase: Effect.fn(function* (name: string, phase: "research" | "draft" | "publish") {
+          const conversation = yield* harness.conversationByName(name);
+          yield* conversation.state(Phase).set({ phase });
+        }),
         // Whether the newest message is an answer (an assistant message with text).
         answered: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
@@ -86,7 +98,7 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
         }),
         create: Effect.fn(function* (
           name: string,
-          tools: ReadonlyArray<"add" | "save_note" | "withdraw" | "glob" | "explode">,
+          tools: ReadonlyArray<"add" | "save_note" | "withdraw" | "glob" | "explode" | "advance">,
         ) {
           const conversation = yield* harness.createConversation({
             name,
@@ -99,8 +111,12 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
                     ? AI.Glob
                     : tool === "explode"
                       ? Explode
-                      : SaveNote,
+                      : tool === "advance"
+                        ? Advance
+                        : SaveNote,
             ),
+            // Only a conversation with phases is told which one it is in.
+            ...(tools.includes("advance") ? {} : { extensions: { remove: [Phases] } }),
             instructions: "You are terse. Use your tools whenever they apply.",
           });
           return conversation.id;

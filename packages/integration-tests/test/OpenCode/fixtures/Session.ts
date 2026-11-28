@@ -90,6 +90,25 @@ const Stall = AI.Tool(
   }),
 );
 
+/** The phase a session is in: state kept beside its transcript. */
+class Phase extends AI.State("phase", {
+  schema: Schema.Struct({ phase: Schema.Literals(["research", "draft", "publish"]) }),
+  initial: { phase: "research" },
+}) {}
+
+/** A tool that writes the state of the session whose model called it. */
+const Advance = AI.Tool(
+  "advance",
+  {
+    description: "Say the research is done, so drafting can start. Call it when asked to advance.",
+    parameters: Schema.Struct({}),
+    success: Schema.Struct({ phase: Schema.String }),
+  },
+  Effect.fn(function* () {
+    return yield* Phase.update(() => ({ phase: "draft" as const }));
+  }),
+);
+
 /** The snapshot every sandbox boots from. */
 const Base = Boat.Snapshot("OpenCodeBase", { run: ["node --version"] });
 
@@ -149,6 +168,7 @@ const toolsByName = {
   withdraw: Withdraw,
   count_bytes: CountBytes,
   stall: Stall,
+  advance: Advance,
   bash: AI.Bash,
   read: AI.Read,
   codes: Codes,
@@ -169,6 +189,7 @@ const session = Effect.gen(function* () {
       Withdraw,
       CountBytes,
       Stall,
+      Advance,
       Codes,
       AI.CodeMode(Add, Withdraw, CountBytes, Codes),
     ],
@@ -185,6 +206,12 @@ const session = Effect.gen(function* () {
     });
 
     return {
+      /** The session's phase, read from outside it; set first when one is given. */
+      phase: Effect.fn(function* (name: string, phase?: "research" | "draft" | "publish") {
+        const state = harness.session(name).state(Phase);
+        if (phase !== undefined) yield* state.set({ phase });
+        return yield* state.get;
+      }),
       /** Prompt with exactly `tools` as direct calls and `programs` from programs; answers with the reply's text. */
       prompt: Effect.fn(function* (
         name: string,

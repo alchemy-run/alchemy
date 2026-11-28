@@ -716,6 +716,7 @@ const SECTIONS: Section[] = [
         "ai/models",
         "ai/tools",
         "ai/coding-tools",
+        "ai/state",
         "ai/mcp-servers",
         "ai/code-mode",
         "ai/harnesses",

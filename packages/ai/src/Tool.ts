@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import type { Sandbox, Sandboxes } from "./Sandbox.ts";
+import type { StateStore } from "./State.ts";
 
 const ToolTypeId = "~alchemy/AI/Tool" as const;
 
@@ -56,8 +57,9 @@ type FailureOf<Spec extends ToolSpec> = Spec["failure"] extends Schema.Top
 
 /**
  * A tool's implementation: one call's arguments in, its result out. A
- * handler runs in its harness and may use the call (`AI.ToolCall`) and the
- * sandbox of the call's conversation (`AI.Sandbox`).
+ * handler runs in its harness and may use the call (`AI.ToolCall`), the
+ * sandbox of the call's conversation (`AI.Sandbox`) and that session's
+ * state (`AI.State`).
  */
 export type ToolHandler<Spec extends ToolSpec> = (
   parameters: Spec["parameters"]["Type"],
@@ -67,12 +69,12 @@ export type ToolHandler<Spec extends ToolSpec> = (
 export type SandboxesFor<Uses> = [Uses] extends [never] ? never : Sandboxes;
 
 /** What a handler may require. */
-export type ToolServices = ToolCall | RuntimeContext | Sandbox;
+export type ToolServices = ToolCall | RuntimeContext | Sandbox | StateStore;
 
 /** A handler that leaves the conversation's sandbox alone. */
 export type PlainToolHandler<Spec extends ToolSpec> = (
   parameters: Spec["parameters"]["Type"],
-) => Effect.Effect<SuccessOf<Spec>, FailureOf<Spec>, ToolCall | RuntimeContext>;
+) => Effect.Effect<SuccessOf<Spec>, FailureOf<Spec>, ToolCall | RuntimeContext | StateStore>;
 
 /**
  * What `make` takes: the handler, or an Effect that builds it. A handler
@@ -524,7 +526,7 @@ export interface ToolTagClass<Self, Name extends string> extends Context.Service
    */
   make<const Spec extends ToolSpec, R = never>(
     spec: Spec,
-    impl: ToolImpl<Spec, ToolCall | RuntimeContext, R>,
+    impl: ToolImpl<Spec, ToolCall | RuntimeContext | StateStore, R>,
   ): Layer.Layer<Self, never, Exclude<R, Scope.Scope>>;
   make<const Spec extends ToolSpec, R = never>(
     spec: Spec,
