@@ -412,6 +412,12 @@ const cloudflareHost = (
                   // The old classes stay declared while their objects move over.
                   const legacy = yield* legacyClasses(modelName, route, legacyData, name);
                   yield* retiring(modelName, route, legacy, backfillTimeoutSeconds);
+                  // For a plan: the old classes, and their retirement, are the model's too.
+                  yield* Effect.forEach(
+                    [...legacy.map((each) => each.binding), `${route}.Retiring`],
+                    (binding) => own("Model", modelName, binding),
+                    { discard: true },
+                  );
                   const namespace = yield* shared.object(route, onCloudflare(impl), legacy);
                   return placed(namespace, placement);
                 }),
@@ -484,6 +490,7 @@ const cloudflareHost = (
         // waits until every one is complete. Reconciliation starts it and waits.
         backfill: ({ modelName }, plansOf) =>
           Effect.gen(function* () {
+            yield* own("Model", modelName, named(modelName, "DomainBackfill"));
             const backfill = yield* Workflow(
               named(modelName, "DomainBackfill"),
               Effect.succeed(
