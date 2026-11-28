@@ -1396,7 +1396,6 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Frontends](https://alchemy.run/domain/frontends) — Drive a Domain Api from a browser app. Effect UI is recommended; Foldkit and any other framework work through the same typed client.
 - [Effect UI](https://alchemy.run/domain/effect-ui) — Derive Effect UI Command and Query services from an Api, read Views as stream query entries, and follow event feeds with Subscriptions.
 - [Integrate with Foldkit](https://alchemy.run/domain/foldkit) — Derive Foldkit Commands from an Api, ask its queries, follow View snapshots, and seed the Model from Flags.
-- [Integrate with Effect UI](https://alchemy.run/domain/effect-ui) — Derive Effect UI Command and Query services from an Api, read Views as stream query entries, and follow event feeds with Subscriptions.
 - [Optimistic updates](https://alchemy.run/domain/optimistic-updates) — Show pending intent, confirm it by commandId from a View feed, and retry an unknown outcome safely.
 - [Offline and local first](https://alchemy.run/domain/local-first) — Choose how local an app is, and keep it working offline by recording intents and sending them when the connection returns.
 - [Sessions and middleware](https://alchemy.run/domain/sessions) — Authenticate every request, carry who is asking into the domain, and sign browsers in with a cookie.
@@ -1415,4 +1414,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~297 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~298 KB) — only fetch it when you need to locate a specific resource's reference page.

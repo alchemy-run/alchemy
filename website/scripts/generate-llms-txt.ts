@@ -1215,7 +1215,6 @@ const SECTIONS: Section[] = [
         "domain/frontends",
         "domain/effect-ui",
         "domain/foldkit",
-        "domain/effect-ui",
         "domain/optimistic-updates",
         "domain/local-first",
         "domain/sessions",
