@@ -1666,7 +1666,11 @@ export const mergeWithObservedConfig = (
           OriginAccessControlId: _oac,
           ...shared
         } = current;
-        return fillUndefined(item, shared as cloudfront.Origin);
+        // The new kind's config has no observed copy: complete it too.
+        return fillUndefined(
+          fillUndefined(item, shared as cloudfront.Origin),
+          originDefaults(item),
+        );
       }),
     };
   }

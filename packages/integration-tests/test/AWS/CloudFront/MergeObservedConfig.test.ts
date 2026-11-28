@@ -311,6 +311,10 @@ describe(
       expect(custom?.CustomOriginConfig?.OriginProtocolPolicy).toBe("https-only");
       expect(custom?.CustomHeaders).toEqual({ Quantity: 0 });
       expect(custom?.ConnectionAttempts).toBe(3);
+      // The new kind's config has no observed copy, so CloudFront's
+      // update-required defaults complete it.
+      expect(custom?.CustomOriginConfig?.OriginReadTimeout).toBe(30);
+      expect(custom?.CustomOriginConfig?.OriginKeepaliveTimeout).toBe(5);
     });
   },
 );
