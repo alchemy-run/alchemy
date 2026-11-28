@@ -1,5 +1,5 @@
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -86,6 +86,10 @@ export type Pipeline = Resource<TypeId, PipelineProps, PipelineAttributes, never
  * {@link PipelineSqlInvalid}) instead of deleting the running pipeline.
  * References to streams/sinks that do not exist yet are not an error at
  * plan time — they are created in the same deploy.
+ * When an explicit `name` remains unchanged, the old pipeline must be
+ * deleted before the replacement is created because names are unique per
+ * account. This briefly stops the data flow. Generated names let the new
+ * generation be created before the old one is deleted.
  *
  * Pipelines is ingest-only: to process data after the sink writes it,
  * subscribe to the sink's bucket with `Cloudflare.R2.BucketEventNotification`.
@@ -108,6 +112,15 @@ export type Pipeline = Resource<TypeId, PipelineProps, PipelineAttributes, never
  * const pipeline = yield* Cloudflare.Basin.Pipeline("errors-only", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name} WHERE level = 'error'`,
  * });
+ * ```
+ *
+ * **Example:** Fixed physical name
+ * ```typescript
+ * const pipeline = yield* Cloudflare.Basin.Pipeline("FilteredEvents", {
+ *   name: "filtered_events",
+ *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
+ * });
+ * // Editing the SQL on a later deploy deletes the old pipeline first.
  * ```
  *
  * @see https://developers.cloudflare.com/pipelines/
@@ -162,24 +175,33 @@ export const PipelineProvider = () =>
             ),
         }),
       );
-      return { action: "replace" } as const;
+      // With a fixed explicit name, the replacement's by-name lookup would
+      // otherwise claim the old pipeline, which GC can then delete.
+      return news.name !== undefined && news.name === oldName
+        ? ({ action: "replace", deleteFirst: true } as const)
+        : ({ action: "replace" } as const);
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       if (output?.pipelineId) {
         const observed = yield* getPipeline(acct, output.pipelineId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — pipeline names are unique per account; a
-      // generated-name match is proof of ownership, an explicit name is
-      // not.
+      // A generated name proves ownership; a user-provided name requires
+      // adoption unless the observed resource is our previous generation.
       const name = yield* pipelineName(id, olds?.name);
       const match = yield* findPipelineByName(acct, name);
       if (match) {
         const attrs = toAttributes(match, acct);
-        return olds?.name !== undefined ? Unowned(attrs) : attrs;
+        return olds?.name !== undefined
+          ? unownedUnlessPrevious(
+              attrs,
+              previous?.accountId === acct ? previous : undefined,
+              "pipelineId",
+            )
+          : attrs;
       }
       return undefined;
     }),

@@ -21,7 +21,10 @@ const getPipeline = (accountId: string, pipelineId: string) =>
  * that takes the Catalog resource (so it is created after the catalog),
  * and the SQL pipeline between them.
  */
-const lakehouse = (sql: (stream: string, sink: string) => string) =>
+const lakehouse = (
+  sql: (stream: string, sink: string) => string,
+  options: { sinkRollingInterval?: number } = {},
+) =>
   Effect.gen(function* () {
     const token = yield* apiToken;
     const bucket = yield* Cloudflare.R2.Bucket("LakeBucket", { forceDestroy: true });
@@ -34,6 +37,9 @@ const lakehouse = (sql: (stream: string, sink: string) => string) =>
       catalog,
       table: { namespace: "web", name: "page_views" },
       token,
+      ...(options.sinkRollingInterval !== undefined
+        ? { rollingPolicy: { intervalSeconds: options.sinkRollingInterval } }
+        : {}),
     });
     const pipeline = yield* Cloudflare.Basin.Pipeline("Etl", {
       sql: Output.all(stream.name, sink.name).pipe(
@@ -61,6 +67,10 @@ test.provider(
         lakehouse((stream, sink) => `  INSERT INTO ${sink}\n    SELECT *\n    FROM ${stream};  `),
       );
       expect(reformatted.resources.Etl!.action).toEqual("noop");
+      const equivalentSink = yield* stack.plan(
+        lakehouse(passthrough, { sinkRollingInterval: 300 }),
+      );
+      expect(equivalentSink.resources.PageViewTable!.action).toEqual("noop");
 
       // Invalid SQL fails the plan — before the running pipeline is deleted.
       const invalid = yield* stack
@@ -74,6 +84,23 @@ test.provider(
         lakehouse((stream, sink) => `INSERT INTO ${sink} SELECT * FROM ${stream} WHERE url != ''`),
       );
       expect(filtered.resources.Etl!.action).toEqual("replace");
+
+      // A catalog sink creates and owns its Iceberg table. Once that
+      // table exists, Cloudflare refuses to recreate a sink for it.
+      // An immutable change must fail in plan rather than deleting the
+      // working sink and then discovering that create cannot succeed.
+      const rejectedSink = yield* stack
+        .plan(lakehouse(passthrough, { sinkRollingInterval: 600 }))
+        .pipe(Effect.exit);
+      expect(Exit.isFailure(rejectedSink)).toBe(true);
+      expect(String(Exit.isFailure(rejectedSink) ? rejectedSink.cause : "")).toContain(
+        "CatalogSinkRecreationUnsupported",
+      );
+      const liveSink = yield* pipelines.getSink({
+        accountId,
+        sinkId: deployed.sink.sinkId,
+      });
+      expect(liveSink.id).toEqual(deployed.sink.sinkId);
 
       const live = yield* getPipeline(accountId, deployed.pipeline.pipelineId);
       expect(live.id).toEqual(deployed.pipeline.pipelineId);

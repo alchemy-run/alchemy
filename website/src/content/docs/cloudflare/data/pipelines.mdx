@@ -63,6 +63,14 @@ stream, which drops events it hasn't processed yet and deletes the pipelines
 that read from it. Writing the same schema as an Effect Schema or as an
 explicit `{ fields }` list is the same stream and causes no change.
 
+With the default generated name, Alchemy creates the replacement before
+deleting the previous stream. If you set a stable `name`, for example
+`Cloudflare.Pipelines.Stream("PageViews", { name: "page_views", schema: PageView })`,
+the two generations cannot coexist under that name. Alchemy deletes the
+old stream first, then creates the replacement. Plan for a brief ingest
+interruption and for any downstream pipelines to be removed by Cloudflare.
+Changing only `http` or Worker-binding settings does not require a replacement.
+
 ## Send events from a Worker
 
 `Cloudflare.Pipelines.WriteStream` is typed by the stream's schema. The client
@@ -178,13 +186,15 @@ export default Alchemy.Stack(
 ```
 
 The sink creates the namespace and table on its first write. The `token` is a
-Cloudflare API token with access to R2 and the catalog. Rotating it updates the
-sink without replacing it.
+Cloudflare API token with access to R2 and the catalog. Its value is
+write-only: changing the declared token does not update an existing sink.
 
 :::caution
-A catalog sink can't be created for a table that already exists. Changing the
-sink's other settings replaces the sink, and the replacement fails once the
-table exists. Choose the table and format before the first deploy.
+A catalog sink can't be created for a table that already exists. Immutable
+changes (including a name change) that would recreate a sink against the
+same Iceberg table fail **during plan**, without deleting the active sink.
+Moving to a new table is a separate migration; choose the table, format
+and token before the first deploy.
 :::
 
 ## Connect the stream and sink with SQL
@@ -206,7 +216,10 @@ Add the pipeline in the same Effect:
 ```
 
 Alchemy validates the SQL with Cloudflare during plan, so a bad statement fails
-before anything is replaced. Reformatting the SQL is not a change.
+before anything is replaced. Reformatting the SQL is not a change. When a
+pipeline retains an explicitly chosen `name`, changing its SQL deletes the
+old pipeline before creating the new one; ingestion into that sink is
+interrupted during the replacement. Generated names allow create-first.
 
 ## Write files instead of a table
 
@@ -232,7 +245,11 @@ const archive = yield* Cloudflare.Pipelines.Sink("EventArchive", {
 `rollingPolicy` decides when the sink closes a file and starts the next one:
 after `intervalSeconds`, after `inactivitySeconds` without new events, or when
 the file reaches `fileSizeBytes`. Point a pipeline at it the same way, with `${archive.name}` in
-the SQL. Unlike a catalog sink, an `r2` sink can be replaced freely.
+the SQL. Unlike a catalog sink, an `r2` sink can be recreated against the
+same bucket. With an unchanged explicit `name`, changing its immutable
+settings (including format or rolling policy) deletes the old sink first;
+with a generated name, Alchemy can create the new sink first. Prefer
+generated names unless a stable physical name is required.
 
 ## React to new files
 
