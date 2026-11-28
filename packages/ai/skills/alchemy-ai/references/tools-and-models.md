@@ -95,18 +95,21 @@ export const ModelsLive = Layer.mergeAll(
 );
 ```
 
-On Anthropic or OpenAI, use `AIAnthropic.Model` (`@alchemy.run/ai/Anthropic`) and `AIOpenAI.Model` (`@alchemy.run/ai/OpenAI`), with `@effect/ai-anthropic` or `@effect/ai-openai` installed. The key is read from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`:
+On Anthropic, use `AIAnthropic.Model` from `@alchemy.run/ai/Anthropic`, with `@effect/ai-anthropic` installed. The key is read from `ANTHROPIC_API_KEY`:
 
 ```typescript
-export const ModelsLive = Layer.mergeAll(
-  AIAnthropic.Model(Smart, { model: "claude-opus-5-5" }),
-  AIOpenAI.Model(Fast, { model: "gpt-5.4-mini" }),
-);
+export const SmartLive = AIAnthropic.Model(Smart, { model: "claude-opus-5-5" });
+```
+
+On OpenAI, use `AIOpenAI.Model` from `@alchemy.run/ai/OpenAI`, with `@effect/ai-openai` installed. The key is read from `OPENAI_API_KEY`:
+
+```typescript
+export const FastLive = AIOpenAI.Model(Fast, { model: "gpt-5.4-mini" });
 ```
 
 `AI.DefaultModel(Smart)` is required by every process. A mentioned model can be chosen at `start`, per message (`{ model: Fast }`), or by a session when it starts another.
 
-More: [Back it with an LLM](https://alchemy.run/ai/models#back-it-with-an-llm), [Use Anthropic or OpenAI](https://alchemy.run/ai/models#use-anthropic-or-openai), [Set the default model](https://alchemy.run/ai/models#set-the-default-model).
+More: [Back it with an LLM](https://alchemy.run/ai/models#back-it-with-an-llm), [Use Anthropic](https://alchemy.run/ai/models#use-anthropic), [Use OpenAI](https://alchemy.run/ai/models#use-openai), [Set the default model](https://alchemy.run/ai/models#set-the-default-model).
 
 ## An MCP server
 
