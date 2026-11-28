@@ -6324,7 +6324,15 @@ export const make = (
     "effect/PubSub:makeAtomicBounded": ([given_], site) => {
       const read = plainOf(given_);
       return typeof read === "number" || (typeof read === "object" && read !== null)
-        ? Effect.succeed(parted("Atomic", PubSub.makeAtomicBounded(read as number)))
+        ? // A capacity the library does not take is one it throws on.
+          Effect.try({
+            try: () => parted("Atomic", PubSub.makeAtomicBounded(read as number)),
+            catch: () =>
+              Value.notTranslated(
+                site,
+                "PubSub.makeAtomicBounded is called in a way the prover has no model for",
+              ),
+          })
         : wrongArguments(site, "PubSub.makeAtomicBounded");
     },
     "effect/PubSub:makeAtomicUnbounded": ([given_], site) => {
@@ -6448,9 +6456,18 @@ export const make = (
       num,
     ),
     "effect/PartitionedSemaphore:makeUnsafe": ([given_], site) =>
-      Effect.map(
+      Effect.flatMap(
         options<{ permits: number }>("PartitionedSemaphore.makeUnsafe", given_, site),
-        (read) => wrap("PartitionedSemaphore", PartitionedSemaphore.makeUnsafe<Key>(read)),
+        (read) =>
+          // Options the library does not take are ones it throws on.
+          Effect.try({
+            try: () => wrap("PartitionedSemaphore", PartitionedSemaphore.makeUnsafe<Key>(read)),
+            catch: () =>
+              Value.notTranslated(
+                site,
+                "PartitionedSemaphore.makeUnsafe is called in a way the prover has no model for",
+              ),
+          }),
       ),
     "effect/TxHashMap:isTxHashMap": isKind("TxHashMap"),
     "effect/TxHashMap:filterMap": derives("TxHashMap", "filterMap", "effect/HashMap:filterMap"),

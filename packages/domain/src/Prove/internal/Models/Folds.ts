@@ -662,9 +662,12 @@ export const make = (
           : value._tag === "Arr" || (value._tag === "Obj" && !value.brand))
           ? Known.real(value)
           : undefined;
+      const refused = () =>
+        Value.notTranslated(site, `calls ${name} on a value the prover cannot hash`);
+      // A value of a kind the function does not take is one the library throws on.
       return real
-        ? Effect.sync(() => Value.num(hash(real.value as never)))
-        : Effect.fail(Value.notTranslated(site, `calls ${name} on a value the prover cannot hash`));
+        ? Effect.try({ try: () => Value.num(hash(real.value as never)), catch: refused })
+        : Effect.fail(refused());
     };
 
   const hashes: Models = {

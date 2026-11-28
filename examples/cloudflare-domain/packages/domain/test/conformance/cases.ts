@@ -79,6 +79,11 @@ export interface Group {
    * something else.
    */
   readonly unread?: ReadonlyArray<readonly [expression: string, reason: RegExp]>;
+  /**
+   * Calls of the library a handler should not make: each is reported, or read
+   * as the real code runs it. None is misread, and none stops the prover.
+   */
+  readonly misuse?: ReadonlyArray<string>;
   /** Lines the group's file declares before its commands. */
   readonly prelude?: ReadonlyArray<string>;
   /** The functions the prelude exports that the prover is told not to read. */
@@ -603,7 +608,10 @@ const base: ReadonlyArray<Group> = [
     ],
     unread: [
       [`Rational.sum(1, a)`, /is called in a way the prover has no model for/],
-      [`Rational.make("x", BigInt(a))`, /is called in a way the prover has no model for/],
+      [
+        `Rational.make("x", BigInt(a))`,
+        /calls Rational.make with something other than a bigint, on which the library never ends/,
+      ],
       [`Rational.clamp(ratio(a), 5)`, /is called in a way the prover has no model for/],
       [
         `Rational.clamp(ratio(a), { minimum: ratio(1) })`,

@@ -70,6 +70,8 @@ interface Chunk {
   readonly expressions: ReadonlyArray<string>;
   /** What the report has to say, for a command the prover is not to read. */
   readonly unread?: RegExp;
+  /** A misuse: reported, or read and compared, whichever the prover does. */
+  readonly misuse?: boolean;
 }
 
 export const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
@@ -93,6 +95,13 @@ export const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
       known: false,
       expressions: [expression],
       unread,
+    });
+  for (const expression of group.misuse ?? [])
+    out.push({
+      command: `${group.name}${out.length}Misuse`,
+      known: false,
+      expressions: [`[${expression}].length`],
+      misuse: true,
     });
   return out;
 };
@@ -197,10 +206,12 @@ export const check = (groups: ReadonlyArray<Group>): void => {
               : [{ expression: chunk.expressions[0], verdict: command.schema._tag, reason }];
           });
           expect(misreported).toEqual([]);
+          const misused = new Set(chunks.flatMap((chunk) => (chunk.misuse ? [chunk.command] : [])));
           const unread = report.commands.flatMap((command) =>
             command.schema._tag === "Proved" ||
             command.schema._tag === "Bounded" ||
-            stopped.has(command.command)
+            stopped.has(command.command) ||
+            misused.has(command.command)
               ? []
               : [
                   {
@@ -213,11 +224,21 @@ export const check = (groups: ReadonlyArray<Group>): void => {
                 ],
           );
           expect(unread).toEqual([]);
-          expect(report.agreement.differs.map((reason) => reason.slice(0, 400))).toEqual([]);
+          // A misuse TypeScript would refuse may throw in the real code where the prover read on: that is all it may do.
+          const thrownByMisuse = (reason: string) =>
+            [...misused].some((command) => reason.includes(`read ${command} `)) &&
+            reason.includes("and the real code threw: ");
+          expect(
+            report.agreement.differs
+              .filter((reason) => !thrownByMisuse(reason))
+              .map((reason) => reason.slice(0, 400)),
+          ).toEqual([]);
           // A path that takes the items of a hash set in an order the real one does not give
           // cannot be run: the order the real one gives is compared on its own path.
-          expect(report.agreement.uncompared - report.agreement.unordered).toBe(0);
-          if (chunks.some((chunk) => !chunk.unread))
+          // A misuse the real code cannot run to its end is not compared: the prover reported it, or read it as a value.
+          if (misused.size === 0)
+            expect(report.agreement.uncompared - report.agreement.unordered).toBe(0);
+          if (chunks.some((chunk) => !chunk.unread && !chunk.misuse))
             expect(report.agreement.compared).toBeGreaterThan(0);
         }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
       600_000,
