@@ -3750,11 +3750,14 @@ const rest: ReadonlyArray<Group> = [
       `Exit.hasDies(Effect.runSyncExit(Effect.sync(() => Schema.decodeUnknownSync(Ticket)({ n: a + 20 }))))`,
       `Exit.hasDies(Effect.runSyncExit(Effect.sync(() => Schema.asserts(Names, [a]))))`,
       `Schema.decodeUnknownSync(Kind)(a > 0 ? { kind: "text", s: "x" } : { kind: "count", n: a })`,
-      `Schema.decodeUnknownSync(Schema.Tuple([Schema.Number]))([a])`,
       `[Schema.is(Ticket)(), a]`,
       `(() => { try { Schema.asserts(Names); return "fine"; } catch (error) { return "thrown"; } })()`,
     ],
     unread: [
+      [
+        `Schema.decodeUnknownSync(Schema.Tuple([Schema.Number]))([a])`,
+        /with a schema the prover does not read in full/,
+      ],
       [
         `Schema.is(Ticket)({ n: a }, { errors: "all" })`,
         /is called in a way the prover has no model for/,
