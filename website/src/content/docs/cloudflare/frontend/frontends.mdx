@@ -1,6 +1,6 @@
 ---
 title: Frontend frameworks
-description: Deploy Vite, Foldkit, Astro, Next.js, vinext, Nuxt, SvelteKit, Waku, or any static build to Cloudflare Workers with first-class Website resources.
+description: Deploy Vite, Foldkit, Effect UI, Astro, Next.js, vinext, Nuxt, SvelteKit, Waku, or any static build to Cloudflare Workers with first-class Website resources.
 sidebar:
   label: Overview
   order: 1
@@ -20,6 +20,9 @@ natively; Alchemy layers its Cloudflare integration on top.
 - [`Foldkit`](/cloudflare/frontend/foldkit) — Foldkit apps; one
   `vite build` emits the client bundle and, for a server-rendered or
   prerendered app, the fetch handler that becomes the Worker.
+- [`EffectUI`](/cloudflare/frontend/effect-ui) — Effect UI apps; one
+  `vite build` emits the client bundle, the prerendered pages and, with
+  a `serverOutDir`, the server that becomes the Worker.
 - [`Astro`](/cloudflare/frontend/astro) — Astro sites, server-rendered
   or fully static, with an auto-provisioned session KV namespace;
   your `astro.config.*` loads natively.
@@ -58,6 +61,7 @@ project skips the build and deploy entirely.
 | React Router (incl. RSC) | `Vite` | [React Router](/cloudflare/frontend/react-router) |
 | Vue | `Vite` | [Vue](/cloudflare/frontend/vue) |
 | Foldkit | `Foldkit` | [Foldkit](/cloudflare/frontend/foldkit) |
+| Effect UI | `EffectUI` | [Effect UI](/cloudflare/frontend/effect-ui) |
 | SolidStart / SolidJS SSR | `Vite` | [SolidStart](/cloudflare/frontend/solidstart) |
 | Astro | `Astro` | [Astro](/cloudflare/frontend/astro) |
 | Next.js | `Nextjs` | [Next.js](/cloudflare/frontend/nextjs) |
@@ -91,6 +95,9 @@ defaults: one `vite build`, and asset routing derived from what that
 build wrote down, because the same project can ship client-only,
 prerendered, server-rendered, or hybrid.
 
+Use `EffectUI` for an Effect UI app. Its `HtmlServerVite.plugin` decides
+the same choices, and the Worker renders pages in workerd, in dev too.
+
 Use `StaticSite` when the build is an arbitrary shell command that
 emits a directory of files — Zola, Hugo, or any other generator
 without a dedicated resource.
@@ -108,6 +115,7 @@ without a dedicated resource.
   [React Router](/cloudflare/frontend/react-router),
   [Vue](/cloudflare/frontend/vue),
   [Foldkit](/cloudflare/frontend/foldkit),
+  [Effect UI](/cloudflare/frontend/effect-ui),
   [SolidStart](/cloudflare/frontend/solidstart),
   [Astro](/cloudflare/frontend/astro),
   [Next.js](/cloudflare/frontend/nextjs),

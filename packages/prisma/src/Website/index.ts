@@ -1,4 +1,5 @@
 export * from "./Astro.ts";
+export * from "./EffectUI.ts";
 export * from "./Foldkit.ts";
 export * from "./Nextjs.ts";
 export * from "./Nuxt.ts";
