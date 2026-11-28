@@ -1,6 +1,9 @@
+import * as RenderSdk from "@distilled.cloud/render";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
+import * as Duration from "effect/Duration";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { RenderAuth } from "./AuthProvider.ts";
@@ -48,6 +51,26 @@ export {
 export class Providers extends Provider.ProviderCollection<Providers>()("Render") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
+
+const serverRetryHintCapMs = (): number => {
+  const raw = process.env.DISTILLED_SERVER_RETRY_HINT_CAP_MS;
+  const n = raw === undefined || raw === "" ? Number.NaN : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 60_000;
+};
+
+const renderDeployRetry: DeployRetry.Factory = (lastError) => {
+  const base = DeployRetry.policy(lastError);
+  return {
+    ...base,
+    while: (error) => {
+      const hint = (error as { retryAfter?: unknown } | null | undefined)?.retryAfter;
+      if (Duration.isDuration(hint) && Duration.toMillis(hint) > serverRetryHintCapMs()) {
+        return false;
+      }
+      return base.while ? base.while(error) : DeployRetry.isTransient(error);
+    },
+  };
+};
 
 /**
  * Render resource providers, credentials, HTTP client, and AuthProvider.
@@ -114,6 +137,7 @@ export const providers = () =>
     ),
     Layer.provideMerge(Credentials.providedOrDefault()),
     Layer.provideMerge(Credentials.ownerIdProvidedOrDefault()),
+    Layer.provideMerge(Layer.succeed(RenderSdk.Retry.Retry, renderDeployRetry)),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(RenderAuth),
     Layer.provideMerge(ProfileStoreLive),

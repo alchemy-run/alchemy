@@ -107,6 +107,22 @@ const mapEnvGroup = (group: RenderSdk.CreateEnvGroupResponse): EnvGroupAttribute
   };
 };
 
+type EnvGroupCursorRow = {
+  readonly envGroup?: RenderSdk.EnvGroupMeta;
+  readonly cursor?: string;
+} & Partial<RenderSdk.EnvGroupMeta>;
+
+const listAllEnvGroups = (ownerId: string) =>
+  Api.paginateCursorList(
+    (cursor) =>
+      RenderSdk.listEnvGroups({ ownerId: [ownerId], cursor, limit: 100 }).pipe(
+        Effect.map((rows) =>
+          Array.isArray(rows) ? (rows as unknown as ReadonlyArray<EnvGroupCursorRow>) : [],
+        ),
+      ),
+    (row) => row.envGroup ?? (row.id ? (row as RenderSdk.EnvGroupMeta) : undefined),
+  );
+
 export const EnvGroupProvider = () =>
   Provider.effect(
     EnvGroup,
@@ -130,7 +146,7 @@ export const EnvGroupProvider = () =>
           typeof olds?.ownerId === "string" && olds.ownerId.length > 0 ? olds.ownerId : undefined;
         const desiredName = explicitName ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const ownerId = yield* Api.resolveOwnerId(explicitOwnerId);
-        const list = yield* RenderSdk.listEnvGroups({ ownerId: [ownerId], limit: 100 });
+        const list = yield* listAllEnvGroups(ownerId);
         const matched = list.find((g) => g.name === desiredName);
         if (!matched) return undefined;
         const full = yield* Api.ignoreNotFound(RenderSdk.getEnvGroup({ envGroupId: matched.id }));
@@ -145,7 +161,7 @@ export const EnvGroupProvider = () =>
         }
         if (props.name) {
           const ownerId = yield* Api.resolveOwnerId(props.ownerId);
-          const list = yield* RenderSdk.listEnvGroups({ ownerId: [ownerId], limit: 100 });
+          const list = yield* listAllEnvGroups(ownerId);
           const matched = list.find((g) => g.name === props.name);
           if (!matched) return undefined;
           const full = yield* Api.ignoreNotFound(RenderSdk.getEnvGroup({ envGroupId: matched.id }));
@@ -155,7 +171,7 @@ export const EnvGroupProvider = () =>
       }),
       list: Effect.fn(function* () {
         const ownerId = yield* Api.resolveOwnerId();
-        const metas = yield* RenderSdk.listEnvGroups({ ownerId: [ownerId], limit: 100 });
+        const metas = yield* listAllEnvGroups(ownerId);
         return yield* Effect.forEach(metas, (meta) =>
           RenderSdk.getEnvGroup({ envGroupId: meta.id }),
         ).pipe(Effect.map((groups) => groups.map(mapEnvGroup)));

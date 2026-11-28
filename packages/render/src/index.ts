@@ -12,6 +12,7 @@ export * from "./EnvGroup.ts";
 export * from "./EnvGroupLink.ts";
 export * from "./Environment.ts";
 export * from "./Errors.ts";
+export * from "./InferEnv.ts";
 export * from "./KeyValue.ts";
 export * from "./LogStream.ts";
 export * from "./MetricsStream.ts";

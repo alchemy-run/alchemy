@@ -205,7 +205,7 @@ export const ProjectProvider = () =>
         const all = yield* listProjectsForOwner(ownerId);
         return yield* Effect.forEach(all, (proj) => hydrateProject(proj));
       }),
-      reconcile: Effect.fn(function* ({ id, news, output }) {
+      reconcile: Effect.fn(function* ({ id, news, olds, output }) {
         const desiredName = news.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
         const desiredEnvs = news.environments ?? DEFAULT_ENVIRONMENTS;
 
@@ -244,6 +244,9 @@ export const ProjectProvider = () =>
           if (prev?.id && existing.environmentIds.includes(prev.id)) {
             keptEnvIds.add(prev.id);
             keyHint.set(prev.id, key);
+            const oldEnv =
+              olds?.environments?.[key] ??
+              Object.values(olds?.environments ?? {}).find((e) => e.name === desiredEnv.name);
             yield* RenderSdk.updateEnvironment({
               environmentId: prev.id,
               name: desiredEnv.name,
@@ -251,7 +254,7 @@ export const ProjectProvider = () =>
               networkIsolationEnabled: desiredEnv.networkIsolated ?? false,
               ...(desiredEnv.ipAllowList !== undefined
                 ? { ipAllowList: desiredEnv.ipAllowList }
-                : prev.ipAllowList !== undefined
+                : oldEnv?.ipAllowList !== undefined
                   ? { ipAllowList: [{ cidrBlock: "0.0.0.0/0", description: "everywhere" }] }
                   : {}),
             });

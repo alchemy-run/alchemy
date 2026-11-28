@@ -107,6 +107,17 @@ export const makeKeyValueBinding = <Client>(options: {
             );
         if (secondary && secondary.length > 0) return secondary;
 
+        const runtimeCtx = yield* CurrentRuntimeContext;
+        if (runtimeCtx) {
+          const direct = yield* runtimeCtx.get<string | Redacted.Redacted<string>>(REDIS_URL_ENV);
+          if (Redacted.isRedacted(direct) && Redacted.value(direct).length > 0) {
+            return Redacted.value(direct);
+          }
+          if (typeof direct === "string" && direct.length > 0) {
+            return direct;
+          }
+        }
+
         const fallback = yield* readConfigUrl(REDIS_URL_ENV);
         if (fallback && fallback.length > 0) return fallback;
 

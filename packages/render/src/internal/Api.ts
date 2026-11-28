@@ -33,7 +33,7 @@ export const paginateCursorList = <Row extends { readonly cursor?: string }, Ite
 
     while (true) {
       const page = yield* fetchPage(cursor);
-      if (page.length === 0) {
+      if (!Array.isArray(page) || page.length === 0) {
         break;
       }
       for (const row of page) {

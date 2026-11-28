@@ -169,11 +169,19 @@ const formatValidationErrors = (validation: RenderSdk.ValidateBlueprintResponse)
   validation.errors?.map((e) => (e.path ? `${e.path}: ${e.error}` : e.error)).join("; ") ||
   "Blueprint YAML validation failed.";
 
+/**
+ * `@distilled.cloud/render` `156659ace` types `ValidateBlueprintRequest.file` as
+ * `string` while its HTTP trait uses `contentType: "multipart"`, where
+ * `protocol-http.ts` appends binary parts only for `Blob | Uint8Array | ArrayBuffer`.
+ */
+const blueprintYamlFile = (yaml: string): string =>
+  new File([yaml], "render.yaml", { type: "application/x-yaml" }) as unknown as string;
+
 /** Validate a `render.yaml` Blueprint document against Render's `/v1/blueprints/validate` endpoint. */
 export const validateBlueprint = (options: { readonly ownerId?: string; readonly yaml: string }) =>
   Effect.gen(function* () {
     const ownerId = yield* Api.resolveOwnerId(options.ownerId);
-    return yield* RenderSdk.validateBlueprint({ ownerId, file: options.yaml });
+    return yield* RenderSdk.validateBlueprint({ ownerId, file: blueprintYamlFile(options.yaml) });
   });
 
 const resolveBlueprintTargetId = (resolvedId: string | undefined, news: BlueprintProps) =>
@@ -271,7 +279,7 @@ export const BlueprintProvider = () =>
         if (news.validateYaml !== undefined) {
           const validation = yield* RenderSdk.validateBlueprint({
             ownerId: current.ownerId,
-            file: news.validateYaml,
+            file: blueprintYamlFile(news.validateYaml),
           });
           if (validation.valid === false) {
             return yield* new RenderValidationError({

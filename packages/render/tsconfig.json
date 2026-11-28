@@ -15,6 +15,7 @@
     { "path": "../../submodules/distilled/packages/render/tsconfig.json" },
     { "path": "../../submodules/distilled/packages/core/tsconfig.json" },
     { "path": "../alchemy/tsconfig.json" },
+    { "path": "../docker/tsconfig.json" },
     { "path": "../redis/tsconfig.json" },
     { "path": "../sql/tsconfig.json" }
   ]
