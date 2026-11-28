@@ -247,6 +247,9 @@ catalogs:
     '@effect/tsgo':
       specifier: ^0.73.2
       version: 0.73.2
+    '@effect/ui':
+      specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab
+      version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab
     '@effect/vitest':
       specifier: ^4.1.4
       version: 4.1.4
@@ -9242,9 +9245,15 @@ importers:
       '@alchemy.run/e2b':
         specifier: workspace:*
         version: link:../e2b
+      '@alchemy.run/effect-cluster':
+        specifier: workspace:*
+        version: link:../effect-cluster
       '@alchemy.run/modal':
         specifier: workspace:*
         version: link:../modal
+      '@alchemy.run/rivet':
+        specifier: workspace:*
+        version: link:../rivet
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -10016,6 +10025,9 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)
+      '@effect/ui':
+        specifier: 'catalog:'
+        version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab(effect@4.1.4)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -11422,7 +11434,7 @@ importers:
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)
       '@effect/ui':
-        specifier: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab
+        specifier: 'catalog:'
         version: https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab(effect@4.1.4)
       '@electric-sql/pglite':
         specifier: 'catalog:'

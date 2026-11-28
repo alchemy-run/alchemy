@@ -316,12 +316,12 @@ const StorageLive = Pi.SqliteFile("/data/pi.sqlite");
 On Cloudflare it is a Durable Object, and you do not write it. Give the process's Layer to a host, and each session gets an object of its own:
 
 ```typescript title="src/Worker.ts"
-const TriageSessions = AICloudflare.layerDurableObjects(
-  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+const TriageSessions = AICloudflare.ProcessSessions(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 ```
 
-`Agents` is what a session runs on, and `BoardLive` is the model its prose mentions.
+`Harness` is what a session runs on, and `BoardLive` is the model its prose mentions.
 
 A policy, a saga or a Worker then holds a session by its key, and each call goes to that session's object:
 

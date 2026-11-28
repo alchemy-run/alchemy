@@ -31,7 +31,7 @@ import { Triage, TriageLive } from "./Triage.process.ts";
  * `OpenCode.CodingTools` and `OpenCodeCloudflare.DurableObjectStorage`
  * instead; nothing else changes.
  */
-const Agents = Layer.mergeAll(
+const Harness = Layer.mergeAll(
   Pi.HarnessLive,
   Pi.CodingTools,
   AI.DefaultModel(Smart),
@@ -55,8 +55,8 @@ const BoardLive = Board.layer(IssueWorkLive).pipe(
  * Triage on Durable Objects: one object per session, which builds the prose
  * with what a session runs on and the board it mentions.
  */
-const TriageSessions = AICloudflare.layerDurableObjects(
-  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+const TriageSessions = AICloudflare.ProcessSessions(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 
 const Live = Layer.mergeAll(BoardLive, TriageSessions, GitHub.RepositoryEventSourceLive).pipe(
