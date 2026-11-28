@@ -111,6 +111,7 @@ const SECTIONS: Section[] = [
         "infrastructure-as-effects/binding",
         "infrastructure-as-effects/identity-federation",
         "infrastructure-as-effects/layers",
+        "infrastructure-as-effects/sandbox-gateway",
         "infrastructure-as-effects/event-sources",
         "infrastructure-as-effects/sinks",
         "infrastructure-as-effects/phases",

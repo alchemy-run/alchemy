@@ -113,8 +113,10 @@ reading files by key without a mount:
 +      fetch: Effect.map(files.getText("README.md"), (text) => HttpServerResponse.text(text)),
     };
 -  }),
-+  }).pipe(Effect.provide(Archil.ReadDiskHttp)),
++  }).pipe(Effect.provide(Layer.mergeAll(Archil.ReadDiskHttp, Gateway.Unprotected))),
 ```
+
+`Gateway.Unprotected` (from `alchemy/Gateway`) lets the disk's keys live in the sandbox, which is fine while the sandbox runs only this program. For a sandbox that runs code you don't trust, give it a [gateway](/infrastructure-as-effects/sandbox-gateway) instead, and the deploy fails if you provide neither.
 
 ## Write an async program
 

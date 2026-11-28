@@ -1,12 +1,13 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { guardClient, recordAcquisition } from "./CapabilityGraph.ts";
+import * as Gateway from "./Gateway.ts";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import { describeDataPlane, type DataPlaneResolution } from "./Provider.ts";
 import { isResource, type ResourceLike } from "./Resource.ts";
+import { CurrentRuntimeContext } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import { taggedFunction } from "./Util/effect.ts";
 
@@ -117,6 +118,14 @@ export const Service = <
   },
 >(
   id: Self["key"],
+  options?: {
+    /**
+     * The binding configures the host it is provided on (a mount) and holds
+     * no credential: under a sandbox gateway it is still built on the
+     * sandbox, never on the gateway.
+     */
+    readonly local?: boolean;
+  },
 ): Self => {
   // Tag key is the caller-supplied `id`, so it can't be a class declaration.
   // oxlint-disable-next-line effecttsgo/service-not-as-class
@@ -128,9 +137,11 @@ export const Service = <
         concurrency: "unbounded",
       }).pipe(
         Effect.flatMap((resolved) => {
+          const local = options?.local === true;
           // A deployed runtime only holds the client to what the plan listed.
+          // A sandbox with a gateway builds its bindings there (see `Gateway.ts`).
           if (globalThis.__ALCHEMY_RUNTIME__) {
-            return Effect.flatMap(f(...resolved), (client) =>
+            return Gateway.bind(id, resolved, f, local, (client) =>
               guardClient(id, () => acquisitionTargets(args, resolved), client),
             );
           }
@@ -138,7 +149,7 @@ export const Service = <
           // whichever frame is current (see CapabilityGraph.ts).
           const targets = acquisitionTargets(args, resolved);
           return recordAcquisition({ binding: id, targets }).pipe(
-            Effect.andThen(f(...resolved)),
+            Effect.andThen(Gateway.bind(id, resolved, f, local)),
             // Deploy-time data-plane routing: the client's calls must target
             // whatever data plane the bound resource actually lives on. In an
             // `alchemy dev` run a local-mode resource exists only on the
@@ -230,7 +241,7 @@ const routeClientDataPlane = (
           );
         }
         // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- data-plane layers are provider-registered Layer<any, any, never>
-        return wrapClientInvocations(client, local[0]!);
+        return Gateway.wrapClientInvocations(client, local[0]!);
       }
       // Live-mode / `Alchemy.remote()`: ambient in a `dev` run is the
       // emulator, so provide the registration-captured live environment
@@ -242,7 +253,7 @@ const routeClientDataPlane = (
         ),
       ];
       // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- data-plane layers are provider-registered Layer<any, any, never>
-      if (live.length === 1) return wrapClientInvocations(client, live[0]!);
+      if (live.length === 1) return Gateway.wrapClientInvocations(client, live[0]!);
       return client;
     });
   });
@@ -263,39 +274,6 @@ const describeResolution = (plane: DataPlaneResolution): string => {
 };
 
 /**
- * Wrap every invocation surface of a binding client so its returned Effects
- * run with `layer` provided closest. Handles the client shapes bindings
- * return: a callable (the common per-operation client), an object of
- * methods/Effects (multi-method clients), or a bare Effect. Anything else
- * passes through untouched. Proxies preserve identity, extra properties,
- * and method names.
- */
-const wrapClientInvocations = (client: unknown, layer: Layer.Layer<any, any, never>): unknown => {
-  const provide = (value: unknown): unknown =>
-    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
-    Effect.isEffect(value) ? Effect.provide(value as Effect.Effect<any, any, any>, layer) : value;
-  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- client Effects come in any shape; each binding's own types carry them
-  if (Effect.isEffect(client)) return provide(client);
-  if (typeof client === "function") {
-    return new Proxy(client, {
-      apply: (target, thisArg, argArray) => provide(Reflect.apply(target, thisArg, argArray)),
-    });
-  }
-  if (typeof client === "object" && client !== null) {
-    return new Proxy(client, {
-      get: (target, prop, receiver) => {
-        const value = Reflect.get(target, prop, receiver);
-        if (typeof value === "function") {
-          return (...args: any[]) => provide(Reflect.apply(value, target, args));
-        }
-        return provide(value);
-      },
-    });
-  }
-  return client;
-};
-
-/**
  * Resolves the host resource a binding is attaching to (the Worker / Lambda
  * Function), i.e. `Self`. It is typed WITHOUT a Context requirement because it
  * is only ever read at DEPLOY time, inside the `if (!globalThis.__ALCHEMY_RUNTIME__)`
@@ -309,6 +287,14 @@ const wrapClientInvocations = (client: unknown, layer: Layer.Layer<any, any, nev
  * `host.bind` (e.g. Cloudflare's `isWorker`, or `AWSBindings.runsAsRole`);
  * both reject `undefined`.
  */
-export const Host: Effect.Effect<ResourceLike | undefined> = Effect.serviceOption(
-  Self as unknown as Context.Service<ResourceLike, ResourceLike>,
-).pipe(Effect.map(Option.getOrUndefined));
+export const Host: Effect.Effect<ResourceLike | undefined> = Effect.flatMap(
+  CurrentRuntimeContext,
+  (ctx) =>
+    // A sandbox's bindings attach to its gateway, not to the sandbox, and
+    // are built there under the same host.
+    ctx?.gateway?.phase === "plan" || ctx?.gateway?.phase === "gateway"
+      ? Effect.succeed(ctx.gateway.self as ResourceLike)
+      : Effect.serviceOption(Self as unknown as Context.Service<ResourceLike, ResourceLike>).pipe(
+          Effect.map(Option.getOrUndefined),
+        ),
+);

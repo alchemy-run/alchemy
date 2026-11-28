@@ -1,0 +1,101 @@
+import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as E2B from "@alchemy.run/e2b";
+import * as Fly from "@alchemy.run/fly";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+
+/**
+ * The program every gatewayed sandbox fixture runs, whichever platform the
+ * sandbox is on. `E2B.ReadTeam` works on any host and creates an API key
+ * for it, so it shows where that key went: the program answers with what
+ * the binding returned and what its own environment holds.
+ */
+export const app = Effect.gen(function* () {
+  const team = yield* E2B.ReadTeam();
+  return {
+    fetch: Effect.gen(function* () {
+      const request = yield* HttpServerRequest;
+      if (new URL(request.url, "http://sandbox").pathname === "/env") {
+        // Without calling the binding: for a sandbox whose network cannot
+        // reach its gateway.
+        const env = yield* Effect.sync(() => process.env);
+        return yield* HttpServerResponse.json({
+          apiKey: env.E2B_API_KEY ?? null,
+          gateway: env.ALCHEMY_GATEWAY_URL ?? null,
+          // The sandbox's own token for its gateway, so a test can make the
+          // call the sandbox's network refuses.
+          token: env.ALCHEMY_GATEWAY_SANDBOX_TOKEN ?? null,
+        });
+      }
+      if (new URL(request.url, "http://sandbox").pathname === "/reach") {
+        // Whether the sandbox's network lets it reach a host that is not
+        // its gateway.
+        const client = yield* HttpClient.HttpClient;
+        const reached = yield* client
+          .get(
+            new URL(request.url, "http://sandbox").searchParams.get("url") ??
+              "https://example.com/",
+          )
+          .pipe(
+            Effect.timeout("10 seconds"),
+            Effect.match({ onFailure: () => false, onSuccess: () => true }),
+            Effect.provide(FetchHttpClient.layer),
+          );
+        return yield* HttpServerResponse.json({ reached });
+      }
+      const now = Math.floor(Date.now() / 1000);
+      const teamId = yield* team.teamId;
+      const metrics = yield* team.metrics({ start: now - 3600, end: now });
+      // A typed failure of the binding crosses the gateway as itself.
+      const failure = yield* team
+        .sandboxEvents("not-a-sandbox-id")
+        .pipe(Effect.match({ onFailure: (error) => error._tag, onSuccess: () => "none" }));
+      const env = yield* Effect.sync(() => process.env);
+      return yield* HttpServerResponse.json({
+        teamId,
+        metrics: Array.isArray(metrics),
+        failure,
+        // What a program in the sandbox can read.
+        apiKey: env.E2B_API_KEY ?? null,
+        gateway: env.ALCHEMY_GATEWAY_URL ?? null,
+      });
+    }).pipe(
+      // Say why, so a failing platform's test shows the cause.
+      Effect.catchCause((cause) =>
+        Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+      ),
+    ),
+  };
+});
+
+/** The program's bindings, built on a Cloudflare Worker gateway. */
+export const WorkerGateway = E2B.ReadTeamHttp.pipe(
+  Layer.provide(Cloudflare.Workers.SandboxGateway),
+);
+
+/** The program's bindings, built on a Lambda Web Function gateway. */
+export const WebFunctionGateway = E2B.ReadTeamHttp.pipe(Layer.provide(AWS.Lambda.SandboxGateway));
+
+/** The program's bindings, built on a Fly Service gateway. */
+export const FlyGateway = E2B.ReadTeamHttp.pipe(Layer.provide(Fly.SandboxGateway));
+
+/**
+ * The program's bindings, built on a Lambda Function the sandbox reaches
+ * through the Lambda `Invoke` API.
+ */
+export const InvokeGateway = E2B.ReadTeamHttp.pipe(Layer.provide(AWS.Lambda.InvokeSandboxGateway));
+
+/** What {@link app} answers. */
+export interface Served {
+  readonly teamId: string;
+  readonly metrics: boolean;
+  readonly failure: string;
+  readonly apiKey: string | null;
+  readonly gateway: string | null;
+}

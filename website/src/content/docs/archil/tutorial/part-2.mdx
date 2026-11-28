@@ -11,7 +11,9 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 ```typescript title="src/Api.ts"
 import * as Archil from "@alchemy.run/archil";
+import * as Gateway from "alchemy/Gateway";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { Golden } from "./Golden.ts";
 
 export default class Api extends Archil.Sandbox<Api>()(
@@ -20,11 +22,13 @@ export default class Api extends Archil.Sandbox<Api>()(
   Effect.gen(function* () {
     const sandboxes = yield* Archil.CreateSandbox(Golden);
     return {};
-  }).pipe(Effect.provide(Archil.CreateSandboxHttp)),
+  }).pipe(Effect.provide(Layer.mergeAll(Archil.CreateSandboxHttp, Gateway.Unprotected))),
 ) {}
 ```
 
 `Api` is a program Alchemy runs in an Archil sandbox of its own, at a public URL. Bound to `Golden`, every sandbox this client creates is a fork of it: its memory and disk, with the repository already cloned.
+
+`Gateway.Unprotected` (from `alchemy/Gateway`) lets the binding's API key live in the sandbox, which is fine while the sandbox runs only this program. For a sandbox that runs code you don't trust, give it a [gateway](/infrastructure-as-effects/sandbox-gateway) instead, and the deploy fails if you provide neither.
 
 ## Run a command in a fresh fork
 

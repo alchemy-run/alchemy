@@ -89,4 +89,4 @@ export interface MountVolume extends Binding.Service<
   (volume: Volume, options: MountVolumeOptions) => Effect.Effect<BoundVolumeMount>
 > {}
 
-export const MountVolume = Binding.Service<MountVolume>("E2B.MountVolume");
+export const MountVolume = Binding.Service<MountVolume>("E2B.MountVolume", { local: true });

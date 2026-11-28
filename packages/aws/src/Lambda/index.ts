@@ -81,6 +81,8 @@ export * from "./UpdateMicrovmImageVersion.ts";
 export * from "./UpdateMicrovmImageVersionHttp.ts";
 export * from "./UserPoolTriggerEventSource.ts";
 export * from "./Version.ts";
+export * from "./InvokeSandboxGateway.ts";
+export * from "./SandboxGateway.ts";
 export * from "./WebFunction.ts";
 export * from "./WebFunctionEndpoint.ts";
 export * from "./WebFunctionPermission.ts";

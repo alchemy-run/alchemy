@@ -96,7 +96,9 @@ Effect.gen(function* () {
       return yield* HttpServerResponse.json({ count: running.length });
     }),
   };
-}).pipe(Effect.provide(Boat.CreateSandboxHttp));
+}).pipe(Effect.provide(Layer.mergeAll(Boat.CreateSandboxHttp, Gateway.Unprotected)));
 ```
+
+`Gateway.Unprotected` (from `alchemy/Gateway`) lets the binding's key live in the sandbox, which is fine while the sandbox runs only this program. For a sandbox that runs code you don't trust, give it a [gateway](/infrastructure-as-effects/sandbox-gateway) instead, and the deploy fails if you provide neither.
 
 To start sandboxes with a project already set up, see [Snapshots & forks](/boat/sandboxes/snapshots).

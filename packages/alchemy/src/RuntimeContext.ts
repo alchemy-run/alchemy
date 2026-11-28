@@ -56,6 +56,42 @@ export interface BaseRuntimeContext {
    */
   inputGate?: boolean;
   /**
+   * Set during Construction by a sandbox gateway Layer (see `Gateway.ts`):
+   * every binding of this host is built with the gateway as its host, and
+   * the sandbox gets a client that calls it there.
+   */
+  gateway?: GatewayContext;
+  /**
+   * Set by a sandbox platform whose network policy can add a header to
+   * requests leaving the sandbox. Its gateway is then bound onto it
+   * (`{ gateway: { url, token } }`): the platform allows the gateway's host
+   * and sets the token at the boundary, so the token never enters the
+   * sandbox.
+   */
+  gatewayEgress?: boolean;
+  /**
+   * Set by a platform whose host runs code that is not trusted (an agent's
+   * sandbox). A binding may not put a secret in such a host: its deploy
+   * fails unless the host has a gateway, or opts in with
+   * `Gateway.Unprotected`.
+   */
+  sandbox?: boolean;
+  /**
+   * Set on the context one binding is built with when what it binds is not
+   * checked: a mount, which configures the sandbox itself.
+   */
+  trusted?: boolean;
+  /** The host's own context, on a context one binding is built with. */
+  root?: BaseRuntimeContext;
+  /** Set by `Gateway.Unprotected`: bindings may keep their secrets in this sandbox. */
+  unprotected?: boolean;
+  /** Set by `Gateway.only`: the bindings (by id) that run in the gateway. */
+  gatewayScope?: ReadonlySet<string>;
+  /** Which binding bound each value (by key), kept during Construction. */
+  boundBy?: Map<string, string>;
+  /** What a gateway took over from this host (by key), as it was bound. */
+  adopted?: Map<string, Output>;
+  /**
    * Mint an OIDC ID token for `audience`, signed by the host's platform
    * (a Fly Machine's `/.fly/api`). Present only on hosts whose platform
    * issues them. Bindings exchange it with a cloud's STS instead of
@@ -63,6 +99,89 @@ export interface BaseRuntimeContext {
    */
   oidcToken?: (audience: string) => Effect.Effect<Redacted.Redacted<string>, OidcTokenError>;
 }
+
+/**
+ * A sandbox's gateway, as the phase a program's Construction is running in
+ * sees it. The same program runs three times: at deploy, inside the gateway,
+ * and inside each sandbox.
+ */
+export type GatewayContext =
+  | {
+      /** At deploy: bindings attach to the gateway, and their values are stored on it. */
+      readonly phase: "plan";
+      /** The gateway, as the host bindings attach to. */
+      readonly self: { readonly Type: string; readonly LogicalId: string };
+      /**
+       * Store a value Construction binds. The gateway gets it; the sandbox
+       * gets it only with `sandbox` set (the program's own `Config`).
+       */
+      readonly set: (
+        key: string,
+        output: Output,
+        options?: { readonly sandbox?: boolean },
+      ) => Effect.Effect<string>;
+    }
+  | {
+      /** Inside the gateway: bindings are built for real, and their clients kept. */
+      readonly phase: "gateway";
+      /**
+       * The gateway's identity, as at deploy: bindings name what they
+       * created after their host, and read it back under that name.
+       */
+      readonly self: { readonly Type: string; readonly LogicalId: string };
+      /** Keep a binding's client for the sandbox to call. */
+      readonly register: (key: string, client: unknown) => Effect.Effect<void>;
+    }
+  | {
+      /** Inside the sandbox: bindings are not built; calls go to the gateway. */
+      readonly phase: "sandbox";
+      /**
+       * Bindings that are built in the sandbox after all, by id: the Layer
+       * returned is provided around each of their calls. Set by a Layer that
+       * lets the sandbox send a request itself with something the gateway
+       * hands it (a signature), such as `AWS.SandboxSigner`.
+       */
+      direct?: (id: string) => Layer.Layer<any> | undefined;
+      /** Call `path` on the client the gateway holds under `key`. */
+      readonly call: (
+        key: string,
+        path: ReadonlyArray<string>,
+        args: ReadonlyArray<unknown> | undefined,
+      ) => Effect.Effect<unknown, unknown>;
+    };
+
+/** A secret a binding tried to put in a sandbox that has no gateway. */
+export class SecretInSandbox extends Data.TaggedError("SecretInSandbox")<{
+  readonly message: string;
+}> {}
+
+/**
+ * Whether a value bound under `key` may stay on this host. Checked when the
+ * value resolves, after every Layer is built, so a gateway installed later
+ * still counts.
+ */
+export const secretInSandbox = (
+  ctx: BaseRuntimeContext,
+  key: string,
+  value: unknown,
+): SecretInSandbox | undefined => {
+  const host = ctx.root ?? ctx;
+  if (
+    !Redacted.isRedacted(value) ||
+    host.sandbox !== true ||
+    ctx.trusted === true ||
+    host.gateway !== undefined ||
+    host.unprotected === true
+  ) {
+    return undefined;
+  }
+  return new SecretInSandbox({
+    message:
+      `${host.boundBy?.get(key) ?? "A binding"} would put a credential (${key}) in the sandbox ${host.id}, where the code it runs can read it. ` +
+      "Provide a gateway Layer to the sandbox's binding Layers (Cloudflare.Workers.SandboxGateway, AWS.Lambda.SandboxGateway, …), " +
+      "or Gateway.Unprotected if the sandbox only runs your own code.",
+  });
+};
 
 /** The host's platform did not issue an OIDC token. */
 export class OidcTokenError extends Data.TaggedError("OidcTokenError")<{

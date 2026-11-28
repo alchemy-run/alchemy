@@ -1,0 +1,272 @@
+---
+title: Sandbox gateways
+description: A sandbox runs code you don't trust. A gateway runs the sandbox's bindings outside it, so the program calls GitHub, S3 or any other binding without holding a credential.
+---
+
+A sandbox runs code you don't fully trust: an agent's shell, a model's
+tool calls, a user's script. A [Binding](/infrastructure-as-effects/binding)
+normally puts its credential in its host's environment, and anything in the
+sandbox can read that.
+
+A **gateway** is a second, small host next to the sandbox. The sandbox's
+bindings run there, with their credentials, and the program in the sandbox
+calls them over HTTPS with a token that works for that gateway only.
+
+## Give a sandbox a gateway
+
+Provide a gateway Layer to the sandbox's binding Layers:
+
+```typescript
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as E2B from "@alchemy.run/e2b";
+import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import { MyRepo } from "./repo.ts";
+
+export default class MySandbox extends E2B.Template<MySandbox>()(
+  "MySandbox",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const createIssue = yield* GitHub.CreateIssue(MyRepo);
+    return {
+      fetch: Effect.gen(function* () {
+        const issue = yield* createIssue({ title: "Found by the agent" });
+        return yield* HttpServerResponse.json({ number: issue.number });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide(
+      GitHub.CreateIssueHttp.pipe(Layer.provide(Cloudflare.Workers.SandboxGateway)),
+    ),
+  ),
+) {}
+```
+
+The program is the one you would write for a Worker. `GitHub.CreateIssueHttp`
+is the same Layer. Only `Layer.provide(Cloudflare.Workers.SandboxGateway)` is
+new: it deploys a Worker for this sandbox and moves the bindings to it.
+
+## One program, three places
+
+Alchemy already runs your program's Construction twice: at deploy, to find
+its bindings, and in the running host, to build them. A gateway adds a third
+run, of the same code.
+
+At deploy, each binding attaches to the gateway instead of the sandbox. The
+GitHub token is stored in the gateway's environment, and the sandbox gets the
+gateway's URL and a token for it.
+
+In the gateway, the program's Construction runs and builds `createIssue` for
+real. The gateway keeps it. Your `fetch` handler never runs there.
+
+In the sandbox, `GitHub.CreateIssue(MyRepo)` returns a client that calls the
+one the gateway kept. `createIssue({ ... })` sends its arguments to the
+gateway and gets the issue, or the binding's own typed error, back.
+
+## What stays out of the sandbox
+
+A `Redacted` value a binding binds reaches the gateway only. The sandbox's
+copy is an empty string. With `E2B.ReadTeamHttp`, which creates an E2B API key
+for its host:
+
+```typescript
+// in the sandbox
+process.env.ALCHEMY_GATEWAY_URL; // "https://….workers.dev"
+process.env.E2B_API_KEY; // ""
+```
+
+Plain values (a repository name, a bucket name) are bound to both. Your own
+`Config` reads in the program still reach the sandbox, as they do without a
+gateway, so keep secrets in bindings.
+
+## A sandbox without a gateway
+
+A binding that would put a credential in a sandbox fails the deploy:
+
+```
+SecretInSandbox: GitHub.ListIssues would put a credential (GITHUB_TOKEN) in the
+sandbox MySandbox, where the code it runs can read it.
+```
+
+Give the sandbox a gateway. If the sandbox only ever runs your own program,
+say so instead, and the credential stays in it as on any other host:
+
+```typescript
+Effect.provide(Layer.mergeAll(GitHub.ListIssuesHttp, Gateway.Unprotected))
+```
+
+This applies to E2B, Daytona, Modal, Boat and Archil sandboxes. Mounts hold
+no credential and are never refused.
+
+## Cloud identities
+
+On AWS, use a Lambda Web Function as the gateway. AWS bindings are granted on
+its execution role, so no access key exists anywhere:
+
+```typescript
+Effect.provide(
+  Layer.mergeAll(AWS.S3.GetObjectHttp, AWS.S3.PutObjectHttp).pipe(
+    Layer.provide(AWS.Lambda.SandboxGateway),
+  ),
+)
+```
+
+This works for a sandbox on any platform. A Boat or E2B sandbox reads an S3
+object through its gateway's role without an AWS credential of its own. An
+object's body is streamed through the gateway, not buffered.
+
+## Send AWS requests from the sandbox
+
+With only a gateway, an AWS binding's whole call runs in the gateway, and
+every byte of an object passes through it. Add `AWS.SandboxSigner` and the
+binding runs in the sandbox instead:
+
+```typescript
+Effect.provide(
+  Layer.mergeAll(AWS.S3.GetObjectHttp, AWS.S3.PutObjectHttp).pipe(
+    Layer.provide(AWS.SandboxSigner),
+    Layer.provide(AWS.Lambda.SandboxGateway),
+  ),
+)
+```
+
+The sandbox asks the gateway for a signature, made with the gateway's role,
+and sends the request straight to AWS. It still holds no key, and a large
+upload or download never touches the gateway. The gateway signs only what
+its role may do, which is what the sandbox's AWS bindings were granted.
+
+## Command-line tools
+
+A CLI can't call a binding, so a binding for one returns an origin instead.
+`GitHub.PushRepository` returns a git remote:
+
+```typescript
+const repo = yield* GitHub.PushRepository(MyRepo);
+// in fetch:
+const { url, env } = yield* repo.remote;
+```
+
+Pass both to `git`:
+
+```typescript
+yield* ChildProcess.make("git", ["clone", url, "work"], { env, extendEnv: true });
+```
+
+In a sandbox, `url` is the gateway and `env` carries the sandbox's gateway
+token. The gateway forwards git's requests to GitHub and adds the GitHub
+token, so `git clone`, `git fetch` and `git push` work and the token never
+enters the sandbox. On a Worker or a Lambda with no gateway, the same code
+gets GitHub's URL and the token directly.
+
+## Lock the sandbox to its gateway
+
+An Archil sandbox can set headers on requests as they leave it. With a
+gateway, Archil adds the gateway's token there, so the sandbox holds no
+token at all. Deny everything else and the gateway is the only host the
+sandbox can reach:
+
+```typescript
+export default class MySandbox extends Archil.Sandbox<MySandbox>()(
+  "MySandbox",
+  { main: import.meta.url, network: { egress: { default: "deny" } } },
+  program,
+) {}
+```
+
+The gateway's host is added to the allowed destinations for you.
+
+## Sandboxes a host creates at run time
+
+A Worker that starts sandboxes from a plain image has no sandbox program to
+give a gateway to. Give the Worker the gateway, limited to what its
+sandboxes may use:
+
+```typescript
+Effect.provide(
+  Layer.mergeAll(
+    E2B.CreateSandboxHttp,
+    GitHub.PushRepositoryHttp.pipe(Layer.provide(Gateway.only(GitHub.PushRepository))),
+  ).pipe(Layer.provide(Cloudflare.Workers.SandboxGateway)),
+)
+```
+
+`Gateway.only` names the bindings that run in the gateway. Every other
+binding, here `E2B.CreateSandbox`, stays on the Worker. What the named
+binding returns is then safe to hand to a sandbox:
+
+```typescript
+const { url, env } = yield* repo.remote;
+const sandbox = yield* sandboxes.create();
+yield* sandbox.exec(`git clone ${url} work`, { env });
+```
+
+`url` and `env` name the gateway and its token. The GitHub token stays in
+the gateway.
+
+## Bindings that stay in the sandbox
+
+A mount configures the sandbox itself and holds no credential, so
+`E2B.MountVolume`, `Daytona.MountVolume`, `Modal.MountVolume`,
+`Modal.MountBucket` and `Archil.MountDisk` are always built on the sandbox.
+A binding of your own opts out the same way:
+
+```typescript
+export const MountCache = Binding.Service<MountCache>("MyApp.MountCache", { local: true });
+```
+
+## What crosses the gateway
+
+A call's arguments and its result travel as JSON, with bytes kept as bytes.
+A binding's typed errors arrive as themselves, so `Effect.catchTag` works as
+it does on any host.
+
+Streams cross in both directions as they are produced. An upload's body is
+sent while the program still writes it, and a download is read while the
+gateway still receives it:
+
+```typescript
+const write = yield* Archil.WriteDisk(MyDisk);
+const read = yield* Archil.ReadDisk(MyDisk);
+// in fetch:
+yield* write.upload("big.bin", body);
+const bytes = read.getStream("big.bin");
+```
+
+A result that is a live handle does not cross. `E2B.CreateSandbox` returns a
+sandbox you call `exec` on, and those methods exist only where the sandbox
+was created. Keep bindings like it on a host you trust.
+
+## Choosing a gateway host
+
+`Cloudflare.Workers.SandboxGateway` starts in milliseconds and costs nothing
+at rest. A Worker caps a request body (100 MB on most plans), so use it for
+API calls, git and small objects. A Worker whose own bindings you move to a
+gateway reaches it through a service binding.
+
+`AWS.Lambda.SandboxGateway` streams requests and responses of any size and
+gives AWS bindings a role. Its environment is limited to 4 KB, which bounds
+how many credentials one gateway holds.
+
+`Fly.SandboxGateway` runs the gateway as a Fly Service: a process that is
+always on, with no limit on a body or a connection's length.
+
+`AWS.ECS.SandboxGateway` runs it as an ECS Service on your cluster, with a
+task role for AWS bindings. Give its load balancer a domain, so the sandbox's
+token travels over HTTPS:
+
+```typescript
+AWS.ECS.SandboxGateway({
+  cluster: MyCluster,
+  port: 3000,
+  loadBalancer: { domain: "gateway.example.com" },
+})
+```
+
+`AWS.Lambda.InvokeSandboxGateway` is for a sandbox whose network reaches
+AWS's API endpoints and little else. A Daytona sandbox below Tier 3 is one:
+it can reach neither a Worker's nor a Web Function's URL. The sandbox calls
+the gateway through the Lambda `Invoke` API, with an access key that may
+invoke that one Function and nothing else. A payload is at most 6 MB each
+way, streams are buffered, and a CLI can't use it as an origin.

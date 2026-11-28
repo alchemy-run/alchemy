@@ -78,7 +78,9 @@ export const resolveDurableObjectNamespace = <Namespace extends DurableObjectNam
     ALCHEMY_PHASE,
   ]).pipe(
     Effect.flatMap(([env, phase]): Effect.Effect<Namespace | undefined> => {
-      if (env === undefined || phase === "plan") {
+      // A worker's gateway builds the worker's bindings and hosts none of
+      // its objects, so there is no namespace there to call either.
+      if (env === undefined || phase === "plan" || globalThis.__ALCHEMY_GATEWAY__) {
         return Effect.undefined;
       }
       const ns: unknown = env[namespace];
@@ -97,10 +99,11 @@ export const resolveDurableObjectNamespace = <Namespace extends DurableObjectNam
   );
 
 /**
- * Export a class's constructor on its hosting worker. At plan time the
- * constructor's outer Effect runs once against `planContext` (a mock
- * Durable Object state) so the transitive bindings the object depends on
- * are discovered and registered on the worker.
+ * Export a class's constructor on its hosting worker. At plan time, and in
+ * the worker's gateway, the constructor's outer Effect runs once against
+ * `planContext` (a mock Durable Object state) so the transitive bindings
+ * the object depends on are discovered: registered on the worker at plan,
+ * built in the gateway.
  */
 export const exportDurableObjectClass = <Shape>(
   host: DurableObjectHostLike,
@@ -110,7 +113,9 @@ export const exportDurableObjectClass = <Shape>(
 ) =>
   Effect.gen(function* () {
     const phase = yield* ALCHEMY_PHASE;
-    if (phase === "plan") {
+    // A worker's gateway runs the worker's Construction and never an
+    // object, so the object's bindings are built there the same way.
+    if (phase === "plan" || globalThis.__ALCHEMY_GATEWAY__) {
       // Provided OVER the ambient context: the constructor still reaches the
       // hosting worker and every other declaration in scope.
       yield* constructor.pipe(Effect.provide(Layer.succeedContext(planContext)), Effect.asVoid);

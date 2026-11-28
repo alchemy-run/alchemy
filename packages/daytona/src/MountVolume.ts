@@ -96,7 +96,7 @@ export interface MountVolume extends Binding.Service<
   (volume: Volume, options: MountVolumeOptions) => Effect.Effect<VolumeMount>
 > {}
 
-export const MountVolume = Binding.Service<MountVolume>("Daytona.MountVolume");
+export const MountVolume = Binding.Service<MountVolume>("Daytona.MountVolume", { local: true });
 
 /** {@link MountVolume}; works on any host. */
 export const MountVolumeLive = Layer.effect(

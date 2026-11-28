@@ -1,9 +1,11 @@
 import * as E2B from "@alchemy.run/e2b";
+import * as Gateway from "alchemy/Gateway";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import { ProbeWebhook } from "./resources.ts";
 
 /** An Effect program baked into a template: every sandbox boots serving it. */
@@ -30,5 +32,10 @@ export default class ProgramTemplate extends E2B.Template<ProgramTemplate>()(
         return HttpServerResponse.text(`${greeting} from an E2B sandbox`);
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(E2B.ReadWebhookHttp)),
+  }).pipe(
+    Effect.provide(
+      // The sandbox runs this program only, so its key may live in it.
+      Layer.mergeAll(E2B.ReadWebhookHttp, Gateway.Unprotected),
+    ),
+  ),
 ) {}

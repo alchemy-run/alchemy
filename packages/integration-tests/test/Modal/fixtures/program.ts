@@ -1,4 +1,5 @@
 import * as Modal from "@alchemy.run/modal";
+import * as Gateway from "alchemy/Gateway";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -55,5 +56,10 @@ export default class Agent extends Modal.Sandbox<Agent>()(
         return yield* HttpServerResponse.json({ agent: "effect", files: files.length });
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Modal.ReadVolumeHttp, Modal.MountVolumeLive))),
+  }).pipe(
+    Effect.provide(
+      // The sandbox runs this program only, so its token may live in it.
+      Layer.mergeAll(Modal.ReadVolumeHttp, Modal.MountVolumeLive, Gateway.Unprotected),
+    ),
+  ),
 ) {}

@@ -357,7 +357,8 @@ export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRu
   readonly lookup: ReturnType<typeof Resource<Sandbox>>["lookup"];
 } = Object.assign(
   Platform("Boat.Sandbox", {
-    createRuntimeContext: createHostRuntimeContext("Boat.Sandbox"),
+    createRuntimeContext: (id) =>
+      Object.assign(createHostRuntimeContext("Boat.Sandbox")(id), { sandbox: true }),
     // A declaration passed as a prop (`snapshot: Golden`) is an Effect until
     // yielded. Yield it here so it is registered and the prop resolves to
     // its attributes, as with `yield* Golden` inside Effect.gen.

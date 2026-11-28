@@ -353,7 +353,8 @@ export const Template: Platform<Template, ServerHost, Main<ServerHost>, HostRunt
    */
   lookup(props: { name: string }): Template;
 } = Platform("E2B.Template", {
-  createRuntimeContext: createContainerRuntimeContext("E2B.Template"),
+  createRuntimeContext: (id) =>
+    Object.assign(createContainerRuntimeContext("E2B.Template")(id), { sandbox: true }),
 });
 
 /** A template by id, or by name (alias). */

@@ -1,4 +1,5 @@
 import * as Archil from "@alchemy.run/archil";
+import * as Gateway from "alchemy/Gateway";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -34,5 +35,10 @@ export default class EffectApi extends Archil.Sandbox<EffectApi>()(
         Effect.catch((e) => Effect.succeed(HttpServerResponse.text(String(e), { status: 500 }))),
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Archil.ReadDiskHttp, Archil.MountDiskLive))),
+  }).pipe(
+    Effect.provide(
+      // The sandbox runs this program only, so its disk keys may live in it.
+      Layer.mergeAll(Archil.ReadDiskHttp, Archil.MountDiskLive, Gateway.Unprotected),
+    ),
+  ),
 ) {}

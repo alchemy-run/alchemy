@@ -628,7 +628,13 @@ export const Platform = <
                           const node = yield* configProvider.load(path);
                           if (node) {
                             const output = Output.literal(Redacted.make(node.value));
-                            yield* ctx?.set(key, output) ?? Effect.void;
+                            // Under a sandbox gateway the program's Construction also
+                            // runs in the gateway, which reads the same config.
+                            yield* (
+                              (ctx?.gateway?.phase === "plan"
+                                ? ctx.gateway.set(key, output, { sandbox: true })
+                                : ctx?.set(key, output)) ?? Effect.void
+                            );
                           }
                           return node;
                         }),

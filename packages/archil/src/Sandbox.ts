@@ -4,6 +4,7 @@ import * as Process from "@distilled.cloud/archil/Process";
 import { Unowned } from "alchemy/AdoptPolicy";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { deepEqual, isResolved } from "alchemy/Diff";
+import { TOKEN_HEADER as GATEWAY_TOKEN_HEADER } from "alchemy/Gateway";
 import {
   checkMountSupport,
   collectMountCapabilities,
@@ -93,6 +94,12 @@ export interface SandboxMountBinding extends DiskMountOptions {
  */
 export interface SandboxBinding {
   env?: Record<string, any>;
+  /**
+   * The sandbox's gateway (see `alchemy/Gateway`). Its host is added to the
+   * egress policy's allowed destinations, with the token as a header Archil
+   * sets on requests to it.
+   */
+  gateway?: { url: string; token: Redacted.Redacted<string> };
   mounts?: ReadonlyArray<SandboxMountBinding | MountCapability>;
 }
 
@@ -527,7 +534,13 @@ export type SandboxShape = Main<ServerHost>;
  */
 export const Sandbox: Platform<Sandbox, ServerHost, SandboxShape, HostRuntimeContext> &
   LookupMethod<Sandbox> = Platform("Archil.Sandbox", {
-  createRuntimeContext: createHostRuntimeContext("Archil.Sandbox"),
+  // Archil sets headers on requests leaving a sandbox, so a gateway's token
+  // is added there and never enters it.
+  createRuntimeContext: (id) =>
+    Object.assign(createHostRuntimeContext("Archil.Sandbox")(id), {
+      gatewayEgress: true,
+      sandbox: true,
+    }),
   // `{ disk: Workspace }` at module scope is an Effect: yield it here so
   // the disk is registered and `news.mounts[i].disk` resolves to its
   // attributes.
@@ -781,6 +794,28 @@ const syncPorts = Effect.fn(function* (sid: string, desired: number[] | undefine
   }
 });
 
+/**
+ * The egress policy with the sandbox's gateway allowed, and its token set on
+ * requests to it. Without a policy of the sandbox's own, everything else
+ * stays allowed.
+ */
+const withGatewayEgress = (
+  egress: SandboxEgress | undefined,
+  bindings: ReadonlyArray<ResourceBinding<SandboxBinding>>,
+): SandboxEgress | undefined => {
+  const gateway = activeBindings(bindings).find((b) => b.data?.gateway !== undefined)?.data
+    ?.gateway;
+  if (gateway === undefined) return egress;
+  return {
+    ...egress,
+    default: egress?.default ?? "allow",
+    allow: [
+      ...(egress?.allow ?? []),
+      { target: new URL(gateway.url).host, headers: { [GATEWAY_TOKEN_HEADER]: gateway.token } },
+    ],
+  };
+};
+
 /** Converge a sandbox's egress policy. */
 const syncNetwork = Effect.fn(function* (sid: string, egress: SandboxEgress | undefined) {
   if (egress === undefined) return;
@@ -941,6 +976,7 @@ export const SandboxProvider = () =>
           const name = output?.name ?? (yield* sandboxName(id, news.name));
           const mounts = yield* desiredMounts(id, news.mounts, bindings);
           const capabilities = boundCapabilities(bindings);
+          const egress = withGatewayEgress(news.network?.egress, bindings);
           const hosted = news.main !== undefined;
           // Observe
           let sandbox =
@@ -965,6 +1001,7 @@ export const SandboxProvider = () =>
                 ...news,
                 image: derivedImage?.imageId ?? news.image,
                 env: hosted ? undefined : news.env,
+                network: egress === undefined ? news.network : { egress },
               },
               mounts,
             );
@@ -986,7 +1023,7 @@ export const SandboxProvider = () =>
             yield* session.note(`Remounted disks on sandbox ${name}`);
             sandbox = yield* waitForSandbox(sid);
           }
-          yield* syncNetwork(sid, news.network?.egress);
+          yield* syncNetwork(sid, egress);
           const port = news.port ?? DEFAULT_PORT;
           yield* syncPorts(
             sid,

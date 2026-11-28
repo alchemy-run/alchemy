@@ -61,7 +61,7 @@ export interface Mount extends Binding.Service<
   "AWS.EFS.Mount",
   (target: AccessPoint | FileSystem, options: MountOptions) => Effect.Effect<MountedFileSystem>
 > {}
-export const Mount = Binding.Service<Mount>("AWS.EFS.Mount");
+export const Mount = Binding.Service<Mount>("AWS.EFS.Mount", { local: true });
 
 /**
  * Ergonomic alias of {@link Mount} — `yield* EFS.mount(accessPoint, { path })`.

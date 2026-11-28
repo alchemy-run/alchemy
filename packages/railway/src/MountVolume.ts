@@ -146,7 +146,7 @@ export interface MountVolume extends Binding.Service<
   (volume: Volume, options: MountVolumeOptions) => Effect.Effect<MountedVolume>
 > {}
 
-export const MountVolume = Binding.Service<MountVolume>("Railway.MountVolume");
+export const MountVolume = Binding.Service<MountVolume>("Railway.MountVolume", { local: true });
 
 export const MountVolumeLive = Layer.effect(
   MountVolume,

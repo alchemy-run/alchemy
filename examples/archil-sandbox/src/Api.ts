@@ -1,7 +1,9 @@
 import * as Archil from "@alchemy.run/archil";
+import * as Gateway from "alchemy/Gateway";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as Random from "effect/Random";
 import { Golden } from "./Golden.ts";
 
@@ -65,5 +67,10 @@ export default class Api extends Archil.Sandbox<Api>()(
         return HttpServerResponse.text("not found", { status: 404 });
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(Archil.CreateSandboxHttp)),
+  }).pipe(
+    Effect.provide(
+      // This sandbox runs only this program, so its key may live in it.
+      Layer.mergeAll(Archil.CreateSandboxHttp, Gateway.Unprotected),
+    ),
+  ),
 ) {}
