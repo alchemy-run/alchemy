@@ -18,13 +18,12 @@
     "@alchemy.run/domain": "workspace:*",
     "@bank/domain": "workspace:*",
     "@effect/platform-browser": "catalog:",
+    "@effect/ui": "catalog:",
     "alchemy": "workspace:*",
-    "effect": "catalog:",
-    "foldkit": "catalog:"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@foldkit/vite-plugin": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   }
