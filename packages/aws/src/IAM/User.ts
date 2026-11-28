@@ -7,12 +7,11 @@ import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/T
 import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
-import { normalizePolicyDocument, type PolicyDocument } from "./Policy.ts";
+import { diffInlinePolicyDocuments, type PolicyDocument } from "./Policy.ts";
 
 export class UserConflict extends Data.TaggedError("UserConflict")<{
   readonly message: string;
@@ -209,29 +208,30 @@ export const UserProvider = () =>
         olds: Record<string, PolicyDocument>;
         news: Record<string, PolicyDocument>;
       }) {
-        for (const [policyName, document] of Rec.toEntries(news)) {
-          const observed = Rec.get(olds, policyName);
-          if (
-            Option.isNone(observed) ||
-            normalizePolicyDocument(observed.value) !== normalizePolicyDocument(document)
-          ) {
-            yield* iam.putUserPolicy({
+        const { upsert, remove } = diffInlinePolicyDocuments(olds, news);
+
+        yield* Effect.forEach(
+          upsert,
+          ([policyName, document]) =>
+            iam.putUserPolicy({
               UserName: userName,
               PolicyName: policyName,
               PolicyDocument: stringifyPolicyDocument(document),
-            });
-          }
-        }
-        for (const policyName of Rec.keys(olds)) {
-          if (!Rec.has(news, policyName)) {
-            yield* iam
+            }),
+          { discard: true },
+        );
+
+        yield* Effect.forEach(
+          remove,
+          (policyName) =>
+            iam
               .deleteUserPolicy({
                 UserName: userName,
                 PolicyName: policyName,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-          }
-        }
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+          { discard: true },
+        );
       });
 
       return {

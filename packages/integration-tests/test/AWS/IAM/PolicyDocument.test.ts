@@ -1,5 +1,6 @@
 import type { IamAction } from "@alchemy.run/aws/IAM/actions.generated";
 import {
+  diffInlinePolicyDocuments,
   normalizePolicyDocument,
   stringifyPolicyDocument,
   type PolicyDocument,
@@ -144,6 +145,49 @@ describe(
       expect(normalizePolicyDocument(document)).toContain(
         '"Action":["s3:GetObject","s3:ListBucket"]',
       );
+    });
+  },
+);
+
+describe(
+  "diffInlinePolicyDocuments",
+  { tags: ["unit", "provider:aws", "provider:aws:iam", "local"] },
+  () => {
+    const observed: PolicyDocument = {
+      Version: "2012-10-17",
+      Statement: [{ Resource: "*", Effect: "Allow", Action: ["s3:ListBucket"] }],
+    };
+    const equivalent: PolicyDocument = {
+      Version: "2012-10-17",
+      Statement: [{ Action: ["s3:ListBucket"], Resource: ["*"], Effect: "Allow" }],
+    };
+    const changed: PolicyDocument = {
+      ...equivalent,
+      Statement: [{ Resource: "*", Effect: "Deny", Action: ["s3:ListBucket"] }],
+    };
+
+    it("selects missing and changed policies without rewriting equivalent ones", () => {
+      expect(
+        diffInlinePolicyDocuments(
+          { unchanged: observed, changed: observed, removed: observed },
+          { added: equivalent, unchanged: equivalent, changed },
+        ),
+      ).toEqual({
+        upsert: [
+          ["added", equivalent],
+          ["changed", changed],
+        ],
+        remove: ["removed"],
+      });
+    });
+
+    it("only considers own keys when adding or removing policies", () => {
+      expect(diffInlinePolicyDocuments({}, { constructor: equivalent }).upsert).toEqual([
+        ["constructor", equivalent],
+      ]);
+      expect(diffInlinePolicyDocuments({ constructor: observed }, {}).remove).toEqual([
+        "constructor",
+      ]);
     });
   },
 );

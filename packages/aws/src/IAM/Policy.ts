@@ -8,6 +8,8 @@ import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
@@ -84,22 +86,24 @@ export interface ServiceControlPolicyDocument {
   Statement: ServiceControlPolicyStatement[];
 }
 
-const canonicalizePolicyValue = (value: unknown): unknown => {
-  if (Arr.isArray(value)) {
-    return value.length === 1
-      ? canonicalizePolicyValue(value[0])
-      : Arr.map(value, canonicalizePolicyValue);
-  }
-  if (Predicate.isObject(value)) {
-    return pipe(
-      Rec.toEntries(value),
+const canonicalizePolicyValue: (value: unknown) => unknown = Match.type<unknown>().pipe(
+  Match.when(
+    (value: unknown): value is unknown[] => Arr.isArray(value),
+    (items) =>
+      items.length === 1
+        ? canonicalizePolicyValue(items[0])
+        : Arr.map(items, canonicalizePolicyValue),
+  ),
+  Match.when(Predicate.isObject, (record) =>
+    pipe(
+      Rec.toEntries(record),
       Arr.sortWith(([key]) => key, Order.String),
-      Arr.map(([key, entry]) => [key, canonicalizePolicyValue(entry)] as const),
+      Arr.map(([key, value]) => [key, canonicalizePolicyValue(value)] as const),
       Rec.fromEntries,
-    );
-  }
-  return value;
-};
+    ),
+  ),
+  Match.orElse((value) => value),
+);
 
 /**
  * Canonicalize an IAM policy document for drift comparison.
@@ -127,6 +131,23 @@ export const normalizePolicyDocument = (json: string | object): string =>
         Result.getOrElse(() => json),
       )
     : encodePolicyJson(canonicalizePolicyValue(json));
+
+const policyDocumentChanged = (observed: Option.Option<PolicyDocument>, desired: PolicyDocument) =>
+  Option.match(observed, {
+    onNone: () => true,
+    onSome: (document) => normalizePolicyDocument(document) !== normalizePolicyDocument(desired),
+  });
+
+/** @internal Calculate the shared inline-policy changes for IAM users and groups. */
+export const diffInlinePolicyDocuments = (
+  observed: Readonly<Record<string, PolicyDocument>>,
+  desired: Readonly<Record<string, PolicyDocument>>,
+) => ({
+  upsert: Arr.filter(Rec.toEntries(desired), ([name, document]) =>
+    policyDocumentChanged(Rec.get(observed, name), document),
+  ),
+  remove: Arr.filter(Rec.keys(observed), (name) => !Rec.has(desired, name)),
+});
 
 export type PolicyName = string;
 export type PolicyArn = `arn:${Partition}:iam::${AccountID}:policy/${string}`;
@@ -491,9 +512,7 @@ export const PolicyProvider = () =>
             versionId: observed?.DefaultVersionId,
           });
           if (
-            observedDocument === undefined ||
-            normalizePolicyDocument(observedDocument) !==
-              normalizePolicyDocument(news.policyDocument)
+            policyDocumentChanged(Option.fromUndefinedOr(observedDocument), news.policyDocument)
           ) {
             yield* prunePolicyVersions(policyArn);
             const createdVersion = yield* iam.createPolicyVersion({

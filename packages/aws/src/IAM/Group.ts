@@ -5,12 +5,11 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument } from "./common.ts";
-import { normalizePolicyDocument, type PolicyDocument } from "./Policy.ts";
+import { diffInlinePolicyDocuments, type PolicyDocument } from "./Policy.ts";
 
 export interface GroupProps {
   /**
@@ -192,29 +191,30 @@ export const GroupProvider = () =>
         olds: Record<string, PolicyDocument>;
         news: Record<string, PolicyDocument>;
       }) {
-        for (const [policyName, document] of Rec.toEntries(news)) {
-          const observed = Rec.get(olds, policyName);
-          if (
-            Option.isNone(observed) ||
-            normalizePolicyDocument(observed.value) !== normalizePolicyDocument(document)
-          ) {
-            yield* iam.putGroupPolicy({
+        const { upsert, remove } = diffInlinePolicyDocuments(olds, news);
+
+        yield* Effect.forEach(
+          upsert,
+          ([policyName, document]) =>
+            iam.putGroupPolicy({
               GroupName: groupName,
               PolicyName: policyName,
               PolicyDocument: stringifyPolicyDocument(document),
-            });
-          }
-        }
-        for (const policyName of Rec.keys(olds)) {
-          if (!Rec.has(news, policyName)) {
-            yield* iam
+            }),
+          { discard: true },
+        );
+
+        yield* Effect.forEach(
+          remove,
+          (policyName) =>
+            iam
               .deleteGroupPolicy({
                 GroupName: groupName,
                 PolicyName: policyName,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-          }
-        }
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+          { discard: true },
+        );
       });
 
       return {
