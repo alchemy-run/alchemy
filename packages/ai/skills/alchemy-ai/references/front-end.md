@@ -2,7 +2,7 @@
 
 A page talks to two things: an Api over the Domain model, for commands and the board's views, and a route the Worker serves from the session, for the agent's status and transcript. Domain knows nothing of a session, so the model never holds either.
 
-For the model's blocks (aggregate, view, stream, projection, Api), use the `alchemy-domain` skill's `references/building-blocks.md`. For the page (client, Commands, Subscriptions, stories, hosting), use its `references/frontend.md`. This file covers only what is specific to sessions.
+For the model's blocks (aggregate, view, stream, projection, Api), use the `alchemy-domain` skill's `references/building-blocks.md`. For the page (client, Commands, Subscriptions, stories, hosting), use its `references/frontend/` files. This file covers only what is specific to sessions.
 
 ## Read a session from the Worker
 
@@ -39,7 +39,7 @@ More: [Serve what the front end may use](https://alchemy.run/ai/front-end#serve-
 
 ## Build the page so it never waits
 
-Follow the `alchemy-domain` skill's `references/frontend.md` for the client, `DomainFoldkit.make`, and hosting with `Cloudflare.Website.Foldkit`. On top of it, for a page over sessions:
+Follow the `alchemy-domain` skill's `references/frontend/foldkit.md` for the client, `DomainFoldkit.make`, and hosting with `Cloudflare.Website.Foldkit`. On top of it, for a page over sessions:
 
 - Keep what was read of each thing the page opened, keyed by its id, and resume each transcript from the `seq` of its last item.
 - Show a new issue or a reply the moment it is submitted, in a `pending` list. Drop it when the board's copy arrives (the item in the transcript), and take it back with its words when the command fails.

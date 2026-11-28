@@ -35,7 +35,7 @@ Work in this order. Each step has a reference file with templates.
 4. **Declare each tool and model** from its template. See [references/tools-and-models.md](references/tools-and-models.md).
 5. **Connect the processes and the models**: mention each model's commands and views in the prose, say who each session acts as, and let a policy hand it work. See [references/domain.md](references/domain.md).
 6. **Run it**: host the model, then give a host the prose with a harness Layer, a model Layer, a sandbox if tools need files, and the model. See [references/running.md](references/running.md).
-7. **Serve it to a front end**: list what a page may send and read, serve each session's status and transcript on a route, and build the page. See [references/front-end.md](references/front-end.md), then the `alchemy-domain` skill's `references/frontend.md` for the page itself.
+7. **Serve it to a front end**: list what a page may send and read, serve each session's status and transcript on a route, and build the page. See [references/front-end.md](references/front-end.md), then the `alchemy-domain` skill's `references/frontend/` for the page itself.
 8. **Test every layer**: stories and `Verify` for the model, stories for the page, the page with the board in memory, then the deployed app. See [references/testing.md](references/testing.md).
 
 More: [Tutorial, part 1](https://alchemy.run/ai/tutorial/part-1), [Connect a front end](https://alchemy.run/ai/front-end).

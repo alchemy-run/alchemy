@@ -7,7 +7,7 @@ description: Build backends with @alchemy.run/domain (domain-driven design on Ef
 
 `@alchemy.run/domain` models a backend as typed messages and pure state transitions. Commands are decided by aggregates, which record events. Views fold events into read models. Policies react to events. Sagas run long processes. Projections write outside the model, and queries serve what they wrote. The same model runs in memory for tests and on Cloudflare, Rivet or Effect Cluster Durable Objects in production.
 
-Docs: https://alchemy.run/domain, with every page listed in https://alchemy.run/llms.txt. Every section here and in the reference files ends with a More link to the docs page that covers it in depth. A complete reference project: `examples/cloudflare-domain` in the alchemy repo (a bank with a foldkit app).
+Docs: https://alchemy.run/domain, with every page listed in https://alchemy.run/llms.txt. Every section here and in the reference files ends with a More link to the docs page that covers it in depth. A complete reference project: `examples/cloudflare-domain` in the alchemy repo (a bank with an Effect UI app).
 
 ## Workflow
 
@@ -18,7 +18,7 @@ Work in this order. Each step has a reference file with templates.
 3. **Write each block** from its template. See [references/building-blocks.md](references/building-blocks.md).
 4. **Specify behavior with stories** before and while you implement it, and **state each rule that must always hold** as an invariant that `Verify` checks. See [references/testing.md](references/testing.md).
 5. **Host the model** on Cloudflare from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
-6. **Drive it from a frontend** (Effect UI, or Foldkit) in the web package. See [references/frontend.md](references/frontend.md).
+6. **Drive it from a frontend** in the web package. See [references/frontend/index.md](references/frontend/index.md), then [Effect UI](references/frontend/effect-ui.md) (recommended) or [Foldkit](references/frontend/foldkit.md).
 7. **Add agents**, if a language model does part of the work: follow the `alchemy-ai` skill, which builds on this model and returns here for the front end.
 
 More: [Tutorial, part 1](https://alchemy.run/domain/tutorial/part-1).
