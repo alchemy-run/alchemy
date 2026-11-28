@@ -226,6 +226,12 @@ catalogs:
     '@cloudflare/vitest-plugin':
       specifier: ^1.4.0
       version: 1.4.0
+    '@effect/ai-anthropic':
+      specifier: 4.1.4
+      version: 4.1.4
+    '@effect/ai-openai':
+      specifier: 4.1.4
+      version: 4.1.4
     '@effect/atom-react':
       specifier: ^4.1.4
       version: 4.1.4
@@ -9254,6 +9260,12 @@ importers:
       '@alchemy.run/rivet':
         specifier: workspace:*
         version: link:../rivet
+      '@effect/ai-anthropic':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)
+      '@effect/ai-openai':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -16287,6 +16299,16 @@ packages:
   '@earendil-works/pi-telemetry@1.5.0':
     resolution: {integrity: sha512-VW3tcVdnNfl/Vk8wHPTzZdKkxcsCOM12ppiO4DXnd9wMxUCmOfLt/wvUnWeKWbTVlVSRg0uqKtnnhE2UCsG2Bw==}
     engines: {node: '>=22.19.0'}
+
+  '@effect/ai-anthropic@4.1.4':
+    resolution: {integrity: sha512-VDcsyL3k76HhF7YqH8z0gQ0bUybX4ti5RHv3JadDXZvEgNpvUT3p4YBssvKR2HAGa7NXr9yfmFedRilhQM7tdQ==}
+    peerDependencies:
+      effect: 4.1.4
+
+  '@effect/ai-openai@4.1.4':
+    resolution: {integrity: sha512-xodZLHmt1N7Ziw94jr0nTfG/fgyMZioYKS85fyy2L1kscNurWGllaDaTQyHUSYd8wghqMoc8vV3XPei0+c9NIQ==}
+    peerDependencies:
+      effect: 4.1.4
 
   '@effect/atom-react@4.1.4':
     resolution: {integrity: sha512-Xj58DcAzKsysHhzBCPaz2v1QAJq6NvMdGVmG7SV4zkw1RMiTZv8gaOXA1VqIRlpmvdspMwRe/BQ4eayuzRZTpQ==}
@@ -34802,6 +34824,14 @@ snapshots:
   '@earendil-works/pi-telemetry@1.3.0': {}
 
   '@earendil-works/pi-telemetry@1.5.0': {}
+
+  '@effect/ai-anthropic@4.1.4(effect@4.1.4)':
+    dependencies:
+      effect: 4.1.4
+
+  '@effect/ai-openai@4.1.4(effect@4.1.4)':
+    dependencies:
+      effect: 4.1.4
 
   '@effect/atom-react@4.1.4(effect@4.1.4)(react@19.3.1)(scheduler@0.28.0)':
     dependencies:
