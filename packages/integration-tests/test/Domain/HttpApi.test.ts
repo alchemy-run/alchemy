@@ -487,11 +487,19 @@ describe("Domain toHttpApi", { tags: ["unit", "local"] }, () => {
       expect(yield* Fiber.join(events)).toEqual([
         {
           event: "message",
-          data: { state: { owner: "kim", balance: 10 }, cursor: expect.any(Number) },
+          data: {
+            state: { owner: "kim", balance: 10 },
+            cursor: expect.any(Number),
+            position: { stream: "Wallet/w-5", seq: 1 },
+          },
         },
         {
           event: "message",
-          data: { state: { owner: "kim", balance: 15 }, cursor: expect.any(Number) },
+          data: {
+            state: { owner: "kim", balance: 15 },
+            cursor: expect.any(Number),
+            position: { stream: "Wallet/w-5", seq: 2 },
+          },
         },
       ]);
     }).pipe(Effect.provide(Served)),

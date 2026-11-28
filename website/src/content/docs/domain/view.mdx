@@ -258,7 +258,7 @@ yield* bank.Statement.events(accountId).pipe(
 
 `Stream.filter(Domain.Read.isEvent)` drops the frame when you don't need it.
 
-`watch` sends each state with its cursor, `{ state, cursor }`. Pass a cursor as `after` to `events` and the feed starts right after it: nothing arrives twice, and nothing is missed. That's how a screen that rendered a watched state follows the events from there, and how a dropped feed resumes from its last `CaughtUp`. Over `protocolWebSocket`, a read that reconnects sends `CaughtUp` again after the entries it missed.
+`watch` sends each state with its cursor, `{ state, cursor, position }`. Pass a cursor as `after` to `events` and the feed starts right after it: nothing arrives twice, and nothing is missed. That's how a screen that rendered a watched state follows the events from there, and how a dropped feed resumes from its last `CaughtUp`. Over `protocolWebSocket`, a read that reconnects sends `CaughtUp` again after the entries it missed.
 
 ### Render a snapshot, then follow it
 
@@ -293,6 +293,8 @@ export const confirmBalance = Effect.fn(function* (bank: CustomerClient, account
 ```
 
 An `asOf` of `{ stream: "Account/a-1", seq: 7 }` means the balance reflects the account up to its seventh event, the same address a command's receipt gives as `stream` and `version`. `position` is `null` until the key applies an event, and on a key last stored before positions were recorded.
+
+Every frame `watch` sends carries `position` too, read from the same stored state as the frame.
 
 `position` is the last fact applied, so on a view with several sources it can name another stream than your command's; to wait for your own write, pass the receipt as [`atLeast`](/domain/view#views-catch-up-after-the-commit).
 
