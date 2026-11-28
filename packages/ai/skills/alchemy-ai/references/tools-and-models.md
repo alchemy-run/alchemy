@@ -111,6 +111,30 @@ export const FastLive = AIOpenAI.Model(Fast, { model: "gpt-5.4-mini" });
 
 More: [Back it with an LLM](https://alchemy.run/ai/models#back-it-with-an-llm), [Use Anthropic](https://alchemy.run/ai/models#use-anthropic), [Use OpenAI](https://alchemy.run/ai/models#use-openai), [Set the default model](https://alchemy.run/ai/models#set-the-default-model).
 
+## State a session keeps
+
+`AI.State` is typed state every session has, stored beside its transcript. The model never reads it.
+
+```typescript
+// src/Phase.state.ts
+export class Phase extends AI.State("phase", {
+  schema: Schema.Struct({ phase: Schema.Literals(["research", "draft", "publish"]) }),
+  initial: { phase: "research" },
+}) {}
+
+// in a tool: the state of the session whose model made the call
+export const AdvanceLive = Advance.make(
+  Effect.fn(function* () {
+    yield* Phase.set({ phase: "draft" });
+  }),
+);
+
+// from outside: name the session
+yield* engineer.get(taskId).state(Phase).update((state) => ({ ...state, phase: "publish" }));
+```
+
+More: [State](https://alchemy.run/ai/state), [Read and write it from outside](https://alchemy.run/ai/state#read-and-write-it-from-outside).
+
 ## An MCP server
 
 ```typescript

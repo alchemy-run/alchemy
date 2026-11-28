@@ -1,4 +1,5 @@
 import { Sandbox, type Sandboxes } from "@alchemy.run/ai/Sandbox";
+import { StateStore } from "@alchemy.run/ai/State";
 import {
   callTool,
   isToolGroup,
@@ -33,7 +34,7 @@ import { makeSandbox } from "./Env.ts";
 import { messageOf } from "./internal/promise.ts";
 
 /** The services every tool handler on a Pi harness may use. */
-export type ToolServices = Sandbox | ToolCall | RuntimeContext;
+export type ToolServices = Sandbox | ToolCall | StateStore | RuntimeContext;
 
 /** Anything a Pi harness lists as a tool: an `AI.Tool`, a tool tag (`AI.Bash`), or a group. */
 export type AnyTool = ToolRef | ToolGroup<ReadonlyArray<ToolRef>>;
@@ -87,7 +88,7 @@ const declaresFailure = (spec: ToolSpec): spec is ToolSpec & { failure: Schema.T
 /** Runs a tool's Effect where the harness was yielded. */
 export type RunTool = <A, E>(
   effect: Effect.Effect<A, E, ToolServices>,
-  services: Context.Context<Sandbox | ToolCall>,
+  services: Context.Context<Sandbox | ToolCall | StateStore>,
   signal: AbortSignal | undefined,
 ) => Promise<Exit.Exit<A, E>>;
 
@@ -101,6 +102,8 @@ export const toRegistration = (
   spec: ToolSpec,
   handler: ToolHandler<ToolSpec>,
   run: RunTool,
+  /** The state of a conversation, by its id. */
+  stateOf: (conversationId: string) => StateStore["Service"],
 ): ToolRegistration => {
   // A tool that returns nothing has no value for a program to read.
   const returns = spec.success.ast._tag !== "Void";
@@ -115,7 +118,10 @@ export const toRegistration = (
       const services = Context.make(ToolCall, {
         conversationId: String(api.conversationId),
         callId: api.callId,
-      }).pipe(Context.add(Sandbox, makeSandbox(requireEnv(api.env))));
+      }).pipe(
+        Context.add(Sandbox, makeSandbox(requireEnv(api.env))),
+        Context.add(StateStore, stateOf(String(api.conversationId))),
+      );
       const exit = await run(callTool(spec, handler, args), services, context.abortSignal);
       // A defect or interruption: Pi turns a throw into the model's error result.
       if (!Exit.isSuccess(exit)) throw new Error(messageOf(exit.cause.pipe(Cause.squash)));

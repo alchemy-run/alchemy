@@ -1,5 +1,6 @@
 import * as AI from "@alchemy.run/ai";
 import { makeHarness } from "@alchemy.run/ai/Harness";
+import { stateStoreOf } from "@alchemy.run/ai/State";
 import {
   callTool,
   isToolTag,
@@ -158,6 +159,17 @@ export const recording = () => {
       return callTool(tool.spec, tool.handler, parameters);
     }).pipe(
       Effect.provideService(AI.ToolCall, { conversationId, callId }),
+      // The state of the session the call belongs to, kept in the harness's values.
+      Effect.provideService(
+        AI.StateStore,
+        stateStoreOf(
+          {
+            get: (key) => Effect.sync(() => values.get(key)),
+            put: (key, value) => Effect.sync(() => void values.set(key, value)),
+          },
+          conversationId,
+        ),
+      ),
       // The recording harness never opens a sandbox: a test that needs one passes it.
       Effect.provideService(AI.Sandbox, sandbox),
     );

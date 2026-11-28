@@ -21,6 +21,7 @@ import {
 import { isMcpServer, type McpServerClass } from "./McpServer.ts";
 import { isModel, type AnyModel, type ModelClass } from "./Model.ts";
 import type { SessionState } from "./Session.ts";
+import { stateStoreOf, type AnyState, type StateOf, type StateStore } from "./State.ts";
 import {
   isToolGroup,
   ownTool,
@@ -180,6 +181,14 @@ export interface Session {
     text: string,
     options?: SendOptions,
   ) => Effect.Effect<Reply, NotStarted | HarnessError, RuntimeContext>;
+  /**
+   * The session's value of a declared state (`AI.State`): what its tools
+   * read and write as `Phase.get` and `Phase.set`. A session nobody started
+   * has the state's `initial`.
+   */
+  readonly state: <S extends AnyState>(
+    state: S,
+  ) => StateOf<S["spec"]["initial"], NotStarted | HarnessError>;
 }
 
 /** What starting a session takes. */
@@ -232,6 +241,10 @@ export type ProcessService<As = never> = ProcessClient<As> & {
   readonly "~model"?: (name: string) => AnyModel | undefined;
   /** @internal What a session started with `as` acts as, in the form that is stored. */
   readonly "~stored"?: (as: Context.Context<never>) => Effect.Effect<Stored | undefined>;
+  /** @internal Where the session with this key keeps its state. */
+  readonly "~state"?: (
+    key: string,
+  ) => Effect.Effect<StateStore["Service"], NotStarted | HarnessError, RuntimeContext>;
 };
 
 /** A process declared by name, as a host reads it. */
@@ -838,8 +851,17 @@ const compileUnframed = (definition: Definition): Effect.Effect<ProcessService<a
             ),
       );
 
+    /** Where the session `key` keeps its state: the store its tool calls are given. */
+    const storeOf = (key: string) =>
+      Effect.gen(function* () {
+        const engine = yield* harness.open;
+        // A tool call carries the session's id, so its state is kept under it.
+        return stateStoreOf(engine.values, yield* (yield* started(key)).open());
+      });
+
     service = {
       "~definition": definition,
+      "~state": storeOf,
       "~exists": (key: string) => Effect.flatMap(sessionOf(key), (session) => session.exists),
       "~model": (name: string) => state.models.get(name),
       "~stored": (as: Context.Context<never>) =>
@@ -901,11 +923,22 @@ const compileUnframed = (definition: Definition): Effect.Effect<ProcessService<a
         history: (options) => Effect.flatMap(sessionOf(key), (session) => session.history(options)),
         prompt: (text, options) =>
           Effect.flatMap(started(key), (session) => session.prompt(text, options)),
+        state: (declared) => stateIn(declared, storeOf(key)),
       }),
     };
     state.services.set(definition, service);
     return service;
   });
+
+/** A declared state over a store that is found on each use, and may not be. */
+const stateIn = <S extends AnyState, E>(
+  declared: S,
+  store: Effect.Effect<StateStore["Service"], E, RuntimeContext>,
+): StateOf<S["spec"]["initial"], E> => ({
+  get: Effect.flatMap(store, (found) => declared.in(found).get),
+  set: (value) => Effect.flatMap(store, (found) => declared.in(found).set(value)),
+  update: (change) => Effect.flatMap(store, (found) => declared.in(found).update(change)),
+});
 
 /** Where a session nobody sent anything stands. */
 const IDLE: SessionState = { status: "idle", queued: [] };
@@ -966,6 +999,9 @@ const hostedAs = (name: string): Hosted => {
         key: string,
         options: StartWith,
       ) => Effect.Effect<void, HarnessError, RuntimeContext>;
+      const stateOf =
+        service["~state"]?.(key) ??
+        Effect.fail(new HarnessError({ message: `${name} keeps no state where it runs.` }));
       return {
         start: (options?: { readonly model?: string; readonly as?: Stored }) =>
           answer(
@@ -987,6 +1023,12 @@ const hostedAs = (name: string): Hosted => {
         status: () => answer(session.status),
         history: (options?: HistoryOptions) => answer(session.history(options)),
         exists: () => answer(service["~exists"]?.(key) ?? Effect.succeed(true)),
+        // A session's state, as it is stored: the caller holds its schema.
+        stateGet: (name: string) => answer(Effect.flatMap(stateOf, (store) => store.get(name))),
+        statePut: (name: string, value: string) =>
+          answer(Effect.flatMap(stateOf, (store) => store.put(name, value))),
+        stateSwap: (name: string, expected: string | null, next: string) =>
+          answer(Effect.flatMap(stateOf, (store) => store.swap(name, expected ?? undefined, next))),
       };
     },
     client: (remote, local): ProcessService<any> => {
@@ -1038,6 +1080,22 @@ const hostedAs = (name: string): Hosted => {
           interrupt: sure(call(key, "interrupt")),
           status: sure(call(key, "status")),
           history: (options) => sure(call(key, "history", options ?? {})),
+          // Read and written in the session's instance, where its tools find it.
+          state: (declared) =>
+            stateIn(
+              declared,
+              Effect.succeed<StateStore["Service"]>({
+                get: (stored) =>
+                  Effect.orDie(
+                    Effect.map(call<string | null>(key, "stateGet", stored), (value) =>
+                      value === null ? undefined : value,
+                    ),
+                  ),
+                put: (stored, value) => Effect.orDie(call<void>(key, "statePut", stored, value)),
+                swap: (stored, expected, next) =>
+                  Effect.orDie(call<boolean>(key, "stateSwap", stored, expected ?? null, next)),
+              }),
+            ),
           // A session's live events stay in its instance.
           events: () =>
             Stream.die(

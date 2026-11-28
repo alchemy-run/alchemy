@@ -86,3 +86,22 @@ export class SaveNote extends AI.Tool<SaveNote>()(
     });
   }),
 ) {}
+
+/** The phase a conversation is in: state kept beside its transcript. */
+export class Phase extends AI.State("phase", {
+  schema: Schema.Struct({ phase: Schema.Literals(["research", "draft", "publish"]) }),
+  initial: { phase: "research" },
+}) {}
+
+/** A tool that writes the state of the conversation whose model called it. */
+export const Advance = AI.Tool(
+  "advance",
+  {
+    description: "Say the research is done, so drafting can start. Call it when asked to advance.",
+    parameters: Schema.Struct({}),
+    success: Schema.Struct({ phase: Schema.String }),
+  },
+  Effect.fn(function* () {
+    return yield* Phase.update(() => ({ phase: "draft" as const }));
+  }),
+);

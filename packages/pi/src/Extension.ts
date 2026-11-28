@@ -1,4 +1,5 @@
 import type { Sandbox } from "@alchemy.run/ai/Sandbox";
+import type { StateStore } from "@alchemy.run/ai/State";
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import type { JsonObject, ToolExecutionResult, ToolHookCall } from "@earendil-works/pi-durable";
 import type { ConversationId } from "@earendil-works/pi-durable";
@@ -18,8 +19,11 @@ export interface ExtensionSpec {
   readonly tools?: ReadonlyArray<AnyTool>;
 }
 
-/** Services an extension's sections and hooks may use. */
-export type ExtensionServices = Exclude<ToolServices, Sandbox>;
+/**
+ * Services an extension's sections and hooks may use. Each runs for one
+ * conversation, so `AI.State` is that conversation's state.
+ */
+export type ExtensionServices = Exclude<ToolServices, Sandbox> | StateStore;
 
 /** The input a dynamic section renders from. */
 export interface SectionInput {

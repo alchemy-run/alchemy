@@ -41,6 +41,8 @@ export default class OpenCodeApi extends Cloudflare.Worker<OpenCodeApi>()(
             });
           case "section":
             return yield* HttpServerResponse.json({ section: yield* session.section(name!) });
+          case "phase":
+            return yield* HttpServerResponse.json(yield* session.phase(name!, body.phase));
           case "tools":
             return yield* HttpServerResponse.json(yield* session.toolsUsed(name!));
           case "file":

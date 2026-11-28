@@ -7,16 +7,19 @@ import {
   type Evaluator,
 } from "@alchemy.run/ai/CodeMode";
 import type { DeclaredNamespace, DeclaredTool, JsonSchema } from "@alchemy.run/ai/Declarations";
-import type {
-  HistoryOptions,
-  QueuedMessage,
-  SessionEntry,
-  SessionEvent,
-  SessionPage,
+import {
+  memoryValues,
+  type EngineValues,
+  type HistoryOptions,
+  type QueuedMessage,
+  type SessionEntry,
+  type SessionEvent,
+  type SessionPage,
 } from "@alchemy.run/ai/Harness";
 import { isMcpServer, type AnyMcpServer, type McpServerService } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { Sandbox, SandboxError, Sandboxes, sandboxOf } from "@alchemy.run/ai/Sandbox";
+import { StateStore, stateStoreOf, type AnyState, type StateOf } from "@alchemy.run/ai/State";
 import {
   callTool,
   parametersJsonSchema,
@@ -169,6 +172,11 @@ export interface Session {
    * `AI.Sandboxes` Layer names or labels the sandbox by.
    */
   readonly sandboxKey: string;
+  /**
+   * The session's value of a declared state (`AI.State`): what its tools
+   * read and write as `Phase.get` and `Phase.set`.
+   */
+  readonly state: <S extends AnyState>(state: S) => StateOf<S["spec"]["initial"]>;
   /** OpenCode's id for the session. */
   readonly id: Effect.Effect<string, OpenCodeError, RuntimeContext>;
   /** Whether OpenCode has this session. */
@@ -241,6 +249,8 @@ export interface Harness {
   readonly use: <A>(
     call: (client: Host) => Promise<A>,
   ) => Effect.Effect<A, OpenCodeError, RuntimeContext>;
+  /** @internal Where each session's state is kept. */
+  readonly "~values": EngineValues;
 }
 
 type ModelServices<Models extends ReadonlyArray<AnyModel>> = Models[number] extends infer M
@@ -332,7 +342,7 @@ interface Built {
     server: string,
     tool: string,
     args: unknown,
-    services: Context.Context<Sandbox | ToolCall>,
+    services: Context.Context<Sandbox | ToolCall | StateStore>,
   ) => Effect.Effect<
     { readonly text: string; readonly structured?: unknown; readonly isError: boolean },
     never,
@@ -387,7 +397,7 @@ const runProgram = (
   programmed: ReadonlyMap<string, Programmed>,
   call: Built["call"],
   code: string,
-  services: Context.Context<Sandbox | ToolCall>,
+  services: Context.Context<Sandbox | ToolCall | StateStore>,
 ): Effect.Effect<{ readonly text: string; readonly isError: boolean }, never, RuntimeContext> =>
   Effect.gen(function* () {
     const context = yield* Effect.context<RuntimeContext>();
@@ -467,6 +477,9 @@ export const Harness = <
     const name = options.name ?? "alchemy";
     const storage = yield* (yield* Storage).instance;
     const instanceId = storage.id;
+    // Where each session's state is kept: beside OpenCode's own tables.
+    const values: EngineValues = storage.values ?? memoryValues();
+    const stateOf = (session: string) => stateStoreOf(values, session);
     // Where tools find files and a shell. A harness without sandboxes runs
     // only tools that need neither.
     const sandboxes = Option.getOrUndefined(yield* Effect.serviceOption(Sandboxes));
@@ -862,7 +875,7 @@ export const Harness = <
                   const call = Context.make(ToolCall, {
                     conversationId: session,
                     callId: context.id,
-                  });
+                  }).pipe(Context.add(StateStore, stateOf(session)));
                   const result = await run(
                     state.call(
                       server,
@@ -872,7 +885,7 @@ export const Harness = <
                       (sandbox === undefined
                         ? call
                         : Context.add(call, Sandbox, sandbox)) as Context.Context<
-                        Sandbox | ToolCall
+                        Sandbox | ToolCall | StateStore
                       >,
                     ),
                   );
@@ -1525,6 +1538,7 @@ export const Harness = <
         }).pipe(lockOf(sessionName).withPermits(1), Effect.ensuring(closeSoon));
       return {
         name: sessionName,
+        state: (declared) => declared.in(stateOf(sessionName)),
         sandboxKey: sandboxKey(instanceId, sessionName),
         id: sessionIdOf(sessionName),
         exists: use(
@@ -1595,7 +1609,7 @@ export const Harness = <
         ? tool.toolName
         : ((isToolTag(tool) ? nativeOf.get(tool.key) : undefined) ?? nameOf(name, tool.toolName));
 
-    return { session, toolName, use } satisfies Harness;
+    return { session, toolName, use, "~values": values } satisfies Harness;
     // Models, tools and servers are read by tag, so their requirements are stated by the signature.
   }) as unknown as Effect.Effect<
     Harness,

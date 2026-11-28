@@ -383,6 +383,44 @@ test(
 );
 
 test(
+  "a conversation's state is written by a tool, read by a section, and kept when its object is evicted",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    yield* call(`/${user}/phased/create`, { tools: ["advance"] });
+    // A conversation that never wrote the state has what the declaration starts it with.
+    expect(yield* call(`/${user}/phased/phase`)).toEqual({ phase: "research" });
+
+    // The model's tool call writes the state of its own conversation.
+    yield* call(`/${user}/phased/prompt`, {
+      text: "The research is done. Advance.",
+      requestId: "phase-1",
+    });
+    expect(yield* call(`/${user}/phased/phase`)).toEqual({ phase: "draft" });
+    // Another conversation of the same object has a value of its own.
+    yield* call(`/${user}/other/create`, { tools: ["advance"] });
+    expect(yield* call(`/${user}/other/phase`)).toEqual({ phase: "research" });
+
+    // Written from outside, and read by the extension's section before the next request.
+    expect(yield* call(`/${user}/phased/phase`, { phase: "publish" })).toEqual({
+      phase: "publish",
+    });
+    yield* call(`/${user}/phased/prompt`, {
+      text: "Which phase is this conversation in? Reply with only the word.",
+      requestId: "phase-2",
+    });
+    const messages = (yield* call(`/${user}/phased/transcript`)) as ReadonlyArray<Message>;
+    expect(
+      textOf(messages.filter((message) => message.role === "assistant").at(-1)!).toLowerCase(),
+    ).toContain("publish");
+
+    // The state is in the object's storage: a fresh instance reads the same value.
+    yield* call(`/${user}/phased/crash`, {});
+    expect(yield* call(`/${user}/phased/phase`)).toEqual({ phase: "publish" });
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
   "an extension's hook blocks a tool call and its section reaches the model",
   Effect.gen(function* () {
     const user = `user-${Date.now()}`;

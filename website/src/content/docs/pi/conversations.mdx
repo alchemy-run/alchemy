@@ -82,6 +82,21 @@ yield* harness.configure("pr-142", { extensions: { add: [Releasing] } });
 
 A field set to `null` goes back to the harness's default.
 
+## Keep state with it
+
+`state` is a conversation's value of an [`AI.State`](/ai/state): what its tools, and an extension's sections and hooks, read as `Phase.get`.
+
+```typescript
+const conversation = yield* harness.conversationByName("pr-142");
+const phase = conversation.state(Phase);
+
+const { phase: now } = yield* phase.get;
+if (now === "draft") {
+  yield* phase.set({ phase: "publish" });
+  yield* conversation.configure({ tools: { add: [Publish] } });
+}
+```
+
 ## Read the transcript
 
 `context` is what the model sees next:
