@@ -60,6 +60,33 @@ export const PlannedBinding = Schema.Struct({
 });
 export type PlannedBinding = typeof PlannedBinding.Type;
 
+/** A binding a term of a runtime can reach, and the services it reaches it through. */
+export const PlannedPermission = Schema.Struct({
+  binding: Schema.String,
+  targets: Schema.Array(Schema.String),
+  via: Schema.Array(Schema.String),
+});
+
+/** An edge from one term of a runtime to another. */
+export const PlannedReference = Schema.Struct({
+  relation: Schema.String,
+  to: Schema.String,
+});
+
+/**
+ * One named thing a runtime runs or reaches (a process, a tool, a piece of a
+ * Domain model). A runtime's terms are a flat list, joined by `references`.
+ */
+export const PlannedTerm = Schema.Struct({
+  id: Schema.String,
+  kind: Schema.String,
+  name: Schema.String,
+  host: Schema.optionalKey(Schema.String),
+  bindings: Schema.Array(PlannedPermission),
+  references: Schema.Array(PlannedReference),
+  resources: Schema.String.pipe(Schema.Array, Schema.optionalKey),
+});
+
 /** Serializable view of one resource row in a plan. */
 export const PlannedResource = Schema.Struct({
   fqn: Schema.String,
@@ -69,6 +96,8 @@ export const PlannedResource = Schema.Struct({
   action: Schema.Literals(["create", "update", "adopted", "replace", "delete", "orphaned", "noop"]),
   /** Binding rows the node carries; empty when the resource has none. */
   bindings: Schema.Array(PlannedBinding),
+  /** For a runtime: its processes, tools and the Domain pieces they use, with the bindings each may use. */
+  capabilities: PlannedTerm.pipe(Schema.Array, Schema.optionalKey),
   /** Mode the node's provider resolved for; absent for mode-agnostic providers. */
   providerMode: Schema.optionalKey(ProviderMode),
   /** On mode-switch replacements: the mode the old generation was created with. */
