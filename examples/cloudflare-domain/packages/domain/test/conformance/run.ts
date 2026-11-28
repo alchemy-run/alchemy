@@ -100,7 +100,7 @@ export const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
     out.push({
       command: `${group.name}${out.length}Misuse`,
       known: false,
-      expressions: [`[${expression}].length`],
+      expressions: [group.effectful ? expression : `[${expression}].length`],
       misuse: true,
     });
   return out;

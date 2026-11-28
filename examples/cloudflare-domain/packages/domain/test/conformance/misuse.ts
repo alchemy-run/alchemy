@@ -1,12 +1,83 @@
 // Every function the prover has a model for, called in ways a handler should
-// not call it: with nothing, with too little, with the wrong kinds of values.
-// Each call is reported, or read as the real code runs it.
+// not call it: with nothing, with too little, with the wrong kinds of values,
+// and with a value of its own module first and the wrong things after. What
+// a call gives is run when it is an effect. Each call is reported, or read as
+// the real code runs it.
 
 import { surface } from "@alchemy.run/domain/Prove/Surface";
 import type { Group } from "./cases.ts";
 
 /** The arguments each function is called with, written in the inputs `a` and `b`. */
 const SHAPES: ReadonlyArray<string> = [``, `a`, `"x", a`, `a, b, a`, `{}, a`, `[a], () => b`];
+
+/** What follows a value of the function's own module: the wrong things, and too many of them. */
+const AFTER: ReadonlyArray<string> = [``, `"x"`, `a, b`, `{}`, `() => b`, `[a]`, `undefined`];
+
+/** A value of a module's own kind, made in a handler: `self` in the calls of its functions. */
+const SELF: Readonly<Record<string, string>> = {
+  Array: `[a, b]`,
+  BigDecimal: `BigDecimal.fromBigInt(1n)`,
+  BigInt: `1n`,
+  Boolean: `a > b`,
+  Cache: `yield* Cache.make({ capacity: 2, lookup: (key) => Effect.succeed(key) })`,
+  Cause: `Cause.fail(a)`,
+  Channel: `Channel.succeed(a)`,
+  Chunk: `Chunk.make(a, b)`,
+  Context: `Context.empty()`,
+  DateTime: `DateTime.makeUnsafe(0)`,
+  Deferred: `yield* Deferred.make()`,
+  Duration: `Duration.millis(a)`,
+  Effect: `Effect.succeed(a)`,
+  Exit: `Exit.succeed(a)`,
+  Fiber: `yield* Effect.forkChild(Effect.succeed(a))`,
+  FiberHandle: `yield* FiberHandle.make()`,
+  FiberMap: `yield* FiberMap.make()`,
+  FiberSet: `yield* FiberSet.make()`,
+  HashMap: `HashMap.make(["k", a])`,
+  HashSet: `HashSet.make(a, b)`,
+  Iterable: `[a, b]`,
+  Latch: `yield* Latch.make()`,
+  Layer: `Layer.empty`,
+  Match: `Match.value(a)`,
+  Metric: `Metric.counter("c")`,
+  MutableHashMap: `MutableHashMap.empty()`,
+  MutableHashSet: `MutableHashSet.empty()`,
+  MutableList: `MutableList.make(a, b)`,
+  MutableRef: `MutableRef.make(a)`,
+  Number: `a`,
+  Optic: `Optic.id()`,
+  Option: `Option.some(a)`,
+  Order: `Order.Number`,
+  PartitionedSemaphore: `yield* PartitionedSemaphore.make({ permits: 1 })`,
+  PubSub: `yield* PubSub.unbounded()`,
+  Queue: `yield* Queue.unbounded()`,
+  Rational: `Rational.fromBigInt(1n)`,
+  Record: `{ x: a }`,
+  Ref: `yield* Ref.make(a)`,
+  Result: `Result.succeed(a)`,
+  Schedule: `Schedule.recurs(1)`,
+  Scope: `yield* Scope.make()`,
+  ScopedCache: `yield* ScopedCache.make({ capacity: 2, lookup: (key) => Effect.succeed(key) })`,
+  Semaphore: `yield* Semaphore.make(1)`,
+  Sink: `Sink.count`,
+  Stream: `Stream.make(a, b)`,
+  String: `"ab"`,
+  Struct: `{ x: a }`,
+  SubscriptionRef: `yield* SubscriptionRef.make(a)`,
+  Tuple: `[a, b]`,
+  TxChunk: `yield* TxChunk.empty()`,
+  TxDeferred: `yield* TxDeferred.make()`,
+  TxHashMap: `yield* TxHashMap.empty()`,
+  TxHashSet: `yield* TxHashSet.empty()`,
+  TxPriorityQueue: `yield* TxPriorityQueue.empty(Order.Number)`,
+  TxPubSub: `yield* TxPubSub.unbounded()`,
+  TxQueue: `yield* TxQueue.unbounded()`,
+  TxReentrantLock: `yield* TxReentrantLock.make()`,
+  TxRef: `yield* TxRef.make(a)`,
+  TxSemaphore: `yield* TxSemaphore.make(1)`,
+  TxSubscriptionRef: `yield* TxSubscriptionRef.make(a)`,
+  UndefinedOr: `a`,
+};
 
 const numbers = {
   input: `a: Small, b: Small`,
@@ -15,6 +86,10 @@ const numbers = {
   bind: (known: boolean) =>
     known ? `const a = pin.a; const b = pin.b;` : `const a = command.a; const b = command.b;`,
 };
+
+/** A call, made in a scope with a value of the module's own first, and what it gives run when it is an effect. */
+const ran = (self: string | undefined, call: string): string =>
+  `Effect.scoped(Effect.gen(function* () { ${self ? `const self = ${self}; ` : ""}const made = ${call}; if (Effect.isEffect(made)) yield* Effect.exit(made); return 1; }))`;
 
 /** One table for each module the prover has models of, named after it. */
 export const misuseGroups = (only?: ReadonlyArray<string>): ReadonlyArray<Group> => {
@@ -26,21 +101,33 @@ export const misuseGroups = (only?: ReadonlyArray<string>): ReadonlyArray<Group>
     if (!module.startsWith("effect/") || path === "" || /[^\w.$]/.test(path)) continue;
     byModule.set(module, [...(byModule.get(module) ?? []), path]);
   }
+  const paths = process.env.MISUSE_PATHS?.split(",");
   return [...byModule]
     .filter(([module]) => !only || only.includes(module))
-    .map(([module, paths]): Group => {
+    .map(([module, all]): Group => {
       const name = module.slice("effect/".length).replace(/\W/g, "");
+      // The module is imported as `Under`: its own value is made with it.
+      const self = SELF[name]?.replaceAll(`${name}.`, "Under.");
+      const calls = all
+        .filter((path) => !paths || paths.includes(path))
+        .flatMap((path) => [
+          ...SHAPES.map((shape) => ran(undefined, `Under.${path}(${shape})`)),
+          ...(self
+            ? [
+                ...AFTER.map((after) =>
+                  ran(self, `Under.${path}(self${after ? `, ${after}` : ""})`),
+                ),
+                ...AFTER.filter(Boolean).map((after) => ran(self, `Under.${path}(${after})(self)`)),
+              ]
+            : []),
+        ]);
       return {
         name: `Misuse${name}`,
         ...numbers,
+        effectful: true,
         prelude: [`import * as Under from "${module}";`],
         both: [],
-        misuse: paths
-          .filter(
-            (path) =>
-              !process.env.MISUSE_PATHS || process.env.MISUSE_PATHS.split(",").includes(path),
-          )
-          .flatMap((path) => SHAPES.map((shape) => `Under.${path}(${shape})`)),
+        misuse: calls,
       };
     });
 };
