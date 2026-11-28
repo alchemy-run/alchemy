@@ -262,7 +262,23 @@ A read with `atLeast` is judged on the state it finds, and again on the state af
 
 When `validate` refuses the state the read finds, the read waits at most a second for the write. If `validate` still refuses, the refusal comes when that second has passed, so the time a read takes tells nothing about a key the caller may not read.
 
-The read waits only for the view it reads. A `validate` that looks up access in another view, such as a membership view, sees that view as it is now: the caller is refused after a second until that view has the write. Keep the fact that grants access in the state of the view being read, or read again once the other view has it.
+The second is fixed, and a read that `validate` allows still waits up to 10 seconds before it fails with `ConsistencyTimeout`. To give up sooner, bound the read yourself:
+
+```typescript
+const support = yield* SupportApi.client;
+const bank = yield* CustomerApi.client;
+const receipt = yield* support.ChangeOwner({ accountId, customerId });
+const summary = yield* bank.AccountSummary.get(accountId, { atLeast: receipt }).pipe(
+  Effect.timeout("2 seconds"),
+);
+```
+
+The read waits only for the view it reads. A `validate` that looks up access in another view, such as a membership view, sees that view as it is now: the caller is refused after a second until that view has the write. Keep the fact that grants access in the state of the view being read, or send the command with `consistency: "strong"`: it answers once every view it reaches has applied it, the membership view included, so the read after it needs no `atLeast`.
+
+```typescript
+yield* support.ChangeOwner({ accountId, customerId }, { consistency: "strong" });
+const summary = yield* bank.AccountSummary.get(accountId, { atLeast: [] });
+```
 
 ## Filter only what's allowed
 

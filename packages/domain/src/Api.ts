@@ -137,6 +137,9 @@ export interface ViewClient<V extends View.Any> {
        * Wait until the view has applied these writes (commands' receipts).
        * Left out, the read waits for the commands this client sent; `[]`
        * waits for nothing.
+       * The read waits up to 10 seconds, then fails with
+       * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
+       * second, then gets the refusal. Bound it with `Effect.timeout`.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.StateOf<V>>;
@@ -172,6 +175,9 @@ export interface ViewClient<V extends View.Any> {
        * Wait until the view has applied these writes (commands' receipts).
        * Left out, the read waits for the commands this client sent; `[]`
        * waits for nothing.
+       * The read waits up to 10 seconds, then fails with
+       * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
+       * second, then gets the refusal. Bound it with `Effect.timeout`.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.EventOf<V>>;
@@ -195,6 +201,9 @@ export interface ViewClient<V extends View.Any> {
        * Wait until the view has applied these writes (commands' receipts).
        * Left out, the read waits for the commands this client sent; `[]`
        * waits for nothing.
+       * The read waits up to 10 seconds, then fails with
+       * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
+       * second, then gets the refusal. Bound it with `Effect.timeout`.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.StateOf<V>>;
@@ -215,6 +224,9 @@ export interface StreamClient<S extends DomainStream.Any> {
        * Wait until the stream's writers have handled these writes (commands'
        * receipts). Left out, the read waits for the commands this client
        * sent; `[]` waits for nothing.
+       * The read waits up to 10 seconds, then fails with
+       * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
+       * second, then gets the refusal. Bound it with `Effect.timeout`.
        */
       readonly atLeast?: Query.AtLeastInput;
     },
@@ -255,6 +267,9 @@ export interface StreamClient<S extends DomainStream.Any> {
        * Wait until the stream's writers have handled these writes (commands'
        * receipts). Left out, the read waits for the commands this client
        * sent; `[]` waits for nothing.
+       * The read waits up to 10 seconds, then fails with
+       * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
+       * second, then gets the refusal. Bound it with `Effect.timeout`.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<DomainStream.EventOf<S>>;
@@ -1445,6 +1460,21 @@ const build = (
  * yield* bank.DepositMoney({ accountId, amount: 1_000 });
  * const summary = yield* bank.AccountSummary.get(accountId); // includes the deposit
  * const now = yield* bank.AccountSummary.get(accountId, { atLeast: [] });
+ * ```
+ *
+ * A read waits up to 10 seconds for its writes, then fails with
+ * `ConsistencyTimeout`. A read `validate` refuses is judged again on the
+ * state after its writes, so a caller a command just let in reads at once.
+ * If it is still refused, the refusal comes after one second, however soon
+ * the writes arrive, so the time a refused read takes tells nothing about
+ * the key. Bound the wait with `Effect.timeout`.
+ *
+ * **Example:** A read that gives up after two seconds
+ * ```typescript
+ * const receipt = yield* bank.DepositMoney({ accountId, amount: 1_000 });
+ * const summary = yield* bank.AccountSummary.get(accountId, { atLeast: receipt }).pipe(
+ *   Effect.timeout("2 seconds"),
+ * );
  * ```
  *
  * ### Calling it in process
