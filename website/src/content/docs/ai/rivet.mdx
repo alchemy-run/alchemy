@@ -7,7 +7,7 @@ Host a process on [Rivet](/rivet), and each of its sessions is a Rivet actor wit
 
 ## Host the process
 
-`AIRivet.Process` takes the name of the Durable Object class that holds the sessions, this file as `main`, the pool that runs it, and the process's Layer with what a session runs on. Export it as the file's default.
+`AIRivet.ProcessSessions` takes the name of the Durable Object class that holds the sessions, this file as `main`, the pool that runs it, and the process's Layer with what a session runs on. Export it as the file's default.
 
 ```typescript title="src/Sessions.ts"
 import * as AIRivet from "@alchemy.run/ai/Rivet";
@@ -19,7 +19,7 @@ import { EngineerLive } from "./Engineer.process.ts";
 const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
 const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
 
-export default AIRivet.Process(
+export default AIRivet.ProcessSessions(
   "Workshop",
   { main: import.meta.url, pool: Default },
   EngineerLive.pipe(Layer.provide(Harness)),
@@ -30,7 +30,7 @@ The pool's nodes load this file's default export and run the sessions. Each sess
 
 ## Host a model beside it
 
-A [Domain model](/domain/rivet) goes on the same host as the sessions. `AIRivet.Process` is `AI.layerObjects` on `Rivet.layerObjectHost`: write those two out, so the model and the sessions are given one host. The model's policy holds `Engineer`, so its Layer still needs one, and the hosted process is what it gets:
+A [Domain model](/domain/rivet) goes on the same host as the sessions. `AIRivet.ProcessSessions` is `AI.layerObjects` on `Rivet.layerObjectHost`: write those two out, so the model and the sessions are given one host. The model's policy holds `Engineer`, so its Layer still needs one, and the hosted process is what it gets:
 
 ```typescript title="src/Live.ts"
 import * as AI from "@alchemy.run/ai";

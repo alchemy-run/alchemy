@@ -20,7 +20,7 @@ More: [Run processes on Pi](https://alchemy.run/ai/harnesses#run-processes-on-pi
 
 ## Host the model, then the process
 
-Host the model as any model is. Then give `AICloudflare.Process` the prose of each process, provided with what a session runs on and the models it mentions. It gives back the same process, with one Durable Object for each session, named after its key. Do not write the object.
+Host the model as any model is. Then give `AICloudflare.ProcessSessions` the prose of each process, provided with what a session runs on and the models it mentions. It gives back the same process, with one Durable Object for each session, named after its key. Do not write the object.
 
 ```typescript
 // src/Worker.ts
@@ -34,7 +34,7 @@ const BoardLive = Board.layer(IssueWorkLive).pipe(
   Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
-const TriageSessions = AICloudflare.Process(
+const TriageSessions = AICloudflare.ProcessSessions(
   TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 
@@ -47,11 +47,11 @@ More: [Cloudflare](https://alchemy.run/ai/cloudflare#host-the-process), [One obj
 
 ## Host it on Rivet
 
-The process's Layer does not change. `AIRivet.Process` (`@alchemy.run/ai/Rivet`) takes the class that holds the sessions, this file and the pool. Export it as default: the pool's nodes load it, and a caller imports it and provides it.
+The process's Layer does not change. `AIRivet.ProcessSessions` (`@alchemy.run/ai/Rivet`) takes the class that holds the sessions, this file and the pool. Export it as default: the pool's nodes load it, and a caller imports it and provides it.
 
 ```typescript
 // src/Sessions.ts
-export default AIRivet.Process(
+export default AIRivet.ProcessSessions(
   "Sessions",
   { main: import.meta.url, pool: Default },
   TriageLive.pipe(Layer.provide(Harness)),
@@ -80,11 +80,11 @@ More: [Rivet](https://alchemy.run/ai/rivet).
 
 ## Host it on Effect Cluster
 
-The same two files with `AICluster.Process` (`@alchemy.run/ai/EffectCluster`), and with a model, `DomainCluster.layerEntities()` on `Cluster.layerObjectHost`.
+The same two files with `AICluster.ProcessSessions` (`@alchemy.run/ai/EffectCluster`), and with a model, `DomainCluster.layerEntities()` on `Cluster.layerObjectHost`.
 
 ```typescript
 // src/Sessions.ts
-export default AICluster.Process(
+export default AICluster.ProcessSessions(
   "Sessions",
   { main: import.meta.url, pool: Default },
   TriageLive.pipe(Layer.provide(Harness)),

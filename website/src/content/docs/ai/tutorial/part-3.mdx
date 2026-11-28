@@ -193,8 +193,8 @@ The policy holds `Triage`, so `BoardLive` now needs one. It is no longer exporte
 The sessions need the board and the board needs the sessions. `TriageSessions` already takes the board. Provide it back to the board, and export the two together:
 
 ```diff lang="typescript" title="src/Sessions.ts"
--export const TriageSessions = AICloudflare.Process(
-+const TriageSessions = AICloudflare.Process(
+-export const TriageSessions = AICloudflare.ProcessSessions(
++const TriageSessions = AICloudflare.ProcessSessions(
   TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 +

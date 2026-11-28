@@ -35,7 +35,7 @@ import { layerObjects } from "../Host.ts";
  * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
  * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
  *
- * export default AIRivet.Process(
+ * export default AIRivet.ProcessSessions(
  *   "Sessions",
  *   { main: import.meta.url, pool: Default },
  *   EngineerLive.pipe(Layer.provide(Harness)),
@@ -67,7 +67,7 @@ import { layerObjects } from "../Host.ts";
  *
  * @layer
  */
-export const Process = <A, E, R, PoolReq>(
+export const ProcessSessions = <A, E, R, PoolReq>(
   /** The Rivet Durable Object class that holds the sessions. */
   name: string,
   props: ObjectHostOptions<PoolReq>,

@@ -73,7 +73,7 @@ const Harness = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast), AddLive).p
   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLive)),
 );
 
-export const AccountantSessions = AICloudflare.Process(
+export const AccountantSessions = AICloudflare.ProcessSessions(
   AccountantLive.pipe(Layer.provide(Harness)),
 );
 ```

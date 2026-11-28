@@ -27,7 +27,7 @@ import { layerObjects } from "../Host.ts";
  * The Worker is the entrypoint, so there is no name and no `main` to give.
  * Props, when you pass them first, say where Cloudflare keeps the objects
  * (`jurisdiction`, `locationHint`). To move the sessions to another
- * platform, give the same Layer to `AIRivet.Process` or `AICluster.Process`.
+ * platform, give the same Layer to `AIRivet.ProcessSessions` or `AICluster.ProcessSessions`.
  *
  * The Layer may need the process it provides, as a Domain model whose
  * policy holds it does: this provides it, inside each object and out.
@@ -47,7 +47,7 @@ import { layerObjects } from "../Host.ts";
  *   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLive)),
  * );
  *
- * export const EngineerSessions = AICloudflare.Process(
+ * export const EngineerSessions = AICloudflare.ProcessSessions(
  *   EngineerLive.pipe(Layer.provide(Harness)),
  * );
  * ```
@@ -63,7 +63,7 @@ import { layerObjects } from "../Host.ts";
  *   Layer.provide(DomainCloudflare.layerDurableObjects()),
  * );
  *
- * const EngineerSessions = AICloudflare.Process(
+ * const EngineerSessions = AICloudflare.ProcessSessions(
  *   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
  * );
  *
@@ -87,7 +87,7 @@ import { layerObjects } from "../Host.ts";
  *
  * @layer
  */
-export const Process: {
+export const ProcessSessions: {
   <A, E, R>(layer: Layer.Layer<A, E, R>): Layer.Layer<A, E, Exclude<R, A> | Worker>;
   <A, E, R>(
     props: ObjectHostOptions,

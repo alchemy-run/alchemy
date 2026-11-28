@@ -316,7 +316,7 @@ const StorageLive = Pi.SqliteFile("/data/pi.sqlite");
 On Cloudflare it is a Durable Object, and you do not write it. Give the process's Layer to a host, and each session gets an object of its own:
 
 ```typescript title="src/Worker.ts"
-const TriageSessions = AICloudflare.Process(
+const TriageSessions = AICloudflare.ProcessSessions(
   TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 ```

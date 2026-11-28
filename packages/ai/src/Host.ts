@@ -183,7 +183,7 @@ export const make = <A, E, R, R2>(
  *
  * The Layer may need the process it provides, as a Domain model whose
  * policy holds it does: the host provides it. Use it in tests and
- * single-process apps; `AICloudflare.Process` takes the same
+ * single-process apps; `AICloudflare.ProcessSessions` takes the same
  * Layer.
  *
  * **Example:** A board and the process it hands issues to, in memory
@@ -233,8 +233,8 @@ export const layerInMemory = <A, E, R>(
  *
  * Provide the platform's object host once, to the Layer the module exports
  * as its default: `Rivet.layerObjectHost`, `Cluster.layerObjectHost`, or one
- * of your own. `AICloudflare.Process`, `AIRivet.Process` and
- * `AICluster.Process` are this with their platform's host provided.
+ * of your own. `AICloudflare.ProcessSessions`, `AIRivet.ProcessSessions` and
+ * `AICluster.ProcessSessions` are this with their platform's host provided.
  *
  * **Example:** A process's sessions on Rivet
  * ```typescript

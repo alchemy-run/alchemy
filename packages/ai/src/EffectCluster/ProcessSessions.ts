@@ -35,7 +35,7 @@ import { layerObjects } from "../Host.ts";
  * export const Database = ClusterDocker.Database("Cluster");
  * const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
  *
- * export default AICluster.Process(
+ * export default AICluster.ProcessSessions(
  *   "Sessions",
  *   { main: import.meta.url, pool: Default },
  *   EngineerLive.pipe(Layer.provide(Harness)),
@@ -44,7 +44,7 @@ import { layerObjects } from "../Host.ts";
  *
  * @layer
  */
-export const Process = <A, E, R, PoolReq>(
+export const ProcessSessions = <A, E, R, PoolReq>(
   /** The entity that holds the sessions: its type in the cluster. */
   name: string,
   props: ObjectHostOptions<PoolReq>,
