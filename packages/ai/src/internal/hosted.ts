@@ -1,39 +1,27 @@
 /**
- * A process hosted on a Domain platform: each session an object of the
- * platform's own, beside whatever models it hosts. Cloudflare, Rivet and
- * Effect Cluster share this, and differ only in the platform Layer.
+ * A process hosted on objects: each session an object of the platform's
+ * own. Cloudflare, Rivet and Effect Cluster share this, and differ only in
+ * the object host they provide.
  *
  * @module
  */
-import { unwrapDefects } from "@alchemy.run/domain/DurableObjects";
-import { Platform } from "@alchemy.run/domain/Platform";
+import { ObjectHost, unwrapDefects } from "alchemy/Workers/ObjectHost";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Host from "../Host.ts";
 
-/** The owner of every process's classes on a platform: `AI.TriageProcess`. */
-const OWNER = "AI";
-
 /**
- * Host every process `layer` provides on the Domain platform it is given:
- * one class per process, one object per session.
+ * Host every process `layer` provides on the object host it is given: one
+ * class per process, `AI.<Name>Process`, and one object per session.
  */
 export const layerObjects = <A, E, R>(
   layer: Layer.Layer<A, E, R>,
-): Layer.Layer<A, E, Exclude<R, A> | Platform> =>
+): Layer.Layer<A, E, Exclude<R, A> | ObjectHost> =>
   Host.make(layer, (name, instance) =>
     Effect.gen(function* () {
-      const platform = yield* Platform;
-      if (platform.objects === undefined) {
-        return yield* Effect.die(
-          new Error(
-            `This platform keeps everything in one process, so it has no object to give each session of ${name}. Host the process with AI.layerInMemory there.`,
-          ),
-        );
-      }
-      const namespace = yield* platform.objects(
-        OWNER,
-        `${name}Process`,
+      const objects = yield* ObjectHost;
+      const namespace = yield* objects.declare(
+        `AI.${name}Process`.replace(/[^A-Za-z0-9_.]/g, "_"),
         // Each object builds the process for itself: a harness opens on its storage.
         Effect.map(instance({ apart: true }), ({ call }) => ({ call })),
       );

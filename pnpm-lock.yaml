@@ -9239,9 +9239,6 @@ importers:
       '@alchemy.run/daytona':
         specifier: workspace:*
         version: link:../daytona
-      '@alchemy.run/domain':
-        specifier: workspace:*
-        version: link:../domain
       '@alchemy.run/e2b':
         specifier: workspace:*
         version: link:../e2b

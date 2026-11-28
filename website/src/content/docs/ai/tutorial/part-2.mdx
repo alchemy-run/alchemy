@@ -206,6 +206,27 @@ export const TriageSessions = AICloudflare.layerDurableObjects(
 );
 ```
 
+## Register Domain's providers
+
+The Stack that deploys the Worker registers Domain's providers beside Cloudflare's:
+
+```diff lang="typescript" title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
++import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import Worker from "./src/Worker.ts";
+
+export default Alchemy.Stack(
+  "CloudflareAiIssues",
+  {
+-    providers: Cloudflare.providers(),
++    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+    state: Alchemy.localState(),
+  },
+```
+
 ## Report from the Worker, and read the board
 
 The session now reports to the board, so nothing has to wait for its answer. The Worker reports the issue and sends its session a first message. A `GET` reads the issue as the board shows it.
@@ -253,6 +274,8 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
 ```
 
 `send` returns once the message is stored. The same `requestId` on every call means a session is given its issue once.
+
+<PackageManagers add="@alchemy.run/domain" />
 
 <PackageManagers run="alchemy deploy" />
 

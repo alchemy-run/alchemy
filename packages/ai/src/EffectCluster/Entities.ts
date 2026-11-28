@@ -3,7 +3,8 @@
  *
  * @module
  */
-import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+import { layerObjectHost, type ObjectHostOptions } from "@alchemy.run/effect-cluster/ObjectHost";
+import type { Providers } from "@alchemy.run/effect-cluster/Providers";
 import * as Layer from "effect/Layer";
 import { layerObjects } from "../internal/hosted.ts";
 
@@ -14,9 +15,9 @@ import { layerObjects } from "../internal/hosted.ts";
  * Domain models its prose mentions). It gives back the same process:
  * `get(key)` is a handle on that session's entity.
  *
- * The options are `DomainCluster.layerEntities`'s, the platform a Domain
- * model runs on: `name` is the entity that holds the sessions, and the
- * pool's runners load the hosted Layer from `main`.
+ * The options are the Effect Cluster object host's: `name` is the entity
+ * that holds the sessions, and the pool's runners load the hosted Layer
+ * from `main`.
  *
  * The Layer may need the process it provides, as a Domain model whose
  * policy holds it does: this provides it, inside each entity and out.
@@ -48,9 +49,6 @@ import { layerObjects } from "../internal/hosted.ts";
  */
 export const layerEntities = <A, E, R, PoolReq>(
   layer: Layer.Layer<A, E, R>,
-  options: DomainCluster.EntitiesOptions<PoolReq>,
-): Layer.Layer<
-  A,
-  E,
-  Exclude<R, A> | Layer.Services<ReturnType<typeof DomainCluster.layerEntities<PoolReq>>>
-> => layerObjects(layer).pipe(Layer.provide(DomainCluster.layerEntities(options)));
+  options: ObjectHostOptions<PoolReq>,
+): Layer.Layer<A, E, Exclude<R, A> | PoolReq | Providers> =>
+  layerObjects(layer).pipe(Layer.provide(layerObjectHost(options)));

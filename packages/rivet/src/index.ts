@@ -14,6 +14,7 @@ export type {
   SqlCursor,
 } from "./DurableObjectState.ts";
 export * from "./Namespace.ts";
+export { layerObjectHost, ObjectClassNotHosted, type ObjectHostOptions } from "./ObjectHost.ts";
 export * from "./Pool.ts";
 export * from "./Providers.ts";
 export * from "./Services.ts";

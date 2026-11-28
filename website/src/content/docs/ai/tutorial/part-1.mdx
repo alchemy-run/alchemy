@@ -19,7 +19,7 @@ Finish [Cloudflare setup](/cloudflare/setup). Part 3 also needs [GitHub setup](/
 
 ## Install
 
-<PackageManagers add="@alchemy.run/ai @alchemy.run/pi @alchemy.run/domain @alchemy.run/cloudflare" />
+<PackageManagers add="@alchemy.run/ai @alchemy.run/pi @alchemy.run/cloudflare" />
 
 ## Declare a model
 
@@ -108,7 +108,7 @@ const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
 +);
 ```
 
-The objects are hosted by the platform a Domain model runs on, which is why Domain is installed. The Worker that provides the Layer declares one Durable Object class for `Triage`. A session is one object of it: its conversation, its alarm and its harness are its own. You write no Durable Object.
+The Worker that provides it declares one Durable Object class for `Triage`. A session is one object of it: its conversation, its alarm and its harness are its own. You write no Durable Object.
 
 ## Ask a session from a Worker
 
@@ -146,20 +146,18 @@ A session's first message makes it. `prompt` sends a message and waits for the a
 
 ## Deploy it
 
-A Stack with the Worker is the whole app. Domain's providers go beside Cloudflare's, for the platform that hosts the sessions:
+A Stack with the Worker is the whole app:
 
 ```typescript title="alchemy.run.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import Worker from "./src/Worker.ts";
 
 export default Alchemy.Stack(
   "CloudflareAiIssues",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+    providers: Cloudflare.providers(),
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {

@@ -103,14 +103,6 @@ const EngineerSessions = AICloudflare.layerDurableObjects(
 
 The model needs the process and the process needs the model. The host closes that loop: the Layer it is given may need the process it provides, and the host supplies it, inside each session's object and outside.
 
-## Register Domain's providers
-
-The sessions' objects are hosted by the platform a Domain model runs on, `DomainCloudflare.layerDurableObjects()`. The Stack that deploys the Worker registers its providers beside Cloudflare's:
-
-```typescript title="alchemy.run.ts"
-providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
-```
-
 ## One object for each session
 
 A session's key is its object's name. Sessions run at the same time and never wait for each other, and each has its own storage, its own alarm and its own sandbox.
@@ -235,7 +227,7 @@ export const Live = WorkshopInMemory.pipe(Layer.provideMerge(EngineerInMemory));
 
 ## Host it on Rivet or Effect Cluster
 
-The process's Layer is the same on every platform. Only the host changes, and it takes the options the model's platform Layer takes there:
+The process's Layer is the same on every platform. Only the host changes. On Rivet it takes the Durable Object class that holds the sessions and the pool that runs it:
 
 ```typescript title="src/Workshop.ts"
 import * as AIRivet from "@alchemy.run/ai/Rivet";
@@ -266,7 +258,7 @@ export const Live = WorkshopLive.pipe(Layer.provideMerge(EngineerSessions));
 
 On [Effect Cluster](/domain/effect-cluster) it is `AICluster.layerEntities` from `@alchemy.run/ai/EffectCluster`, beside `DomainCluster.layerEntities`, with the same options. Each session is then an entity id on whichever runner holds its shard.
 
-`main` and `handler` name the export the pool's nodes load to run the sessions: the Layer that holds the host. Give the model and the sessions different names, since each is a class of its own.
+`main` and `handler` name the export the pool's nodes load to run the sessions: the Layer that holds the host. Give the model and the sessions different names, since each is a class of its own. A process with no model needs neither `@alchemy.run/domain` nor its Layer: the host is the platform package's own.
 
 A session needs a harness that keeps its conversation where the session runs. `PiCloudflare.DurableObjectStorage` and OpenCode's are for a Cloudflare Durable Object. Neither harness has a storage Layer for a Rivet actor or an Effect Cluster entity yet, so on those two platforms a process runs with a harness you provide, or played by `AI.scripted`.
 

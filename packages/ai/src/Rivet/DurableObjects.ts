@@ -3,7 +3,7 @@
  *
  * @module
  */
-import * as DomainRivet from "@alchemy.run/domain/Rivet";
+import { layerObjectHost, type ObjectHostOptions } from "@alchemy.run/rivet/ObjectHost";
 import type { Providers } from "@alchemy.run/rivet/Providers";
 import * as Layer from "effect/Layer";
 import { layerObjects } from "../internal/hosted.ts";
@@ -16,9 +16,9 @@ import { layerObjects } from "../internal/hosted.ts";
  * a handle on that session's object, and each call goes to it through the
  * control plane's gateway.
  *
- * The options are `DomainRivet.layerDurableObjects`'s, the platform a Domain
- * model runs on: `name` is the Durable Object class that holds the
- * sessions, and the pool's nodes load the hosted Layer from `main`.
+ * The options are `Rivet.layerObjectHost`'s: `name` is the Durable Object
+ * class that holds the sessions, and the pool's nodes load the hosted Layer
+ * from `main`.
  *
  * The Layer may need the process it provides, as a Domain model whose
  * policy holds it does: this provides it, inside each object and out.
@@ -66,6 +66,6 @@ import { layerObjects } from "../internal/hosted.ts";
  */
 export const layerDurableObjects = <A, E, R, PoolReq>(
   layer: Layer.Layer<A, E, R>,
-  options: DomainRivet.DurableObjectsOptions<PoolReq>,
+  options: ObjectHostOptions<PoolReq>,
 ): Layer.Layer<A, E, Exclude<R, A> | PoolReq | Providers> =>
-  layerObjects(layer).pipe(Layer.provide(DomainRivet.layerDurableObjects(options)));
+  layerObjects(layer).pipe(Layer.provide(layerObjectHost(options)));

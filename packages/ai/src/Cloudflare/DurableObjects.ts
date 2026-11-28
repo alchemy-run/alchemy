@@ -3,9 +3,11 @@
  *
  * @module
  */
+import {
+  layerObjectHost,
+  type ObjectHostOptions,
+} from "@alchemy.run/cloudflare/Workers/ObjectHost";
 import type { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
-import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
-import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Layer from "effect/Layer";
 import { layerObjects } from "../internal/hosted.ts";
 
@@ -22,11 +24,10 @@ import { layerObjects } from "../internal/hosted.ts";
  * harness opens on that object's storage and alarm, and a session carries
  * on after its object is evicted.
  *
- * The objects are hosted by `DomainCloudflare.layerDurableObjects()`, the
- * platform a Domain model runs on, so the Stack registers
- * `DomainCloudflare.providers()` beside `Cloudflare.providers()`. To move
- * the sessions, use `AIRivet.layerDurableObjects` or
- * `AICluster.layerEntities` with the same Layer.
+ * The options are `Cloudflare.layerObjectHost`'s: where the objects are
+ * kept (`jurisdiction`, `locationHint`). To move the sessions to another
+ * platform, use `AIRivet.layerDurableObjects` or `AICluster.layerEntities`
+ * with the same Layer.
  *
  * The Layer may need the process it provides, as a Domain model whose
  * policy holds it does: this provides it, inside each object and out.
@@ -88,9 +89,6 @@ import { layerObjects } from "../internal/hosted.ts";
  */
 export const layerDurableObjects = <A, E, R>(
   layer: Layer.Layer<A, E, R>,
-  options?: DomainCloudflare.DurableObjectsOptions,
-): Layer.Layer<A, E, Exclude<R, A> | Worker | DomainCloudflare.Providers> =>
-  layerObjects(layer).pipe(
-    Layer.provide(DomainCloudflare.layerDurableObjects(options)),
-    Layer.provide(SecureRandom.layerWebCrypto),
-  );
+  options?: ObjectHostOptions,
+): Layer.Layer<A, E, Exclude<R, A> | Worker> =>
+  layerObjects(layer).pipe(Layer.provide(layerObjectHost(options)));

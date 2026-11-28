@@ -231,6 +231,8 @@ export default defineConfig({
         "packages/opencode/src/**",
         "packages/pi/src/**",
         "packages/domain/src/**",
+        // An object's stub: what a call fails with in transit is the platform's.
+        "packages/alchemy/src/Workers/ObjectHost.ts",
         "packages/effect-cluster/src/**",
         "packages/gcp/src/GCPBindings.ts",
         "packages/gcp/src/HostContext.ts",
