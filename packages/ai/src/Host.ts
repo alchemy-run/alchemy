@@ -5,13 +5,15 @@
  * Layer and gives back the same process, as a client: `get(key)` is a handle
  * on the instance of that session, which builds the Layer for itself. Where
  * the instances live is the host's: this process's memory
- * ({@link layerInMemory}), or a Durable Object each
- * (`AICloudflare.layerDurableObjects`).
+ * ({@link layerInMemory}), or an object each on whatever provides an
+ * `ObjectHost` ({@link layerObjects}): a Cloudflare Durable Object, a Rivet
+ * actor, an Effect Cluster entity, or a platform of your own.
  *
  * @module
  */
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { InstanceSetup } from "alchemy/Workers/InstanceSetup";
+import { ObjectHost, unwrapDefects } from "alchemy/Workers/ObjectHost";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -111,7 +113,8 @@ const instanceOf =
  * it is given whose policy holds one. Inside an instance and out, they are
  * the clients this returns.
  *
- * @internal For hosts: `layerInMemory`, `AICloudflare.layerDurableObjects`.
+ * {@link layerInMemory} and {@link layerObjects} are built on it. Use it to
+ * keep the instances somewhere neither covers.
  */
 export const make = <A, E, R, R2>(
   layer: Layer.Layer<A, E, R>,
@@ -220,3 +223,52 @@ export const layerInMemory = <A, E, R>(
       } satisfies Instances;
     }),
   ) as Layer.Layer<A, E, Exclude<R, A>>;
+
+/**
+ * Host a process on objects: each session in an object of its own, on
+ * whatever platform provides the `ObjectHost` (`alchemy/Workers/ObjectHost`).
+ * Every process the Layer provides gets one class, `AI.<Name>Process`, and
+ * every session one object of it, named after the session's key. Each object
+ * builds the Layer for itself, so a harness opens on that object's storage.
+ *
+ * `AICloudflare.layerDurableObjects`, `AIRivet.layerDurableObjects` and
+ * `AICluster.layerEntities` are this, given their platform's object host.
+ * Use it directly to host a process on an object host of your own.
+ *
+ * **Example:** Sessions on Rivet, spelled out
+ * ```typescript
+ * import * as AI from "@alchemy.run/ai";
+ * import * as Rivet from "@alchemy.run/rivet";
+ * import * as Layer from "effect/Layer";
+ *
+ * export const EngineerSessions = AI.layerObjects(EngineerLive.pipe(Layer.provide(Agents))).pipe(
+ *   Layer.provide(
+ *     Rivet.layerObjectHost({
+ *       name: "Sessions",
+ *       main: import.meta.url,
+ *       handler: "EngineerSessions",
+ *       pool: Default,
+ *     }),
+ *   ),
+ * );
+ * ```
+ *
+ * @layer
+ */
+export const layerObjects = <A, E, R>(
+  layer: Layer.Layer<A, E, R>,
+): Layer.Layer<A, E, Exclude<R, A> | ObjectHost> =>
+  make(layer, (name, instance) =>
+    Effect.gen(function* () {
+      const objects = yield* ObjectHost;
+      const namespace = yield* objects.declare(
+        `AI.${name}Process`.replace(/[^A-Za-z0-9_.]/g, "_"),
+        // Each object builds the process for itself: a harness opens on its storage.
+        Effect.map(instance({ apart: true }), ({ call }) => ({ call })),
+      );
+      return {
+        call: (key, method, args) =>
+          unwrapDefects(namespace.getByName(key).call!(key, method, args)),
+      } satisfies Instances;
+    }),
+  );

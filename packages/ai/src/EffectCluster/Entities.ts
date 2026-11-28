@@ -6,7 +6,7 @@
 import { layerObjectHost, type ObjectHostOptions } from "@alchemy.run/effect-cluster/ObjectHost";
 import type { Providers } from "@alchemy.run/effect-cluster/Providers";
 import * as Layer from "effect/Layer";
-import { layerObjects } from "../internal/hosted.ts";
+import { layerObjects } from "../Host.ts";
 
 /**
  * Host a process on Effect Cluster: each session an entity id of one

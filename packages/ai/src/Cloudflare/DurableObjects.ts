@@ -9,7 +9,7 @@ import {
 } from "@alchemy.run/cloudflare/Workers/ObjectHost";
 import type { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import * as Layer from "effect/Layer";
-import { layerObjects } from "../internal/hosted.ts";
+import { layerObjects } from "../Host.ts";
 
 /**
  * Host a process on Cloudflare Durable Objects: each session in an object

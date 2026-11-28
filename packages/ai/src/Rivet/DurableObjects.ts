@@ -6,7 +6,7 @@
 import { layerObjectHost, type ObjectHostOptions } from "@alchemy.run/rivet/ObjectHost";
 import type { Providers } from "@alchemy.run/rivet/Providers";
 import * as Layer from "effect/Layer";
-import { layerObjects } from "../internal/hosted.ts";
+import { layerObjects } from "../Host.ts";
 
 /**
  * Host a process on Rivet Durable Objects: each session in an object of its
