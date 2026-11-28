@@ -1,6 +1,8 @@
 import type * as iam from "@distilled.cloud/aws/iam";
 import { toWireDays, toWireSeconds } from "alchemy/Util/Duration";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import type { Partition } from "../Partition.ts";
 import type { PolicyDocument } from "./Policy.ts";
 
@@ -34,24 +36,30 @@ export const toTagRecord = (
       .map((tag) => [tag.Key, tag.Value]),
   );
 
-const decodePolicyString = (value: string) => {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-};
+const policyJson = Schema.fromJsonString(Schema.Unknown);
+const decodeJson = Schema.decodeResult(policyJson);
+const decodeUriJson = Schema.decodeResult(
+  Schema.StringFromUriComponent.pipe(Schema.decodeTo(policyJson)),
+);
+
+// Try plain JSON first so literal percent escapes in a policy are not altered.
+export const decodePolicyJson = (value: string) =>
+  decodeJson(value).pipe(Result.orElse(() => decodeUriJson(value)));
+
+const encodeJson = Schema.encodeResult(policyJson);
+
+export const encodePolicyJson = (value: unknown): string =>
+  Result.getOrThrowWith(encodeJson(value), (error) => error);
 
 export const parsePolicyDocument = (value: string | undefined): PolicyDocument | undefined => {
   if (!value) {
     return undefined;
   }
 
-  const decoded = decodePolicyString(value);
-  return JSON.parse(decoded) as PolicyDocument;
+  return Result.getOrThrowWith(decodePolicyJson(value), (error) => error) as PolicyDocument;
 };
 
-export const stringifyPolicyDocument = (value: PolicyDocument) => JSON.stringify(value);
+export const stringifyPolicyDocument = (value: PolicyDocument): string => encodePolicyJson(value);
 
 export const normalizeIamPath = (value: string | undefined) => {
   const path = value ?? "/";

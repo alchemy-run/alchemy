@@ -4,12 +4,14 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument, toTagRecord } from "./common.ts";
-import type { PolicyDocument } from "./Policy.ts";
+import { diffInlinePolicyDocuments, type PolicyDocument } from "./Policy.ts";
 
 export class UserConflict extends Data.TaggedError("UserConflict")<{
   readonly message: string;
@@ -35,7 +37,8 @@ export interface UserProps {
    */
   managedPolicyArns?: string[];
   /**
-   * Inline policies embedded in the user.
+   * Inline policies embedded in the user. Key order and singleton-list formatting
+   * alone do not trigger a rewrite.
    */
   inlinePolicies?: Record<string, PolicyDocument>;
   /**
@@ -131,10 +134,9 @@ export const UserProvider = () =>
       });
 
       const readInlinePolicies = Effect.fn(function* (userName: string) {
-        const policyNames = yield* iam.listUserPolicies.items({ UserName: userName }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-        );
+        const policyNames = yield* iam.listUserPolicies
+          .items({ UserName: userName })
+          .pipe(Stream.runCollect);
         const entries = yield* Effect.forEach(policyNames, (policyName) =>
           iam
             .getUserPolicy({
@@ -150,9 +152,13 @@ export const UserProvider = () =>
               ),
             ),
         );
-        return Object.fromEntries(
-          entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
+        const policies: Record<string, PolicyDocument> = Rec.fromEntries(
+          Arr.filter(
+            entries,
+            (entry): entry is readonly [string, PolicyDocument] => entry[1] !== undefined,
+          ),
         );
+        return policies;
       });
 
       const readTags = Effect.fn(function* (userName: string) {
@@ -202,25 +208,30 @@ export const UserProvider = () =>
         olds: Record<string, PolicyDocument>;
         news: Record<string, PolicyDocument>;
       }) {
-        for (const [policyName, document] of Object.entries(news)) {
-          if (JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)) {
-            yield* iam.putUserPolicy({
+        const { upsert, remove } = diffInlinePolicyDocuments(olds, news);
+
+        yield* Effect.forEach(
+          upsert,
+          ([policyName, document]) =>
+            iam.putUserPolicy({
               UserName: userName,
               PolicyName: policyName,
               PolicyDocument: stringifyPolicyDocument(document),
-            });
-          }
-        }
-        for (const policyName of Object.keys(olds)) {
-          if (!(policyName in news)) {
-            yield* iam
+            }),
+          { discard: true },
+        );
+
+        yield* Effect.forEach(
+          remove,
+          (policyName) =>
+            iam
               .deleteUserPolicy({
                 UserName: userName,
                 PolicyName: policyName,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-          }
-        }
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+          { discard: true },
+        );
       });
 
       return {

@@ -3,11 +3,13 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { parsePolicyDocument, stringifyPolicyDocument } from "./common.ts";
-import type { PolicyDocument } from "./Policy.ts";
+import { diffInlinePolicyDocuments, type PolicyDocument } from "./Policy.ts";
 
 export interface GroupProps {
   /**
@@ -24,7 +26,8 @@ export interface GroupProps {
    */
   managedPolicyArns?: string[];
   /**
-   * Inline policies embedded in the group.
+   * Inline policies embedded in the group. Key order and singleton-list formatting
+   * alone do not trigger a rewrite.
    */
   inlinePolicies?: Record<string, PolicyDocument>;
 }
@@ -111,10 +114,9 @@ export const GroupProvider = () =>
           : createPhysicalName({ id, maxLength: 128 });
 
       const readInlinePolicies = Effect.fn(function* (groupName: string) {
-        const policyNames = yield* iam.listGroupPolicies.items({ GroupName: groupName }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) => Array.from(chunk)),
-        );
+        const policyNames = yield* iam.listGroupPolicies
+          .items({ GroupName: groupName })
+          .pipe(Stream.runCollect);
         const entries = yield* Effect.forEach(policyNames, (policyName) =>
           iam
             .getGroupPolicy({
@@ -130,9 +132,13 @@ export const GroupProvider = () =>
               ),
             ),
         );
-        return Object.fromEntries(
-          entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
+        const policies: Record<string, PolicyDocument> = Rec.fromEntries(
+          Arr.filter(
+            entries,
+            (entry): entry is readonly [string, PolicyDocument] => entry[1] !== undefined,
+          ),
         );
+        return policies;
       });
 
       const readManagedPolicies = Effect.fn(function* (groupName: string) {
@@ -185,25 +191,30 @@ export const GroupProvider = () =>
         olds: Record<string, PolicyDocument>;
         news: Record<string, PolicyDocument>;
       }) {
-        for (const [policyName, document] of Object.entries(news)) {
-          if (JSON.stringify(olds[policyName] ?? null) !== JSON.stringify(document)) {
-            yield* iam.putGroupPolicy({
+        const { upsert, remove } = diffInlinePolicyDocuments(olds, news);
+
+        yield* Effect.forEach(
+          upsert,
+          ([policyName, document]) =>
+            iam.putGroupPolicy({
               GroupName: groupName,
               PolicyName: policyName,
               PolicyDocument: stringifyPolicyDocument(document),
-            });
-          }
-        }
-        for (const policyName of Object.keys(olds)) {
-          if (!(policyName in news)) {
-            yield* iam
+            }),
+          { discard: true },
+        );
+
+        yield* Effect.forEach(
+          remove,
+          (policyName) =>
+            iam
               .deleteGroupPolicy({
                 GroupName: groupName,
                 PolicyName: policyName,
               })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-          }
-        }
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
+          { discard: true },
+        );
       });
 
       return {

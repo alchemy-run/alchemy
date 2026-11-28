@@ -1,11 +1,25 @@
 import type { IamAction } from "@alchemy.run/aws/IAM/actions.generated";
 import {
+  diffInlinePolicyDocuments,
   normalizePolicyDocument,
   stringifyPolicyDocument,
   type PolicyDocument,
   type ServiceControlPolicyDocument,
 } from "@alchemy.run/aws/IAM/Policy";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Schema from "effect/Schema";
+import {
+  decodeIamPolicyDocument,
+  equivalentPolicyDocument,
+  equivalentPolicyJson,
+} from "./fixtures.ts";
+
+const jsonObject = Schema.Record(Schema.String, Schema.Json);
+const policyJson = Schema.fromJsonString(jsonObject);
+const decodeJson = Schema.decodeSync(policyJson);
+const encodeJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown));
+const encodePrettyJson = Schema.encodeSync(Schema.fromJsonString(Schema.Unknown, { space: 2 }));
+const encodeUriComponent = Schema.encodeSync(Schema.StringFromUriComponent);
 
 const document: PolicyDocument = {
   Version: "2012-10-17",
@@ -24,8 +38,17 @@ describe(
   "stringifyPolicyDocument",
   { tags: ["unit", "provider:aws", "provider:aws:iam", "local"] },
   () => {
-    it("round-trips through JSON.parse", () => {
-      expect(JSON.parse(stringifyPolicyDocument(document))).toEqual(document);
+    it("round-trips through the JSON schema", () => {
+      expect(decodeJson(stringifyPolicyDocument(document))).toEqual(document);
+      expect(
+        decodeIamPolicyDocument(encodeUriComponent(stringifyPolicyDocument(document))),
+      ).toEqual(document);
+    });
+
+    it("keeps the scalar action and other fields in the IAM fixture readback", () => {
+      expect(decodeIamPolicyDocument(encodeUriComponent(equivalentPolicyJson))).toEqual(
+        equivalentPolicyDocument,
+      );
     });
   },
 );
@@ -51,23 +74,45 @@ describe(
     });
 
     it("treats a JSON string and the equivalent object identically", () => {
-      const json = JSON.stringify(document, null, 2);
+      const json = encodePrettyJson(document);
       expect(normalizePolicyDocument(json)).toBe(normalizePolicyDocument(document));
     });
 
     it("handles the URL-encoded documents IAM returns", () => {
-      const encoded = encodeURIComponent(JSON.stringify(document));
+      const encoded = encodeUriComponent(encodeJson(document));
       expect(normalizePolicyDocument(encoded)).toBe(normalizePolicyDocument(document));
+    });
+
+    it("preserves literal percent escapes in plain and URL-encoded documents", () => {
+      const escaped = {
+        ...document,
+        Statement: [{ Effect: "Allow", Resource: "arn:aws:s3:::my-bucket/a%20b" }],
+      };
+      const raw = encodeJson(escaped);
+      const expected = normalizePolicyDocument(escaped);
+      expect(normalizePolicyDocument(raw)).toBe(expected);
+      expect(normalizePolicyDocument(encodeUriComponent(raw))).toBe(expected);
+    });
+
+    it("preserves nulls, empty collections and the order of multi-value lists", () => {
+      const raw = { z: ["second", "first"], a: { empty: [], none: null } };
+      expect(normalizePolicyDocument(raw)).toBe(
+        '{"a":{"empty":[],"none":null},"z":["second","first"]}',
+      );
+      expect(normalizePolicyDocument(raw)).not.toBe(
+        normalizePolicyDocument({ ...raw, z: ["first", "second"] }),
+      );
     });
 
     it("is deterministic for the same document", () => {
       expect(normalizePolicyDocument(document)).toBe(
-        normalizePolicyDocument(JSON.parse(stringifyPolicyDocument(document))),
+        normalizePolicyDocument(decodeJson(stringifyPolicyDocument(document))),
       );
     });
 
     it("returns unparseable strings unchanged so drift diffs still fire", () => {
       expect(normalizePolicyDocument("not-json{")).toBe("not-json{");
+      expect(normalizePolicyDocument("%ZZ")).toBe("%ZZ");
     });
 
     it("treats singleton arrays and scalars as equivalent (AWS collapses them)", () => {
@@ -100,6 +145,49 @@ describe(
       expect(normalizePolicyDocument(document)).toContain(
         '"Action":["s3:GetObject","s3:ListBucket"]',
       );
+    });
+  },
+);
+
+describe(
+  "diffInlinePolicyDocuments",
+  { tags: ["unit", "provider:aws", "provider:aws:iam", "local"] },
+  () => {
+    const observed: PolicyDocument = {
+      Version: "2012-10-17",
+      Statement: [{ Resource: "*", Effect: "Allow", Action: ["s3:ListBucket"] }],
+    };
+    const equivalent: PolicyDocument = {
+      Version: "2012-10-17",
+      Statement: [{ Action: ["s3:ListBucket"], Resource: ["*"], Effect: "Allow" }],
+    };
+    const changed: PolicyDocument = {
+      ...equivalent,
+      Statement: [{ Resource: "*", Effect: "Deny", Action: ["s3:ListBucket"] }],
+    };
+
+    it("selects missing and changed policies without rewriting equivalent ones", () => {
+      expect(
+        diffInlinePolicyDocuments(
+          { unchanged: observed, changed: observed, removed: observed },
+          { added: equivalent, unchanged: equivalent, changed },
+        ),
+      ).toEqual({
+        upsert: [
+          ["added", equivalent],
+          ["changed", changed],
+        ],
+        remove: ["removed"],
+      });
+    });
+
+    it("only considers own keys when adding or removing policies", () => {
+      expect(diffInlinePolicyDocuments({}, { constructor: equivalent }).upsert).toEqual([
+        ["constructor", equivalent],
+      ]);
+      expect(diffInlinePolicyDocuments({ constructor: observed }, {}).remove).toEqual([
+        "constructor",
+      ]);
     });
   },
 );
@@ -165,7 +253,7 @@ describe(
       };
       expect(illegal).toBeDefined();
       expect(normalizePolicyDocument(scp)).toBe(
-        normalizePolicyDocument(JSON.parse(JSON.stringify(scp))),
+        normalizePolicyDocument(decodeJson(encodeJson(scp))),
       );
     });
   },

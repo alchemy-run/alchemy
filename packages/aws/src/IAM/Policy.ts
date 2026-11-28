@@ -4,8 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -13,6 +21,8 @@ import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { IamAction } from "./actions.generated.ts";
 import {
+  decodePolicyJson,
+  encodePolicyJson,
   oldestNondefaultPolicyVersion,
   parsePolicyDocument,
   policyArnFromParts,
@@ -76,6 +86,25 @@ export interface ServiceControlPolicyDocument {
   Statement: ServiceControlPolicyStatement[];
 }
 
+const canonicalizePolicyValue: (value: unknown) => unknown = Match.type<unknown>().pipe(
+  Match.when(
+    (value: unknown): value is unknown[] => Arr.isArray(value),
+    (items) =>
+      items.length === 1
+        ? canonicalizePolicyValue(items[0])
+        : Arr.map(items, canonicalizePolicyValue),
+  ),
+  Match.when(Predicate.isObject, (record) =>
+    pipe(
+      Rec.toEntries(record),
+      Arr.sortWith(([key]) => key, Order.String),
+      Arr.map(([key, value]) => [key, canonicalizePolicyValue(value)] as const),
+      Rec.fromEntries,
+    ),
+  ),
+  Match.orElse((value) => value),
+);
+
 /**
  * Canonicalize an IAM policy document for drift comparison.
  *
@@ -95,32 +124,30 @@ export interface ServiceControlPolicyDocument {
  * Unparseable strings are returned unchanged so a diff still fires (and shows
  * the offending value) instead of throwing inside a provider.
  */
-export const normalizePolicyDocument = (json: string | object): string => {
-  const stable = (value: unknown): unknown =>
-    Array.isArray(value)
-      ? value.length === 1
-        ? stable(value[0])
-        : value.map(stable)
-      : value !== null && typeof value === "object"
-        ? Object.fromEntries(
-            Object.entries(value as Record<string, unknown>)
-              .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-              .map(([k, v]) => [k, stable(v)]),
-          )
-        : value;
-  if (typeof json === "string") {
-    try {
-      return JSON.stringify(stable(JSON.parse(json)));
-    } catch {
-      try {
-        return JSON.stringify(stable(JSON.parse(decodeURIComponent(json))));
-      } catch {
-        return json;
-      }
-    }
-  }
-  return JSON.stringify(stable(json));
-};
+export const normalizePolicyDocument = (json: string | object): string =>
+  typeof json === "string"
+    ? decodePolicyJson(json).pipe(
+        Result.map((value) => encodePolicyJson(canonicalizePolicyValue(value))),
+        Result.getOrElse(() => json),
+      )
+    : encodePolicyJson(canonicalizePolicyValue(json));
+
+const policyDocumentChanged = (observed: Option.Option<PolicyDocument>, desired: PolicyDocument) =>
+  Option.match(observed, {
+    onNone: () => true,
+    onSome: (document) => normalizePolicyDocument(document) !== normalizePolicyDocument(desired),
+  });
+
+/** @internal Calculate the shared inline-policy changes for IAM users and groups. */
+export const diffInlinePolicyDocuments = (
+  observed: Readonly<Record<string, PolicyDocument>>,
+  desired: Readonly<Record<string, PolicyDocument>>,
+) => ({
+  upsert: Arr.filter(Rec.toEntries(desired), ([name, document]) =>
+    policyDocumentChanged(Rec.get(observed, name), document),
+  ),
+  remove: Arr.filter(Rec.keys(observed), (name) => !Rec.has(desired, name)),
+});
 
 export type PolicyName = string;
 export type PolicyArn = `arn:${Partition}:iam::${AccountID}:policy/${string}`;
@@ -136,7 +163,8 @@ export interface PolicyProps {
    */
   path?: string;
   /**
-   * The JSON IAM policy document.
+   * The JSON IAM policy document. Key order and singleton-list formatting
+   * alone do not create a new policy version.
    */
   policyDocument: PolicyDocument;
   /**
@@ -483,7 +511,9 @@ export const PolicyProvider = () =>
             policyArn,
             versionId: observed?.DefaultVersionId,
           });
-          if (JSON.stringify(observedDocument ?? null) !== JSON.stringify(news.policyDocument)) {
+          if (
+            policyDocumentChanged(Option.fromUndefinedOr(observedDocument), news.policyDocument)
+          ) {
             yield* prunePolicyVersions(policyArn);
             const createdVersion = yield* iam.createPolicyVersion({
               PolicyArn: policyArn,
