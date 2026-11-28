@@ -614,6 +614,24 @@ export type BucketLookup = {
  * });
  * ```
  *
+ * ### Detecting and Repairing Drift
+ *
+ * `alchemy drift` reads the live bucket configuration, including custom
+ * domains, the managed `r2.dev` domain, lifecycle rules and CORS. Bucket
+ * lock rules and Local Uploads are checked once declared; an undeclared
+ * setting remains unmanaged. Cloudflare-managed domain verification and TLS
+ * issuance status are informational, not desired configuration.
+ *
+ * A failed subresource read fails the drift check rather than treating
+ * inaccessible configuration as empty. Repair restores the last-deployed
+ * configuration, not the objects stored in the bucket.
+ *
+ * **Example:** Review drift before repairing the production stage
+ * ```sh
+ * alchemy drift --stage prod
+ * alchemy drift --stage prod --repair
+ * ```
+ *
  * ### Deleting a Bucket
  *
  * R2 refuses to delete a bucket that still has objects in it, and alchemy
@@ -1119,6 +1137,130 @@ export const ProviderLive = () =>
             }),
           ),
         );
+
+      // A single managed bucket's drift check must observe every relevant
+      // endpoint or fail. Unlike the account-wide census above, a partial
+      // read must never be treated as empty configuration: repair would then
+      // act on an invented state. Use the same SDK and normalizers as the
+      // reconcile and inventory paths, but not their permissive fallbacks.
+      const observeBucketConfiguration = (
+        accountId: string,
+        bucket: {
+          name: string;
+          jurisdiction: Bucket.Jurisdiction;
+          storageClass: Bucket.StorageClass;
+          location: Bucket.Location | undefined;
+        },
+        managed: {
+          locks: boolean;
+          localUploads: boolean;
+          previousDomains?: Bucket.CustomDomain[];
+        },
+      ) =>
+        Effect.gen(function* () {
+          const scope = {
+            accountId,
+            bucketName: bucket.name,
+            jurisdiction: bucket.jurisdiction,
+          };
+          const readDomains = r2.listBucketDomainCustoms(scope).pipe(
+            Effect.map((response) =>
+              response.domains
+                .map(toCustomDomainAttributes)
+                .sort((a, b) => a.domain.localeCompare(b.domain)),
+            ),
+            Effect.retry({
+              while: (error) => error._tag === "NoSuchBucket",
+              schedule: r2BucketEndpointConsistencySchedule,
+              times: 5,
+            }),
+          );
+          const readLifecycleRules = r2.getBucketLifecycle(scope).pipe(
+            Effect.map((response) => (response.rules ?? []).map(toLifecycleRule)),
+            Effect.retry({
+              while: (error) => error._tag === "NoSuchBucket",
+              schedule: r2BucketEndpointConsistencySchedule,
+              times: 5,
+            }),
+          );
+          const readCors = r2.getBucketCors(scope).pipe(
+            Effect.map((response) => (response.rules ?? []).map(toCorsRule)),
+            Effect.catchTag("NoCorsConfiguration", () => Effect.succeed([] as Bucket.CorsRule[])),
+            Effect.retry({
+              while: (error) => error._tag === "NoSuchBucket",
+              schedule: r2BucketEndpointConsistencySchedule,
+              times: 5,
+            }),
+          );
+          const readManagedDomain = r2.listBucketDomainManageds(scope).pipe(
+            Effect.map((response) => (response.enabled ? response.domain : undefined)),
+            Effect.retry({
+              while: (error) => error._tag === "NoSuchBucket",
+              schedule: r2BucketEndpointConsistencySchedule,
+              times: 5,
+            }),
+          );
+          const readLocks = managed.locks
+            ? r2.getBucketLock(scope).pipe(
+                Effect.map((response) => sortLockRules((response.rules ?? []).map(toLockRule))),
+                Effect.retry({
+                  while: (error) => error._tag === "NoSuchBucket",
+                  schedule: r2BucketEndpointConsistencySchedule,
+                  times: 5,
+                }),
+              )
+            : Effect.succeed(undefined);
+          const readLocalUploads = managed.localUploads
+            ? bucket.jurisdiction === "default"
+              ? r2.getBucketLocalUploads({ accountId, bucketName: bucket.name }).pipe(
+                  Effect.map((response) => response.enabled),
+                  Effect.retry({
+                    while: (error) => error._tag === "NoSuchBucket",
+                    schedule: r2BucketEndpointConsistencySchedule,
+                    times: 5,
+                  }),
+                )
+              : Effect.succeed(false)
+            : Effect.succeed(undefined);
+
+          const [domains, lifecycleRules, cors, publicDomain, locks, localUploads] =
+            yield* Effect.all(
+              [
+                readDomains,
+                readLifecycleRules,
+                readCors,
+                readManagedDomain,
+                readLocks,
+                readLocalUploads,
+              ] as const,
+              { concurrency: 6 },
+            );
+
+          // Domain ownership and TLS issuance status are Cloudflare-managed
+          // progress, not desired configuration. Keep the last persisted
+          // status so a normal activation does not produce false drift.
+          // Newly discovered domains still report their live status.
+          const previousDomains = new Map(
+            managed.previousDomains?.map((domain) => [domain.domain, domain]),
+          );
+          const observedDomains = domains.map((domain) => {
+            const previous = previousDomains.get(domain.domain);
+            return previous ? { ...domain, status: previous.status } : domain;
+          });
+          return {
+            bucketName: bucket.name,
+            storageClass: bucket.storageClass,
+            jurisdiction: bucket.jurisdiction,
+            location: bucket.location,
+            accountId,
+            domains: observedDomains,
+            lifecycleRules,
+            cors,
+            locks,
+            localUploads,
+            publicDomain,
+          };
+        });
 
       const reconcileLifecycleRules = (
         bucketName: string,
@@ -1654,29 +1796,34 @@ export const ProviderLive = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = output?.bucketName ?? (yield* createBucketName(id, olds?.name));
           const acct = output?.accountId ?? accountId;
-          return yield* r2
+          const bucket = yield* r2
             .getBucket({
               accountId: acct,
               bucketName: name,
               jurisdiction: output?.jurisdiction ?? olds?.jurisdiction,
             })
-            .pipe(
-              Effect.map((bucket) => ({
-                bucketName: bucket.name!,
-                // Distilled widened generated string enums to open unions.
-                storageClass: (bucket.storageClass ?? "Standard") as Bucket.StorageClass,
-                jurisdiction: (bucket.jurisdiction ?? "default") as Bucket.Jurisdiction,
-                location: normalizeLocation(bucket.location),
-                accountId: acct,
-                domains: output?.domains ?? [],
-                lifecycleRules: output?.lifecycleRules ?? [],
-                cors: output?.cors ?? [],
-                locks: output?.locks,
-                localUploads: output?.localUploads,
-                publicDomain: output?.publicDomain,
-              })),
-              Effect.catchTag("NoSuchBucket", () => Effect.undefined),
-            );
+            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
+          if (!bucket) return undefined;
+          return yield* observeBucketConfiguration(
+            acct,
+            {
+              name: bucket.name ?? name,
+              // Distilled widened generated string enums to open unions.
+              storageClass: (bucket.storageClass ?? "Standard") as Bucket.StorageClass,
+              jurisdiction: (bucket.jurisdiction ??
+                output?.jurisdiction ??
+                olds?.jurisdiction ??
+                "default") as Bucket.Jurisdiction,
+              location: normalizeLocation(bucket.location),
+            },
+            {
+              // These settings are deliberately unmanaged until the user
+              // declares them, including when adopting an existing bucket.
+              locks: olds?.locks !== undefined || output?.locks !== undefined,
+              localUploads: olds?.localUploads !== undefined || output?.localUploads !== undefined,
+              previousDomains: output?.domains,
+            },
+          );
         }),
       };
     }),
