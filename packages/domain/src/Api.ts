@@ -139,7 +139,8 @@ export interface ViewClient<V extends View.Any> {
        * waits for nothing.
        * The read waits up to 10 seconds, then fails with
        * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
-       * second, then gets the refusal. Bound it with `Effect.timeout`.
+       * second, then gets the refusal. Bound it with `Effect.timeout`:
+       * interrupting the read also stops the server's wait.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.StateOf<V>>;
@@ -177,7 +178,8 @@ export interface ViewClient<V extends View.Any> {
        * waits for nothing.
        * The read waits up to 10 seconds, then fails with
        * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
-       * second, then gets the refusal. Bound it with `Effect.timeout`.
+       * second, then gets the refusal. Bound it with `Effect.timeout`:
+       * interrupting the read also stops the server's wait.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.EventOf<V>>;
@@ -203,7 +205,8 @@ export interface ViewClient<V extends View.Any> {
        * waits for nothing.
        * The read waits up to 10 seconds, then fails with
        * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
-       * second, then gets the refusal. Bound it with `Effect.timeout`.
+       * second, then gets the refusal. Bound it with `Effect.timeout`:
+       * interrupting the read also stops the server's wait.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.StateOf<V>>;
@@ -226,7 +229,8 @@ export interface StreamClient<S extends DomainStream.Any> {
        * sent; `[]` waits for nothing.
        * The read waits up to 10 seconds, then fails with
        * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
-       * second, then gets the refusal. Bound it with `Effect.timeout`.
+       * second, then gets the refusal. Bound it with `Effect.timeout`:
+       * interrupting the read also stops the server's wait.
        */
       readonly atLeast?: Query.AtLeastInput;
     },
@@ -269,7 +273,8 @@ export interface StreamClient<S extends DomainStream.Any> {
        * sent; `[]` waits for nothing.
        * The read waits up to 10 seconds, then fails with
        * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
-       * second, then gets the refusal. Bound it with `Effect.timeout`.
+       * second, then gets the refusal. Bound it with `Effect.timeout`:
+       * interrupting the read also stops the server's wait.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<DomainStream.EventOf<S>>;
@@ -1467,7 +1472,8 @@ const build = (
  * state after its writes, so a caller a command just let in reads at once.
  * If it is still refused, the refusal comes after one second, however soon
  * the writes arrive, so the time a refused read takes tells nothing about
- * the key. Bound the wait with `Effect.timeout`.
+ * the key. Bound the wait with `Effect.timeout`. Interrupting the read
+ * stops the server's wait too, in process and over HTTP or WebSockets.
  *
  * **Example:** A read that gives up after two seconds
  * ```typescript

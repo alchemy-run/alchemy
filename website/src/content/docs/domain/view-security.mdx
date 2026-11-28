@@ -273,6 +273,8 @@ const summary = yield* bank.AccountSummary.get(accountId, { atLeast: receipt }).
 );
 ```
 
+When the read gives up, the server stops waiting for the write too.
+
 The read waits only for the view it reads. A `validate` that looks up access in another view, such as a membership view, sees that view as it is now: the caller is refused after a second until that view has the write. Keep the fact that grants access in the state of the view being read, or send the command with `consistency: "strong"`: it answers once every view it reaches has applied it, the membership view included, so the read after it needs no `atLeast`.
 
 ```typescript
