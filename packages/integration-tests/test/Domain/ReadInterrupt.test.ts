@@ -154,8 +154,8 @@ const held = () => {
             projection: (projection, kit) =>
               Effect.map(host.projection(projection, kit), (store) => ({
                 ...store,
-                checkpoints: (key: string, streams: ReadonlyArray<string>) =>
-                  Effect.andThen(poll(key), store.checkpoints(key, streams)),
+                checkpoints: (key: string, sources?: ReadonlyArray<string>) =>
+                  Effect.andThen(poll(key), store.checkpoints(key, sources)),
               })),
           })),
       }),
