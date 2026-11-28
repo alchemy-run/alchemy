@@ -1,5 +1,6 @@
 import * as os from "node:os";
 import {
+  registerHttpServer,
   Runtime,
   type RuntimeServices,
   type BindingHook,
@@ -64,7 +65,7 @@ import { readAssetsConfigFiles } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalEdge } from "./LocalEdge.ts";
-import { routePatternHost } from "./RoutePattern.ts";
+import { routePatternAllowedHost, routePatternHost } from "./RoutePattern.ts";
 import { materializeRuntimeBindings, WorkerValidationError } from "./RuntimeBindings.ts";
 import { resolveSource, SourceProviderError, type DevContext } from "./Source.ts";
 import { workerBundleOptions } from "./Sources/Rolldown.ts";
@@ -125,6 +126,15 @@ const resolveLocalUrls = (serverUrl: URL): Effect.Effect<string[]> =>
       ...lanAddresses.map((address) => `http://${address}:${port}`),
     ];
   });
+
+/**
+ * The script name the local edge router targets for a Worker. A plain Vite
+ * Worker's own name is taken by the dev server's workerd (cross-Worker
+ * service bindings must reach its code), so the edge gets a distinct
+ * name for the HTTP bridge to the dev server (`registerHttpServer`).
+ */
+const edgeScriptName = (worker: { name: string; vite?: unknown; source?: unknown }) =>
+  worker.vite && !worker.source ? `${worker.name}-vite-edge` : worker.name;
 
 export const LocalWorkerProvider = () =>
   LocalProvider.make(
@@ -839,6 +849,65 @@ export const LocalWorkerProvider = () =>
       });
 
       /**
+       * The private origin of each Vite Worker: a second stable proxy,
+       * always pointed at the dev-server child and never handed to users,
+       * published to the edge router under the Worker's name with
+       * `registerHttpServer`. The public proxy (the Worker's advertised URL)
+       * may point at the router, which reaches the origin — so the two must
+       * be distinct, or a routed request would loop back through the public
+       * proxy. Lives across child restarts (the registration stays valid;
+       * the origin parks requests while the child is down); reclaimed by
+       * `stop`.
+       */
+      const viteOrigins = new Map<
+        string,
+        {
+          name: string;
+          script: string;
+          instance: WorkerProxy.WorkerProxyInstance;
+          scope: Scope.Closeable;
+        }
+      >();
+
+      const releaseViteOrigin = Effect.fn(function* (fqn: string) {
+        const existing = viteOrigins.get(fqn);
+        if (existing) {
+          viteOrigins.delete(fqn);
+          yield* edge.removeTarget(existing.script, existing.name);
+          yield* Scope.close(existing.scope, Exit.void);
+        }
+      });
+
+      const ensureViteOrigin = Effect.fn(function* (worker: RunnableWorkerConfig) {
+        const existing = viteOrigins.get(worker.fqn);
+        if (existing?.name === edgeScriptName(worker)) return existing.instance;
+        yield* releaseViteOrigin(worker.fqn);
+        const scope = yield* Scope.fork(rootScope);
+        const instance = yield* Effect.gen(function* () {
+          const instance = yield* workerProxy.serve({ host: "127.0.0.1" });
+          // Registered at the origin's stable address, so the registration
+          // outlives dev-server restarts.
+          yield* registerHttpServer(edgeScriptName(worker), instance.url).pipe(
+            Effect.provideContext(context),
+          );
+          return instance;
+        }).pipe(
+          Scope.provide(scope),
+          Effect.onExit((exit) =>
+            exit._tag === "Failure" ? Scope.close(scope, exit) : Effect.void,
+          ),
+        );
+        viteOrigins.set(worker.fqn, {
+          name: edgeScriptName(worker),
+          script: worker.name,
+          instance,
+          scope,
+        });
+        yield* edge.setTarget(worker.name, edgeScriptName(worker));
+        return instance;
+      });
+
+      /**
        * Point the worker's stable proxy at a freshly served workerd. A
        * custom-domain worker is handed to the local edge instead, which
        * fronts it with the zone-route router whenever routes match its
@@ -850,14 +919,15 @@ export const LocalWorkerProvider = () =>
         url: URL,
       ) {
         const previous = edgeDomains.get(worker.fqn);
-        if (previous && (previous.host !== worker.edgeDomain || previous.script !== worker.name)) {
+        const script = edgeScriptName(worker);
+        if (previous && (previous.host !== worker.edgeDomain || previous.script !== script)) {
           yield* releaseEdgeDomain(worker.fqn);
         }
         if (worker.edgeDomain === undefined) {
           return yield* proxy.set(url);
         }
-        edgeDomains.set(worker.fqn, { host: worker.edgeDomain, script: worker.name });
-        yield* edge.serveDomain(worker.edgeDomain, { script: worker.name, proxy, upstream: url });
+        edgeDomains.set(worker.fqn, { host: worker.edgeDomain, script });
+        yield* edge.serveDomain(worker.edgeDomain, { script, proxy, upstream: url });
       });
 
       const serveWith = (
@@ -1269,8 +1339,12 @@ export const LocalWorkerProvider = () =>
                   return;
                 }
               }
-              // Queue requests while the child is (re)starting.
+              // Queue requests while the child is (re)starting. A plain Vite
+              // Worker also publishes a private origin to the edge router
+              // (source-provided dev servers register themselves).
+              const origin = source ? undefined : yield* ensureViteOrigin(worker);
               yield* proxy.unset();
+              if (origin) yield* origin.unset();
               // The dev server and its workerd run in a child process rooted
               // at the app.
               const root = path.resolve(initialCwd, rootDir ?? ".");
@@ -1301,6 +1375,15 @@ export const LocalWorkerProvider = () =>
                       // unwraps at the process boundary inside
                       // `startViteChild`.
                       env: worker.env ?? {},
+                      // Edge requests reach Vite with their original `Host`.
+                      allowedHosts: [
+                        ...new Set([
+                          ...(worker.edgeDomain ? [worker.edgeDomain.toLowerCase()] : []),
+                          ...worker.routes.flatMap(
+                            (route) => routePatternAllowedHost(route.pattern) ?? [],
+                          ),
+                        ]),
+                      ],
                       source,
                       worker: {
                         name: worker.name,
@@ -1332,7 +1415,19 @@ export const LocalWorkerProvider = () =>
                   // interrupted start must close it here — nothing else owns
                   // it yet.
                   Effect.onExit((exit) =>
-                    exit._tag === "Failure" ? Scope.close(scope, exit) : Effect.void,
+                    exit._tag === "Failure"
+                      ? Effect.all([
+                          Scope.close(scope, exit),
+                          // An interrupted start is a restart in progress:
+                          // keep requests parked for the next child.
+                          Cause.hasInterruptsOnly(exit.cause)
+                            ? Effect.void
+                            : Effect.all([
+                                proxy.fail(Cause.pretty(exit.cause)),
+                                origin ? origin.fail(Cause.pretty(exit.cause)) : Effect.void,
+                              ]),
+                        ]).pipe(Effect.asVoid)
+                      : Effect.void,
                   ),
                 );
                 workerdScopes.set(worker.fqn, scope);
@@ -1345,7 +1440,11 @@ export const LocalWorkerProvider = () =>
                 yield* child.exitCode.pipe(
                   Effect.flatMap((exitCode) => {
                     const message = `Dev server child exited unexpectedly with code ${exitCode}`;
-                    return Effect.all([Effect.logWarning(message), proxy.fail(message)]);
+                    return Effect.all([
+                      Effect.logWarning(message),
+                      proxy.fail(message),
+                      origin ? origin.fail(message) : Effect.void,
+                    ]);
                   }),
                   Effect.andThen(invalidate),
                   Effect.forkIn(scope),
@@ -1366,8 +1465,32 @@ export const LocalWorkerProvider = () =>
                   continue;
                 }
                 servedViteConsumers.set(worker.fqn, JSON.stringify(queueConsumers));
-                servedViteHttps.set(worker.fqn, child.url.protocol === "https:");
-                yield* proxy.set(child.url);
+                const https = child.url.protocol === "https:";
+                servedViteHttps.set(worker.fqn, https);
+                if (origin) {
+                  if (https) {
+                    // The edge bridge speaks plain HTTP, so routed requests
+                    // cannot reach a TLS dev server. Fail the origin so they
+                    // report why instead of a bare connection error; the
+                    // Worker's own dev URL keeps working.
+                    const message = `${worker.name}: the Vite dev server serves HTTPS, but zone routes and custom domains reach it through the local edge over plain HTTP. Turn off \`server.https\` to serve this Worker on its routes.`;
+                    yield* Effect.logWarning(message);
+                    yield* origin.fail(message);
+                  } else {
+                    yield* origin.set(child.url);
+                  }
+                }
+                if (origin && !https) {
+                  // The public proxy goes through the edge (custom domain
+                  // with matching routes) or straight at the dev server.
+                  yield* exposeWorker(worker, proxy, child.url);
+                } else {
+                  // Source-provided dev servers have no edge bridge, and a
+                  // TLS dev server cannot sit behind the plain-HTTP router:
+                  // keep the proxy pointed straight at the dev server.
+                  if (origin) yield* releaseEdgeDomain(worker.fqn);
+                  yield* proxy.set(child.url);
+                }
                 return;
               }
             }),
@@ -1533,6 +1656,7 @@ export const LocalWorkerProvider = () =>
             yield* closeWorkerd(fqn);
             yield* edge.removeRoutes(fqn);
             yield* releaseEdgeDomain(fqn);
+            yield* releaseViteOrigin(fqn);
             const urls = config.dev.url ? [config.dev.url] : [];
             return {
               workerId: `dev:${config.name}`,
@@ -1585,13 +1709,19 @@ export const LocalWorkerProvider = () =>
           // Zone routes target this script through the local edge's router.
           yield* edge.setRoutes(
             fqn,
-            config.routes.map((route) => ({ pattern: route.pattern, script: config.name })),
+            config.routes.map((route) => ({
+              pattern: route.pattern,
+              script: config.name,
+            })),
           );
-          // Only workerd-served workers can sit behind the edge router (it
-          // reaches them over service bindings); dev-server modes keep
-          // their proxy pointed at the dev server.
-          if (config.vite || config.source?.devMode === "server") {
+          // The edge router reaches a Worker over a service binding. Plain
+          // Vite Workers publish a private origin for it (`ensureViteOrigin`);
+          // other dev-server modes keep their proxy pointed at the dev server.
+          if (config.source?.devMode === "server") {
             yield* releaseEdgeDomain(fqn);
+          }
+          if (!config.vite || config.source) {
+            yield* releaseViteOrigin(fqn);
           }
           const serverUrl = yield* config.source
             ? config.source.devMode === "server"
@@ -1648,6 +1778,7 @@ export const LocalWorkerProvider = () =>
           dropServeState(fqn);
           yield* edge.removeRoutes(fqn);
           yield* releaseEdgeDomain(fqn);
+          yield* releaseViteOrigin(fqn);
           yield* closeWorkerd(fqn);
           yield* stopProxy(fqn);
         }),

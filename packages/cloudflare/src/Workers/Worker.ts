@@ -989,7 +989,9 @@ export interface WorkerProps<
    * `alchemy dev` emulates zone routing locally: a Worker whose custom
    * {@link domain} matches a route's hostname serves the routes on its own
    * dev URL, and each route's `url` attribute is a local listener for its
-   * hostname.
+   * hostname. A Vite-served Worker takes part too: matched paths go to the
+   * owning Worker and the rest fall back to its Vite dev server, with assets
+   * and HMR intact (see `Cloudflare.Website.Vite`).
    */
   routes?: WorkerRouteConfig[];
   /**
