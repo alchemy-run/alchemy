@@ -158,7 +158,7 @@ export interface ObjectHostOptions<PoolReq> {
  * Layer holds the class.
  *
  * It is the entrypoint of everything built on objects: provide it once, to
- * the Layer the module exports as its default. `DomainRivet.layerObjects()`
+ * the Layer the module exports as its default. `DomainRivet.layerDurableObjects()`
  * puts a Domain model on it, and `AI.layerObjects` a process's sessions.
  *
  * **Example:** A model and a process's sessions on one class
@@ -175,7 +175,7 @@ export interface ObjectHostOptions<PoolReq> {
  * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
  * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
  *
- * const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainRivet.layerObjects()));
+ * const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainRivet.layerDurableObjects()));
  *
  * const TriageSessions = AI.layerObjects(
  *   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),

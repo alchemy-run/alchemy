@@ -8,7 +8,7 @@ Host your model on [Effect Cluster](/cluster), and every aggregate instance, vie
 
 ## Host the model
 
-Provide `DomainCluster.layerObjects()` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Then provide `Cluster.layerObjectHost` to the Layer the file exports as its default: it names the entity that holds the model, points `main` at this file, and takes a pool.
+Provide `DomainCluster.layerEntities()` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Then provide `Cluster.layerObjectHost` to the Layer the file exports as its default: it names the entity that holds the model, points `main` at this file, and takes a pool.
 
 ```typescript
 // packages/server/src/BankLive.ts
@@ -23,7 +23,7 @@ export const Database = ClusterDocker.Database("Cluster");
 const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(Layer.provide(Database));
 
 export default Bank.layer(BankHandlers).pipe(
-  Layer.provide(Layer.mergeAll(DomainCluster.layerObjects(), SiftFraudCheck)),
+  Layer.provide(Layer.mergeAll(DomainCluster.layerEntities(), SiftFraudCheck)),
   Layer.provide(Cluster.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
 );
 ```
@@ -118,7 +118,7 @@ Every event reaches the views, projections and policies that consume it, at leas
 Some rows exist only to drop repeats: the receipt of each accepted command and committed decision, the mark that a policy ran a delivery, a cancelled scheduled command, and Effect Cluster's processed messages to the model's entity. Every runner deletes them once they are older than `retention`, each hour:
 
 ```typescript
-DomainCluster.layerObjects({
+DomainCluster.layerEntities({
   retention: {
     receipts: "30 days", // a command or decision sent again after this is decided again
     deliveries: "7 days", // a delivery that arrives again after this runs again

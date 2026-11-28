@@ -450,7 +450,7 @@ export class ClusterObjects extends Context.Service<
  * same Layer holds the entity.
  *
  * It is the entrypoint of everything built on objects: provide it once, to
- * the Layer the module exports as its default. `DomainCluster.layerObjects()`
+ * the Layer the module exports as its default. `DomainCluster.layerEntities()`
  * puts a Domain model on it, and `AI.layerObjects` a process's sessions.
  *
  * **Example:** A model and a process's sessions on one entity
@@ -467,7 +467,7 @@ export class ClusterObjects extends Context.Service<
  * export const Database = ClusterDocker.Database("Cluster");
  * const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
  *
- * const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainCluster.layerObjects()));
+ * const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainCluster.layerEntities()));
  *
  * const TriageSessions = AI.layerObjects(
  *   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),

@@ -8,7 +8,7 @@ import { DomainPool } from "./cluster.ts";
 export default ConformanceLiveV1.pipe(
   Layer.provide(
     // Swept often enough for the retention case to see a receipt go.
-    DomainCluster.layerObjects({
+    DomainCluster.layerEntities({
       retention: { receipts: RECEIPT_RETENTION, interval: "3 seconds" },
     }),
   ),

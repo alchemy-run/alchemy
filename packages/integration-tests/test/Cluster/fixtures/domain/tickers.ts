@@ -33,7 +33,7 @@ export class Ticker extends Domain.Aggregate("Ticker", {
 export class Tickers extends Domain.Model("Tickers", { aggregates: [Ticker] }) {}
 
 export default Tickers.layer(Layer.empty).pipe(
-  Layer.provide(DomainCluster.layerObjects()),
+  Layer.provide(DomainCluster.layerEntities()),
   Layer.provide(
     Cluster.layerObjectHost("DomainTickers", { main: import.meta.url, pool: DomainPool }),
   ),

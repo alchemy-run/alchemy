@@ -17,7 +17,7 @@ export const Pool = ClusterCloudflare.DurableObjectPool("Runners");
  * callers reach it through the pool's gateway.
  */
 export default hostBank(
-  DomainCluster.layerObjects().pipe(
+  DomainCluster.layerEntities().pipe(
     Layer.provide(Cluster.layerObjectHost("Bank", { main: import.meta.url, pool: Pool })),
   ),
 );

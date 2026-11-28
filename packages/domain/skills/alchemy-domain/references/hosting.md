@@ -51,14 +51,14 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 
 ## Hosting on Rivet or Effect Cluster
 
-Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerObjects()`, `DomainCluster.layerObjects()`. On Rivet and Effect Cluster, that Layer runs on the platform's object host (`Rivet.layerObjectHost`, `Cluster.layerObjectHost`), which declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the host deploys that class and reaches it through the gateway; the pool's nodes load the default export of `main` and host the model.
+Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerDurableObjects()`, `DomainCluster.layerEntities()`. On Rivet and Effect Cluster, that Layer runs on the platform's object host (`Rivet.layerObjectHost`, `Cluster.layerObjectHost`), which declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the host deploys that class and reaches it through the gateway; the pool's nodes load the default export of `main` and host the model.
 
 ```ts
 // packages/server/src/BankLive.ts — provide BankLive wherever the Api is served
 export default Bank.layer(BankHandlers).pipe(
-  Layer.provide(DomainRivet.layerObjects()),
+  Layer.provide(DomainRivet.layerDurableObjects()),
   Layer.provide(Rivet.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
-  // on Effect Cluster: DomainCluster.layerObjects() and Cluster.layerObjectHost
+  // on Effect Cluster: DomainCluster.layerEntities() and Cluster.layerObjectHost
 );
 ```
 

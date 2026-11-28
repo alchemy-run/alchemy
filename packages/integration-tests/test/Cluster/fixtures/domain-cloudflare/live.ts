@@ -12,7 +12,7 @@ export const ENTITY = "DomainObjectsOnDurableObjects";
 export const DomainDurableObjectPool = ClusterCloudflare.DurableObjectPool("DomainDurableObjects");
 
 export default ConformanceLive.pipe(
-  Layer.provide(DomainCluster.layerObjects({ retention: { receipts: RECEIPT_RETENTION } })),
+  Layer.provide(DomainCluster.layerEntities({ retention: { receipts: RECEIPT_RETENTION } })),
   Layer.provide(
     Cluster.layerObjectHost(ENTITY, { main: import.meta.url, pool: DomainDurableObjectPool }),
   ),

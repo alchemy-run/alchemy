@@ -46,7 +46,7 @@ import { Workshop } from "./Workshop/Workshop.model.ts";
 const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
 const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
 
-const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainRivet.layerObjects()));
+const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainRivet.layerDurableObjects()));
 
 const EngineerSessions = AI.layerObjects(
   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),

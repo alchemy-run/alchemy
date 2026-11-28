@@ -7,7 +7,7 @@ import { Desk, HandoverLive, HelperPlayed } from "../desk.ts";
 import { HostedPool } from "./cluster.ts";
 
 /** The desk. Its policy holds the Helper, so it still needs one. */
-const DeskLive = Desk.layer(HandoverLive).pipe(Layer.provide(DomainCluster.layerObjects()));
+const DeskLive = Desk.layer(HandoverLive).pipe(Layer.provide(DomainCluster.layerEntities()));
 
 /** Each Helper session an entity id of its own, with the desk it closes tickets on. */
 const HelperSessions = AI.layerObjects(HelperPlayed.pipe(Layer.provide(DeskLive)));

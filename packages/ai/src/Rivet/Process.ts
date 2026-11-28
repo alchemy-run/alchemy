@@ -53,7 +53,7 @@ import { layerObjects } from "../Host.ts";
  * import * as DomainRivet from "@alchemy.run/domain/Rivet";
  * import * as Rivet from "@alchemy.run/rivet";
  *
- * const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainRivet.layerObjects()));
+ * const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainRivet.layerDurableObjects()));
  *
  * const EngineerSessions = AI.layerObjects(
  *   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),

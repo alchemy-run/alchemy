@@ -46,7 +46,7 @@ import { Workshop } from "./Workshop/Workshop.model.ts";
 export const Database = ClusterDocker.Database("Cluster");
 const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
 
-const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainCluster.layerObjects()));
+const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainCluster.layerEntities()));
 
 const EngineerSessions = AI.layerObjects(
   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),

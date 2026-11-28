@@ -314,8 +314,8 @@ const workflowName = Effect.map(EffectEntity.CurrentAddress, (address) =>
   address.entityId.slice(WORKFLOWS.length + 1),
 );
 
-/** Options for {@link layerObjects}. */
-export interface ObjectsOptions {
+/** Options for {@link layerEntities}. */
+export interface EntitiesOptions {
   /**
    * How long the host keeps rows that only dedupe needs: command receipts,
    * policy delivery marks, cancelled scheduled commands, and Effect
@@ -379,7 +379,7 @@ const hostWorkflows = new WeakMap<object, Map<string, Workflow.Any>>();
  * );
  *
  * export default Bank.layer(BankHandlers).pipe(
- *   Layer.provide(DomainCluster.layerObjects()),
+ *   Layer.provide(DomainCluster.layerEntities()),
  *   Layer.provide(Cluster.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
  * );
  * ```
@@ -406,8 +406,8 @@ const hostWorkflows = new WeakMap<object, Map<string, Workflow.Any>>();
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const layerObjects = (
-  options: ObjectsOptions = {},
+export const layerEntities = (
+  options: EntitiesOptions = {},
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
   never,

@@ -18,7 +18,7 @@ export const Pool = ClusterDocker.SwarmPool("Runners", { replicas: 2 }).pipe(
  * the pool's gateway.
  */
 export default hostBank(
-  DomainCluster.layerObjects().pipe(
+  DomainCluster.layerEntities().pipe(
     Layer.provide(Cluster.layerObjectHost("Bank", { main: import.meta.url, pool: Pool })),
   ),
 );

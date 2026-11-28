@@ -6,7 +6,7 @@ import { ConformanceLive, RECEIPT_RETENTION } from "../../Domain/conformance/mod
 import { DomainPool } from "./domain-cluster.ts";
 
 export default ConformanceLive.pipe(
-  Layer.provide(DomainRivet.layerObjects({ retention: { receipts: RECEIPT_RETENTION } })),
+  Layer.provide(DomainRivet.layerDurableObjects({ retention: { receipts: RECEIPT_RETENTION } })),
   Layer.provide(
     Rivet.layerObjectHost("DomainObjects", { main: import.meta.url, pool: DomainPool }),
   ),

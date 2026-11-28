@@ -62,7 +62,7 @@ With a model, both share one host, written once below them:
 
 ```typescript
 // src/Live.ts
-const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainRivet.layerObjects()));
+const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainRivet.layerDurableObjects()));
 
 const TriageSessions = AI.layerObjects(
   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
@@ -80,7 +80,7 @@ More: [Rivet](https://alchemy.run/ai/rivet).
 
 ## Host it on Effect Cluster
 
-The same two files with `AICluster.Process` (`@alchemy.run/ai/EffectCluster`), and with a model, `DomainCluster.layerObjects()` on `Cluster.layerObjectHost`.
+The same two files with `AICluster.Process` (`@alchemy.run/ai/EffectCluster`), and with a model, `DomainCluster.layerEntities()` on `Cluster.layerObjectHost`.
 
 ```typescript
 // src/Sessions.ts

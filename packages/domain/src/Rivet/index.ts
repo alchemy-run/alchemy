@@ -98,8 +98,8 @@ const connectTo = (namespace: Namespace, key: string, subscription: Subscription
     return yield* stub.fetch(forwarded).pipe(Effect.orDie);
   }) as HttpEffect;
 
-/** Options for {@link layerObjects}. */
-export interface ObjectsOptions {
+/** Options for {@link layerDurableObjects}. */
+export interface DurableObjectsOptions {
   /**
    * How long each actor keeps the rows that only dedupe needs: command and
    * decision receipts, policy delivery marks, and cancelled scheduled
@@ -149,7 +149,7 @@ export interface ObjectsOptions {
  * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
  *
  * export default Bank.layer(BankHandlers).pipe(
- *   Layer.provide(DomainRivet.layerObjects()),
+ *   Layer.provide(DomainRivet.layerDurableObjects()),
  *   Layer.provide(Rivet.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
  * );
  * ```
@@ -181,7 +181,7 @@ export interface ObjectsOptions {
  * ```typescript
  * export default Bank.layer(BankHandlers).pipe(
  *   Layer.provide(
- *     DomainRivet.layerObjects({ retention: { receipts: "365 days", deliveries: "forever" } }),
+ *     DomainRivet.layerDurableObjects({ retention: { receipts: "365 days", deliveries: "forever" } }),
  *   ),
  *   Layer.provide(Rivet.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
  * );
@@ -191,8 +191,8 @@ export interface ObjectsOptions {
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const layerObjects = (
-  options: ObjectsOptions = {},
+export const layerDurableObjects = (
+  options: DurableObjectsOptions = {},
 ): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
   never,

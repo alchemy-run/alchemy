@@ -8,7 +8,7 @@ Host your model on [Rivet](/rivet), and every aggregate instance, view key and p
 
 ## Host the model
 
-Provide `DomainRivet.layerObjects()` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Then provide `Rivet.layerObjectHost` to the Layer the file exports as its default: it names the class that holds the model, points `main` at this file, and takes a pool.
+Provide `DomainRivet.layerDurableObjects()` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Then provide `Rivet.layerObjectHost` to the Layer the file exports as its default: it names the class that holds the model, points `main` at this file, and takes a pool.
 
 ```typescript
 // packages/server/src/BankLive.ts
@@ -23,7 +23,7 @@ const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
 const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
 
 export default Bank.layer(BankHandlers).pipe(
-  Layer.provide(Layer.mergeAll(DomainRivet.layerObjects(), SiftFraudCheck)),
+  Layer.provide(Layer.mergeAll(DomainRivet.layerDurableObjects(), SiftFraudCheck)),
   Layer.provide(Rivet.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
 );
 ```
@@ -122,7 +122,7 @@ const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane
 
 export default Bank.layer(BankHandlers).pipe(
   Layer.provide(
-    DomainRivet.layerObjects({
+    DomainRivet.layerDurableObjects({
       retention: {
         receipts: "30 days", // a command or decision sent again after this is decided again
         deliveries: "7 days", // a delivery that arrives again after this runs again
