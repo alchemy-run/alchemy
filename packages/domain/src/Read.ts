@@ -21,7 +21,15 @@ export interface Snapshot<S> {
    * (the `stream` of the source it came from and its `seq` there), read from
    * the same stored snapshot as the state. Absent before the key applies one,
    * and on a key last written before positions were recorded. A fact's address
-   * names it across the model, so two reads can be compared by it.
+   * names it across the model, so two reads can be compared by it. On a view
+   * with several sources it can name another stream than your command's: to
+   * wait for your own write, pass its receipt as `atLeast`.
+   *
+   * **Example:** Say which fact a balance reflects
+   * ```typescript
+   * const { state, position } = yield* bank.AccountSummary.snapshot(accountId);
+   * return { accountId, balance: state?.balance ?? 0, asOf: position };
+   * ```
    */
   readonly position?: { readonly stream: string; readonly seq: number };
 }

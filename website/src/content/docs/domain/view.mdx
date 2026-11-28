@@ -281,6 +281,21 @@ export const followSummary = Effect.fn(function* (
 
 A server can read the snapshot while it renders a page and send it with the page, so the browser shows data at once and starts its feed from the cursor. `snapshot` and `list` take `atLeast`, like `get`: pass a command's `stream` and `version` to wait until the view has applied it.
 
+### Say which fact a snapshot reflects
+
+`snapshot` also returns `position`: the `stream` and `seq` of the last event the key applied. Keep it with a record of what someone was shown, like a balance confirmation:
+
+```typescript title="packages/server/test/confirmBalance.ts"
+export const confirmBalance = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
+  const { state, position } = yield* bank.AccountSummary.snapshot(accountId);
+  return { accountId, balance: state?.balance ?? 0, asOf: position };
+});
+```
+
+An `asOf` of `{ stream: "Account/a-1", seq: 7 }` means the balance reflects the account up to its seventh event, the same address a command's receipt gives as `stream` and `version`. A key that has applied no event has no `position`.
+
+`position` is the last fact applied, so on a view with several sources it can name another stream than your command's; to wait for your own write, pass the receipt as [`atLeast`](/domain/view#views-catch-up-after-the-commit).
+
 ## Decide who may read it
 
 A view that's exposed through an Api declares `middleware` to identify the caller and the `rejects` a read may fail with. Its Layer's `validate` judges each read against the view's state.

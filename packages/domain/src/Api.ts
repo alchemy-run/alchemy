@@ -188,6 +188,12 @@ export interface ViewClient<V extends View.Any> {
    * state, then follow `events(key, { after: cursor })`: every later change
    * arrives once, and none is missed. `position` is the address of the last
    * fact the key applied, read with the state (absent before it applied one).
+   *
+   * **Example:** Say which fact a balance reflects
+   * ```typescript
+   * const { state, position } = yield* bank.AccountSummary.snapshot(accountId);
+   * return { accountId, balance: state?.balance ?? 0, asOf: position };
+   * ```
    */
   readonly snapshot: (
     key: Key.IdOf<View.KeyOf<V>>,
