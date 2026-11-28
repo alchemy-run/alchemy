@@ -1213,6 +1213,7 @@ const SECTIONS: Section[] = [
         "domain/cli",
         "domain/mcp",
         "domain/foldkit",
+        "domain/effect-ui",
         "domain/optimistic-updates",
         "domain/local-first",
         "domain/sessions",
