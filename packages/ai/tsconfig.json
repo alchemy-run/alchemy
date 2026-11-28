@@ -18,6 +18,8 @@
     { "path": "../cloudflare/tsconfig.json" },
     { "path": "../daytona/tsconfig.json" },
     { "path": "../e2b/tsconfig.json" },
-    { "path": "../modal/tsconfig.json" }
+    { "path": "../effect-cluster/tsconfig.json" },
+    { "path": "../modal/tsconfig.json" },
+    { "path": "../rivet/tsconfig.json" }
   ]
 }

@@ -20,11 +20,11 @@ More: [Run processes on Pi](https://alchemy.run/ai/harnesses#run-processes-on-pi
 
 ## Host the model, then the process
 
-Host the model as any model is. Then give `AICloudflare.layerDurableObjects` the prose of each process, provided with what a session runs on and the models it mentions. It gives back the same process, with one Durable Object for each session, named after its key. Do not write the object.
+Host the model as any model is. Then give `AICloudflare.ProcessSessions` the prose of each process, provided with what a session runs on and the models it mentions. It gives back the same process, with one Durable Object for each session, named after its key. Do not write the object.
 
 ```typescript
 // src/Worker.ts
-const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), PostAnswerLive).pipe(
+const Harness = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), PostAnswerLive).pipe(
   Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
   Layer.provide(Boat.CreateSandboxHttp),
 );
@@ -34,16 +34,66 @@ const BoardLive = Board.layer(IssueWorkLive).pipe(
   Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
-const TriageSessions = AICloudflare.layerDurableObjects(
-  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+const TriageSessions = AICloudflare.ProcessSessions(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 
 const Live = BoardLive.pipe(Layer.provideMerge(TriageSessions));
 ```
 
-Provide `Live` to the Worker, and register `DomainCloudflare.providers()` in the Stack. The model needs the process and the process needs the model: the host closes that loop, so no thunk and no second build of the model is needed. The prose's Layer is built again inside each session's object, so the harness and its storage belong to that one session.
+Provide `Live` to the Worker. The model needs the process and the process needs the model: the host closes that loop, so no thunk and no second build of the model is needed. The prose's Layer is built again inside each session's object, so the harness and its storage belong to that one session.
 
-More: [Host the process](https://alchemy.run/ai/hosting#host-the-process), [One object for each session](https://alchemy.run/ai/hosting#one-object-for-each-session).
+More: [Cloudflare](https://alchemy.run/ai/cloudflare#host-the-process), [One object for each session](https://alchemy.run/ai/hosting#one-object-for-each-session).
+
+## Host it on Rivet
+
+The process's Layer does not change. `AIRivet.ProcessSessions` (`@alchemy.run/ai/Rivet`) takes the class that holds the sessions, this file and the pool. Export it as default: the pool's nodes load it, and a caller imports it and provides it.
+
+```typescript
+// src/Sessions.ts
+export default AIRivet.ProcessSessions(
+  "Sessions",
+  { main: import.meta.url, pool: Default },
+  TriageLive.pipe(Layer.provide(Harness)),
+);
+```
+
+With a model, both share one host, written once below them:
+
+```typescript
+// src/Live.ts
+const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainRivet.layerDurableObjects()));
+
+const TriageSessions = AI.layerObjects(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
+);
+
+export default BoardLive.pipe(
+  Layer.provideMerge(TriageSessions),
+  Layer.provide(Rivet.layerObjectHost("App", { main: import.meta.url, pool: Default })),
+);
+```
+
+Pi and OpenCode have no storage Layer for a Rivet actor: provide a harness of your own.
+
+More: [Rivet](https://alchemy.run/ai/rivet).
+
+## Host it on Effect Cluster
+
+The same two files with `AICluster.ProcessSessions` (`@alchemy.run/ai/EffectCluster`), and with a model, `DomainCluster.layerEntities()` on `Cluster.layerObjectHost`.
+
+```typescript
+// src/Sessions.ts
+export default AICluster.ProcessSessions(
+  "Sessions",
+  { main: import.meta.url, pool: Default },
+  TriageLive.pipe(Layer.provide(Harness)),
+);
+```
+
+Each session is an entity id on whichever runner holds its shard. Pi and OpenCode have no storage Layer for an entity: provide a harness of your own.
+
+More: [Effect Cluster](https://alchemy.run/ai/effect-cluster).
 
 ## Reach a session
 
@@ -81,7 +131,7 @@ const TriageInMemory = AI.layerInMemory(TriagePlayed.pipe(Layer.provide(BoardInM
 const Live = BoardInMemory.pipe(Layer.provideMerge(TriageInMemory));
 ```
 
-More: [Run it in memory](https://alchemy.run/ai/hosting#run-it-in-memory).
+More: [In memory](https://alchemy.run/ai/in-memory).
 
 ## Without a host
 

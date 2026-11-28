@@ -693,6 +693,31 @@ describe("Domain on Durable Objects", { tags: ["unit"] }, () => {
   );
 
   it.live(
+    "a scheduled command that ran is still reported as executed once its receipt is pruned",
+    () => {
+      const disk: Disk = { objects: new Map() };
+      const now = { millis: T0 };
+      return Effect.gen(function* () {
+        const ledgers = yield* Ledger;
+        yield* ledgers.schedule(new BookMany({ id: "main", count: 1 }), {
+          after: "1 second",
+          commandId: "ran",
+        });
+        now.millis = T0 + 1000;
+        yield* eventually(() => ledgerRows(disk).some((key) => key.startsWith("receipt:")));
+        expect(yield* cancelledAgain("ran")).toMatchObject({ _tag: "AlreadyExecuted" });
+
+        // Thirty days on, a commit prunes the command's receipt.
+        now.millis = T0 + 31 * DAY;
+        yield* bookAs("c-1");
+        expect(ledgerRows(disk)).toEqual(["receipt:c-1"]);
+        expect(yield* cancelledAgain("ran")).toMatchObject({ _tag: "AlreadyExecuted" });
+      }).pipe(Effect.scoped, Effect.provide(retainedOn(disk)), atTime(now));
+    },
+    { timeout: 60_000 },
+  );
+
+  it.live(
     "a name cancelled again starts its window again",
     () => {
       const disk: Disk = { objects: new Map() };

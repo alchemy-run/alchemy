@@ -190,7 +190,27 @@ export type Step =
       readonly _tag: "Provide";
       readonly service: Context.Key<unknown, unknown>;
       readonly value: unknown;
+      /**
+       * Set by `provideWith`: computes the service for each `when`, in place of
+       * `value`.
+       */
+      readonly make?: (sent: Sent) => Effect.Effect<unknown, unknown>;
     };
+
+/** The command a `when` is about to send, as {@link Story.provideWith} sees it. */
+export interface Sent {
+  /**
+   * The command, as the `when` step has it: what a middleware reads from the
+   * request's payload, e.g. to scope a capability to one command.
+   */
+  readonly command: { readonly _tag: string };
+  /**
+   * The aggregate instances the model routes the command to: the one its
+   * aggregate targets, or each one its decision reads. Use it to scope a
+   * service to the instances a command is for.
+   */
+  readonly refs: ReadonlyArray<Aggregate.Ref>;
+}
 
 /**
  * What a {@link probe} is given of the run so far.
@@ -717,6 +737,52 @@ const provide = <I, S>(service: Context.Key<I, S>, value: S): ProvideStep<I> => 
   value,
 });
 
+/**
+ * Provide a service computed for each command, as a middleware computes it
+ * for each request. `make` runs at every `when` after this step, with the
+ * command about to be sent and the aggregate instances it is for, and what it
+ * succeeds with is provided to that command only. If it fails, the `when`
+ * fails, naming the service. A later `provide` or `provideWith` of the same
+ * service replaces it. A `query` step does not run it: give a query its
+ * service with `provide`.
+ *
+ * Use it when one value for the whole story cannot exercise the rule under
+ * test: the caller differs by instance, or a capability is scoped to the
+ * command or instance it was issued for.
+ *
+ * ### A caller that differs by instance
+ * **Example:** The owner of each account, from the instance the command is for
+ * ```typescript
+ * const owners: Record<string, string> = { "a-1": "sam", "a-2": "alex" };
+ *
+ * story(
+ *   Story.provideWith(Caller, ({ refs }) => Effect.succeed(owners[refs[0]!.id]!)),
+ *   Story.when(new Withdraw({ accountId: "a-1", amount: 5 })),
+ *   Story.then(Account.ref("a-1"), new Withdrawn({ by: "sam", amount: 5 })),
+ *   Story.when(new Withdraw({ accountId: "a-2", amount: 5 })),
+ *   Story.then(Account.ref("a-2"), new Withdrawn({ by: "alex", amount: 5 })),
+ * );
+ * ```
+ *
+ * ### A capability scoped to the command
+ * **Example:** A stamp naming the command and instances it authorizes
+ * ```typescript
+ * Story.provideWith(Stamp, ({ command, refs }) =>
+ *   Effect.succeed({ command: command._tag, instances: refs.map((ref) => ref.id) }),
+ * ),
+ * Story.when(new Deposit({ accountId: "a-1", amount: 100 })),
+ * ```
+ */
+const provideWith = <I, S, E>(
+  service: Context.Key<I, S>,
+  make: (sent: Sent) => Effect.Effect<S, E>,
+): ProvideStep<I> => ({
+  _tag: "Provide",
+  service: service as unknown as Context.Key<unknown, unknown>,
+  value: undefined,
+  make,
+});
+
 const normalize = (value: unknown, redact = false): unknown => {
   if (redact && Redacted.isRedacted(value)) return "<redacted>";
   if (DateTime.isDateTime(value)) return DateTime.formatIso(value);
@@ -822,7 +888,9 @@ const describeStep = (s: Step): string => {
     case "Shred":
       return s.subject;
     case "Provide":
-      return `${s.service.key} = ${summarize(s.value)}`;
+      return s.make === undefined
+        ? `${s.service.key} = ${summarize(s.value)}`
+        : `${s.service.key} = (computed at each when)`;
     case "Given":
       return `${refName(s.ref)}: ${summarizeAll(s.events)}`;
     case "Then":
@@ -1328,6 +1396,14 @@ const make =
               }
             | undefined;
           let provided = Context.empty() as Context.Context<unknown>;
+          // What `provideWith` computes at each `when`, by the service's key.
+          const computed = new Map<
+            string,
+            {
+              readonly service: Context.Key<unknown, unknown>;
+              readonly make: NonNullable<StepOf<"Provide">["make"]>;
+            }
+          >();
           // Set by `loose`: a rejection no step asserts is no longer a failure.
           let lenient = false;
           const assertedDeaths = new Set<string>();
@@ -1427,7 +1503,13 @@ const make =
                 break;
               }
               case "Provide": {
-                provided = Context.add(provided, s.service, s.value);
+                if (s.make === undefined) {
+                  computed.delete(s.service.key);
+                  provided = Context.add(provided, s.service, s.value);
+                } else {
+                  computed.set(s.service.key, { service: s.service, make: s.make });
+                  provided = Context.omit(s.service)(provided) as Context.Context<unknown>;
+                }
                 break;
               }
               case "Given": {
@@ -1495,9 +1577,22 @@ const make =
                 if (client === undefined) {
                   return yield* fail(`the model has no command ${s.command._tag}`);
                 }
+                let context = provided;
+                for (const [key, { service, make }] of computed) {
+                  const made = yield* make({
+                    command: s.command,
+                    refs: instancesOf(domain.definitions, s.command),
+                  }).pipe(Effect.exit);
+                  if (Exit.isFailure(made)) {
+                    return yield* fail(
+                      `${key} could not be provided: ${String(Cause.squash(made.cause))}`,
+                    );
+                  }
+                  context = Context.add(context, service, made.value);
+                }
                 const result = yield* client
                   .send(s.command, { commandId: s.commandId ?? `story:${step}` })
-                  .pipe(Effect.provide(provided), Effect.result);
+                  .pipe(Effect.provide(context), Effect.result);
                 if (result._tag === "Success") {
                   last = { _tag: "Accepted", receipt: result.success };
                 } else {
@@ -2209,6 +2304,7 @@ export const Story = {
   advance,
   shred,
   provide,
+  provideWith,
   signal,
   start,
   saga,

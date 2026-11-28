@@ -8,7 +8,7 @@ import * as Rivet from "@alchemy.run/rivet";
 import * as Effect from "effect/Effect";
 import { app } from "../../Domain/conformance/app.ts";
 import { DomainControlPlane } from "./domain-cluster.ts";
-import { ConformanceRivetLiveV1 } from "./domain-live.ts";
+import ConformanceRivetLiveV1 from "./domain-live-v1.ts";
 
 export default class DomainFrontV1 extends Docker.Service<DomainFrontV1>()(
   "RivetDomainFront",
