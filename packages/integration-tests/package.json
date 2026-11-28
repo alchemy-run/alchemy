@@ -83,7 +83,7 @@
     "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
-    "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab",
+    "@effect/ui": "catalog:",
     "@electric-sql/pglite": "catalog:",
     "@foldkit/vite-plugin": "catalog:",
     "@libsql/client": "catalog:",

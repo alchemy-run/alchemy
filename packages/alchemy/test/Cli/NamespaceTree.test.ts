@@ -51,3 +51,71 @@ describe("NamespaceTree YAML properties", { tags: ["unit", "local"] }, () => {
     expect(item?.propertyYaml).toBeUndefined();
   });
 });
+
+describe("a runtime's terms in the plan tree", { tags: ["unit"] }, () => {
+  test("a model's own bindings are grouped under it by name, and a host's terms under its row", () => {
+    const node = createNode({}, "Worker");
+    const bind = (sid: string) => ({ sid, action: "create" }) as never;
+    node.bindings = [
+      bind("AI"),
+      bind("Agents"),
+      bind("Board.IssueAggregate"),
+      bind("Board.IssueAggregate.BeforeVersions"),
+      bind("Board.IssueView"),
+      bind("Board.NotifyPolicy"),
+      bind("Board.NotifyPolicy.Retiring"),
+    ];
+    node.capabilities = [
+      {
+        id: "Model:Board",
+        kind: "Model",
+        name: "Board",
+        bindings: [],
+        references: [],
+        resources: [
+          "Board.IssueAggregate",
+          "Board.IssueAggregate.BeforeVersions",
+          "Board.IssueView",
+          "Board.NotifyPolicy",
+          "Board.NotifyPolicy.Retiring",
+        ],
+      },
+      {
+        id: "Policy:Notify",
+        kind: "Policy",
+        name: "Notify",
+        host: "Board.NotifyPolicy",
+        bindings: [],
+        references: [{ relation: "uses", to: "Process:Triage" }],
+      },
+      {
+        id: "Process:Triage",
+        kind: "Process",
+        name: "Triage",
+        host: "Agents",
+        bindings: [],
+        references: [],
+      },
+    ];
+    expect(
+      flattenTree(buildNamespaceTree([node])).map(
+        (item) => `${"  ".repeat(item.depth)}${item.type} ${item.id}`,
+      ),
+    ).toEqual([
+      "resource Worker",
+      "  binding Agents",
+      "    capability Triage",
+      "  binding AI",
+      "  capability Board",
+      // A part of a piece is under the piece, by its last name.
+      "    binding IssueAggregate",
+      "      binding BeforeVersions",
+      "    binding IssueView",
+      // What a piece's object runs is under it too.
+      "    binding NotifyPolicy",
+      "      capability Notify",
+      "        capability Process Triage",
+      "      binding Retiring",
+    ]);
+  });
+});

@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import { guardClient, recordAcquisition } from "./CapabilityGraph.ts";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import { describeDataPlane, type DataPlaneResolution } from "./Provider.ts";
@@ -89,6 +90,21 @@ export interface Service<
     : never;
 }
 
+/** What a bind's arguments are bound to, as `Type(logicalId)`. A resource given in a list counts each. */
+const acquisitionTargets = (
+  args: ReadonlyArray<unknown>,
+  resolved: ReadonlyArray<unknown>,
+): ReadonlyArray<string> =>
+  args.flatMap((arg, index) => {
+    for (const candidate of [arg, resolved[index]]) {
+      const found = (Array.isArray(candidate) ? candidate : [candidate])
+        .filter(isResource)
+        .map((resource) => `${resource.Type}(${resource.LogicalId})`);
+      if (found.length > 0) return found;
+    }
+    return [];
+  });
+
 /**
  * Build a combined tag+callable binding (see {@link Service}). The returned
  * value forwards the Effect/Tag protocol to its Context tag (via `taggedFunction`)
@@ -111,8 +127,18 @@ export const Service = <
       Effect.forEach(args, (arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg)), {
         concurrency: "unbounded",
       }).pipe(
-        Effect.flatMap((resolved) =>
-          f(...resolved).pipe(
+        Effect.flatMap((resolved) => {
+          // A deployed runtime only holds the client to what the plan listed.
+          if (globalThis.__ALCHEMY_RUNTIME__) {
+            return Effect.flatMap(f(...resolved), (client) =>
+              guardClient(id, () => acquisitionTargets(args, resolved), client),
+            );
+          }
+          // The permission: this capability, over these targets, acquired by
+          // whichever frame is current (see CapabilityGraph.ts).
+          const targets = acquisitionTargets(args, resolved);
+          return recordAcquisition({ binding: id, targets }).pipe(
+            Effect.andThen(f(...resolved)),
             // Deploy-time data-plane routing: the client's calls must target
             // whatever data plane the bound resource actually lives on. In an
             // `alchemy dev` run a local-mode resource exists only on the
@@ -120,8 +146,10 @@ export const Service = <
             // cloud environment would miss it — or worse, mutate the real
             // cloud. See {@link routeClientDataPlane}.
             Effect.flatMap((client) => routeClientDataPlane(resolved, client)),
-          ),
-        ),
+            // A policy given by hand holds the client here too.
+            Effect.flatMap((client) => guardClient(id, () => targets, client)),
+          );
+        }),
       ),
     );
   // Plan-time invoke (see the `execute` doc on `Service`): bind hostless —

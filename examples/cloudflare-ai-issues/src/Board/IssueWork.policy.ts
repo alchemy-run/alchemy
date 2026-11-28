@@ -16,14 +16,12 @@ export class IssueWork extends Domain.Policy("IssueWork", {
 export const IssueWorkLive = IssueWork.toLayer(
   Effect.gen(function* () {
     const triage = yield* Triage;
-    return Effect.fn(function* ({ source, event }) {
-      const session = triage.get(source.id);
-      yield* Match.valueTags(event, {
+    return ({ source, event }) =>
+      Match.valueTags(event, {
         // The same id however often the event is delivered, so the issue is taken up once.
-        IssueReported: () => session.send(started(source.id), { requestId: "start" }),
+        IssueReported: () => triage.get(source.id).send(started(source.id), { requestId: "start" }),
         IssueCommented: ({ body, commentId }) =>
-          session.send(replied(body), { requestId: commentId }),
+          triage.get(source.id).send(replied(body), { requestId: commentId }),
       }).pipe(Effect.orDie);
-    });
   }),
 );

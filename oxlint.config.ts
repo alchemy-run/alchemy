@@ -231,6 +231,8 @@ export default defineConfig({
         "packages/opencode/src/**",
         "packages/pi/src/**",
         "packages/domain/src/**",
+        // An object's stub: what a call fails with in transit is the platform's.
+        "packages/alchemy/src/Workers/ObjectHost.ts",
         "packages/effect-cluster/src/**",
         "packages/gcp/src/GCPBindings.ts",
         "packages/gcp/src/HostContext.ts",
@@ -248,6 +250,11 @@ export default defineConfig({
         "packages/pi/src/Harness.ts",
         "packages/pi/src/internal/mcp.ts",
       ],
+      rules: { "effecttsgo/experimental-api-usage": "off" },
+    },
+    {
+      // Effect UI marks its whole API experimental; the adapter has no stable API to use instead.
+      files: ["packages/domain/src/EffectUI.ts"],
       rules: { "effecttsgo/experimental-api-usage": "off" },
     },
   ],

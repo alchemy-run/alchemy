@@ -1,3 +1,4 @@
+import { framed } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -353,10 +354,13 @@ export const make = <
     static toLayer<E, R>(build: Effect.Effect<Handlers<I, W>, E, R>, options: Options = {}) {
       return Layer.effect(
         Tag,
-        Effect.map(build, (built): Implementation<I, W> =>
-          typeof built === "function"
-            ? { handle: built, rewrite: undefined, options }
-            : { handle: built.write, rewrite: built.rewrite, options },
+        // Built as a term of its own: a plan lists what the projection binds.
+        Effect.map(
+          framed("Projection", name, { hosted: false })(build),
+          (built): Implementation<I, W> =>
+            typeof built === "function"
+              ? { handle: built, rewrite: undefined, options }
+              : { handle: built.write, rewrite: built.rewrite, options },
         ),
       );
     }

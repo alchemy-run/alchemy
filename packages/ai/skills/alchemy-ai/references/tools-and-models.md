@@ -33,7 +33,9 @@ export const PostAnswerLive = PostAnswer.make(
 
 The outer Effect runs where the process is yielded, so bindings it declares are part of the deploy. A tool with nothing to build passes the handler alone: `Add.make(({ a, b }) => ({ sum: a + b }))`.
 
-More: [Declare a tool](https://alchemy.run/ai/tools#declare-a-tool), [Use a binding](https://alchemy.run/ai/tools#use-a-binding).
+Bind in that outer Effect, never outside the tool: a plan lists each tool with what it binds, and a handler that uses a client bound elsewhere (one it closed over or was handed) fails that call with `CapabilityDenied`.
+
+More: [Declare a tool](https://alchemy.run/ai/tools#declare-a-tool), [Use a binding](https://alchemy.run/ai/tools#use-a-binding), [A tool uses only what it binds](https://alchemy.run/ai/tools#a-tool-uses-only-what-it-binds).
 
 ## A tool that fails
 
@@ -93,9 +95,21 @@ export const ModelsLive = Layer.mergeAll(
 );
 ```
 
+On Anthropic, use `AIAnthropic.Model` from `@alchemy.run/ai/Anthropic`, with `@effect/ai-anthropic` installed. The key is read from `ANTHROPIC_API_KEY`:
+
+```typescript
+export const SmartLive = AIAnthropic.Model(Smart, { model: "claude-opus-5-5" });
+```
+
+On OpenAI, use `AIOpenAI.Model` from `@alchemy.run/ai/OpenAI`, with `@effect/ai-openai` installed. The key is read from `OPENAI_API_KEY`:
+
+```typescript
+export const FastLive = AIOpenAI.Model(Fast, { model: "gpt-5.4-mini" });
+```
+
 `AI.DefaultModel(Smart)` is required by every process. A mentioned model can be chosen at `start`, per message (`{ model: Fast }`), or by a session when it starts another.
 
-More: [Back it with an LLM](https://alchemy.run/ai/models#back-it-with-an-llm), [Set the default model](https://alchemy.run/ai/models#set-the-default-model).
+More: [Back it with an LLM](https://alchemy.run/ai/models#back-it-with-an-llm), [Use Anthropic](https://alchemy.run/ai/models#use-anthropic), [Use OpenAI](https://alchemy.run/ai/models#use-openai), [Set the default model](https://alchemy.run/ai/models#set-the-default-model).
 
 ## An MCP server
 

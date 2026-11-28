@@ -125,7 +125,7 @@ spec.paths["/DepositMoney"].post.description;
 
 ## Live reads
 
-`watch` and `events` answer with Server-Sent Events. Each value the typed client would receive is one event, its JSON in `data`: `{ state, cursor }` for `watch`, then one per change, and for `events` each entry, a `CaughtUp` frame, then live entries. A browser reads them with `EventSource`:
+`watch` and `events` answer with Server-Sent Events. Each value the typed client would receive is one event, its JSON in `data`: `{ state, cursor, position }` for a view's `watch` (`{ state, cursor }` for a stream's), then one per change, and for `events` each entry, a `CaughtUp` frame, then live entries. A browser reads them with `EventSource`:
 
 ```typescript
 const summary = new EventSource(`/AccountSummary/${accountId}/watch`);

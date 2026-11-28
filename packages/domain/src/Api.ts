@@ -147,13 +147,14 @@ export interface ViewClient<V extends View.Any> {
     },
   ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]> | View.ConsistencyTimeout>;
   /**
-   * The key's state with its cursor, then every change. Ends with a rejection
-   * when `validate` stops allowing it.
+   * The key's state with its cursor and `position`, then every change, each
+   * frame read from one stored snapshot like {@link ViewClient.snapshot}'s.
+   * Ends with a rejection when `validate` stops allowing it.
    */
   readonly watch: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & { readonly where?: Filter<View.StateOf<V>> },
-  ) => Stream.Stream<Read.Snapshot<View.StateOf<V> | null>, ReadError<V["definition"]>>;
+  ) => Stream.Stream<Read.ViewSnapshot<View.StateOf<V> | null>, ReadError<V["definition"]>>;
   /**
    * The events the key emitted, each with the state after it: history from
    * `after` (a cursor), a {@link Read.CaughtUp} frame, then live events.
@@ -194,7 +195,15 @@ export interface ViewClient<V extends View.Any> {
   /**
    * The key's state and the cursor it is valid at, read together. Render the
    * state, then follow `events(key, { after: cursor })`: every later change
-   * arrives once, and none is missed.
+   * arrives once, and none is missed. `position` is the address of the last
+   * fact the key applied, read with the state (`null` before it applied one);
+   * each `watch` frame carries it too.
+   *
+   * **Example:** Say which fact a balance reflects
+   * ```typescript
+   * const { state, position } = yield* bank.AccountSummary.snapshot(accountId);
+   * return { accountId, balance: state?.balance ?? 0, asOf: position };
+   * ```
    */
   readonly snapshot: (
     key: Key.IdOf<View.KeyOf<V>>,
@@ -212,7 +221,7 @@ export interface ViewClient<V extends View.Any> {
       readonly where?: Filter<View.StateOf<V>>;
     },
   ) => Effect.Effect<
-    Read.Snapshot<View.StateOf<V> | null>,
+    Read.ViewSnapshot<View.StateOf<V> | null>,
     ReadError<V["definition"]> | View.ConsistencyTimeout
   >;
 }
@@ -960,7 +969,11 @@ const handlersOf = (
                 "watch",
                 refOf(id),
               )(state).pipe(
-                Effect.map(() => ({ state: visible(state, where), cursor: snapshot.seq })),
+                Effect.map(() => ({
+                  state: visible(state, where),
+                  cursor: snapshot.seq,
+                  position: snapshot.last ?? null,
+                })),
               );
             }),
           ),
@@ -990,7 +1003,11 @@ const handlersOf = (
         });
         handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
           judgedSnapshot(id, "get", atLeast).pipe(
-            Effect.map(({ state, cursor }) => ({ state: visible(state, where), cursor })),
+            Effect.map(({ state, cursor, position }) => ({
+              state: visible(state, where),
+              cursor,
+              position,
+            })),
           ),
         );
         handlers[`${name}.list`] = effect(

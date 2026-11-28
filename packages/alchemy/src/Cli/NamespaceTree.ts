@@ -1,6 +1,7 @@
 import { toPath } from "../FQN.ts";
 import type { BindingAction, CRUD, ActionApply, ActionDelete, Plan } from "../Plan.ts";
 import type { ProviderMode } from "../ProviderMode.ts";
+import { capabilityGroups, resourceGroups, type CapabilityGroup } from "./CapabilityRows.ts";
 import {
   formatDeclaredPropertyYaml,
   formatDriftPropertyYaml,
@@ -143,7 +144,7 @@ function deriveNamespaceAction(node: TreeNode): DerivedAction {
 }
 
 export interface FlattenedItem {
-  type: "namespace" | "resource" | "binding" | "action";
+  type: "namespace" | "resource" | "binding" | "action" | "capability";
   depth: number;
   id: string;
   path: string[];
@@ -151,6 +152,10 @@ export interface FlattenedItem {
   resourceType?: string;
   bindingSid?: string;
   bindingCount?: number;
+  /** For capability items: the row's kind (see `CapabilityRow`). */
+  capabilityKind?: string;
+  /** For a capability item: what a binding is bound to and reached through, or how a reference is used. */
+  capabilityDetail?: string;
   hasChildren?: boolean;
   /** For task items, the Task's Type (e.g. "Sync"). */
   actionType?: string;
@@ -242,15 +247,63 @@ const flattenNamespace = (
               )
             : undefined,
     });
-    for (const binding of [...resource.bindings].sort((a, b) => a.sid.localeCompare(b.sid))) {
+    const here = [...node.path, resource.resource.LogicalId];
+    const groups = capabilityGroups(resource.capabilities ?? []);
+    const hosted = new Set<string | undefined>();
+    const models = resourceGroups(resource.capabilities ?? []);
+    const modelOf = (sid: string) => models.find((model) => model.resources.includes(sid));
+    const bindings = [...resource.bindings].sort((a, b) => a.sid.localeCompare(b.sid));
+    const pushBinding = (binding: (typeof bindings)[number], at: number, label: string) => {
       result.push({
         type: "binding",
-        depth: depth + 1,
-        id: binding.sid,
-        path: [...node.path, resource.resource.LogicalId, binding.sid],
+        depth: at,
+        id: label,
+        path: [...here, binding.sid],
         action: binding.action,
         bindingSid: binding.sid,
       });
+      // What a Durable Object runs is drawn under its row.
+      for (const group of groups.filter((each) => each.host === binding.sid)) {
+        hosted.add(group.host);
+        pushCapabilities(group, at + 1, [...here, binding.sid], result);
+      }
+    };
+    for (const binding of bindings) {
+      if (modelOf(binding.sid) === undefined) pushBinding(binding, depth + 1, binding.sid);
+    }
+    // A Domain model's own resources are drawn together, under its name.
+    for (const model of models) {
+      const own = bindings.filter((binding) => model.resources.includes(binding.sid));
+      if (own.length === 0) continue;
+      result.push({
+        type: "capability",
+        depth: depth + 1,
+        id: model.term.name,
+        path: [...here, model.term.id],
+        action: "noop",
+        capabilityKind: "Term",
+        capabilityDetail: model.term.kind,
+      });
+      // Named `<Model>.<Piece>`, and `<Model>.<Piece>.<Part>` for what belongs
+      // to a piece: each is drawn by its last name, a part under its piece.
+      const prefix = `${model.term.name}.`;
+      const under = new Map<string, number>();
+      for (const binding of own) {
+        const within = own
+          .filter((each) => binding.sid.startsWith(`${each.sid}.`))
+          .sort((a, b) => b.sid.length - a.sid.length)[0];
+        const at = within === undefined ? depth + 2 : (under.get(within.sid) ?? depth + 2) + 1;
+        under.set(binding.sid, at);
+        const outer = within === undefined ? prefix : `${within.sid}.`;
+        pushBinding(
+          binding,
+          at,
+          binding.sid.startsWith(outer) ? binding.sid.slice(outer.length) : binding.sid,
+        );
+      }
+    }
+    for (const group of groups.filter((each) => !hosted.has(each.host))) {
+      pushCapabilities(group, depth + 1, here, result);
     }
     if (childNamespace) {
       flattenNamespace(childNamespace, depth + 1, result, options);
@@ -269,6 +322,26 @@ const flattenNamespace = (
       path: [...node.path, action.def.LogicalId],
       action: action.action,
       actionType: action.def.Type,
+    });
+  }
+};
+
+/** The rows of what one host runs, as items of the plan tree. */
+const pushCapabilities = (
+  group: CapabilityGroup,
+  depth: number,
+  path: ReadonlyArray<string>,
+  result: FlattenedItem[],
+): void => {
+  for (const row of group.rows) {
+    result.push({
+      type: "capability",
+      depth: depth + row.depth,
+      id: row.label,
+      path: [...path, row.key],
+      action: "noop",
+      capabilityKind: row.kind,
+      ...(row.detail === undefined ? {} : { capabilityDetail: row.detail }),
     });
   }
 };

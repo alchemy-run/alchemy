@@ -8,7 +8,11 @@ import {
   type InlineDurableObjectProps,
 } from "@alchemy.run/cloudflare/Workers/DurableObject";
 import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
-import { makeRpcStub } from "@alchemy.run/cloudflare/Workers/Rpc";
+import {
+  namespaceFromBinding,
+  type ObjectPlacement,
+  placeObjects,
+} from "@alchemy.run/cloudflare/Workers/ObjectHost";
 import { Worker as CloudflareWorker, type Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import {
   deferredExecutionContext,
@@ -21,6 +25,7 @@ import {
   Workflow,
   type WorkflowImpl,
 } from "@alchemy.run/cloudflare/Workflows/Workflow";
+import { hostedBy, own } from "alchemy/CapabilityGraph";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine, provideCallbacks } from "alchemy/Workers/DurableObjectEngine";
 import { StorageName } from "alchemy/Workflows";
@@ -79,34 +84,8 @@ export { D1KeyStore, type D1KeyStoreOptions } from "./D1KeyStore.ts";
 export { providers, Providers, type ProviderRequirements } from "./Providers.ts";
 export { SecretKeyWrap } from "./SecretKeyWrap.ts";
 
-/** Where the platform keeps the model's Durable Objects. */
-interface Placement {
-  readonly jurisdiction: DurableObjectJurisdiction | undefined;
-  readonly locationHint: DurableObjectLocationHint | undefined;
-}
-
-/**
- * A namespace whose objects live in the platform's jurisdiction and are
- * created near its location hint. Every namespace Domain reaches goes
- * through here, so no kind of object is left outside either.
- */
-const placed = (namespace: CloudflareNamespace, placement: Placement): CloudflareNamespace => {
-  const inside =
-    placement.jurisdiction === undefined
-      ? namespace
-      : namespace.jurisdiction(placement.jurisdiction);
-  return placement.locationHint === undefined ? inside : hinted(inside, placement.locationHint);
-};
-
-/** A namespace that creates each new object near `locationHint`. */
-const hinted = (
-  namespace: CloudflareNamespace,
-  locationHint: DurableObjectLocationHint,
-): CloudflareNamespace => ({
-  ...namespace,
-  getByName: (name, options) => namespace.getByName(name, { locationHint, ...options }),
-  jurisdiction: (inside) => hinted(namespace.jurisdiction(inside), locationHint),
-});
+type Placement = ObjectPlacement;
+const placed = placeObjects;
 
 /**
  * Hand `effect` to the current invocation's `waitUntil`: the Durable Object's
@@ -297,6 +276,14 @@ const retiring = (
         });
       });
 
+/** For a plan: a route's old classes, and their retirement, are resources of its model. */
+const ownLegacy = (modelName: string, route: string, legacy: ReadonlyArray<LegacyClass>) =>
+  Effect.forEach(
+    [...legacy.map((each) => each.binding), `${route}.Retiring`],
+    (binding) => own("Model", modelName, binding),
+    { discard: true },
+  );
+
 /**
  * A saga's run objects, listed in their model's directory as they start, like
  * every other object of the model: a later layout change finds each run
@@ -351,14 +338,8 @@ const cloudflareHost = (
 ): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.unwrap(
     Effect.gen(function* () {
-      /** A Durable Object namespace from the Worker's bindings, placed as the platform says. */
-      const fromBinding = (native: any): CloudflareNamespace => {
-        const wrap = (namespace: any): CloudflareNamespace => ({
-          getByName: (name, options) => makeRpcStub(namespace.getByName(name, options)) as never,
-          jurisdiction: (inside) => wrap(namespace.jurisdiction(inside)),
-        });
-        return placed(wrap(native), placement);
-      };
+      const fromBinding = (native: any): CloudflareNamespace =>
+        namespaceFromBinding(native, placement);
       // The Worker's bindings, at runtime: see `lookup`.
       const env = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment));
       /** A model's class name on the Worker: `Bank.AccountAggregate` (or the bare name before versions). */
@@ -388,25 +369,47 @@ const cloudflareHost = (
       const host: Host<Worker> = {
         // Every kind of object is declared through here, so none is left
         // outside the jurisdiction or the location hint.
-        declare: ({ modelName, legacyData }, name, impl) =>
-          oneClass === undefined
-            ? Effect.map(
-                declare(
-                  named(modelName, name),
-                  renamedFrom(version, legacyData, name),
-                  onCloudflare(impl),
+        declare: ({ modelName, legacyData }, name, impl, runs) =>
+          // For a plan: this object's class is a resource of the model, and
+          // what it runs is listed under the piece's own binding.
+          Effect.andThen(
+            Effect.all(
+              [
+                own(
+                  "Model",
+                  modelName,
+                  oneClass === undefined ? named(modelName, name) : domainClassName(modelName),
                 ),
-                (namespace) => placed(namespace, placement),
-              )
-            : Effect.gen(function* () {
-                const shared = yield* sharedOf(oneClass, modelName);
-                const route = className(modelName, name);
-                // The old classes stay declared while their objects move over.
-                const legacy = yield* legacyClasses(modelName, route, legacyData, name);
-                yield* retiring(modelName, route, legacy, backfillTimeoutSeconds);
-                const namespace = yield* shared.object(route, onCloudflare(impl), legacy);
-                return placed(namespace, placement);
-              }),
+                runs === undefined
+                  ? Effect.void
+                  : hostedBy(
+                      runs.kind,
+                      runs.name,
+                      oneClass === undefined ? named(modelName, name) : className(modelName, name),
+                    ),
+              ],
+              { discard: true },
+            ),
+            oneClass === undefined
+              ? Effect.map(
+                  declare(
+                    named(modelName, name),
+                    renamedFrom(version, legacyData, name),
+                    onCloudflare(impl),
+                  ),
+                  (namespace) => placed(namespace, placement),
+                )
+              : Effect.gen(function* () {
+                  const shared = yield* sharedOf(oneClass, modelName);
+                  const route = className(modelName, name);
+                  // The old classes stay declared while their objects move over.
+                  const legacy = yield* legacyClasses(modelName, route, legacyData, name);
+                  yield* retiring(modelName, route, legacy, backfillTimeoutSeconds);
+                  yield* ownLegacy(modelName, route, legacy);
+                  const namespace = yield* shared.object(route, onCloudflare(impl), legacy);
+                  return placed(namespace, placement);
+                }),
+          ),
         lookup: ({ modelName }, name) => {
           // A route this isolate's model hosts, or (code that doesn't build the model) any.
           const shared = oneClass?.shared.get(modelName);
@@ -475,6 +478,7 @@ const cloudflareHost = (
         // waits until every one is complete. Reconciliation starts it and waits.
         backfill: ({ modelName }, plansOf) =>
           Effect.gen(function* () {
+            yield* own("Model", modelName, named(modelName, "DomainBackfill"));
             const backfill = yield* Workflow(
               named(modelName, "DomainBackfill"),
               Effect.succeed(
@@ -779,6 +783,7 @@ const sagaEngine = (
         const shared = yield* sharedOf(oneClass, saga.modelName);
         const legacy = yield* legacyClasses(saga.modelName, name, saga.legacyData, saga.legacyName);
         yield* retiring(saga.modelName, name, legacy, timeoutSeconds);
+        yield* ownLegacy(saga.modelName, name, legacy);
         const namespace = yield* shared.object(
           name,
           listedRuns(oneClass, saga.modelName, saga.saga, cloudflareImpl),

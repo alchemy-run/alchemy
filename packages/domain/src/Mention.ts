@@ -289,6 +289,8 @@ export const of = (model: Model.Any, entries: Entries): Mention<unknown, unknown
           return {
             "~alchemy/AI/Tool": "inline",
             toolName: name,
+            // What a plan lists the mention as: a piece of the model, not a tool.
+            refers: { relation: op.operation, kind: "Domain", name: `${api.apiName}.${op.name}` },
             spec: command ? { ...spec, parameters: withoutCommandId(op.rpc.payloadSchema) } : spec,
             handler: (payload: unknown) =>
               Effect.gen(function* () {

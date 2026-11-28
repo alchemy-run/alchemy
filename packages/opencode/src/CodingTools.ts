@@ -1,8 +1,16 @@
 import * as AI from "@alchemy.run/ai";
-import { Sandbox } from "@alchemy.run/ai/Sandbox";
+import { Sandbox, Sandboxes } from "@alchemy.run/ai/Sandbox";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+
+/**
+ * A tool whose calls run in the session's sandbox. Its handler asks for the
+ * sandbox when it is called, so the place sandboxes come from is looked up
+ * here, while the tool is built: a plan then lists it as what the tool reaches.
+ */
+const inSandbox = <Handler>(handler: Handler) =>
+  Effect.as(Effect.serviceOption(Sandboxes), handler);
 
 /** The most of a command's output or a file the model is given. */
 const MAX_CHARS = 30_000;
@@ -33,17 +41,19 @@ export const Bash = AI.Bash.make(
       stderr: Schema.String,
     }),
   },
-  Effect.fn(function* ({ command, timeout }) {
-    const sandbox = yield* Sandbox;
-    const result = yield* sandbox
-      .exec(["bash", "-lc", command], { timeout: (timeout ?? 120) * 1000 })
-      .pipe(Effect.orDie);
-    return {
-      exitCode: result.exitCode,
-      stdout: tail(result.stdout),
-      stderr: tail(result.stderr),
-    };
-  }),
+  inSandbox(
+    Effect.fn(function* ({ command, timeout }) {
+      const sandbox = yield* Sandbox;
+      const result = yield* sandbox
+        .exec(["bash", "-lc", command], { timeout: (timeout ?? 120) * 1000 })
+        .pipe(Effect.orDie);
+      return {
+        exitCode: result.exitCode,
+        stdout: tail(result.stdout),
+        stderr: tail(result.stderr),
+      };
+    }),
+  ),
 );
 
 /** `AI.Read` for OpenCode: a text file from the sandbox, with line numbers. */
@@ -67,20 +77,22 @@ export const Read = AI.Read.make(
     }),
     replay: "safe",
   },
-  Effect.fn(function* ({ path, offset, limit }) {
-    const sandbox = yield* Sandbox;
-    const all = (yield* sandbox.readTextFile(path).pipe(Effect.orDie)).split("\n");
-    const first = Math.max(1, offset ?? 1);
-    return {
-      content: tail(
-        all
-          .slice(first - 1, first - 1 + (limit ?? 2000))
-          .map((line, index) => `${first + index}\t${line}`)
-          .join("\n"),
-      ),
-      lines: all.length,
-    };
-  }),
+  inSandbox(
+    Effect.fn(function* ({ path, offset, limit }) {
+      const sandbox = yield* Sandbox;
+      const all = (yield* sandbox.readTextFile(path).pipe(Effect.orDie)).split("\n");
+      const first = Math.max(1, offset ?? 1);
+      return {
+        content: tail(
+          all
+            .slice(first - 1, first - 1 + (limit ?? 2000))
+            .map((line, index) => `${first + index}\t${line}`)
+            .join("\n"),
+        ),
+        lines: all.length,
+      };
+    }),
+  ),
 );
 
 /** `AI.Write` for OpenCode: a whole file in the sandbox, with its directories. */
@@ -94,14 +106,16 @@ export const Write = AI.Write.make(
     }),
     success: Schema.Struct({ bytes: Schema.Number }),
   },
-  Effect.fn(function* ({ path, content }) {
-    const sandbox = yield* Sandbox;
-    yield* sandbox
-      .exec(["sh", "-c", 'mkdir -p "$(dirname "$1")"', "mkdir", path])
-      .pipe(Effect.orDie);
-    yield* sandbox.writeFile(path, content).pipe(Effect.orDie);
-    return { bytes: new TextEncoder().encode(content).length };
-  }),
+  inSandbox(
+    Effect.fn(function* ({ path, content }) {
+      const sandbox = yield* Sandbox;
+      yield* sandbox
+        .exec(["sh", "-c", 'mkdir -p "$(dirname "$1")"', "mkdir", path])
+        .pipe(Effect.orDie);
+      yield* sandbox.writeFile(path, content).pipe(Effect.orDie);
+      return { bytes: new TextEncoder().encode(content).length };
+    }),
+  ),
 );
 
 /** `AI.Edit` for OpenCode: replace exact text in a file in the sandbox. */
@@ -116,24 +130,26 @@ export const Edit = AI.Edit.make(
     }),
     success: Schema.Struct({ bytes: Schema.Number }),
   },
-  Effect.fn(function* ({ path, oldText, newText }) {
-    const sandbox = yield* Sandbox;
-    const before = yield* sandbox.readTextFile(path).pipe(Effect.orDie);
-    const found = before.split(oldText).length - 1;
-    if (oldText.length === 0 || found !== 1) {
-      return yield* Effect.die(
-        new Error(
-          found === 0
-            ? `oldText was not found in ${path}`
-            : `oldText matches ${found} places in ${path}: add surrounding lines so it matches one`,
-        ),
-      );
-    }
-    const index = before.indexOf(oldText);
-    const after = `${before.slice(0, index)}${newText}${before.slice(index + oldText.length)}`;
-    yield* sandbox.writeFile(path, after).pipe(Effect.orDie);
-    return { bytes: new TextEncoder().encode(after).length };
-  }),
+  inSandbox(
+    Effect.fn(function* ({ path, oldText, newText }) {
+      const sandbox = yield* Sandbox;
+      const before = yield* sandbox.readTextFile(path).pipe(Effect.orDie);
+      const found = before.split(oldText).length - 1;
+      if (oldText.length === 0 || found !== 1) {
+        return yield* Effect.die(
+          new Error(
+            found === 0
+              ? `oldText was not found in ${path}`
+              : `oldText matches ${found} places in ${path}: add surrounding lines so it matches one`,
+          ),
+        );
+      }
+      const index = before.indexOf(oldText);
+      const after = `${before.slice(0, index)}${newText}${before.slice(index + oldText.length)}`;
+      yield* sandbox.writeFile(path, after).pipe(Effect.orDie);
+      return { bytes: new TextEncoder().encode(after).length };
+    }),
+  ),
 );
 
 /**
@@ -176,26 +192,28 @@ export const Grep = AI.Grep.make(
     success: Found,
     replay: "safe",
   },
-  Effect.fn(function* ({ pattern, path, include }) {
-    const sandbox = yield* Sandbox;
-    const result = yield* sandbox
-      .exec([
-        "bash",
-        "-c",
-        `${HOME_PATH}; shift; exec grep -rnE --exclude-dir=.git --exclude-dir=node_modules "$@" "$p"`,
-        "grep",
-        path ?? ".",
-        ...(include === undefined ? [] : [`--include=${include}`]),
-        "--",
-        pattern,
-      ])
-      .pipe(Effect.orDie);
-    // grep exits 1 when nothing matches, and 2 when it could not search.
-    if (result.exitCode > 1) {
-      return yield* Effect.die(new Error(result.stderr.trim() || "grep could not search"));
-    }
-    return lines(result.stdout);
-  }),
+  inSandbox(
+    Effect.fn(function* ({ pattern, path, include }) {
+      const sandbox = yield* Sandbox;
+      const result = yield* sandbox
+        .exec([
+          "bash",
+          "-c",
+          `${HOME_PATH}; shift; exec grep -rnE --exclude-dir=.git --exclude-dir=node_modules "$@" "$p"`,
+          "grep",
+          path ?? ".",
+          ...(include === undefined ? [] : [`--include=${include}`]),
+          "--",
+          pattern,
+        ])
+        .pipe(Effect.orDie);
+      // grep exits 1 when nothing matches, and 2 when it could not search.
+      if (result.exitCode > 1) {
+        return yield* Effect.die(new Error(result.stderr.trim() || "grep could not search"));
+      }
+      return lines(result.stdout);
+    }),
+  ),
 );
 
 /** `AI.Glob` for OpenCode: a `bash` glob in the sandbox. */
@@ -211,28 +229,30 @@ export const Glob = AI.Glob.make(
     success: Found,
     replay: "safe",
   },
-  Effect.fn(function* ({ pattern, path }) {
-    const sandbox = yield* Sandbox;
-    const result = yield* sandbox
-      .exec([
-        "bash",
-        "-O",
-        "globstar",
-        "-O",
-        "nullglob",
-        "-c",
-        // An empty IFS keeps a pattern with spaces whole while it still expands.
-        `${HOME_PATH}; cd "$p" && IFS= && printf "%s\\n" $2`,
-        "glob",
-        path ?? ".",
-        pattern,
-      ])
-      .pipe(Effect.orDie);
-    if (result.exitCode !== 0) {
-      return yield* Effect.die(new Error(result.stderr.trim() || "glob could not search"));
-    }
-    return lines(result.stdout);
-  }),
+  inSandbox(
+    Effect.fn(function* ({ pattern, path }) {
+      const sandbox = yield* Sandbox;
+      const result = yield* sandbox
+        .exec([
+          "bash",
+          "-O",
+          "globstar",
+          "-O",
+          "nullglob",
+          "-c",
+          // An empty IFS keeps a pattern with spaces whole while it still expands.
+          `${HOME_PATH}; cd "$p" && IFS= && printf "%s\\n" $2`,
+          "glob",
+          path ?? ".",
+          pattern,
+        ])
+        .pipe(Effect.orDie);
+      if (result.exitCode !== 0) {
+        return yield* Effect.die(new Error(result.stderr.trim() || "glob could not search"));
+      }
+      return lines(result.stdout);
+    }),
+  ),
 );
 
 /**

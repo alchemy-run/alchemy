@@ -2,6 +2,7 @@
 title: Models
 description: Name a model once with AI.Model and back it with any Effect AI LanguageModel Layer, so a harness changes LLM by changing one Layer.
 ---
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 A harness runs each conversation on a model. `AI.Model` gives a model a name, and an Effect AI `LanguageModel` Layer says which LLM answers under that name. Conversations store the name, so the LLM behind it can change without touching them.
 
@@ -56,6 +57,68 @@ export const FastLive = AICloudflare.Model(Fast, {
 ```
 
 See [AI Gateway](/cloudflare/ai/ai-gateway).
+
+## Use Anthropic
+
+`AIAnthropic.Model` backs a model with one of Anthropic's, through Effect AI's `@effect/ai-anthropic`:
+
+<PackageManagers add="@effect/ai-anthropic" />
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AIAnthropic from "@alchemy.run/ai/Anthropic";
+
+export class Smart extends AI.Model<Smart>()("smart", { contextWindow: 200_000 }) {}
+
+export const SmartLive = AIAnthropic.Model(Smart, { model: "claude-opus-5-5" });
+```
+
+It reads its key from `ANTHROPIC_API_KEY` while the runtime is constructed, so the deploy binds it as a [secret](/environments/secrets). Pass `apiKey` to name it yourself, and `parameters` for what every request is made with:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AIAnthropic from "@alchemy.run/ai/Anthropic";
+import * as Config from "effect/Config";
+
+export class Smart extends AI.Model<Smart>()("smart", { contextWindow: 200_000 }) {}
+
+export const SmartLive = AIAnthropic.Model(Smart, {
+  model: "claude-opus-5-5",
+  apiKey: Config.Redacted("TEAM_ANTHROPIC_API_KEY"),
+  parameters: { temperature: 0 },
+});
+```
+
+## Use OpenAI
+
+`AIOpenAI.Model` backs a model with one of OpenAI's, through Effect AI's `@effect/ai-openai`:
+
+<PackageManagers add="@effect/ai-openai" />
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AIOpenAI from "@alchemy.run/ai/OpenAI";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AIOpenAI.Model(Fast, { model: "gpt-5.4-mini" });
+```
+
+It reads its key from `OPENAI_API_KEY` while the runtime is constructed, so the deploy binds it as a [secret](/environments/secrets). Pass `apiKey` to name it yourself, and `parameters` for what every request is made with:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AIOpenAI from "@alchemy.run/ai/OpenAI";
+import * as Config from "effect/Config";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AIOpenAI.Model(Fast, {
+  model: "gpt-5.4-mini",
+  apiKey: Config.Redacted("TEAM_OPENAI_API_KEY"),
+  parameters: { temperature: 0 },
+});
+```
 
 ## Use another provider
 

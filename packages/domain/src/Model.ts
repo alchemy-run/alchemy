@@ -52,7 +52,7 @@ import {
   type StreamMeta,
   type StreamStore,
   type ViewEntry,
-  type ViewSnapshot,
+  type StoredViewSnapshot,
   type ViewStore,
   runDirectly,
   RunWait,
@@ -113,7 +113,7 @@ export class Internals extends Context.Service<
      *
      * "Applied" is what the view key's stored checkpoints say, so the
      * guarantee is only as strong as the platform's: see
-     * `ViewSnapshot.checkpoints` for what a platform with read replicas owes.
+     * `StoredViewSnapshot.checkpoints` for what a platform with read replicas owes.
      */
     readonly applied: (
       receipt: Aggregate.Receipt,
@@ -1622,7 +1622,7 @@ const decisionClient = (
 const decodeSnapshot = (
   kernel: Kernel.Kernel,
   view: View.Any,
-  snapshot: ViewSnapshot,
+  snapshot: StoredViewSnapshot,
 ): Option.Option<unknown> =>
   snapshot.state === null
     ? Option.none()
@@ -1723,6 +1723,7 @@ const viewHost = (
         Effect.map((snapshot) => ({
           state: Option.getOrNull(decodeSnapshot(kernel, view, snapshot)),
           cursor: snapshot.seq,
+          position: snapshot.last ?? null,
         })),
       ),
     waitFor: (key, where, options) =>
@@ -2030,7 +2031,7 @@ interface AppliedKey {
   readonly key: string;
   /** The position it had to reach on each source stream. */
   readonly streams: ReadonlyMap<string, number>;
-  readonly snapshot: ViewSnapshot;
+  readonly snapshot: StoredViewSnapshot;
   /** Its cursor before it applied them; `undefined` if it had when first read. */
   readonly before: number | undefined;
 }
@@ -2125,7 +2126,7 @@ const follow = (route: Route, receipt: CaughtUpReceipt, timeout: Duration.Input 
           only === undefined ? waits : [...waits].filter(([key]) => key === only),
           ([key, streams]) =>
             Effect.gen(function* () {
-              const missing = (snapshot: ViewSnapshot) =>
+              const missing = (snapshot: StoredViewSnapshot) =>
                 [...streams].find(([stream, seq]) => (snapshot.checkpoints[stream] ?? 0) < seq);
               const first = yield* viewStore.read(key);
               const unapplied = missing(first);

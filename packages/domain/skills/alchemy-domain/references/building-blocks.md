@@ -549,7 +549,9 @@ Clients call commands and queries as methods (`bank.WithdrawMoney({ accountId, a
 
 Give every declaration a `{ description }` as its last argument, written for the person or agent who calls it; `toMcp` tools, `toCli` help and the `toHttpApi` OpenAPI document show it. Add your own keys by augmenting `Domain.Annotations` (`declare module "@alchemy.run/domain"`), and read them as `X.annotations`.
 
-More: [Api](https://alchemy.run/domain/api), [Annotations](https://alchemy.run/domain/annotations).
+A view's `snapshot`, and every frame of its `watch`, also carries `position`, the last fact the key applied (`null` before any), to cite what a read reflects.
+
+More: [Api](https://alchemy.run/domain/api), [Annotations](https://alchemy.run/domain/annotations), [View: Say which fact a snapshot reflects](https://alchemy.run/domain/view#say-which-fact-a-snapshot-reflects).
 
 An Api is the domain's interface for its own clients. For a public or partner API, write a separate `HttpApi` with its own response schemas that calls the Api in process; see [hosting.md](hosting.md#public-and-partner-apis). `toHttpApi`, `toMcp` and `toCli` publish only the calls their `expose` option lists, as the domain shapes them, which is convenient for internal tools only; see [hosting.md](hosting.md#conveniences-for-internal-tools).
 
@@ -578,6 +580,6 @@ export const BankHandlers = Layer.mergeAll(
 
 `Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()`.
 
-An AI process is not a member, and Domain knows nothing of one. A policy holds it (`yield* Assistant`), so the policy's Layer requires it. A host gives it each session, `AICloudflare.layerDurableObjects` or `AI.layerInMemory`, and is given the model its prose mentions. That prose and the model lead to each other, so the model takes its members as a thunk, `Domain.Model("Bank", () => ({ ... }))`. See the `alchemy-ai` skill's `references/domain.md`.
+An AI process is not a member, and Domain knows nothing of one. A policy holds it (`yield* Assistant`), so the policy's Layer requires it. A host gives it each session, `AICloudflare.ProcessSessions` or `AI.layerInMemory`, and is given the model its prose mentions. That prose and the model lead to each other, so the model takes its members as a thunk, `Domain.Model("Bank", () => ({ ... }))`. See the `alchemy-ai` skill's `references/domain.md`.
 
 More: [Domain Model: Declare the model](https://alchemy.run/domain/model#declare-the-model), [Processes and Domain models](https://alchemy.run/ai/domain).
