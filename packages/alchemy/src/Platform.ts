@@ -280,6 +280,20 @@ export interface Platform<
     PlatformIdentity<Id>;
 }
 
+/** A graph, and how a runtime's build is observed into it. */
+const makeRecorder = () => {
+  const graph = makeCapabilityGraph();
+  const memoMap = observeLayerBuilds(Layer.makeMemoMapUnsafe(), graph);
+  return {
+    graph,
+    observe: <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+      observeLookups(graph)(effect).pipe(
+        Effect.provideService(CapabilityGraph, graph),
+        Effect.provideService(Layer.CurrentMemoMap, memoMap),
+      ),
+  };
+};
+
 export const Platform = <
   R extends ResourceLike<
     string,
@@ -506,8 +520,9 @@ export const Platform = <
         // memo map, `Effect.provide` inside the program included, gets a
         // frame; every service the program looks up and every binding it
         // binds lands on the frame current at that moment.
-        const graph = makeCapabilityGraph();
-        const memoMap = observeLayerBuilds(Layer.makeMemoMapUnsafe(), graph);
+        // A deployed runtime records nothing: the bundler folds the flag, and
+        // the recorder is left out of the bundle.
+        const recorder = globalThis.__ALCHEMY_RUNTIME__ ? undefined : makeRecorder();
         // build the Layer once for the root Self
         const SelfLayer = Layer.effect(
           Self,
@@ -537,14 +552,10 @@ export const Platform = <
               // handlers, where the bridge provides a per-event scope.
               const buildScope = yield* Effect.scope;
               // Only a plan records: at runtime the same build runs unobserved.
-              const planning = (yield* ALCHEMY_PHASE) === "plan";
+              const recording =
+                recorder !== undefined && (yield* ALCHEMY_PHASE) === "plan" ? recorder : undefined;
               const recorded = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-                planning
-                  ? observeLookups(graph)(effect).pipe(
-                      Effect.provideService(CapabilityGraph, graph),
-                      Effect.provideService(Layer.CurrentMemoMap, memoMap),
-                    )
-                  : effect;
+                recording === undefined ? effect : recording.observe(effect);
               const instance = Object.assign(
                 yield* resource(id, props as any).pipe(
                   Effect.flatMap(
@@ -677,8 +688,8 @@ export const Platform = <
                 ),
               );
 
-              if (planning) {
-                const reached = graph.describe();
+              if (recording !== undefined) {
+                const reached = recording.graph.describe();
                 if (reached.length > 0) {
                   const stack = yield* Stack;
                   (stack.capabilities ??= {})[instance.FQN] = reached;
