@@ -153,9 +153,16 @@ export interface AgentOptions {
   readonly instructions?: string | null;
   /** The working directory tools start in. */
   readonly cwd?: string | null;
-  /** Tool rounds one run may take before it ends unanswered. */
+  /**
+   * Tool rounds one run may take before it ends unanswered. `null` is no
+   * limit: a model that keeps calling a tool that keeps failing never stops.
+   * @default 100
+   */
   readonly maxTurns?: number | null;
 }
+
+/** The tool rounds a run may take when nothing says otherwise. */
+const DEFAULT_MAX_TURNS = 100;
 
 /** A submission: an input, a passive write, or a continue. */
 export type SubmissionDraft =
@@ -936,10 +943,12 @@ export const Harness = <
       });
 
     const defaultModel = models[0]?.model;
-    const withDefaults = (agent: AgentOptions): AgentOptions =>
-      agent.model === undefined && defaultModel !== undefined
-        ? { ...agent, model: defaultModel }
-        : agent;
+    const withDefaults = (agent: AgentOptions): AgentOptions => ({
+      ...agent,
+      ...(agent.model === undefined && defaultModel !== undefined ? { model: defaultModel } : {}),
+      // Pi's own default is no limit, and a run that never ends is resumed forever.
+      ...(agent.maxTurns === undefined ? { maxTurns: DEFAULT_MAX_TURNS } : {}),
+    });
 
     /** The tools a conversation has enabled now, by name. */
     const enabledTools = (conversation: PiConversation) =>

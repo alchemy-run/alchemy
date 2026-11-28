@@ -113,7 +113,7 @@ test("creating by name and submitting by request id are idempotent", async () =>
   expect(await chat<Record<string, number>>("twice", "list")).toMatchObject({ twice: id });
 }, 180_000);
 
-test("an inline tool writes through its Durable Object's binding, and a hook can block it", async () => {
+test("a tool implemented on its class writes through its own binding, and a hook can block it", async () => {
   await create("notes", ["save_note"]);
   const saved = await prompt("notes", "Remember this: save the text 'teal' under the key 'color'.");
   expect(toolResults(saved, "save_note")).toMatchObject([{ isError: false }]);

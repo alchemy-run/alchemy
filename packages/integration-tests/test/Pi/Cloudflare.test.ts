@@ -167,7 +167,7 @@ test(
 );
 
 test(
-  "an inline tool closes over the Durable Object's KV binding",
+  "a tool implemented on its class uses the KV binding it bound",
   Effect.gen(function* () {
     const user = `user-${Date.now()}`;
     yield* call(`/${user}/notes/create`, { tools: ["save_note"] });
@@ -180,6 +180,33 @@ test(
     expect(String(note.text).toLowerCase()).toContain("teal");
   }),
   { tags, timeout: 180_000 },
+);
+
+test(
+  "a run whose tool always dies ends at the round limit",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    yield* call(`/${user}/blast/create`, { tools: ["explode"] });
+    // The model is told to keep at it, and every call dies.
+    const result = yield* call(`/${user}/blast/prompt`, {
+      text: "Set off the charge: it must go off, so use explode.",
+      requestId: "blast-1",
+    });
+    expect(result.status).toBe("unanswered");
+    const results = (yield* call(`/${user}/blast/results`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+      text: string;
+    }>;
+    // Each death is the model's error result, and the rounds stop at the limit.
+    expect(results[0]).toEqual({
+      tool: "explode",
+      isError: true,
+      text: "<harness>\n[error] the charge was wet\n</harness>",
+    });
+    expect(results.length).toBeLessThanOrEqual(100);
+  }),
+  { tags, timeout: 300_000 },
 );
 
 test(

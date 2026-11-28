@@ -1,6 +1,6 @@
 ---
 title: Tools
-description: Declare a tool with AI.Tool — its parameters, what it returns and how it fails — and implement it as a Layer or inline, on any harness.
+description: Declare a tool with AI.Tool — its parameters, what it returns and how it fails — and implement it as a Layer or on the class, on any harness.
 ---
 
 A tool is a function the model can call. The model sees its name, its description and the JSON Schema of its parameters, and decides when to call it. The call runs in your harness, as an Effect, with whatever bindings your Durable Object has.
@@ -160,27 +160,47 @@ The model reads a failure as the tool's error result, encoded by the schema, and
 
 Anything else a handler hits is a defect: use `Effect.orDie` on errors the model can do nothing about, and the harness reports the failed call to the model in its own words.
 
-## Declare a tool inline
+## Implement a tool on its class
 
-A tool can be a value, declared where its bindings are in scope:
+A class can carry its implementation. Give it the Effect you would give `make`, which binds what the tool uses and returns the handler:
 
 ```typescript
-const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
-
-const SaveNote = AI.Tool(
+export class SaveNote extends AI.Tool<SaveNote>()(
   "save_note",
   {
     description: "Save a note the user can read later.",
     parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
     success: Schema.Void,
   },
-  Effect.fn(function* ({ key, text }) {
-    yield* notes.put(key, text).pipe(Effect.orDie);
+  Effect.gen(function* () {
+    const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+    return Effect.fn(function* ({ key, text }) {
+      yield* notes.put(key, text).pipe(Effect.orDie);
+    });
   }),
-);
+) {}
 ```
 
-An inline tool has no Layer to provide. Mention it, or list it on a harness, like any other.
+The tool has no Layer to provide. Mention it, or list it on a harness, like any other. What its Effect requires, the harness requires.
+
+## A tool uses only what it binds
+
+A plan lists each tool with the bindings it binds while it is built:
+
+```
+[Session]   Tool save_note
+[Session]     · Cloudflare.KVNamespace.ReadWrite Cloudflare.KV.Namespace(Notes)
+```
+
+That list is also the limit when the tool runs. A handler that uses a client bound somewhere else, one it was handed or closed over, fails on that call:
+
+```
+CapabilityDenied: Tool save_note used Cloudflare.KVNamespace.ReadWrite on
+Cloudflare.KV.Namespace(Notes), which the plan does not list under it.
+Bind it where the tool is built.
+```
+
+So bind inside the tool: in the Effect given to `make`, or to the class. A service the tool looks up while it is built counts too, with whatever that service's Layer bound.
 
 ## Know which call is running
 

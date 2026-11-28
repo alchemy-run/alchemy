@@ -19,6 +19,8 @@ const conversation = yield* harness.createConversation({
 
 Creating a name that exists returns the existing conversation unchanged, so the call is safe to repeat. `model`, `tools`, `extensions`, `instructions`, `cwd` and `maxTurns` each fall back to the harness's default when left out.
 
+A run takes at most 100 tool rounds, then ends unanswered. That stops a model that keeps calling a tool that keeps failing. Set `maxTurns` to change the limit, or to `null` for none.
+
 ## Submit an input
 
 `submit` stores the input and returns a submission. The run that answers it goes on in the object:

@@ -1,3 +1,4 @@
+import { framed, refer } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -22,7 +23,7 @@ import { isModel, type AnyModel, type ModelClass } from "./Model.ts";
 import type { SessionState } from "./Session.ts";
 import {
   isToolGroup,
-  Tool,
+  ownTool,
   ToolCall,
   type AnyTool,
   type InlineTool,
@@ -529,7 +530,7 @@ const childTools = (
   const cached = known.tools.get(child.name);
   if (cached !== undefined) return cached;
   const id = snake(child.name);
-  const start = Tool(
+  const start = ownTool(
     `start_${id}`,
     {
       description: `Start a session of the ${child.name} process: ${child.description} It runs on its own, apart from this conversation. Returns the session's name.`,
@@ -575,7 +576,7 @@ const childTools = (
       return { session };
     }),
   );
-  const send = Tool(
+  const send = ownTool(
     `send_${id}`,
     {
       description: `Send a message to a session of the ${child.name} process that was started earlier.`,
@@ -608,7 +609,15 @@ const childTools = (
  * mentions, tell the harness, and return its client. Runs where the
  * process's Layer is built, so every mention's service is at hand.
  */
+/**
+ * A process is built under its own frame (alchemy's CapabilityGraph), so a
+ * plan lists it with the tools it mentions and the bindings each reaches. A
+ * process it follows or starts is built inside it, and listed under it.
+ */
 const compile = (definition: Definition): Effect.Effect<ProcessService<any>, never, any> =>
+  framed("Process", definition.name)(compileUnframed(definition));
+
+const compileUnframed = (definition: Definition): Effect.Effect<ProcessService<any>, never, any> =>
   Effect.gen(function* () {
     const harness = yield* Harness;
     let known = knownBy.get(harness);
@@ -733,7 +742,7 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
     const follow =
       followable.length === 0
         ? undefined
-        : Tool(
+        : ownTool(
             `follow_${snake(definition.name)}`,
             {
               description:
@@ -754,6 +763,32 @@ const compile = (definition: Definition): Effect.Effect<ProcessService<any>, nev
       ...[...children.values()].flatMap((child) => childTools(child, state, harness)),
     ];
     const every = [...new Set([...tools, ...generated])];
+    // What this process uses, for a plan: each tool it mentions, each piece
+    // of a Domain model, and each process it may follow or start.
+    yield* Effect.forEach(
+      tools,
+      (tool) => {
+        const { toolName, refers } = tool as {
+          readonly toolName?: unknown;
+          readonly refers?: {
+            readonly relation: string;
+            readonly kind: string;
+            readonly name: string;
+          };
+        };
+        return refers !== undefined
+          ? refer(refers.relation, refers.kind, refers.name)
+          : typeof toolName === "string"
+            ? refer("uses", "Tool", toolName)
+            : Effect.void;
+      },
+      { discard: true },
+    );
+    yield* Effect.forEach(
+      [...children.keys()].filter((name) => name !== definition.name),
+      (name) => refer("uses", "Process", name),
+      { discard: true },
+    );
     yield* harness.add({ models, tools: every, context });
 
     let instructions: string | undefined;
