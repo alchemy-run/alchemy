@@ -2027,7 +2027,8 @@ export const make = (host: Host) => {
         : wrongArguments(site, "Context.add");
     }),
     "effect/Context:merge": dual("Context.merge", 2, ([self, that], site) => {
-      const [a, b] = [self ? contexts.get(self) : undefined, that ? contexts.get(that) : undefined];
+      // `dual` gives the first context; the second is missing where the code gave none.
+      const [a, b] = [contexts.get(self!), that ? contexts.get(that) : undefined];
       return a && b
         ? Effect.succeed(
             contextOf([...a.filter(([each]) => !b.some(([other]) => other === each)), ...b]),
