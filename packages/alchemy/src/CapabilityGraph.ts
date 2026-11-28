@@ -41,7 +41,6 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -932,15 +931,16 @@ const held = (
       return caller === undefined || allowed.has(caller.id) ? effect : denied(caller);
     });
   const guard = (value: unknown): unknown => {
-    if (Effect.isEffect(value)) return checked(value);
+    // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a client's Effects come in any shape
+    if (Effect.isEffect(value)) return checked(value as Effect.Effect<any, any, any>);
     if (typeof value === "object" && value !== null && STREAM_TYPE_ID in value) {
       // Checked when the stream is run, as an Effect is.
-      return Stream.unwrap(
-        checked(Effect.succeed(value as Stream.Stream<unknown, unknown, unknown>)),
-      );
+      const stream = value as Stream.Stream<any, any, any>;
+      return Effect.succeed(stream).pipe(checked, Stream.unwrap);
     }
     return value;
   };
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a client that is an Effect, of any shape
   if (Effect.isEffect(client)) return guard(client);
   if (typeof client !== "function" && (typeof client !== "object" || client === null)) {
     return client;
