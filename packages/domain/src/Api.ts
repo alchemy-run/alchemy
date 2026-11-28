@@ -137,6 +137,10 @@ export interface ViewClient<V extends View.Any> {
        * Wait until the view has applied these writes (commands' receipts).
        * Left out, the read waits for the commands this client sent; `[]`
        * waits for nothing.
+       * The read waits up to 10 seconds, then fails with
+       * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
+       * second, then gets the refusal. Bound it with `Effect.timeout`:
+       * interrupting the read also stops the server's wait.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.StateOf<V>>;
@@ -173,6 +177,10 @@ export interface ViewClient<V extends View.Any> {
        * Wait until the view has applied these writes (commands' receipts).
        * Left out, the read waits for the commands this client sent; `[]`
        * waits for nothing.
+       * The read waits up to 10 seconds, then fails with
+       * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
+       * second, then gets the refusal. Bound it with `Effect.timeout`:
+       * interrupting the read also stops the server's wait.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.EventOf<V>>;
@@ -204,6 +212,10 @@ export interface ViewClient<V extends View.Any> {
        * Wait until the view has applied these writes (commands' receipts).
        * Left out, the read waits for the commands this client sent; `[]`
        * waits for nothing.
+       * The read waits up to 10 seconds, then fails with
+       * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
+       * second, then gets the refusal. Bound it with `Effect.timeout`:
+       * interrupting the read also stops the server's wait.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.StateOf<V>>;
@@ -224,6 +236,10 @@ export interface StreamClient<S extends DomainStream.Any> {
        * Wait until the stream's writers have handled these writes (commands'
        * receipts). Left out, the read waits for the commands this client
        * sent; `[]` waits for nothing.
+       * The read waits up to 10 seconds, then fails with
+       * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
+       * second, then gets the refusal. Bound it with `Effect.timeout`:
+       * interrupting the read also stops the server's wait.
        */
       readonly atLeast?: Query.AtLeastInput;
     },
@@ -264,6 +280,10 @@ export interface StreamClient<S extends DomainStream.Any> {
        * Wait until the stream's writers have handled these writes (commands'
        * receipts). Left out, the read waits for the commands this client
        * sent; `[]` waits for nothing.
+       * The read waits up to 10 seconds, then fails with
+       * `ConsistencyTimeout`. A caller `validate` refuses waits at most a
+       * second, then gets the refusal. Bound it with `Effect.timeout`:
+       * interrupting the read also stops the server's wait.
        */
       readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<DomainStream.EventOf<S>>;
@@ -665,26 +685,72 @@ const withCaughtUp = <A>(
     : rest;
 };
 
+/** How long a read waits for its `atLeast` in all, as a command's own wait does. */
+const WAIT_TIMEOUT = Duration.seconds(10);
+
+/**
+ * How long a read waits for its `atLeast` while `validate` refuses the
+ * caller, and how long such a caller waits for its refusal.
+ */
+const REFUSED_WAIT = Duration.seconds(1);
+
+/** A read's wait for its `atLeast`, failing with `ConsistencyTimeout` after `timeout`. */
+type Wait = (timeout: Duration.Duration) => Effect.Effect<void, unknown>;
+
 /**
  * Read a key for a caller, judged before anything the caller asked for
- * runs: `validate` judges the key's current state, then, if the read waits
- * for `atLeast`, the state after the wait (only if it moved). A caller
- * `validate` refuses is refused at once, so how long a wait takes tells it
- * nothing about the key (#2906).
+ * reaches it: `validate` judges the key's current state, then, if the read
+ * waits for `atLeast`, the state after the wait (only if it moved).
+ *
+ * A caller `validate` refuses now may be let in by the write it waits for
+ * (it just got access). Its read waits up to `REFUSED_WAIT` and is judged
+ * again on the state after it. A caller still refused gets the refusal only
+ * once `REFUSED_WAIT` has passed since the read began, so how long the read
+ * takes tells it nothing about the key (#2906). The wait covers only the
+ * key being read: a `validate` that reads another view judges it as it is.
  */
 const judgedRead = Effect.fn(function* <A>(
   read: Effect.Effect<A, unknown>,
   judge: (value: A) => Effect.Effect<void, unknown>,
   versionOf: (value: A) => number,
-  wait: Effect.Effect<void, unknown> | undefined,
+  wait: Wait | undefined,
 ) {
+  const started = yield* Clock.currentTimeNanos;
   const current = yield* read;
-  yield* judge(current);
-  if (wait === undefined) return current;
-  yield* wait;
+  if (wait === undefined) {
+    yield* judge(current);
+    return current;
+  }
+  const allowed = Exit.isSuccess(yield* Effect.exit(judge(current)));
+  // An allowed caller waits the whole `WAIT_TIMEOUT`; a refused one, only `REFUSED_WAIT`.
+  const waitedInTime = allowed
+    ? yield* Effect.as(wait(WAIT_TIMEOUT), true)
+    : yield* wait(WAIT_TIMEOUT).pipe(
+        Effect.timeoutOption(REFUSED_WAIT),
+        Effect.map(Option.isSome),
+        Effect.orElseSucceed(() => false),
+      );
   const waited = yield* read;
-  if (versionOf(waited) !== versionOf(current)) yield* judge(waited);
-  return waited;
+  if (allowed) {
+    if (versionOf(waited) !== versionOf(current)) yield* judge(waited);
+    return waited;
+  }
+  const verdict = yield* Effect.exit(judge(waited));
+  const elapsed = (yield* Clock.currentTimeNanos) - started;
+  if (Exit.isFailure(verdict)) {
+    // Rounded up to whole milliseconds: a timer drops the fraction, and the
+    // refusal would come up to 1ms before `REFUSED_WAIT` has passed.
+    const left = Math.ceil(Number(Duration.toNanosUnsafe(REFUSED_WAIT) - elapsed) / 1e6);
+    if (left > 0) yield* Effect.sleep(Duration.millis(left));
+    return yield* Effect.failCause(verdict.cause);
+  }
+  if (waitedInTime) return waited;
+  // Let in before its write arrived: wait for the rest of it, within the same `WAIT_TIMEOUT`.
+  const rest = Duration.toNanosUnsafe(WAIT_TIMEOUT) - elapsed;
+  yield* wait(Duration.nanos(rest > 0n ? rest : 0n));
+  const caughtUp = yield* read;
+  if (versionOf(caughtUp) !== versionOf(waited)) yield* judge(caughtUp);
+  return caughtUp;
 });
 
 /**
@@ -698,14 +764,15 @@ const waitFor = (
   caughtUp: Query.CaughtUp | undefined,
   atLeast: Query.AtLeastInput | undefined,
   key?: string,
-): Effect.Effect<void, unknown> | undefined => {
+): Wait | undefined => {
   const receipts = Query.receiptsOf(atLeast);
   return caughtUp === undefined || receipts.length === 0
     ? undefined
-    : Effect.forEach(receipts, (receipt) => caughtUp(receipt, { key }), {
-        concurrency: "unbounded",
-        discard: true,
-      });
+    : (timeout) =>
+        Effect.forEach(receipts, (receipt) => caughtUp(receipt, { key, timeout }), {
+          concurrency: "unbounded",
+          discard: true,
+        });
 };
 
 type Handler = (input: never) => unknown;
@@ -868,7 +935,7 @@ const handlersOf = (
         const refOf = (id: string) => Key.refOf(key, id);
         const visible = (state: unknown, where: unknown) =>
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
-        // The key's state with its cursor, judged before the read waits for `atLeast`.
+        // The key's state with its cursor, judged before and after the read waits for `atLeast`.
         const judgedSnapshot = (
           id: string,
           mode: Read.Mode,
@@ -1418,6 +1485,22 @@ const build = (
  * yield* bank.DepositMoney({ accountId, amount: 1_000 });
  * const summary = yield* bank.AccountSummary.get(accountId); // includes the deposit
  * const now = yield* bank.AccountSummary.get(accountId, { atLeast: [] });
+ * ```
+ *
+ * A read waits up to 10 seconds for its writes, then fails with
+ * `ConsistencyTimeout`. A read `validate` refuses is judged again on the
+ * state after its writes, so a caller a command just let in reads at once.
+ * If it is still refused, the refusal comes after one second, however soon
+ * the writes arrive, so the time a refused read takes tells nothing about
+ * the key. Bound the wait with `Effect.timeout`. Interrupting the read
+ * stops the server's wait too, in process and over HTTP or WebSockets.
+ *
+ * **Example:** A read that gives up after two seconds
+ * ```typescript
+ * const receipt = yield* bank.DepositMoney({ accountId, amount: 1_000 });
+ * const summary = yield* bank.AccountSummary.get(accountId, { atLeast: receipt }).pipe(
+ *   Effect.timeout("2 seconds"),
+ * );
  * ```
  *
  * ### Calling it in process

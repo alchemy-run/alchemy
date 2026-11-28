@@ -4,6 +4,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -63,20 +64,38 @@ const refuse = Effect.succeed(
   }),
 );
 
+// A view and a stream a caller may read only while the last bump is at most 5.
+class CappedTotals extends Domain.View("CappedTotals", {
+  from: [Counter],
+  key: Counter,
+  rejects: [Hidden],
+  state: Schema.Struct({ total: Schema.Number, last: Schema.Number }),
+  initial: { total: 0, last: 0 },
+  evolve: { Incremented: (s, e) => ({ total: s.total + e.by, last: e.by }) },
+}) {}
+class CappedBumps extends Domain.Stream("CappedBumps", {
+  key: Counter,
+  entries: [Bumped],
+  rejects: [Hidden],
+}) {}
+const overCap = (last: number | undefined) => (last ?? 0) > 5;
+
 class BumpWriter extends Domain.Projection("BumpWriter", {
   from: [Counter],
   key: Counter,
   on: [Incremented],
-  writes: [Bumps, HiddenBumps],
+  writes: [Bumps, HiddenBumps, CappedBumps],
 }) {}
 const BumpWriterLive = BumpWriter.toLayer(
   Effect.gen(function* () {
     const bumps = yield* Bumps;
     const hidden = yield* HiddenBumps;
+    const capped = yield* CappedBumps;
     return Effect.fn(function* (batch) {
       for (const input of batch) {
         yield* bumps.append(input, new Bumped({ by: input.event.by }));
         yield* hidden.append(input, new Bumped({ by: input.event.by }));
+        yield* capped.append(input, new Bumped({ by: input.event.by }));
       }
     });
   }),
@@ -84,19 +103,37 @@ const BumpWriterLive = BumpWriter.toLayer(
 
 class Counters extends Domain.Model("Counters", {
   aggregates: [Counter],
-  views: [Totals, HiddenTotals],
+  views: [Totals, HiddenTotals, CappedTotals],
   projections: [BumpWriter],
-  streams: [Bumps, HiddenBumps],
+  streams: [Bumps, HiddenBumps, CappedBumps],
 }) {}
 class CounterApi extends Domain.Api("CounterApi", {
   model: Counters,
   commands: ["Increment"],
-  views: ["Totals", "HiddenTotals"],
-  streams: ["Bumps", "HiddenBumps"],
+  views: ["Totals", "HiddenTotals", "CappedTotals"],
+  streams: ["Bumps", "HiddenBumps", "CappedBumps"],
 }) {}
 
 const Hosted = Counters.layer(
-  Layer.mergeAll(BumpWriterLive, HiddenTotals.toLayer(refuse), HiddenBumps.toLayer(refuse)),
+  Layer.mergeAll(
+    BumpWriterLive,
+    HiddenTotals.toLayer(refuse),
+    HiddenBumps.toLayer(refuse),
+    CappedTotals.toLayer(
+      Effect.succeed(
+        Effect.fn(function* (_request, state) {
+          if (overCap(state?.last)) return yield* new Hidden();
+        }),
+      ),
+    ),
+    CappedBumps.toLayer(
+      Effect.succeed(
+        Effect.fn(function* (_request, latest) {
+          if (overCap(latest?.event.by)) return yield* new Hidden();
+        }),
+      ),
+    ),
+  ),
 ).pipe(Layer.provideMerge(InMemory));
 const InProcess = Layer.effect(CounterApi.Client, CounterApi.clientInProcess).pipe(
   Layer.provideMerge(Hosted),
@@ -132,6 +169,7 @@ const SocketWire = Layer.unwrap(
 );
 
 type Client = Effect.Success<typeof CounterApi.client>;
+type Receipt = { readonly stream: string; readonly version: number };
 type Frame = { readonly envelope: { readonly seq: number } } | Domain.Read.CaughtUp;
 
 /** A key's live reads, the same for a view and a stream. */
@@ -268,22 +306,65 @@ for (const [transport, layer] of [
       Effect.gen(function* () {
         const api = yield* seed;
         for (const key of ["c-1", "c-0"]) {
-          // A version neither key has reached: the read is refused before it waits.
+          // A version neither key has reached: a read with `atLeast` waits a fixed time, then is refused.
           const atLeast = { stream: `Counter/${key}`, version: 9 };
-          const refusals = yield* Effect.all([
-            api.HiddenTotals.get(key, { atLeast }).pipe(Effect.flip),
-            api.HiddenTotals.snapshot(key, { atLeast }).pipe(Effect.flip),
-            api.HiddenTotals.list(key, { atLeast }).pipe(Effect.flip),
-            api.HiddenTotals.events(key).pipe(Stream.runHead, Effect.flip),
-            api.HiddenTotals.events(key, { after: 9 }).pipe(Stream.runHead, Effect.flip),
-            api.HiddenTotals.watch(key).pipe(Stream.runHead, Effect.flip),
-            api.HiddenBumps.peek(key, { atLeast }).pipe(Effect.flip),
-            api.HiddenBumps.list(key).pipe(Effect.flip),
-            api.HiddenBumps.events(key).pipe(Stream.runHead, Effect.flip),
-            api.HiddenBumps.events(key, { after: 9 }).pipe(Stream.runHead, Effect.flip),
-            api.HiddenBumps.watch(key).pipe(Stream.runHead, Effect.flip),
-          ]).pipe(Effect.timeout("3 seconds"));
+          const padded = <A, E>(refused: Effect.Effect<A, E>) =>
+            Effect.flip(refused).pipe(
+              Effect.timed,
+              Effect.map(([took, refusal]) => {
+                // Never the consistency timeout's 10 seconds, nor at once.
+                expect(Duration.toMillis(took)).toBeGreaterThanOrEqual(1_000);
+                return refusal;
+              }),
+            );
+          const refusals = yield* Effect.all(
+            [
+              padded(api.HiddenTotals.get(key, { atLeast })),
+              padded(api.HiddenTotals.snapshot(key, { atLeast })),
+              padded(api.HiddenTotals.list(key, { atLeast })),
+              api.HiddenTotals.events(key).pipe(Stream.runHead, Effect.flip),
+              api.HiddenTotals.events(key, { after: 9 }).pipe(Stream.runHead, Effect.flip),
+              api.HiddenTotals.watch(key).pipe(Stream.runHead, Effect.flip),
+              padded(api.HiddenBumps.peek(key, { atLeast })),
+              api.HiddenBumps.list(key).pipe(Effect.flip),
+              api.HiddenBumps.events(key).pipe(Stream.runHead, Effect.flip),
+              api.HiddenBumps.events(key, { after: 9 }).pipe(Stream.runHead, Effect.flip),
+              api.HiddenBumps.watch(key).pipe(Stream.runHead, Effect.flip),
+            ],
+            { concurrency: "unbounded" },
+          ).pipe(Effect.timeout("3 seconds"));
           expect(refusals.map((refusal) => refusal._tag)).toEqual(Array(11).fill("Hidden"));
+        }
+      }).pipe(Effect.scoped, Effect.provide(layer)),
+    );
+
+    it.live("a read refused now waits for the write that lets the caller in", () =>
+      Effect.gen(function* () {
+        const api = yield* seed;
+        const capped = yield* CappedTotals;
+        const over = yield* api.Increment({ id: "c-1", by: 6 });
+        yield* capped.get(Counter.ref("c-1"), { atLeast: over });
+        expect(yield* api.CappedTotals.get("c-1", { atLeast: [] }).pipe(Effect.flip)).toEqual(
+          new Hidden(),
+        );
+        // Each read is refused on the state it finds, and allowed on the state after the write.
+        // The last bump each read sees: 1, from the write the caller waits for.
+        const reads: ReadonlyArray<(atLeast: Receipt) => Effect.Effect<unknown, unknown>> = [
+          (atLeast) => Effect.map(api.CappedTotals.get("c-1", { atLeast }), (state) => state?.last),
+          (atLeast) =>
+            Effect.map(api.CappedTotals.snapshot("c-1", { atLeast }), ({ state }) => state?.last),
+          (atLeast) => Effect.map(api.CappedTotals.list("c-1", { atLeast }), () => 1),
+          (atLeast) =>
+            Effect.map(api.CappedBumps.peek("c-1", { atLeast }), (entry) => entry?.event.by),
+          (atLeast) => Effect.map(api.CappedBumps.list("c-1", { atLeast }), () => 1),
+        ];
+        for (const read of reads) {
+          const under = yield* api.Increment({ id: "c-1", by: 1 });
+          expect(yield* read(under).pipe(Effect.timeout("3 seconds"))).toBe(1);
+          // Over the cap again, for the next read.
+          const back = yield* api.Increment({ id: "c-1", by: 6 });
+          yield* capped.get(Counter.ref("c-1"), { atLeast: back });
+          yield* (yield* CappedBumps).peek(Counter.ref("c-1"), { atLeast: back });
         }
       }).pipe(Effect.scoped, Effect.provide(layer)),
     );

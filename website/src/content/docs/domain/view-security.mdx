@@ -256,6 +256,32 @@ The Layer's construction runs once and may resolve services, such as a permissio
 
 `validate` runs again on every change while a client watches. When support moves an account to another customer, the old owner's watch ends with `NotOwner` at that change. See the test in [Testing an Api](/domain/testing-apis#test-in-process).
 
+## Read your own write
+
+A read with `atLeast` is judged on the state it finds, and again on the state after the write it waits for. `AccountSummary` holds the account's `customerId` in its own state, and its `validate` judges that field. So a customer whom a command just made the account's owner reads `AccountSummary` with that command's receipt at once.
+
+When `validate` refuses the state the read finds, the read waits at most a second for the write. If `validate` still refuses, the refusal comes when that second has passed, so the time a read takes tells nothing about a key the caller may not read.
+
+The second is fixed, and a read that `validate` allows still waits up to 10 seconds before it fails with `ConsistencyTimeout`. To give up sooner, bound the read yourself:
+
+```typescript
+const support = yield* SupportApi.client;
+const bank = yield* CustomerApi.client;
+const receipt = yield* support.ChangeOwner({ accountId, customerId });
+const summary = yield* bank.AccountSummary.get(accountId, { atLeast: receipt }).pipe(
+  Effect.timeout("2 seconds"),
+);
+```
+
+When the read gives up, the server stops waiting for the write too.
+
+The read waits only for the view it reads. A `validate` that looks up access in another view, such as a membership view, sees that view as it is now: the caller is refused after a second until that view has the write. Keep the fact that grants access in the state of the view being read, or send the command with `consistency: "strong"`: it answers once every view it reaches has applied it, the membership view included, so the read after it needs no `atLeast`.
+
+```typescript
+yield* support.ChangeOwner({ accountId, customerId }, { consistency: "strong" });
+const summary = yield* bank.AccountSummary.get(accountId, { atLeast: [] });
+```
+
 ## Filter only what's allowed
 
 A client's `where` filter narrows a read it's already allowed to make, and never grants one. `validate` doesn't look at filters, so a filter can't widen what someone sees.
