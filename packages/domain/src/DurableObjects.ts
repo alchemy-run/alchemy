@@ -82,6 +82,11 @@ import {
   type SeedResult,
   type SendResult,
   sendResultOf,
+  answersResend,
+  rewrittenResult,
+  type CommandReceipt,
+  storedCommand,
+  storedRejection,
   stampRevisions,
   type StoredEvent,
   storedDecisionReceipt,
@@ -530,8 +535,17 @@ type AgedScan = { readonly prefix: number; readonly after?: string } | "done";
  * order, by the first prunes after the upgrade: their window starts then.
  */
 interface Aging {
-  /** Index a row written now. Call in the transaction that writes it. */
-  readonly stamp: (kind: AgedKind, key: string) => Effect.Effect<void, never, ObjectState>;
+  /**
+   * Index a row written now. Call in the transaction that writes it.
+   * `again` when the row replaces one already indexed (a rejected receipt):
+   * its latest stamp is kept under `aged-at:<key>`, so the older index row
+   * leaves it alone.
+   */
+  readonly stamp: (
+    kind: AgedKind,
+    key: string,
+    again?: boolean,
+  ) => Effect.Effect<void, never, ObjectState>;
   /** Delete a few rows of these kinds that are past their window. */
   readonly prune: (kinds: ReadonlyArray<AgedKind>) => Effect.Effect<void, never, ObjectState>;
 }
@@ -553,19 +567,24 @@ const scanAhead = (kind: AgedKind, scan: AgedScan | undefined, key: string) => {
 const makeAging = (retention: Retention | false): Aging => {
   if (retention === false) return { stamp: () => Effect.void, prune: () => Effect.void };
   const windows = retentionWindows(retention);
-  const stampRows = (kind: AgedKind, at: number, key: string): Array<[string, unknown]> =>
-    kind === "cancelled"
+  const stampRows = (
+    kind: AgedKind,
+    at: number,
+    key: string,
+    again = false,
+  ): Array<[string, unknown]> =>
+    kind === "cancelled" || again
       ? [
           [agedIndex(kind, at, key), true],
           [agedAtKey(key), at],
         ]
       : [[agedIndex(kind, at, key), true]];
-  const stamp = Effect.fn(function* (kind: AgedKind, key: string) {
+  const stamp = Effect.fn(function* (kind: AgedKind, key: string, again = false) {
     const state = yield* ObjectState;
     // A row the scan has yet to reach gets its stamp from the scan.
     if (scanAhead(kind, yield* state.storage.get<AgedScan>(agedScanKey(kind)), key)) return;
     const at = yield* Clock.currentTimeMillis;
-    yield* state.storage.put(Object.fromEntries(stampRows(kind, at, key)));
+    yield* state.storage.put(Object.fromEntries(stampRows(kind, at, key, again)));
   });
   /** Stamp a batch of the rows an older instance kept before stamps. */
   const scan = Effect.fn(function* (kind: AgedKind) {
@@ -618,6 +637,10 @@ const makeAging = (retention: Retention | false): Aging => {
       const stamped = index.slice(prefix.length);
       const key = stamped.slice(17);
       if (kind !== "cancelled") {
+        // Replaced since (a rejected command decided again): the later stamp decides.
+        const latest = yield* state.storage.get<number>(agedAtKey(key));
+        if (latest !== undefined && latest !== Number(stamped.slice(0, 16))) continue;
+        if (latest !== undefined) deletes.push(agedAtKey(key));
         deletes.push(key);
         continue;
       }
@@ -1371,9 +1394,12 @@ const aggregateObject = Effect.fn(function* (
 ) {
   const state = yield* ObjectState;
   const outbox = yield* queue<Delivery>("outbox", kit.deliver);
-  /** Index a receipt, and delete a few receipts and cancelled names past their window. */
-  const receiptKept = (key: string) =>
-    Effect.andThen(aging.stamp("receipts", key), aging.prune(["receipts", "cancelled"]));
+  /**
+   * Index a receipt, and delete a few receipts and cancelled names past their
+   * window. `again` when it replaces a rejected command's receipt.
+   */
+  const receiptKept = (key: string, again = false) =>
+    Effect.andThen(aging.stamp("receipts", key, again), aging.prune(["receipts", "cancelled"]));
   // `held` marks an instance a decision's intent holds, so a command learns
   // it from the row it reads anyway.
   const storedMeta = state.storage
@@ -1456,8 +1482,10 @@ const aggregateObject = Effect.fn(function* (
       ),
     );
   const commitOnce = Effect.fn(function* (id: string, command: Json, meta: Aggregate.SendMeta) {
-    const duplicate = yield* state.storage.get<StoredResult>(`receipt:${meta.commandId}`);
-    if (duplicate) return yield* resent(id, duplicate);
+    const key = `receipt:${meta.commandId}`;
+    const prior = yield* state.storage.get<StoredResult>(key);
+    // Only an accepted receipt answers a resend: a rejected command is decided again.
+    if (answersResend(prior)) return yield* resent(id, prior);
     const current = yield* storedMeta;
     if (current.held) return yield* new InstanceHeld();
     const result = yield* kit.handle({
@@ -1472,7 +1500,20 @@ const aggregateObject = Effect.fn(function* (
       trace: meta.trace,
       link: meta.link,
     });
-    if (result._tag === "Rejected") return result as SendResult;
+    if (result._tag === "Rejected") {
+      yield* state.storage.transaction(
+        Effect.gen(function* () {
+          // Another copy of the instance may have accepted it since: that receipt stays.
+          if (answersResend(yield* state.storage.get<StoredResult>(key))) return;
+          yield* state.storage.put<StoredResult>(
+            key,
+            storedRejection(result.rejection, storedCommand(command)),
+          );
+          yield* receiptKept(key, prior !== undefined);
+        }),
+      );
+      return { _tag: "Rejected", rejection: result.rejection } satisfies SendResult as SendResult;
+    }
     const sent: SendResult = {
       _tag: "Accepted",
       receipt: {
@@ -1486,10 +1527,10 @@ const aggregateObject = Effect.fn(function* (
       Effect.gen(function* () {
         if (!(yield* stillAt(current.version))) return STALE;
         yield* state.storage.put<StoredResult>(
-          `receipt:${meta.commandId}`,
-          storedResult(result.version, result.events.length, result.reply),
+          key,
+          storedResult(result.version, result.events.length, result.reply, storedCommand(command)),
         );
-        yield* receiptKept(`receipt:${meta.commandId}`);
+        yield* receiptKept(key, prior !== undefined);
         yield* persist(id, current.version, result);
       }),
     );
@@ -1712,19 +1753,16 @@ const aggregateObject = Effect.fn(function* (
               if (stored.at !== undefined || stored.events.length === 0) continue;
               yield* state.storage.put(key, { ...stored, events: [] });
             }
-            // A receipt stored with a copy of its events keeps their count instead.
+            // A receipt keeps its count instead of a copy of its events, and
+            // neither the command it answered nor a rejection.
             for (const [key, stored] of yield* state.storage.list<StoredResult>({
               prefix: "receipt:",
             })) {
-              if (stored._tag !== "Accepted" || !("receipt" in stored)) continue;
-              yield* state.storage.put<StoredResult>(
-                key,
-                storedResult(
-                  stored.receipt.version,
-                  stored.receipt.events.length,
-                  stored.receipt.reply,
-                ),
-              );
+              if (stored._tag === "Accepted" && "stored" in stored && stored.command === undefined)
+                continue;
+              const kept = rewrittenResult(stored);
+              if (kept === undefined) yield* state.storage.delete(key);
+              else yield* state.storage.put<StoredResult>(key, kept);
             }
           }
           yield* finish(
@@ -2267,7 +2305,8 @@ const aggregateObject = Effect.fn(function* (
   const executed = (commandId: string) =>
     state.storage
       .get<StoredResult>(`receipt:${commandId}`)
-      .pipe(Effect.map((receipt) => receipt !== undefined));
+      // A rejected command committed nothing: it never ran.
+      .pipe(Effect.map(answersResend));
   // Scheduled commands: one durable callback job per name, run here when
   // due. `scheduled:<name>` holds the token of the job that may run, or
   // `CANCELLED` once it is cancelled, so a job cancelled or replaced after
@@ -2362,6 +2401,18 @@ const aggregateObject = Effect.fn(function* (
     importEvents: (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
       whenFree(id, importEvents(id, events, meta)).pipe(reportDefects),
     state: () => reportDefects(currentMeta),
+    // A command's receipt, read-only. None is `null`: RPC carries no `undefined`.
+    receipt: (id: string, commandId: string) =>
+      reportDefects(
+        Effect.gen(function* () {
+          const stored = yield* state.storage.get<StoredResult>(`receipt:${commandId}`);
+          if (stored?.command === undefined) return null;
+          return {
+            result: yield* resent(id, stored),
+            command: stored.command,
+          } satisfies CommandReceipt as CommandReceipt;
+        }),
+      ),
     after: (after: number) => reportDefects(eventsAfter(after)),
     eventsAt: (seqs: ReadonlyArray<number>) => reportDefects(eventsAt(seqs)),
     rewrite: (id: string, input: RewriteInput) => reportDefects(rewrite(id, input)),
@@ -4041,6 +4092,10 @@ export const makePlatform = <R>(
                     ),
                   events: (id) =>
                     unwrapDefects<ReadonlyArray<StoredEvent>>(namespace.getByName(id).after(0)),
+                  receipt: (id, commandId) =>
+                    unwrapDefects<CommandReceipt | null>(
+                      namespace.getByName(id).receipt(id, commandId),
+                    ).pipe(Effect.map((receipt) => receipt ?? undefined)),
                   rewrite: (id, input) =>
                     announce.pipe(
                       Effect.andThen(

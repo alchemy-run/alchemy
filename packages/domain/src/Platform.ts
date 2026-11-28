@@ -326,18 +326,79 @@ export interface StoredReceipt {
   readonly reply: Json;
 }
 
-/** What an instance stores under a command id: its rejection, or its receipt. */
-export type StoredResult =
+/** The command a stored result answered: its `_tag`, and the rest of its encoded form. */
+export interface StoredCommand {
+  readonly tag: string;
+  readonly input: Json;
+}
+
+/** The stored form of an encoded command. */
+export const storedCommand = (command: Json): StoredCommand => {
+  const { _tag: tag, ...input } = command as { readonly _tag: string };
+  return { tag, input };
+};
+
+/**
+ * What an instance stores under a command id: its rejection, or its receipt,
+ * with the command it answered. Results stored before commands were kept,
+ * and imports, have no `command`.
+ */
+export type StoredResult = (
   | { readonly _tag: "Rejected"; readonly rejection: Json }
   | { readonly _tag: "Accepted"; readonly stored: StoredReceipt }
   /** Stored before receipts were counts: it holds a copy of its events. */
-  | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson };
+  | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson }
+) & { readonly command?: StoredCommand };
 
 /** The stored form of an accepted command's result. */
-export const storedResult = (version: number, count: number, reply: Json): StoredResult => ({
+export const storedResult = (
+  version: number,
+  count: number,
+  reply: Json,
+  command?: StoredCommand,
+): StoredResult => ({
   _tag: "Accepted",
   stored: { version, count, reply },
+  ...(command === undefined ? {} : { command }),
 });
+
+/** The stored form of a rejected command's result. */
+export const storedRejection = (rejection: Json, command: StoredCommand): StoredResult => ({
+  _tag: "Rejected",
+  rejection,
+  command,
+});
+
+/**
+ * A stored result as a rewrite leaves it, or `undefined` to delete it. The
+ * rewrite governs what an instance keeps, and a stored command is a copy of
+ * input it doesn't rewrite: an accepted result keeps its count alone, and a
+ * rejected one, which answers no resend, goes.
+ */
+export const rewrittenResult = (result: StoredResult): StoredResult | undefined => {
+  if (result._tag === "Rejected") return undefined;
+  if ("receipt" in result)
+    return storedResult(result.receipt.version, result.receipt.events.length, result.receipt.reply);
+  const { version, count, reply } = result.stored;
+  return storedResult(version, count, reply);
+};
+
+/**
+ * Whether a stored result answers a resend of its command. Only an accepted
+ * one does: a rejected command is decided again, against the state then.
+ */
+export const answersResend = (result: StoredResult | undefined): result is StoredResult =>
+  result?._tag === "Accepted";
+
+/**
+ * A command's receipt as {@link AggregateStore.receipt} reads it: the result
+ * `send` answered, and the command it answered.
+ */
+export interface CommandReceipt {
+  /** `Accepted` with its receipt, or `Rejected` with the rejection. */
+  readonly result: SendResult;
+  readonly command: StoredCommand;
+}
 
 /**
  * A stored result as `send` answers it: its events are the rows of `events`
@@ -348,8 +409,8 @@ export const sendResultOf = (
   result: StoredResult,
   events: ReadonlyArray<StoredEvent>,
 ): SendResult => {
-  if (result._tag === "Rejected") return result;
-  if ("receipt" in result) return result;
+  if (result._tag === "Rejected") return { _tag: "Rejected", rejection: result.rejection };
+  if ("receipt" in result) return { _tag: "Accepted", receipt: result.receipt };
   const { version, count, reply } = result.stored;
   return {
     _tag: "Accepted",
@@ -765,6 +826,14 @@ export interface AggregateStore {
   readonly state: (id: string) => Effect.Effect<{ readonly state: Json; readonly version: number }>;
   /** Read the committed events of an instance (tests and diagnostics; optional). */
   readonly events?: (id: string) => Effect.Effect<ReadonlyArray<StoredEvent>>;
+  /**
+   * The receipt an instance keeps for the command `commandId`, accepted or
+   * rejected, with the command it answered; absent when it keeps none (never
+   * sent, past its retention window, or stored before commands were kept).
+   * A rejected command's receipt holds its latest rejection: sent again, the
+   * command is decided again (optional).
+   */
+  readonly receipt?: (id: string, commandId: string) => Effect.Effect<CommandReceipt | undefined>;
   /** The stored state and version of an instance, then every new one. */
   readonly changes: (
     id: string,

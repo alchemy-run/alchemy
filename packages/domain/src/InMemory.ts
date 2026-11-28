@@ -39,6 +39,11 @@ import {
   type StoredViewInput,
   revisionKey,
   sendResultOf,
+  answersResend,
+  rewrittenResult,
+  type CommandReceipt,
+  storedCommand,
+  storedRejection,
   stampRevisions,
   storedDecisionReceipt,
   storedResult,
@@ -880,7 +885,9 @@ export const make = (
             Effect.gen(function* () {
               const current = instance(id);
               const duplicate = current.receipts.get(meta.commandId);
-              if (duplicate) return sendResultOf(`${kit.name}/${id}`, duplicate, current.events);
+              // Only an accepted receipt answers a resend: a rejected command is decided again.
+              if (answersResend(duplicate))
+                return sendResultOf(`${kit.name}/${id}`, duplicate, current.events);
               const result = yield* kit.handle({
                 id,
                 state: current.state,
@@ -893,7 +900,13 @@ export const make = (
                 trace: meta.trace,
                 link: meta.link,
               });
-              if (result._tag === "Rejected") return result satisfies SendResult;
+              if (result._tag === "Rejected") {
+                current.receipts.set(
+                  meta.commandId,
+                  storedRejection(result.rejection, storedCommand(command)),
+                );
+                return { _tag: "Rejected", rejection: result.rejection } satisfies SendResult;
+              }
               if (current.version === 0) yield* register({ source: kit.name, id });
               const live = yield* Backfill.routeCommit(
                 sourceRole(id),
@@ -920,7 +933,12 @@ export const make = (
               };
               current.receipts.set(
                 meta.commandId,
-                storedResult(result.version, result.events.length, result.reply),
+                storedResult(
+                  result.version,
+                  result.events.length,
+                  result.reply,
+                  storedCommand(command),
+                ),
               );
               yield* announce(id);
               yield* enqueue(live.send, kit.deliver);
@@ -1074,6 +1092,14 @@ export const make = (
                 return change === undefined ? [row] : change.after ? [change.after] : [];
               });
               current.state = state;
+              if (!deletes) {
+                // A receipt keeps neither the command it answered nor a rejection.
+                for (const [commandId, stored] of current.receipts) {
+                  const kept = rewrittenResult(stored);
+                  if (kept === undefined) current.receipts.delete(commandId);
+                  else current.receipts.set(commandId, kept);
+                }
+              }
               if (deletes) {
                 // What it kept of the commands it handled and scheduled goes with it.
                 current.receipts.clear();
@@ -1198,7 +1224,7 @@ export const make = (
                     const current = instance(id);
                     const armed = current.scheduled.get(name);
                     if (!armed) return Effect.fail(new NotScheduled(fields));
-                    if (current.receipts.has(armed.commandId))
+                    if (answersResend(current.receipts.get(armed.commandId)))
                       return Effect.fail(new AlreadyExecuted(fields));
                     if (armed.cancelled) return Effect.fail(new AlreadyCancelled(fields));
                     timers.delete(`${modelName}/${kit.name}/${id}/${name}`);
@@ -1210,6 +1236,17 @@ export const make = (
             state: (id) =>
               Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
             events: (id) => Effect.sync(() => [...instance(id).events]),
+            // A command's receipt, creating no instance.
+            receipt: (id, commandId) =>
+              Effect.sync((): CommandReceipt | undefined => {
+                const current = instances.get(id);
+                const stored = current?.receipts.get(commandId);
+                if (current === undefined || stored?.command === undefined) return undefined;
+                return {
+                  result: sendResultOf(`${kit.name}/${id}`, stored, current.events),
+                  command: stored.command,
+                };
+              }),
             changes: (id) =>
               Stream.unwrap(
                 versionOf(id).pipe(
