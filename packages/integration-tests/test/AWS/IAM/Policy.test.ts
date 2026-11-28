@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import { equivalentPolicyJson } from "./fixtures.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -135,6 +136,79 @@ test.provider(
       expect(all.some((p) => p.policyArn === deployed.policyArn)).toBe(true);
 
       yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:iam", "live"] },
+);
+
+test.provider(
+  "does not create a new version for an equivalent document",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (action: "s3:ListBucket" | "s3:GetObject", env: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Policy("EquivalentPolicy", {
+              policyDocument: {
+                Version: "2012-10-17",
+                Statement: [{ Effect: "Allow", Action: [action], Resource: "*" }],
+              },
+              tags: { env },
+            });
+          }),
+        );
+
+      const policy = yield* deploy("s3:ListBucket", "before");
+      const input = { PolicyArn: policy.policyArn };
+      const seeded = yield* IAM.createPolicyVersion({
+        ...input,
+        PolicyDocument: equivalentPolicyJson,
+        SetAsDefault: true,
+      });
+      const seededId = seeded.PolicyVersion?.VersionId;
+      expect(seededId).toBeDefined();
+      const { PolicyVersion: observedSeed } = yield* IAM.getPolicyVersion({
+        ...input,
+        VersionId: seededId!,
+      });
+      expect(JSON.parse(decodeURIComponent(observedSeed?.Document ?? ""))).toEqual(
+        JSON.parse(equivalentPolicyJson),
+      );
+
+      const getVersions = IAM.listPolicyVersions(input).pipe(
+        Effect.map((result) =>
+          (result.Versions ?? [])
+            .map(({ VersionId, IsDefaultVersion }) => ({
+              VersionId,
+              IsDefaultVersion,
+            }))
+            .sort((a, b) => (a.VersionId ?? "").localeCompare(b.VersionId ?? "")),
+        ),
+      );
+      const before = yield* getVersions;
+      expect(before).toContainEqual({ VersionId: seededId, IsDefaultVersion: true });
+
+      yield* deploy("s3:ListBucket", "after");
+      expect(yield* getVersions).toEqual(before);
+      const { Tags } = yield* IAM.listPolicyTags(input);
+      expect(Tags).toContainEqual({ Key: "env", Value: "after" });
+
+      yield* deploy("s3:GetObject", "after");
+      const after = yield* getVersions;
+      expect(after).toHaveLength(before.length + 1);
+      const changedId = after.find((version) => version.IsDefaultVersion)?.VersionId;
+      expect(changedId).toBeDefined();
+      expect(changedId).not.toBe(seededId);
+      const { PolicyVersion } = yield* IAM.getPolicyVersion({ ...input, VersionId: changedId! });
+      const changed = JSON.parse(decodeURIComponent(PolicyVersion?.Document ?? ""));
+      expect(["s3:GetObject", ["s3:GetObject"]]).toContainEqual(changed.Statement[0].Action);
+
+      yield* stack.destroy();
+      const deleted = yield* IAM.getPolicy(input).pipe(
+        Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
+      );
+      expect(deleted).toBeUndefined();
     }),
   { tags: ["provider:aws", "provider:aws:iam", "live"] },
 );

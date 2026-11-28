@@ -96,3 +96,9 @@ export const testOidcGithubUrl = "https://example.com/alchemy-oidc-github";
 export const testOidcGithubHost = testOidcGithubUrl.replace(/^https?:\/\//, "");
 export const testOidcThumbprintA = "1111111111111111111111111111111111111111";
 export const testOidcThumbprintB = "2222222222222222222222222222222222222222";
+
+/** Same permission in the two policy shapes IAM can return. */
+export const equivalentPolicyJson = JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [{ Resource: "*", Action: "s3:ListBucket", Effect: "Allow" }],
+});
