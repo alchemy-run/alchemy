@@ -35,31 +35,31 @@ export const NotesMessage = UiSchema.TaggedEnum({
 export class SignIn extends Command.Service<SignIn>()("notes/SignIn", {
   args: { provider: Provider },
   success: NotesMessage,
-}) {
-  static readonly layer = this.toLayer(({ provider }) =>
-    callAuth(() => auth.signIn.social({ provider, callbackURL: "/" })).pipe(
-      Effect.match({
-        onSuccess: () => NotesMessage.Redirecting(),
-        onFailure: ({ message }) => NotesMessage.Failed({ reason: message }),
-      }),
-    ),
-  );
-}
+}) {}
+
+export const SignInLive = SignIn.toLayer(({ provider }) =>
+  callAuth(() => auth.signIn.social({ provider, callbackURL: "/" })).pipe(
+    Effect.match({
+      onSuccess: () => NotesMessage.Redirecting(),
+      onFailure: ({ message }) => NotesMessage.Failed({ reason: message }),
+    }),
+  ),
+);
 
 /** Clear better-auth's session, then start over signed out. A failed sign-out shows why. */
 export class SignOut extends Command.Service<SignOut>()("notes/SignOut", {
   success: NotesMessage,
-}) {
-  static readonly layer = this.toLayer(() =>
-    callAuth(() => auth.signOut()).pipe(
-      Effect.andThen(Effect.sync(() => location.reload())),
-      Effect.match({
-        onSuccess: () => NotesMessage.Redirecting(),
-        onFailure: ({ message }) => NotesMessage.Failed({ reason: message }),
-      }),
-    ),
-  );
-}
+}) {}
+
+export const SignOutLive = SignOut.toLayer(() =>
+  callAuth(() => auth.signOut()).pipe(
+    Effect.andThen(Effect.sync(() => location.reload())),
+    Effect.match({
+      onSuccess: () => NotesMessage.Redirecting(),
+      onFailure: ({ message }) => NotesMessage.Failed({ reason: message }),
+    }),
+  ),
+);
 
 /**
  * A signed-in user's notebook. The `Notes` View is a query: it shows the notes and follows
@@ -124,7 +124,7 @@ export const NotebookNoDeps = Html.component({
 
 /** The notebook with its Commands and queries; the entry provides the NotesApi client. */
 export const Notebook = NotebookNoDeps.pipe(
-  Component.provide(Layer.mergeAll(NotesUI.layer, SignOut.layer)),
+  Component.provide(Layer.mergeAll(NotesUI.layer, SignOutLive)),
 );
 
 /** The app: sign-in buttons, or the signed-in user's notebook. */
@@ -160,4 +160,4 @@ export const NotesAppNoDeps = Html.component({
 });
 
 /** The app with its sign-in Command. */
-export const NotesApp = NotesAppNoDeps.pipe(Component.provide(SignIn.layer));
+export const NotesApp = NotesAppNoDeps.pipe(Component.provide(SignInLive));

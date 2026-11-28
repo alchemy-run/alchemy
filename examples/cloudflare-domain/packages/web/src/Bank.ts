@@ -109,53 +109,53 @@ export class Deliver extends Command.Service<Deliver>()("bank/Deliver", {
   args: { accountId: AccountId, intents: Schema.Array(Intent) },
   success: BankMessage,
   mode: "queue",
-}) {
-  static readonly layer = this.toLayer(
-    Effect.gen(function* () {
-      // The adapter's own Commands: they classify a failure as Rejected,
-      // Denied or Unknown, and keep the id a retry needs.
-      const deposit = yield* BankUI.DepositMoney;
-      const withdraw = yield* BankUI.WithdrawMoney;
-      const send = (accountId: AccountId, { commandId, kind, amount }: Intent) =>
-        (kind === "deposit" ? deposit : withdraw)({ input: { accountId, amount }, commandId }).pipe(
-          Effect.as<Outcome>({ commandId, result: "Accepted", reason: Option.none() }),
-          Effect.catchTags({
-            Rejected: ({ rejection }) =>
-              Effect.succeed<Outcome>({
-                commandId,
-                result: "Rejected",
-                reason: Option.some(rejection._tag),
-              }),
-            Denied: ({ error }) =>
-              Effect.succeed<Outcome>({
-                commandId,
-                result: "Denied",
-                reason: Option.some(error._tag),
-              }),
-          }),
-          // Unknown: the write may have committed, so retry with the same id.
-          Effect.retry({ schedule: Schedule.exponential("200 millis"), times: 3 }),
-          Effect.catch(() =>
-            Effect.succeed<Outcome>({ commandId, result: "Queued", reason: Option.none() }),
-          ),
-        );
-      return Effect.fn(function* ({ accountId, intents }) {
-        const outcomes: Array<Outcome> = [];
-        for (const intent of intents) {
-          const outcome = yield* send(accountId, intent);
-          outcomes.push(outcome);
-          if (outcome.result === "Queued") {
-            for (const rest of intents.slice(outcomes.length)) {
-              outcomes.push({ commandId: rest.commandId, result: "Queued", reason: Option.none() });
-            }
-            break;
+}) {}
+
+export const DeliverLive = Deliver.toLayer(
+  Effect.gen(function* () {
+    // The adapter's own Commands: they classify a failure as Rejected,
+    // Denied or Unknown, and keep the id a retry needs.
+    const deposit = yield* BankUI.DepositMoney;
+    const withdraw = yield* BankUI.WithdrawMoney;
+    const send = (accountId: AccountId, { commandId, kind, amount }: Intent) =>
+      (kind === "deposit" ? deposit : withdraw)({ input: { accountId, amount }, commandId }).pipe(
+        Effect.as<Outcome>({ commandId, result: "Accepted", reason: Option.none() }),
+        Effect.catchTags({
+          Rejected: ({ rejection }) =>
+            Effect.succeed<Outcome>({
+              commandId,
+              result: "Rejected",
+              reason: Option.some(rejection._tag),
+            }),
+          Denied: ({ error }) =>
+            Effect.succeed<Outcome>({
+              commandId,
+              result: "Denied",
+              reason: Option.some(error._tag),
+            }),
+        }),
+        // Unknown: the write may have committed, so retry with the same id.
+        Effect.retry({ schedule: Schedule.exponential("200 millis"), times: 3 }),
+        Effect.catch(() =>
+          Effect.succeed<Outcome>({ commandId, result: "Queued", reason: Option.none() }),
+        ),
+      );
+    return Effect.fn(function* ({ accountId, intents }) {
+      const outcomes: Array<Outcome> = [];
+      for (const intent of intents) {
+        const outcome = yield* send(accountId, intent);
+        outcomes.push(outcome);
+        if (outcome.result === "Queued") {
+          for (const rest of intents.slice(outcomes.length)) {
+            outcomes.push({ commandId: rest.commandId, result: "Queued", reason: Option.none() });
           }
+          break;
         }
-        return BankMessage.CompletedDeliver({ outcomes });
-      });
-    }),
-  );
-}
+      }
+      return BankMessage.CompletedDeliver({ outcomes });
+    });
+  }),
+);
 
 /** Keep the intents not yet acknowledged, so a reload sends them. */
 export const SaveIntents = Command.make(
@@ -554,5 +554,5 @@ export const BankNoDeps = BankDef.make({
 
 /** The bank with its Commands and queries; the entry provides the CustomerApi client. */
 export const Bank = BankNoDeps.pipe(
-  Component.provide(Deliver.layer.pipe(Layer.provideMerge(BankUI.layer))),
+  Component.provide(DeliverLive.pipe(Layer.provideMerge(BankUI.layer))),
 );

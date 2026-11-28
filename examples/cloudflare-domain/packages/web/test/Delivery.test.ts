@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcClientError from "effect/rpc/RpcClientError";
-import { BankUI, Deliver } from "../src/Bank.ts";
+import { BankUI, Deliver, DeliverLive } from "../src/Bank.ts";
 import { Client } from "./Domain.ts";
 
 const accountId = AccountId.make("c-1-main");
@@ -15,7 +15,7 @@ const deliver = (
   intents: ReadonlyArray<{ commandId: string; kind: "deposit" | "withdrawal"; amount: number }>,
 ) =>
   Deliver.make({ accountId, intents }).effect.pipe(
-    Effect.provide(Deliver.layer.pipe(Layer.provide(BankUI.layer))),
+    Effect.provide(DeliverLive.pipe(Layer.provide(BankUI.layer))),
   );
 it.live("retries only the unknown intent with its original id and queues the rest", () =>
   Effect.gen(function* () {

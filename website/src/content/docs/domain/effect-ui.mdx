@@ -358,27 +358,27 @@ export const SessionMessage = UiSchema.TaggedEnum({
 export class SignIn extends Command.Service<SignIn>()("bank/SignIn", {
   args: { customerId: CustomerId },
   success: SessionMessage,
-}) {
-  static readonly layer = this.toLayer(
-    Effect.gen(function* () {
-      const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-      return ({ customerId }) =>
-        client
-          .execute(
-            HttpClientRequest.post("/api/session").pipe(
-              HttpClientRequest.bodyJsonUnsafe({ customerId }),
-            ),
-          )
-          .pipe(
-            Effect.andThen(Bank.AccountSummary.invalidate()),
-            Effect.match({
-              onSuccess: () => SessionMessage.SignedIn(),
-              onFailure: (error) => SessionMessage.FailedSignIn({ reason: error._tag }),
-            }),
-          );
-    }),
-  );
-}
+}) {}
+
+export const SignInLive = SignIn.toLayer(
+  Effect.gen(function* () {
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    return ({ customerId }) =>
+      client
+        .execute(
+          HttpClientRequest.post("/api/session").pipe(
+            HttpClientRequest.bodyJsonUnsafe({ customerId }),
+          ),
+        )
+        .pipe(
+          Effect.andThen(Bank.AccountSummary.invalidate()),
+          Effect.match({
+            onSuccess: () => SessionMessage.SignedIn(),
+            onFailure: (error) => SessionMessage.FailedSignIn({ reason: error._tag }),
+          }),
+        );
+  }),
+);
 
 export const SessionNoDeps = Html.component({
   name: "Session",
@@ -405,7 +405,7 @@ export const SessionNoDeps = Html.component({
 });
 
 // The host provides the HttpClient and the Bank's client.
-export const Session = SessionNoDeps.pipe(Component.provide(SignIn.layer));
+export const Session = SessionNoDeps.pipe(Component.provide(SignInLive));
 ```
 
 A Subscription calls `onFailure` and stops. Change its `restartKey` after the new sign-in to start it again. A query that failed with `Denied` keeps its failure until it fetches again: invalidate it too, or name it in the `invalidates` of a command that signs in.
