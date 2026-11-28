@@ -1,13 +1,19 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
 import { fromTruth, isQuotient, same, textual, truth } from "./Compare.ts";
+import * as Judged from "./Judged.ts";
+import * as Known from "./Known.ts";
 import * as Library from "./Library.ts";
+import * as Strings from "./Models/Strings.ts";
 import * as Smt from "./Smt.ts";
 import type { Loader, OpaqueFunction } from "./Source.ts";
 import * as Symbolic from "./Symbolic.ts";
+import * as Timeline from "./Timeline.ts";
 import type { Brand, Env, Eval, Module, Node, Run, Scope, Site, V } from "./Value.ts";
 import * as Value from "./Value.ts";
 
@@ -234,12 +240,169 @@ const PURE: ReadonlySet<string> = new Set([
 ]);
 
 /** Leaves the `switch` or the loop it is in. */
+/**
+ * The errors the language has: `new Error("no")`. One is what it says, its
+ * `message` and its `name`. A stack and a cause are not read.
+ */
+/** A class the prover reads from its source: its body, where it was declared, and what it extends. */
+interface Read {
+  readonly name: string;
+  readonly node: Node;
+  readonly env: Env;
+  readonly parent: V | undefined;
+  /** What the class itself holds: `static` fields and methods. */
+  readonly statics: Record<string, V>;
+}
+const classes = new WeakMap<object, Read>();
+/** The classes whose bodies are being read: a `static` block may write what the class holds. */
+const building = new WeakSet<object>();
+/** A generator the code called: the function and what it was called with, to run when it is gone over. */
+const generators = new WeakMap<
+  object,
+  { readonly fn: V & { readonly _tag: "Fn" }; readonly args: ReadonlyArray<V> }
+>();
+/** What stops a generator when the loop that goes over it is left: its `finally` runs, and no `catch` sees it. */
+const LEFT: V = { _tag: "Opaque", what: "a loop that was left" };
+const isLeft = (stop: Value.Stop): boolean => stop._tag === "Rejected" && stop.rejection === LEFT;
+
+/** What a `Map` or a `Set` the code made holds, in the order it was put in. A set holds each item as its own key. */
+interface Kept {
+  readonly kind: "Map" | "Set";
+  readonly entries: Array<readonly [V, V]>;
+}
+const kept = new WeakMap<object, Kept>();
+/**
+ * `new Uint8Array([1, 2])`: bytes the code writes, as the language holds them.
+ * `new Uint8Array(buffer)` views the bytes of a buffer the library made.
+ */
+const bytesOf = ([given]: ReadonlyArray<V>, at: Site): Eval<V> => {
+  if (given?._tag === "Host" && given.name === "ArrayBuffer")
+    return Effect.succeed({
+      _tag: "Host",
+      value: new Uint8Array(given.value as ArrayBuffer),
+      name: "bytes",
+    });
+  const real = given ? Known.real(given) : { value: 0 };
+  return real && (typeof real.value === "number" || Array.isArray(real.value))
+    ? Effect.sync((): V => ({
+        _tag: "Host",
+        value: new Uint8Array(real.value as ArrayLike<number>),
+        name: "bytes",
+      }))
+    : Effect.fail(Value.notTranslated(at, "makes bytes of values the prover cannot see"));
+};
+/** `Uint8Array(...)` with no `new` throws, as the language's does. */
+const BYTES: V = {
+  _tag: "Native",
+  name: "Uint8Array",
+  call: (_, at) => Effect.fail(Value.notTranslated(at, "calls Uint8Array without new")),
+};
+/** `Map` and `Set`, which `new` makes one of. */
+const KEEPERS: ReadonlyMap<string, V> = new Map(
+  (["Map", "Set"] as const).map((name) => [
+    name,
+    {
+      _tag: "Native",
+      name,
+      call: (_, at) => Effect.fail(Value.notTranslated(at, `calls ${name} without new`)),
+    } satisfies V,
+  ]),
+);
+/** The class each object the code made with `new` is an instance of. */
+const instances = new WeakMap<object, V>();
+/** What an object answers with when a property is read or written: a getter, a setter. */
+const accessors = new WeakMap<object, Record<string, { get?: V; set?: V }>>();
+/** The name a class body or a property gives: `#count` for a private one. */
+const keyNameOf = (key: Node): string | undefined =>
+  key.type === "PrivateIdentifier"
+    ? `#${key.name}`
+    : key.type === "Identifier"
+      ? key.name
+      : key.type === "Literal"
+        ? String(key.value)
+        : undefined;
+
+/** The class each error the code made was made with: `thrown instanceof TypeError`. */
+const errorNames = new WeakMap<object, string>();
+const ERRORS: ReadonlyMap<string, V> = new Map(
+  ["Error", "TypeError", "RangeError"].map((name) => [
+    name,
+    {
+      _tag: "Native",
+      name,
+      call: ([message]) =>
+        Effect.sync(() => {
+          const error = Value.obj({ name: Value.str(name), message: message ?? Value.str("") });
+          errorNames.set(error, name);
+          return error;
+        }),
+    } satisfies V,
+  ]),
+);
+const ERROR_CLASSES: ReadonlySet<V> = new Set(ERRORS.values());
+
+/** What the language gives every file by name, read through the models of the library. */
+const GLOBAL_OBJECTS: ReadonlySet<string> = new Set(
+  "Math Object String Number Boolean Array JSON".split(" "),
+);
+const GLOBAL_FUNCTIONS: ReadonlySet<string> = new Set(
+  "parseInt parseFloat structuredClone Symbol".split(" "),
+);
+/** A name of the language itself, where no file gives it another meaning. */
+const globalOf = (name: string): V | undefined =>
+  name === "undefined"
+    ? Value.undef
+    : name === "Infinity" || name === "NaN"
+      ? Value.num(name === "NaN" ? Number.NaN : Number.POSITIVE_INFINITY)
+      : GLOBAL_OBJECTS.has(name)
+        ? { _tag: "Lib", module: name, path: [] }
+        : GLOBAL_FUNCTIONS.has(name)
+          ? { _tag: "Lib", module: "global", path: [name] }
+          : name === "globalThis"
+            ? { _tag: "Lib", module: "globalThis", path: [] }
+            : name === "Uint8Array"
+              ? BYTES
+              : (ERRORS.get(name) ?? KEEPERS.get(name));
+
 const BREAK: V = { _tag: "Opaque", what: "break" };
+/** `break outer` and `continue outer`: one value for each label, to find the statement it names. */
+const labelled = new Map<string, V>();
+const toLabel = (kind: "break" | "continue", label: string): V => {
+  const key = `${kind} ${label}`;
+  const known = labelled.get(key);
+  if (known) return known;
+  const made: V = { _tag: "Opaque", what: key };
+  labelled.set(key, made);
+  return made;
+};
+/** How deep one function may call another before the prover stops: one that calls itself with no end is not read. */
+const MAX_DEPTH = 500;
+/** A service of `effect/Context`: a key under which the code around provides a value. */
+const isService = (
+  value: unknown,
+): value is { readonly key: string; readonly defaultValue?: unknown } =>
+  (typeof value === "function" || (typeof value === "object" && value !== null)) &&
+  typeof (value as { readonly key?: unknown }).key === "string";
+const isIterable = (value: unknown): value is Iterable<unknown> =>
+  typeof value === "object" && value !== null && Symbol.iterator in value;
+/** A number, text, a boolean or a bigint the code writes. */
+const primitive = (v: V): { readonly value: number | string | boolean | bigint } | undefined =>
+  v._tag === "Num" || v._tag === "Str" || v._tag === "Bool" || v._tag === "Big"
+    ? { value: v.value }
+    : undefined;
+/** `==`, as the language has it between two values that are not objects. */
+const loosely = (a: unknown, b: unknown): boolean => a == b;
+/** The operators of the bits of a whole number. */
+const BITS: ReadonlySet<string> = new Set(["&", "|", "^", "<<", ">>", ">>>"]);
+/** The highest power a number an input holds is raised to, as that many multiplications. */
+const MAX_POWER = 16;
 /** Goes on to the next turn of the loop it is in. */
 const CONTINUE: V = { _tag: "Opaque", what: "continue" };
 
 /** The most turns a loop takes before the prover stops reading it. */
 const MAX_TURNS = 10_000;
+/** How many times a loop may go round where an input decides whether it does: a bound on the input ends it sooner. */
+const MAX_DECIDED = 64;
 
 /** What `typeof` gives, for the values it is known of. */
 const kindOf = (v: V): string | undefined => {
@@ -272,6 +435,17 @@ const kindOf = (v: V): string | undefined => {
           : v.term.sort === "Bool"
             ? "boolean"
             : "number";
+    // An effect is an object of the library's, a function only when it is called to make one.
+    case "Effect":
+      return "object";
+    // What the library made is what it is.
+    case "Host":
+      return typeof v.value;
+    case "Lib": {
+      // A function of a pure module is the one the runtime loads.
+      const host: unknown = v.host ?? Known.hostOf(v.module, v.path);
+      return host === undefined ? undefined : typeof host;
+    }
     default:
       return undefined;
   }
@@ -283,16 +457,27 @@ const kindOf = (v: V): string | undefined => {
  * model for each library function it knows, and stops with `NotTranslated`
  * at anything else.
  */
-export const make = (loader: Loader, run: Run): Interpreter => {
+export const make = (given: Loader, run: Run): Interpreter => {
+  // Reading a file takes no time of the handler's, and no other fiber of it runs meanwhile.
+  const loader: Loader = {
+    ...given,
+    load: (file) => Timeline.outside(given.load(file)),
+    resolve: (from, specifier) => Timeline.outside(given.resolve(from, specifier)),
+    runtime: (from, specifier) => Timeline.outside(given.runtime(from, specifier)),
+  };
   const current: Interpreter["current"] = { run };
 
+  /** How many calls of the code the library is running at once, one inside another. */
+  let runningAtOnce = 0;
   const branch: Interpreter["branch"] = (condition) =>
     Effect.suspend(() => {
       const run = current.run;
       const known = run.sideOf(condition);
       if (known !== undefined) return Effect.succeed(known);
       const feasible = current.feasible;
-      if (!feasible) return Effect.succeed(run.branch(condition));
+      // Code the library runs at once cannot wait for the solver: both sides are taken, and
+      // a side no inputs reach is found when its path is checked.
+      if (!feasible || runningAtOnce > 0) return Effect.succeed(run.branch(condition));
       return feasible(run, condition).pipe(
         Effect.flatMap((holds) =>
           holds ? feasible(run, Smt.not(condition)) : Effect.succeed(undefined),
@@ -301,8 +486,12 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         Effect.map((fails) =>
           run.branch(condition, fails === undefined ? false : fails ? undefined : true),
         ),
+        // Asking the solver takes no time of the handler's.
+        Timeline.outside,
       );
     });
+  /** The services the code has read, by key: what a context of the library finds by its key. */
+  const services = new Map<string, unknown>();
   const hooks: Hooks = {
     service: undefined,
     host: undefined,
@@ -540,6 +729,8 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           ),
         );
       }
+      if (declaration?._tag === "Enum") return yield* enumOf(declaration.node, moduleEnv(module));
+      if (declaration?._tag === "Space") return yield* spaceOf(declaration.node, moduleEnv(module));
       if (declaration?._tag === "Function") {
         return exported(
           { _tag: "Fn", node: declaration.node, env: moduleEnv(module), effectful: false },
@@ -548,16 +739,20 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         );
       }
       if (declaration?._tag === "Class") {
-        if (name in module.exports) return fromHost(module.exports[name], name);
-        // A class a file keeps to itself is read where it only extends one of `effect/Data`'s.
         const node = declaration.node;
+        // A class of the library or of the domain a file exports is the one the runtime made.
+        const host: unknown = name in module.exports ? module.exports[name] : undefined;
+        if (host !== undefined && (node.superClass || typeof host !== "function"))
+          return fromHost(host, name);
+        // A class a file keeps to itself is read where it only extends one of `effect/Data`'s.
         const body: ReadonlyArray<Node> = node.body?.body ?? [];
         if (node.superClass && body.length === 0) {
           const base = yield* evaluate(node.superClass, moduleEnv(module));
           const made = library.subclass(base, name);
           if (made) return made;
         }
-        return yield* reaches(site, `${name} is a class that its file does not export`);
+        // Any other class is read from what the file writes: its fields, its constructor, its methods.
+        return yield* classOf(node, moduleEnv(module), name);
       }
       const imported = module.imports.get(name);
       if (imported) {
@@ -631,8 +826,8 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     }
     const found = yield* top(env.module, name, site);
     if (found) return found;
-    if (name === "undefined") return Value.undef;
-    if (name === "Math" || name === "Object") return { _tag: "Lib", module: name, path: [] } as V;
+    const global = globalOf(name);
+    if (global) return global;
     if (name === "BigInt")
       return {
         _tag: "Native",
@@ -648,6 +843,47 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       } as V;
     return yield* reaches(site, `refers to ${name}, which the prover cannot find`);
   });
+
+  /** A function of the code, run to its end where it stands: the library called it and waits for no one. */
+  /** `value instanceof cls`, as the language has it, of a value and a class the prover can see. */
+  const instanceOf = (left: V, right: V, site: Site): Eval<V> =>
+    Effect.gen(function* () {
+      const value = forced(left);
+      if (value._tag === "Opaque" || value._tag === "Applied" || value._tag === "Pending")
+        return yield* fail(
+          site,
+          inside("uses instanceof on", value) ?? "uses instanceof on a value it cannot see",
+        );
+      // An array of the language, whatever name the file gives `Array`.
+      if (right._tag === "Lib" && right.module === "Array" && right.path.length === 0)
+        return Value.bool(value._tag === "Arr");
+      if (classes.has(right)) return Value.bool(isInstance(value, right));
+      if (right._tag === "Native" && ERROR_CLASSES.has(right)) {
+        const named = value._tag === "Obj" ? errorNames.get(value) : undefined;
+        return Value.bool(named !== undefined && (right.name === "Error" || right.name === named));
+      }
+      if (right._tag === "Host" && typeof right.value === "function") {
+        const cls: unknown =
+          value._tag === "Obj" && value.brand && "cls" in value.brand ? value.brand.cls : undefined;
+        return Value.bool(
+          typeof cls === "function" &&
+            (cls === right.value ||
+              Object.prototype.isPrototypeOf.call(right.value.prototype, cls.prototype)),
+        );
+      }
+      return yield* fail(site, "uses instanceof with a class the prover cannot see");
+    });
+
+  const ranAtOnce = (fn: V, args: ReadonlyArray<V>, site: Site): V => {
+    runningAtOnce++;
+    try {
+      const exit = Effect.runSyncExit(call(fn, args, site));
+      if (exit._tag === "Success") return exit.value;
+      throw new Known.NotAtOnce();
+    } finally {
+      runningAtOnce--;
+    }
+  };
 
   const library = Library.make({
     current,
@@ -669,8 +905,76 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         : Effect.succeed(fromTruth(equal));
     },
     force: (value) => forced(value),
+    fresh: (value) => made(value),
+    atOnce: (fn, args, site) => ranAtOnce(fn, args, site),
+    instanceOf: (value, cls, site) => instanceOf(value, cls, site),
+    setOf: (items) => {
+      const self = made<V>({ _tag: "Obj", fields: {} });
+      kept.set(self, { kind: "Set", entries: items.map((item): [V, V] => [item, item]) });
+      return self;
+    },
+    keptOf: (value) => (typeof value === "object" ? kept.get(value) : undefined),
+    services,
+    stepper: (value) => stepper(value),
     array: (name, items, fn, initial, site) => arrayMethods[name]!(items, fn, initial, site),
   });
+
+  /**
+   * A generator the code called, gone over one value at a time as an iterator's
+   * `next` gives them: its body runs up to the next `yield` each time, and no
+   * further. One that is not gone over to its end is left where it stands.
+   */
+  const stepper = (value: V): (() => Eval<Library.Step>) | undefined => {
+    const generator = generators.get(value);
+    if (!generator) return undefined;
+    let channels:
+      | {
+          readonly asks: Queue.Queue<void>;
+          readonly gives: Queue.Queue<Exit.Exit<Library.Step, Value.Stop>>;
+        }
+      | undefined;
+    let ended = false;
+    const start = Effect.gen(function* () {
+      const asks = yield* Queue.unbounded<void>();
+      const gives = yield* Queue.unbounded<Exit.Exit<Library.Step, Value.Stop>>();
+      const sink: V = {
+        _tag: "Native",
+        name: "yield",
+        call: ([given]) =>
+          Queue.offer(gives, Exit.succeed({ done: false, value: given ?? Value.undef })).pipe(
+            Effect.andThen(Queue.take(asks)),
+            Effect.as(Value.undef),
+          ),
+      };
+      yield* Queue.take(asks).pipe(
+        Effect.andThen(invoke(yielding(generator.fn, sink), generator.args)),
+        Effect.exit,
+        Effect.flatMap((exit) => {
+          ended = true;
+          return Queue.offer(
+            gives,
+            Exit.isSuccess(exit)
+              ? Exit.succeed({ done: true, value: exit.value })
+              : Exit.failCause(exit.cause),
+          );
+        }),
+        Effect.forkDetach,
+      );
+      return { asks, gives };
+    });
+    return () =>
+      Effect.suspend(() => {
+        if (ended && channels === undefined)
+          return Effect.succeed<Library.Step>({ done: true, value: Value.undef });
+        return Effect.gen(function* () {
+          if (ended) return { done: true, value: Value.undef } satisfies Library.Step;
+          channels ??= yield* start;
+          yield* Queue.offer(channels.asks, undefined);
+          const exit = yield* Queue.take(channels.gives);
+          return yield* exit;
+        });
+      });
+  };
 
   /** The array methods that take a function. The items are known; what the function gives may not be. */
   const arrayMethods: Record<
@@ -748,6 +1052,15 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         yield* call(fn, [item, Value.num(index)], at);
       return Value.undef;
     }),
+    reduceRight: Effect.fnUntraced(function* (items, fn, initial, at) {
+      if (items.length === 0 && initial === undefined)
+        return yield* fail(at, "reduces an empty array with no first value");
+      let from = items.length - 1;
+      let total = initial ?? items[from--]!;
+      for (let index = from; index >= 0; index--)
+        total = yield* call(fn, [total, items[index]!, Value.num(index)], at);
+      return total;
+    }),
     reduce: Effect.fnUntraced(function* (items, fn, initial, at) {
       if (initial === undefined && items.length === 0)
         return yield* fail(at, "reduces an empty array with no first value");
@@ -761,6 +1074,19 @@ export const make = (loader: Loader, run: Run): Interpreter => {
   };
 
   /** The array methods that take values. */
+  /** A method that changes an array where it stands: only an array the code made itself. */
+  const changing = (
+    self: V & { readonly _tag: "Arr" },
+    at: Site,
+    change: (items: Array<V>) => Eval<V>,
+  ): Eval<V> =>
+    mine(self)
+      ? change(self.items as Array<V>)
+      : reaches(
+          at,
+          "changes a value it was given: the prover reads code that changes only what it wrote itself",
+        );
+
   const arrayOwn: Record<
     string,
     (self: V & { readonly _tag: "Arr" }, args: ReadonlyArray<V>, at: Site) => Eval<V>
@@ -808,7 +1134,9 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     at: (self, [index], at) =>
       index?._tag === "Num"
         ? Effect.succeed(self.items.at(index.value) ?? Value.undef)
-        : fail(at, "reads an array at a place the prover cannot see"),
+        : index?._tag === "Term" && index.term.sort === "Int" && index.big !== true
+          ? placed(self.items, index.term.text, true)
+          : fail(at, "reads an array at a place the prover cannot see"),
     entries: (self) =>
       Effect.succeed<V>({
         _tag: "Arr",
@@ -862,11 +1190,106 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         : fail(at, "flattens an array to a depth the prover does not read"),
     toReversed: (self) =>
       Effect.succeed(made<V>({ _tag: "Arr", items: [...self.items].reverse() })),
+    // In the order the function gives: with none, the items have to be text the code writes.
+    toSorted: (self, [compare], at) =>
+      compare && compare._tag !== "Undef"
+        ? library.call({ _tag: "Lib", module: "effect/Array", path: ["sort"] }, [self, compare], at)
+        : self.items.every((item) => primitive(item) !== undefined)
+          ? // With no function, the language orders items by their text: `10` comes before `9`.
+            Effect.succeed(
+              made<V>({
+                _tag: "Arr",
+                items: [...self.items].sort((a, b) => {
+                  const [x, y] = [String(primitive(a)?.value), String(primitive(b)?.value)];
+                  return x === y ? 0 : x < y ? -1 : 1;
+                }),
+              }),
+            )
+          : fail(at, "sorts items by their text, which the prover does not translate"),
+    lastIndexOf: Effect.fnUntraced(function* (self, [wanted], at) {
+      for (let index = self.items.length - 1; index >= 0; index--) {
+        const item = self.items[index]!;
+        const equal = sameAs(item, wanted ?? Value.undef);
+        if (equal === undefined)
+          return yield* fail(
+            at,
+            inside("looks for", item, wanted) ?? "looks for a value the prover does not model",
+          );
+        if (typeof equal === "boolean" ? equal : yield* branch(equal)) return Value.num(index);
+      }
+      return Value.num(-1);
+    }),
+    with: (self, [index, value], at) => {
+      const size = self.items.length;
+      const place =
+        index?._tag === "Num" && Number.isInteger(index.value)
+          ? index.value < 0
+            ? index.value + size
+            : index.value
+          : undefined;
+      if (place === undefined) return fail(at, "puts an item at a place the prover cannot see");
+      // A place the array does not have: the language throws.
+      return place < 0 || place >= size
+        ? Effect.fail(
+            new Value.Rejected({
+              rejection: Value.obj({
+                name: Value.str("RangeError"),
+                message: Value.str("Invalid index : " + String(place < 0 ? place - size : place)),
+              }),
+              defect: true,
+            }),
+          )
+        : Effect.succeed(
+            made<V>({
+              _tag: "Arr",
+              items: self.items.map((item, at_) => (at_ === place ? (value ?? Value.undef) : item)),
+            }),
+          );
+    },
     push: (self, args, at) => {
       if (!mine(self)) return reaches(at, "pushes onto an array it was given, which changes it");
       (self.items as Array<V>).push(...args);
       return Effect.succeed(Value.num(self.items.length));
     },
+    // The other methods that change an array where it stands, for one the code made itself.
+    pop: (self, _, at) => changing(self, at, (items) => Effect.succeed(items.pop() ?? Value.undef)),
+    shift: (self, _, at) =>
+      changing(self, at, (items) => Effect.succeed(items.shift() ?? Value.undef)),
+    unshift: (self, args, at) =>
+      changing(self, at, (items) => Effect.succeed(Value.num(items.unshift(...args)))),
+    reverse: (self, _, at) =>
+      changing(self, at, (items) => {
+        items.reverse();
+        return Effect.succeed<V>(self);
+      }),
+    fill: (self, [value, from, to], at) =>
+      changing(self, at, (items) => {
+        const place = (v: V | undefined): number | undefined | null =>
+          v === undefined || v._tag === "Undef" ? undefined : v._tag === "Num" ? v.value : null;
+        const [start, end] = [place(from), place(to)];
+        if (start === null || end === null)
+          return fail(at, "fills an array between places the prover cannot see");
+        items.fill(value ?? Value.undef, start, end);
+        return Effect.succeed<V>(self);
+      }),
+    splice: (self, [from, count, ...added], at) =>
+      changing(self, at, (items) => {
+        if (from?._tag !== "Num" || (count !== undefined && count._tag !== "Num"))
+          return fail(at, "splices an array at a place the prover cannot see");
+        const removed =
+          count === undefined
+            ? items.splice(from.value)
+            : items.splice(from.value, count.value, ...added);
+        return Effect.succeed(made<V>({ _tag: "Arr", items: removed }));
+      }),
+    sort: (self, [compare], at) =>
+      changing(self, at, (items) =>
+        Effect.map(arrayOwn.toSorted!(self, [compare ?? Value.undef], at), (sorted) => {
+          const next = sorted._tag === "Arr" ? sorted.items : items;
+          items.splice(0, items.length, ...next);
+          return self as V;
+        }),
+      ),
   };
 
   /** `value.pipe(f, g)`: each function applied to what the one before gave. */
@@ -880,6 +1303,456 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     }),
   });
 
+  /** The class a function was already bound in, kept when it is bound again. */
+  const thisOfFn = (fn: V & { readonly _tag: "Fn" }): V | undefined => thisOf(fn.env, "~class");
+
+  /** A generator function, with what each `yield` in its body hands its value to. */
+  const yielding = (fn: V & { readonly _tag: "Fn" }, sink: V): V & { readonly _tag: "Fn" } => {
+    const scope = child(fn.env.scope);
+    scope.variables.set("~yield", sink);
+    return { ...fn, env: { ...fn.env, scope } };
+  };
+
+  /** What a `yield` hands its value to, where the code being read is a generator that is gone over. */
+  const sinkOf = (env: Env): V | undefined => {
+    const sink = thisOf(env, "~yield");
+    return sink && sink._tag !== "Undef" ? sink : undefined;
+  };
+
+  /**
+   * Go over a generator: its body is run, and each value it yields is given
+   * to `each` where the body stands. `each` says whether to go on. When it
+   * says no, the generator is left where it stands, as a loop that is broken
+   * out of leaves one: its `finally` runs.
+   */
+  const through: (
+    generator: { readonly fn: V & { readonly _tag: "Fn" }; readonly args: ReadonlyArray<V> },
+    each: (value: V) => Eval<boolean>,
+  ) => Eval<void> = Effect.fnUntraced(function* (generator, each) {
+    const sink: V = {
+      _tag: "Native",
+      name: "yield",
+      call: ([value]) =>
+        Effect.flatMap(each(value ?? Value.undef), (goesOn) =>
+          goesOn
+            ? Effect.succeed(Value.undef)
+            : Effect.fail(new Value.Rejected({ rejection: LEFT, defect: true, yielded: true })),
+        ),
+    };
+    yield* invoke(yielding(generator.fn, sink), generator.args).pipe(
+      Effect.catchIf(isLeft, () => Effect.succeed(Value.undef)),
+    );
+  });
+
+  /** A function with `this` bound to the value it was read from. */
+  const bound = (fn: V, self: V, cls?: V): V => {
+    if (fn._tag !== "Fn" || fn.node.type === "ArrowFunctionExpression") return fn;
+    const scope = child(fn.env.scope);
+    scope.variables.set("this", self);
+    if (cls) scope.variables.set("~class", cls);
+    return { ...fn, env: { ...fn.env, scope } };
+  };
+
+  const membersOf = (read: Read): ReadonlyArray<Node> =>
+    (read.node.body?.body ?? []) as ReadonlyArray<Node>;
+
+  /** The method, getter or setter a class gives under a name, in the class or one it extends. */
+  const methodOf = (
+    cls: V | undefined,
+    key: string,
+    kind: "method" | "get" | "set",
+    isStatic = false,
+  ): { readonly fn: V; readonly cls: V } | undefined => {
+    for (let at = cls; at;) {
+      const read = classes.get(at);
+      if (!read) return undefined;
+      const found = membersOf(read).find(
+        (each) =>
+          each.type === "MethodDefinition" &&
+          each.kind === kind &&
+          Boolean(each.static) === isStatic &&
+          !each.computed &&
+          keyNameOf(each.key) === key,
+      );
+      if (found)
+        return { fn: { _tag: "Fn", node: found.value, env: read.env, effectful: false }, cls: at };
+      at = read.parent;
+    }
+    return undefined;
+  };
+
+  /** `this`, where the code being read has one. */
+  const thisOf = (env: Env, name = "this"): V | undefined => {
+    for (let scope: Scope | undefined = env.scope; scope; scope = scope.parent) {
+      const found = scope.variables.get(name);
+      if (found) return found;
+    }
+    return undefined;
+  };
+
+  /** The fields a class body gives each instance, set where the language sets them. */
+  const fieldsOf: (cls: V, read: Read, self: V & { readonly _tag: "Obj" }) => Eval<void> =
+    Effect.fnUntraced(function* (cls: V, read: Read, self: V & { readonly _tag: "Obj" }) {
+      const scope = child(read.env.scope);
+      scope.variables.set("this", self);
+      scope.variables.set("~class", cls);
+      for (const each of membersOf(read)) {
+        if (each.type !== "PropertyDefinition" || each.static || each.declare) continue;
+        const key = each.computed ? undefined : keyNameOf(each.key);
+        if (key === undefined)
+          return yield* fail(
+            { module: read.env.module, node: each },
+            "declares a field under a name the prover cannot see",
+          );
+        (self.fields as Record<string, V>)[key] = each.value
+          ? yield* evaluate(each.value, { ...read.env, scope })
+          : Value.undef;
+      }
+    });
+
+  /** What `new` does to the object it makes: the fields and the constructor of the class, and of the ones it extends. */
+  const initialise: (
+    cls: V,
+    self: V & { readonly _tag: "Obj" },
+    args: ReadonlyArray<V>,
+    site: Site,
+  ) => Eval<void> = Effect.fnUntraced(function* (
+    cls: V,
+    self: V & { readonly _tag: "Obj" },
+    args: ReadonlyArray<V>,
+    site: Site,
+  ) {
+    const read = classes.get(cls);
+    if (!read) return yield* fail(site, "extends a class the prover cannot read");
+    const constructor = membersOf(read).find(
+      (each) => each.type === "MethodDefinition" && each.kind === "constructor",
+    );
+    if (!read.parent) yield* fieldsOf(cls, read, self);
+    if (!constructor) {
+      // With no constructor of its own, a class that extends another is made as that one is.
+      if (read.parent) {
+        yield* initialise(read.parent, self, args, site);
+        yield* fieldsOf(cls, read, self);
+      }
+      return;
+    }
+    const scope = child(read.env.scope);
+    scope.variables.set("this", self);
+    scope.variables.set("~class", cls);
+    // `super(...)`: the class it extends makes the object first, and then this one's fields are set.
+    const parent = read.parent;
+    if (parent)
+      scope.variables.set("~super", {
+        _tag: "Native",
+        name: "super",
+        call: (given, at) =>
+          Effect.as(
+            Effect.andThen(initialise(parent, self, given, at), fieldsOf(cls, read, self)),
+            Value.undef,
+          ),
+      });
+    yield* invoke(
+      { _tag: "Fn", node: constructor.value, env: { ...read.env, scope }, effectful: false },
+      args,
+    );
+  });
+
+  /** A class read from its source: `new` makes an object of it. */
+  const classOf: (node: Node, env: Env, name: string) => Eval<V> = Effect.fnUntraced(function* (
+    node: Node,
+    env: Env,
+    name: string,
+  ) {
+    const site: Site = { module: env.module, node };
+    const parent = node.superClass ? yield* evaluate(node.superClass, env) : undefined;
+    if (parent && !classes.has(parent))
+      return yield* fail(site, `${name} extends a class the prover does not read the body of`);
+    const statics: Record<string, V> = {};
+    const cls: V = made<V>({
+      _tag: "Native",
+      name,
+      call: (_, at) => fail(at, `calls the class ${name} without new`),
+    });
+    building.add(cls);
+    const read: Read = { name, node, env, parent, statics };
+    classes.set(cls, read);
+    const scope = child(env.scope);
+    scope.variables.set("this", cls);
+    scope.variables.set("~class", cls);
+    // A class can name itself in its own body.
+    scope.variables.set(name, cls);
+    for (const each of membersOf(read)) {
+      if (each.type === "StaticBlock") {
+        yield* execute(each.body, { ...env, scope: child(scope) });
+        continue;
+      }
+      if (each.type !== "PropertyDefinition" || !each.static) continue;
+      const key = each.computed ? undefined : keyNameOf(each.key);
+      if (key === undefined)
+        return yield* fail(site, "declares a field under a name the prover cannot see");
+      statics[key] = each.value ? yield* evaluate(each.value, { ...env, scope }) : Value.undef;
+    }
+    building.delete(cls);
+    return cls;
+  });
+
+  /** Whether an object was made by a class, or by one that extends it. */
+  const isInstance = (value: V, cls: V): boolean => {
+    for (let at = instances.get(value); at; at = classes.get(at)?.parent)
+      if (at === cls) return true;
+    return false;
+  };
+
+  /**
+   * `enum Kind { Good, Gift = 5, Last }`: an object of its members. One with
+   * no value is one more than the member before it, and a member that is a
+   * number is found by it too: `Kind[5]`.
+   */
+  const enumOf: (node: Node, env: Env) => Eval<V> = Effect.fnUntraced(function* (
+    node: Node,
+    env: Env,
+  ) {
+    const site: Site = { module: env.module, node };
+    const members = (node.body?.members ?? node.members ?? []) as ReadonlyArray<Node>;
+    const scope = child(env.scope);
+    const fields: Record<string, V> = {};
+    let next: number | undefined = 0;
+    for (const member of members) {
+      const name: string =
+        member.id.type === "Identifier" ? member.id.name : String(member.id.value);
+      const value: V = member.initializer
+        ? yield* evaluate(member.initializer, { ...env, scope })
+        : next === undefined
+          ? yield* fail(
+              site,
+              "declares an enum member with no value after one that is not a number",
+            )
+          : Value.num(next);
+      next = value._tag === "Num" ? value.value + 1 : undefined;
+      fields[name] = value;
+      if (value._tag === "Num") fields[String(value.value)] = Value.str(name);
+      scope.variables.set(name, value);
+    }
+    return Value.obj(fields);
+  });
+
+  /** `namespace Space { export const n = 1 }`: its statements are run, and it is an object of what it exports. */
+  const spaceOf: (node: Node, env: Env) => Eval<V> = Effect.fnUntraced(function* (
+    node: Node,
+    env: Env,
+  ) {
+    const site: Site = { module: env.module, node };
+    const body = (node.body?.body ?? []) as ReadonlyArray<Node>;
+    const scope = child(env.scope);
+    const inner: Env = { ...env, scope };
+    const fields: Record<string, V> = {};
+    for (const statement of body) {
+      const exported = statement.type === "ExportNamedDeclaration" && statement.declaration;
+      const declared: Node = exported ? statement.declaration : statement;
+      if (statement.type.startsWith("Export") && !exported)
+        return yield* fail(site, "exports from a namespace in a way the prover does not read");
+      const before = new Set(scope.variables.keys());
+      yield* execute([declared], inner);
+      if (exported)
+        for (const [name, value] of scope.variables) if (!before.has(name)) fields[name] = value;
+    }
+    return Value.obj(fields);
+  });
+
+  /** A regular expression the code writes: what it is asked of text the code writes. */
+  const patternMember = (pattern: RegExp, key: string): V | undefined => {
+    const asked = (name: string, ask: (text: string) => V): V => ({
+      _tag: "Native",
+      name,
+      call: ([text], at) =>
+        text?._tag === "Str"
+          ? Effect.sync(() => ask(text.value))
+          : fail(at, `runs a regular expression's ${name} on text an input holds`),
+    });
+    if (key === "test") return asked("test", (text) => Value.bool(pattern.test(text)));
+    if (key === "exec")
+      return asked("exec", (text) => {
+        const found = pattern.exec(text);
+        return found
+          ? {
+              _tag: "Arr",
+              items: found.map((part) => (part === undefined ? Value.undef : Value.str(part))),
+            }
+          : Value.nil;
+      });
+    if (key === "source") return Value.str(pattern.source);
+    if (key === "flags") return Value.str(pattern.flags);
+    if (key === "global") return Value.bool(pattern.global);
+    if (key === "lastIndex") return Value.num(pattern.lastIndex);
+    return undefined;
+  };
+
+  // ---- `Map` and `Set`: kept in the order things were put in, found by `===`.
+
+  /** Where a key is among the ones held, on this path: `-1` where it is not. */
+  const found: (held: Kept, key: V, site: Site) => Eval<number> = Effect.fnUntraced(function* (
+    held: Kept,
+    key: V,
+    site: Site,
+  ) {
+    for (const [index, [each]] of held.entries.entries()) {
+      const equal = sameAs(each, key);
+      if (equal === undefined)
+        return yield* fail(
+          site,
+          inside("looks for", each, key) ?? "looks for a key the prover does not model",
+        );
+      if (typeof equal === "boolean" ? equal : yield* branch(equal)) return index;
+    }
+    return -1;
+  });
+
+  const keptMember = (self: V, held: Kept, key: string): V | undefined => {
+    const method = (name: string, run: (args: ReadonlyArray<V>, at: Site) => Eval<V>): V => ({
+      _tag: "Native",
+      name: `${held.kind}.${name}`,
+      call: run,
+    });
+    /** Changing one: only the code that made it may. */
+    const changing = (name: string, run: (args: ReadonlyArray<V>, at: Site) => Eval<V>): V =>
+      method(name, (args, at) =>
+        mine(self)
+          ? run(args, at)
+          : reaches(
+              at,
+              "changes a value it was given: the prover reads code that changes only what it wrote itself",
+            ),
+      );
+    const list = (items: ReadonlyArray<V>): V => made<V>({ _tag: "Arr", items });
+    switch (key) {
+      case "size":
+        return Value.num(held.entries.length);
+      case "has":
+        return method("has", ([wanted], at) =>
+          Effect.map(found(held, wanted ?? Value.undef, at), (index) => Value.bool(index >= 0)),
+        );
+      case "get":
+        return held.kind === "Map"
+          ? method("get", ([wanted], at) =>
+              Effect.map(found(held, wanted ?? Value.undef, at), (index) =>
+                index < 0 ? Value.undef : held.entries[index]![1],
+              ),
+            )
+          : undefined;
+      case "set":
+        return held.kind === "Map"
+          ? changing("set", ([k, v], at) =>
+              Effect.map(found(held, k ?? Value.undef, at), (index) => {
+                if (index < 0) held.entries.push([k ?? Value.undef, v ?? Value.undef]);
+                else held.entries[index] = [held.entries[index]![0], v ?? Value.undef];
+                return self;
+              }),
+            )
+          : undefined;
+      case "add":
+        return held.kind === "Set"
+          ? changing("add", ([item], at) =>
+              Effect.map(found(held, item ?? Value.undef, at), (index) => {
+                if (index < 0) held.entries.push([item ?? Value.undef, item ?? Value.undef]);
+                return self;
+              }),
+            )
+          : undefined;
+      case "delete":
+        return changing("delete", ([wanted], at) =>
+          Effect.map(found(held, wanted ?? Value.undef, at), (index) => {
+            if (index >= 0) held.entries.splice(index, 1);
+            return Value.bool(index >= 0);
+          }),
+        );
+      case "clear":
+        return changing("clear", () =>
+          Effect.sync(() => {
+            held.entries.length = 0;
+            return Value.undef;
+          }),
+        );
+      case "keys":
+        return method("keys", () => Effect.succeed(list(held.entries.map(([k]) => k))));
+      case "values":
+        return method("values", () => Effect.succeed(list(held.entries.map(([, v]) => v))));
+      case "entries":
+        return method("entries", () =>
+          Effect.succeed(list(held.entries.map(([k, v]) => list([k, v])))),
+        );
+      case "forEach":
+        return method("forEach", ([fn], at) =>
+          Effect.gen(function* () {
+            // The entries there are when it starts: one added on the way is not gone over.
+            for (const [k, v] of held.entries.slice())
+              yield* call(fn ?? Value.undef, [v, k, self], at);
+            return Value.undef;
+          }),
+        );
+      default:
+        return undefined;
+    }
+  };
+
+  /** `new Map(entries)` and `new Set(items)`. */
+  const keeping: (kind: "Map" | "Set", given: V | undefined, site: Site) => Eval<V> =
+    Effect.fnUntraced(function* (kind: "Map" | "Set", given: V | undefined, site: Site) {
+      const self = made<V>({ _tag: "Obj", fields: {} });
+      const held: Kept = { kind, entries: [] };
+      kept.set(self, held);
+      if (given === undefined || given._tag === "Undef" || given._tag === "Null") return self;
+      const items = yield* iterate(given, site);
+      if (!items) return yield* fail(site, `makes a ${kind} of something that is not a list`);
+      for (const item of items) {
+        const entry = kind === "Map" ? forced(item) : undefined;
+        if (kind === "Map" && entry?._tag !== "Arr")
+          return yield* fail(site, "makes a Map of something that is not a list of pairs");
+        const [k, v] =
+          entry?._tag === "Arr"
+            ? [entry.items[0] ?? Value.undef, entry.items[1] ?? Value.undef]
+            : [item, item];
+        const index = yield* found(held, k, site);
+        if (index < 0) held.entries.push([k, v]);
+        else held.entries[index] = [held.entries[index]![0], v];
+      }
+      return self;
+    });
+
+  /** `n.toString()` and `n.toFixed(2)`: a number as text. */
+  const numberMember = (value: V, key: string): V | undefined =>
+    key === "toString"
+      ? {
+          _tag: "Native",
+          name: "toString",
+          call: ([radix], at) =>
+            radix === undefined || radix._tag === "Undef"
+              ? arithmetic("+", Value.str(""), value, at)
+              : value._tag === "Num" && radix._tag === "Num"
+                ? Effect.succeed(Value.str(value.value.toString(radix.value)))
+                : fail(at, "writes a number an input holds in another base"),
+        }
+      : key === "toFixed"
+        ? {
+            _tag: "Native",
+            name: "toFixed",
+            call: ([digits], at) =>
+              value._tag === "Num" && (digits === undefined || digits._tag === "Num")
+                ? Effect.succeed(Value.str(value.value.toFixed(digits?.value)))
+                : fail(at, "calls toFixed on a number an input holds, which it rounds"),
+          }
+        : undefined;
+
+  /** `items[n]`, for a place an input decides: one of the places the array has, or nothing. */
+  const placed: (items: ReadonlyArray<V>, place: string, wraps: boolean) => Eval<V> =
+    Effect.fnUntraced(function* (items: ReadonlyArray<V>, place: string, wraps: boolean) {
+      for (const [index, item] of items.entries()) {
+        if (yield* branch(`(= ${place} ${index})`)) return item;
+        // `items.at(-1)`: from the end.
+        if (wraps && (yield* branch(`(= ${place} (- ${items.length - index}))`))) return item;
+      }
+      return Value.undef;
+    });
+
   const member: Interpreter["member"] = Effect.fnUntraced(function* (
     value: V,
     key: string,
@@ -887,7 +1760,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
   ) {
     switch (value._tag) {
       case "Obj": {
-        const waiting = library.waitMember(value, key);
+        const waiting = library.waitMember(value, key, site);
         if (waiting) return waiting;
         // A duration, a decimal, a hash set and a hash map are read through their modules, never by what they are made of.
         if (value.brand && Brands.SEALED.has(value.brand.kind) && key !== "pipe")
@@ -907,11 +1780,49 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           !value.fields.pipe
         )
           return piping(value);
+        // A layer and a context are put together with `pipe`.
+        if (key === "pipe" && (value.fields["~layer"] || value.fields["~context"]))
+          return piping(value);
+        const keeper = kept.get(value);
+        if (keeper)
+          return (
+            keptMember(value, keeper, key) ??
+            (yield* fail(
+              site,
+              `reads .${key} of a ${keeper.kind}, which the prover has no model for`,
+            ))
+          );
         const held = value.fields[key];
+        if (held === undefined) {
+          // A getter of the object, and a method or a getter of its class.
+          const getter = accessors.get(value)?.[key]?.get;
+          if (getter) return yield* call(bound(getter, value), [], site);
+          const cls = instances.get(value);
+          const got = methodOf(cls, key, "get");
+          if (got) return yield* call(bound(got.fn, value, got.cls), [], site);
+          const method = methodOf(cls, key, "method");
+          if (method) return bound(method.fn, value, method.cls);
+        }
+        // A method an object was written with is called on the object: `this` is it.
+        if (held?._tag === "Fn" && !value.brand) return bound(held, value, thisOfFn(held));
         // A field the run has yet to choose is chosen now: this one, and no other.
         return (
           (held?._tag === "Pending" ? Symbolic.resolve(held, current.run) : held) ?? Value.undef
         );
+      }
+      case "Native": {
+        // What a class itself holds: a `static` field, method or getter, its own or one it extends.
+        for (let at: V | undefined = classes.has(value) ? value : undefined; at;) {
+          const read: Read = classes.get(at)!;
+          if (Object.hasOwn(read.statics, key)) return read.statics[key]!;
+          at = read.parent;
+        }
+        const got = methodOf(value, key, "get", true);
+        if (got) return yield* call(bound(got.fn, value, got.cls), [], site);
+        const method = methodOf(value, key, "method", true);
+        if (method) return bound(method.fn, value, method.cls);
+        if (key === "pipe" && library.piped(value)) return piping(value);
+        return yield* fail(site, `reads .${key} of a function`);
       }
       case "List":
         // The first and the last part of a split string are known, however many parts there are.
@@ -952,14 +1863,33 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             }),
           };
         }
+        // A place the array does not have, such as `-1` or `1.5`, holds nothing.
         return /^\d+$/.test(key)
           ? (value.items[Number(key)] ?? Value.undef)
-          : yield* fail(site, `reads .${key} of an array`);
+          : /^-?\d+(\.\d+)?$/.test(key)
+            ? Value.undef
+            : yield* fail(site, `reads .${key} of an array`);
       case "Str":
+        if (/^\d+$/.test(key))
+          return value.value[Number(key)] === undefined
+            ? Value.undef
+            : Value.str(value.value[Number(key)]!);
         return key === "length"
           ? Value.num(value.value.length)
           : (library.stringMember(value, key) ?? (yield* fail(site, `reads .${key} of a string`)));
+      case "Num":
+      case "Big":
+        return numberMember(value, key) ?? (yield* fail(site, `reads .${key} of a ${value._tag}`));
       case "Term":
+        if (value.term.sort === "Int" || value.term.sort === "Real") {
+          const method = numberMember(value, key);
+          if (method) return method;
+        }
+        // `text[0]`: the letter at a place, or nothing past the end.
+        if (value.term.sort === "String" && /^\d+$/.test(key)) {
+          const at = library.stringMember(value, "at");
+          if (at) return yield* call(at, [Value.num(Number(key))], site);
+        }
         return value.term.sort === "String" && key === "length"
           ? Value.term("Int", `(str.len ${value.term.text})`)
           : ((value.term.sort === "String" ? library.stringMember(value, key) : undefined) ??
@@ -970,6 +1900,12 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           (yield* fail(site, `uses an optic's .${key}, which the prover has no model for`))
         );
       case "Lib": {
+        // `globalThis.String`: the name, as a file that gives it no other meaning reads it.
+        if (value.module === "globalThis" && value.path.length === 0) {
+          const global = globalOf(key);
+          if (global) return global;
+          return yield* fail(site, `reads globalThis.${key}, which the prover has no model for`);
+        }
         const { host, ...lib } = value;
         const held =
           (typeof host === "object" || typeof host === "function") && host !== null
@@ -988,7 +1924,13 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         const found = yield* top(value.module, key, site);
         return found ?? fromHost(value.module.exports[key], key);
       }
-      case "Host":
+      case "Host": {
+        if (isService(value.value)) services.set(value.value.key, value.value);
+        const pattern = Strings.patternOf(value);
+        const asked = pattern ? patternMember(pattern, key) : undefined;
+        if (asked) return asked;
+        // `Rate.pipe(Effect.map(f))`: a service, given to each function in turn.
+        if (key === "pipe" && isService(value.value)) return piping(value);
         // `Started.make(fields)`: the event, as `new Started(fields)` builds it.
         if (key === "make" && isDomainClass(value.value))
           return {
@@ -1019,6 +1961,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           library.unionMember(value.value, key, value.name) ??
           fromHost((value.value as Record<string, unknown>)[key], `${value.name}.${key}`)
         );
+      }
       case "Time":
       case "Effect":
       case "Stream":
@@ -1076,7 +2019,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     return held?._tag === "Pending" &&
       object._tag === "Obj" &&
       !(object.brand && Brands.SEALED.has(object.brand.kind)) &&
-      !library.waitMember(object, key)
+      !library.waitMember(object, key, site)
       ? Effect.succeed(held)
       : member(object, key, site);
   };
@@ -1293,9 +2236,22 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       for (const [index, parameter] of (fn.node.params as ReadonlyArray<Node>).entries()) {
         if (parameter.type === "RestElement")
           yield* bind(parameter.argument, { _tag: "Arr", items: args.slice(index) }, scope, env);
-        else yield* bind(parameter, args[index] ?? Value.undef, scope, env);
+        else if (parameter.type === "TSParameterProperty") {
+          // `constructor(readonly n: number)`: the parameter, and a field of the same name.
+          const inner: Node = parameter.parameter;
+          yield* bind(inner, args[index] ?? Value.undef, scope, env);
+          const name: string = inner.type === "AssignmentPattern" ? inner.left.name : inner.name;
+          const self = thisOf(env);
+          if (self?._tag === "Obj")
+            (self.fields as Record<string, V>)[name] = scope.variables.get(name) ?? Value.undef;
+        } else yield* bind(parameter, args[index] ?? Value.undef, scope, env);
       }
       const body: Node = fn.node.body;
+      if (frames.length > MAX_DEPTH)
+        return yield* fail(
+          { module: fn.env.module, node: fn.node },
+          `calls functions more than ${MAX_DEPTH} deep: a function that calls itself with no end`,
+        );
       // What the call writes, it may change until it returns.
       const frame = ++calls;
       frames.push(frame);
@@ -1312,13 +2268,25 @@ export const make = (loader: Loader, run: Run): Interpreter => {
   const write = (object: V, key: V, value: V, site: Site): Eval<void> => {
     if (key._tag !== "Str" && key._tag !== "Num")
       return fail(site, "writes a property by a key the prover cannot see");
+    // What a class itself holds, written while it is declared or by the function that declared it.
+    const read = classes.get(object);
+    if (read && (building.has(object) || mine(object))) {
+      read.statics[String(key.value)] = value;
+      return Effect.void;
+    }
     if ((object._tag !== "Obj" && object._tag !== "Arr") || !mine(object))
       return reaches(
         site,
         "changes a value it was given: the prover reads code that changes only what it wrote itself",
       );
-    if (object._tag === "Obj") (object.fields as Record<string, V>)[String(key.value)] = value;
-    else if (typeof key.value === "number" && Number.isInteger(key.value) && key.value >= 0)
+    if (object._tag === "Obj") {
+      const name = String(key.value);
+      const setter =
+        accessors.get(object)?.[name]?.set ?? methodOf(instances.get(object), name, "set")?.fn;
+      if (setter && !Object.hasOwn(object.fields, name))
+        return Effect.asVoid(call(bound(setter, object), [value], site));
+      (object.fields as Record<string, V>)[name] = value;
+    } else if (typeof key.value === "number" && Number.isInteger(key.value) && key.value >= 0)
       (object.items as Array<V>)[key.value] = value;
     else return fail(site, "writes an array at a place that is not an index");
     return Effect.void;
@@ -1354,31 +2322,142 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       const object = yield* evaluate(target.object, env);
       const key = target.computed
         ? yield* evaluate(target.property, env)
-        : Value.str(target.property.name);
+        : Value.str(keyNameOf(target.property) ?? target.property.name);
       return yield* write(object, key, value, site);
     },
   );
 
   /** One turn of a loop: `BREAK` to leave it, a value to return, or nothing to go on. */
-  const turn = (body: Node, env: Env): Eval<V | undefined> =>
+  const turn = (body: Node, env: Env, label?: string): Eval<V | undefined> =>
     execute([body], env).pipe(
-      Effect.map((returned) => (returned === CONTINUE ? undefined : returned)),
+      Effect.map((returned) =>
+        returned === CONTINUE || (label && returned === toLabel("continue", label))
+          ? undefined
+          : label && returned === toLabel("break", label)
+            ? BREAK
+            : returned,
+      ),
     );
 
+  /** `**` and the operators of bits: worked out where the numbers are ones the code writes. */
+  const beyond = (operator: string, left: V, right: V, site: Site): Eval<V> | undefined => {
+    if (operator === "**") {
+      if (left._tag === "Num" && right._tag === "Num")
+        return Effect.succeed(Value.num(left.value ** right.value));
+      const power =
+        right._tag === "Num" ? right.value : right._tag === "Big" ? Number(right.value) : undefined;
+      if (power === undefined || !Number.isInteger(power) || power < 0 || power > MAX_POWER)
+        return fail(site, "raises a number to a power the prover cannot see");
+      const big = Value.isBig(left);
+      if (big !== (right._tag === "Big")) return fail(site, "applies ** to a bigint and a number");
+      return Effect.gen(function* () {
+        let out: V = big ? { _tag: "Big", value: 1n } : Value.num(1);
+        for (let turns = 0; turns < power; turns++) out = yield* arithmetic("*", out, left, site);
+        return out;
+      });
+    }
+    if (!BITS.has(operator)) return undefined;
+    if (left._tag === "Num" && right._tag === "Num") {
+      const [l, r] = [left.value, right.value];
+      return Effect.succeed(
+        Value.num(
+          operator === "&"
+            ? l & r
+            : operator === "|"
+              ? l | r
+              : operator === "^"
+                ? l ^ r
+                : operator === "<<"
+                  ? l << r
+                  : operator === ">>"
+                    ? l >> r
+                    : l >>> r,
+        ),
+      );
+    }
+    if (left._tag === "Big" && right._tag === "Big" && operator !== ">>>") {
+      const [l, r] = [left.value, right.value];
+      return Effect.succeed<V>({
+        _tag: "Big",
+        value:
+          operator === "&"
+            ? l & r
+            : operator === "|"
+              ? l | r
+              : operator === "^"
+                ? l ^ r
+                : operator === "<<"
+                  ? l << r
+                  : l >> r,
+      });
+    }
+    return fail(site, `applies ${operator} to a number an input holds`);
+  };
+
   /** Whether a loop goes on. What an input decides, the prover cannot count the turns of. */
-  const goesOn: (test: Node | null, env: Env, site: Site) => Eval<boolean> = Effect.fnUntraced(
-    function* (test: Node | null, env: Env, site: Site) {
-      if (!test) return true;
-      const t = yield* truthOf(yield* evaluate(test, env), site);
-      if (t === true || t === "true") return true;
-      if (t === false || t === "false") return false;
-      return yield* fail(site, "loops a number of times that depends on an input");
-    },
-  );
+  const goesOn: (
+    test: Node | null,
+    env: Env,
+    site: Site,
+    decided: { turns: number },
+  ) => Eval<boolean> = Effect.fnUntraced(function* (
+    test: Node | null,
+    env: Env,
+    site: Site,
+    decided: { turns: number },
+  ) {
+    if (!test) return true;
+    const t = yield* truthOf(yield* evaluate(test, env), site);
+    if (t === true || t === "true") return true;
+    if (t === false || t === "false") return false;
+    // An input decides: each way it can go is a path, as long as the inputs allow another turn.
+    if (++decided.turns > MAX_DECIDED)
+      return yield* fail(
+        site,
+        `loops more than ${MAX_DECIDED} times, a number of times that depends on an input`,
+      );
+    return yield* branch(t);
+  });
 
   /** What a loop or a spread goes over: what an opaque function returned is a list of what it gives. */
-  const iterate = (value: V, site: Site) =>
-    library.iterate(value._tag === "Applied" ? listOf(value) : value, site);
+  const iterate = (value: V, site: Site): Eval<ReadonlyArray<V> | undefined> => {
+    // A `Map` gives its entries as pairs, and a `Set` its items, in the order they were put in.
+    const keeper = kept.get(value);
+    if (keeper)
+      return Effect.succeed(
+        keeper.entries.map(([k, v]): V =>
+          keeper.kind === "Map" ? made<V>({ _tag: "Arr", items: [k, v] }) : k,
+        ),
+      );
+    // What the library gave that can be gone over: its items, as far as each is a value.
+    if (value._tag === "Host" && isIterable(value.value)) {
+      const items: Array<V> = [];
+      for (const item of value.value) {
+        const made_ = Known.known(item, value.name);
+        if (!made_ || items.length >= MAX_TURNS)
+          return fail(site, `goes over ${value.name}, whose items the prover cannot see`);
+        items.push(made_);
+      }
+      return Effect.succeed(items);
+    }
+    // A generator is run to its end: each value it yields, in order.
+    const generator = generators.get(value);
+    if (generator) {
+      const items: Array<V> = [];
+      return Effect.as(
+        through(generator, (item) =>
+          items.length >= MAX_TURNS
+            ? fail(site, `goes over a generator that has not ended after ${MAX_TURNS} values`)
+            : Effect.sync(() => {
+                items.push(item);
+                return true;
+              }),
+        ),
+        items,
+      );
+    }
+    return library.iterate(value._tag === "Applied" ? listOf(value) : value, site);
+  };
 
   /** A call that has no reading of an opaque function's result is tried again with the result as what it works on. */
   const retaken =
@@ -1413,9 +2492,16 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     switch (fn._tag) {
       case "Fn":
         if (fn.node.async) return reaches(site, "calls an async function");
-        // A generator's body runs when it is yielded, as an effect does.
-        if (fn.node.generator || fn.effectful)
-          return Effect.succeed<V>({ _tag: "Effect", run: Effect.suspend(() => invoke(fn, args)) });
+        // A generator's body runs when it is yielded, as an effect does, or when it is gone over.
+        if (fn.node.generator || fn.effectful) {
+          const made_: V = {
+            _tag: "Effect",
+            // Yielded as an effect, a `yield` in it is the effect's own, whatever is around it.
+            run: Effect.suspend(() => invoke(yielding(fn, Value.undef), args)),
+          };
+          if (fn.node.generator) generators.set(made_, { fn, args });
+          return Effect.succeed(made_);
+        }
         const real = fn.real;
         if (real === undefined) return invoke(fn, args);
         // An exported function whose body the prover cannot read is a value it does not look inside.
@@ -1430,10 +2516,44 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         return fn.call(args.map(whole), site).pipe(retaken(fn, args, site));
       case "Lib": {
         // A library function goes over what it is given: every field of it is chosen first.
-        if (library.models(fn))
-          return library
-            .call(fn, passes(fn) ? args : args.map(whole), site)
-            .pipe(retaken(fn, args, site));
+        if (library.models(fn)) {
+          // A service is an effect that gives what is provided for it: `Effect.map(Rate, f)`.
+          const served = fn.module === "effect/Effect" && fn.path.length === 1;
+          const serving = (given: ReadonlyArray<V>, at: Site): ReadonlyArray<V> => {
+            const first = given[0];
+            const name = fn.path[0];
+            return served &&
+              first?._tag === "Host" &&
+              isService(first.value) &&
+              name !== "service" &&
+              name !== "serviceOption" &&
+              // It is given the service itself, and gives an effect of its own.
+              name !== "updateServiceScoped" &&
+              // Written to be given the effect by `pipe`, the service is what comes first.
+              !(
+                ["provideService", "updateService", "provideServiceEffect"].includes(name ?? "") &&
+                given.length < 3
+              )
+              ? [
+                  { _tag: "Effect", run: Effect.suspend(() => settle(first, at)) },
+                  ...given.slice(1),
+                ]
+              : given;
+          };
+          const taken = serving(args, site);
+          return library.call(fn, passes(fn) ? taken : taken.map(whole), site).pipe(
+            // Written to be given the effect by `pipe`: the service is what it is given then.
+            Effect.map((gave) =>
+              served && gave._tag === "Native"
+                ? {
+                    ...gave,
+                    call: (given: ReadonlyArray<V>, at: Site) => gave.call(serving(given, at), at),
+                  }
+                : gave,
+            ),
+            retaken(fn, args, site),
+          );
+        }
         const given = loader.opaque(fn.host, fn.path.at(-1));
         if (given) return Effect.succeed(applied(given, args, "is opaque"));
         // A function of Node's that gives the same result for the same arguments.
@@ -1497,6 +2617,29 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       current.run.contexts.set(key, { tag, value: made });
       return Effect.succeed(made);
     }
+    if (value._tag === "Host" && isService(value.value)) {
+      // A service: what the code around provides, or what the service itself gives when none does.
+      const given = hooks.provided.get(value.value);
+      if (given) return Effect.succeed(given);
+      const fallback = value.value.defaultValue;
+      const made_ =
+        typeof fallback === "function"
+          ? Known.known((fallback as () => unknown)(), value.name)
+          : undefined;
+      return made_
+        ? Effect.succeed(made_)
+        : reaches(site, `yields ${value.name}, a service that nothing around it provides`);
+    }
+    if (value._tag === "Lib") {
+      const named = [value.module.replace(/^effect\//, ""), ...value.path].join(".");
+      const judged = Judged.reasonOf(value.module, value.path);
+      return reaches(
+        site,
+        judged
+          ? `yields ${named}, which ${judged}`
+          : `yields ${named}, which the prover has no model for`,
+      );
+    }
     return reaches(site, "yields a value the prover has no model for");
   };
 
@@ -1533,7 +2676,21 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     function* (cls: V, args: ReadonlyArray<V>, site: Site) {
       if (cls._tag === "Host" && !isDomainClass(cls.value) && isDataClass(cls.value))
         return yield* constructData(cls, args, site);
-      if (cls._tag === "Native" && library.isClass(cls)) return yield* cls.call(args, site);
+      if (cls._tag === "Native" && (library.isClass(cls) || ERROR_CLASSES.has(cls)))
+        return yield* cls.call(args, site);
+      if (cls._tag === "Lib" && library.constructed(cls.module, cls.path))
+        return yield* call(cls, args, site);
+      if (cls === BYTES) return yield* bytesOf(args, site);
+      if (cls === KEEPERS.get("Map")) return yield* keeping("Map", args[0], site);
+      if (cls === KEEPERS.get("Set")) return yield* keeping("Set", args[0], site);
+      if (classes.has(cls)) {
+        const instance = made<V & { readonly _tag: "Obj" }>({ _tag: "Obj", fields: {} });
+        instances.set(instance, cls);
+        yield* initialise(cls, instance, args, site);
+        return instance;
+      }
+      const hosted = cls._tag === "Host" ? library.constructHost(cls.value, args, site) : undefined;
+      if (hosted) return yield* hosted;
       if (cls._tag !== "Host" || !isDomainClass(cls.value))
         return yield* reaches(
           site,
@@ -1687,7 +2844,8 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           : Value.term("Bool", text),
       );
     }
-    if (operator === "+") {
+    // `+` joins text only where one side is text: otherwise it adds, as numbers.
+    if (operator === "+" && (textual(a) || textual(b))) {
       // A number in a string is its text. The solver knows the text of a
       // number only as the real `String` gives it, one number at a time.
       const written = (v: V) =>
@@ -1733,6 +2891,14 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         if (typeof value === "string") return Value.str(value);
         if (typeof value === "boolean") return Value.bool(value);
         if (typeof node.bigint === "string") return { _tag: "Big", value: BigInt(node.bigint) };
+        // A regular expression: the language's own, made each time the code comes to it.
+        if (node.regex)
+          // The file was imported before it is read, so the language took the expression already.
+          return {
+            _tag: "Host",
+            value: new RegExp(node.regex.pattern, node.regex.flags),
+            name: "a regular expression",
+          } satisfies V;
         return value === null && node.raw === "null"
           ? Value.nil
           : yield* fail(site, "uses a literal the prover does not read");
@@ -1763,18 +2929,54 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       case "ArrowFunctionExpression":
       case "FunctionExpression":
         return { _tag: "Fn", node, env, effectful: false };
+      case "ClassExpression":
+        return yield* classOf(node, env, node.id?.name ?? "a class");
+      case "ThisExpression": {
+        const self = thisOf(env);
+        return self ?? (yield* fail(site, "uses this where nothing is it"));
+      }
       case "MemberExpression": {
+        if (node.object.type === "Super") {
+          // `super.total()`: the method of the class this one extends, on this object.
+          const self = thisOf(env);
+          const from = thisOf(env, "~class");
+          const parent = from ? classes.get(from)?.parent : undefined;
+          const key = node.computed ? undefined : keyNameOf(node.property);
+          const found =
+            key === undefined
+              ? undefined
+              : (methodOf(parent, key, "method", self !== undefined && classes.has(self)) ??
+                methodOf(parent, key, "get", self !== undefined && classes.has(self)));
+          if (!self || !found)
+            return yield* fail(site, "uses super where the prover cannot read it");
+          const got = bound(found.fn, self, found.cls);
+          return found.fn._tag === "Fn" && methodOf(parent, key!, "method")
+            ? got
+            : yield* call(got, [], site);
+        }
         const object = yield* evaluate(node.object, env);
         if (object === SHORT) return SHORT;
         if (node.optional && (object._tag === "Null" || object._tag === "Undef")) return SHORT;
         const key = node.computed
           ? yield* evaluate(node.property, env)
-          : Value.str(node.property.name);
+          : Value.str(keyNameOf(node.property) ?? node.property.name);
+        if (key._tag === "Term" && key.term.sort === "Int" && key.big !== true) {
+          const list = forced(object);
+          if (list._tag === "Arr") return yield* placed(list.items, key.term.text, false);
+        }
         return key._tag === "Str" || key._tag === "Num"
           ? yield* member(object, String(key.value), site)
           : yield* fail(site, "reads a property by a key the prover cannot see");
       }
       case "CallExpression": {
+        if (node.callee.type === "Super") {
+          const parent = thisOf(env, "~super");
+          if (!parent) return yield* fail(site, "calls super where the prover cannot read it");
+          const given: Array<V> = [];
+          for (const argument of node.arguments as ReadonlyArray<Node>)
+            given.push(yield* evaluate(argument, env));
+          return yield* call(parent, given, site);
+        }
         // `field.pipe(f)`: the field is not looked at before `f` is known.
         const receiver =
           node.callee.type === "MemberExpression" &&
@@ -1833,10 +3035,44 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           args.push(yield* evaluate(argument, env));
         return yield* construct(cls, args, site);
       }
-      case "YieldExpression":
+      case "YieldExpression": {
+        // In a generator that is gone over, a value it yields goes to the loop that goes over it.
+        const sink = sinkOf(env);
+        if (sink && !node.delegate)
+          return yield* call(
+            sink,
+            [node.argument ? yield* evaluate(node.argument, env) : Value.undef],
+            site,
+          );
+        if (sink && node.argument) {
+          // `yield* other`: each value the other gives, in turn.
+          const items = yield* iterate(yield* evaluate(node.argument, env), site);
+          if (!items) return yield* fail(site, "yields each of something that is not a list");
+          for (const item of items) yield* call(sink, [item], site);
+          return Value.undef;
+        }
         return node.delegate && node.argument
-          ? yield* settle(yield* evaluate(node.argument, env), site)
+          ? yield* settle(yield* evaluate(node.argument, env), site).pipe(
+              // An effect that fails leaves the generator: its `try` does not see the failure.
+              Effect.mapError((stop) =>
+                stop._tag === "Rejected" && stop.yielded !== true
+                  ? new Value.Rejected({
+                      rejection: stop.rejection,
+                      ...(stop.defect === true ? { defect: true } : {}),
+                      yielded: true,
+                    })
+                  : stop,
+              ),
+            )
           : yield* fail(site, "yields without a star");
+      }
+      case "SequenceExpression": {
+        // `(a, b)`: each is run, and the last is what it gives.
+        let last: V = Value.undef;
+        for (const each of node.expressions as ReadonlyArray<Node>)
+          last = yield* evaluate(each, env);
+        return last;
+      }
       case "ConditionalExpression":
         return (yield* decide(yield* evaluate(node.test, env), site))
           ? yield* evaluate(node.consequent, env)
@@ -1864,6 +3100,24 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         return (node.operator === "&&") === truthy ? yield* evaluate(node.right, env) : kept;
       }
       case "UnaryExpression": {
+        if (node.operator === "delete") {
+          const target: Node = node.argument;
+          if (target.type !== "MemberExpression" || target.optional)
+            return yield* fail(site, "deletes something that is not a property");
+          const object = yield* evaluate(target.object, env);
+          const key = target.computed
+            ? yield* evaluate(target.property, env)
+            : Value.str(keyNameOf(target.property) ?? target.property.name);
+          if (object._tag !== "Obj" || object.brand || (key._tag !== "Str" && key._tag !== "Num"))
+            return yield* fail(site, "deletes a property of a value the prover cannot see into");
+          if (!mine(object))
+            return yield* reaches(
+              site,
+              "changes a value it was given: the prover reads code that changes only what it wrote itself",
+            );
+          delete (object.fields as Record<string, V>)[String(key.value)];
+          return Value.bool(true);
+        }
         const argument = yield* evaluate(node.argument, env);
         if (node.operator === "!") {
           const t = yield* truthOf(argument, site);
@@ -1884,6 +3138,12 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           const kind = kindOf(argument);
           if (kind !== undefined) return Value.str(kind);
         }
+        if (node.operator === "~")
+          return argument._tag === "Num"
+            ? Value.num(~argument.value)
+            : argument._tag === "Big"
+              ? made<V>({ _tag: "Big", value: ~argument.value })
+              : yield* fail(site, "applies ~ to a number an input holds");
         return yield* fail(site, `uses ${node.operator}, which the prover does not translate`);
       }
       case "BinaryExpression": {
@@ -1902,9 +3162,27 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         }
         if (["+", "-", "*", "/", "%", "<", "<=", ">", ">="].includes(node.operator))
           return yield* arithmetic(node.operator, left, right, site);
+        const more = beyond(node.operator, left, right, site);
+        if (more) return yield* more;
         if (node.operator === "==" || node.operator === "!=") {
           // `x == null`: nothing, of either kind.
           const nothing = (v: V) => v._tag === "Null" || v._tag === "Undef";
+          // Two values of one kind are `==` when they are `===`: nothing is turned into anything.
+          const kind = kindOf(left);
+          const alikeKinds =
+            kind !== undefined &&
+            kind === kindOf(right) &&
+            kind !== "object" &&
+            kind !== "function";
+          const equal =
+            !nothing(left) && !nothing(right) && alikeKinds ? sameAs(left, right) : undefined;
+          if (equal !== undefined)
+            return fromTruth(
+              node.operator === "==" ? equal : typeof equal === "boolean" ? !equal : Smt.not(equal),
+            );
+          // Two values the code writes: the language's own `==`, whatever it turns into what.
+          const [l, r] = [primitive(left), primitive(right)];
+          if (l && r) return Value.bool(loosely(l.value, r.value) === (node.operator === "=="));
           if (!nothing(left) && !nothing(right))
             return yield* fail(site, `uses ${node.operator}, where the prover reads ===`);
           const other = nothing(left) ? right : left;
@@ -1922,10 +3200,27 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             Object.hasOwn((forced(right) as typeof right).fields, String(left.value)),
           );
         }
+        if (node.operator === "instanceof") return yield* instanceOf(left, right, site);
         return yield* fail(site, `uses ${node.operator}, which the prover does not translate`);
+      }
+      case "TaggedTemplateExpression": {
+        // The function is given the text between the values, and then each value.
+        const tag = yield* evaluate(node.tag, env);
+        const quasi: Node = node.quasi;
+        const texts: V = made<V>({
+          _tag: "Arr",
+          items: (quasi.quasis as ReadonlyArray<Node>).map((each) =>
+            Value.str(each.value.cooked ?? ""),
+          ),
+        });
+        const values: Array<V> = [];
+        for (const each of quasi.expressions as ReadonlyArray<Node>)
+          values.push(yield* evaluate(each, env));
+        return yield* call(tag, [texts, ...values], site);
       }
       case "ObjectExpression": {
         const fields: Record<string, V> = {};
+        const pending: Record<string, { get?: V; set?: V }> = {};
         for (const property of node.properties as ReadonlyArray<Node>) {
           if (property.type === "SpreadElement") {
             const spread = yield* evaluate(property.argument, env);
@@ -1936,11 +3231,19 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             continue;
           }
           // A getter runs when the property is read: the prover reads a property as the value it holds.
-          if (property.kind === "get" || property.kind === "set")
-            return yield* fail(
-              site,
-              `declares a ${property.kind}ter in an object, which the prover does not read`,
-            );
+          if (property.kind === "get" || property.kind === "set") {
+            const name = property.computed ? undefined : keyNameOf(property.key);
+            if (name === undefined)
+              return yield* fail(site, `declares a ${property.kind}ter under a name it cannot see`);
+            const kind: "get" | "set" = property.kind;
+            (pending[name] ??= {})[kind] = {
+              _tag: "Fn",
+              node: property.value,
+              env,
+              effectful: false,
+            };
+            continue;
+          }
           const key = property.computed
             ? yield* evaluate(property.key, env)
             : Value.str(
@@ -1953,7 +3256,9 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             );
           fields[String(key.value)] = yield* evaluate(property.value, env);
         }
-        return made(Value.obj(fields));
+        const object = made(Value.obj(fields));
+        if (Object.keys(pending).length > 0) accessors.set(object, pending);
+        return object;
       }
       case "ArrayExpression": {
         const items: Array<V> = [];
@@ -2002,7 +3307,12 @@ export const make = (loader: Loader, run: Run): Interpreter => {
               : before;
         else if (["+", "-", "*", "/", "%"].includes(operator))
           value = yield* arithmetic(operator, before, yield* evaluate(node.right, env), site);
-        else return yield* fail(site, `uses ${node.operator}, which the prover does not translate`);
+        else {
+          const more = beyond(operator, before, yield* evaluate(node.right, env), site);
+          if (!more)
+            return yield* fail(site, `uses ${node.operator}, which the prover does not translate`);
+          value = yield* more;
+        }
         yield* assign(node.left, value, env, site);
         return value;
       }
@@ -2031,7 +3341,10 @@ export const make = (loader: Loader, run: Run): Interpreter => {
 
   /** Run statements in order. The result is what they returned, or `undefined` when they did not. */
   const execute: (statements: ReadonlyArray<Node>, env: Env) => Eval<V | undefined> =
-    Effect.fnUntraced(function* (statements: ReadonlyArray<Node>, env: Env) {
+    Effect.fnUntraced(function* (statements: ReadonlyArray<Node>, given: Env) {
+      // A label names the one statement it is written on, and nothing inside it.
+      const label = given.label;
+      const env: Env = label === undefined ? given : { ...given, label: undefined };
       // A function a block declares is there from the block's first line.
       for (const statement of statements)
         if (statement.type === "FunctionDeclaration" && !env.scope.variables.has(statement.id.name))
@@ -2106,14 +3419,95 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             if (returned && returned !== BREAK) return returned;
             break;
           }
+          case "ThrowStatement":
+            return yield* new Value.Rejected({
+              rejection: yield* evaluate(statement.argument, env),
+              defect: true,
+            });
+          case "TryStatement": {
+            const handler: Node | null = statement.handler;
+            const finalizer: Node | null = statement.finalizer;
+            /** What is thrown, as code throws: not a failure of an effect the generator yielded. */
+            const thrown = (stop: Value.Stop): stop is Value.Rejected =>
+              stop._tag === "Rejected" && stop.defect === true && stop.yielded !== true;
+            const attempt = execute(statement.block.body, { ...env, scope: child(env.scope) });
+            const handled = handler
+              ? Effect.catchIf(attempt, thrown, (stop) =>
+                  Effect.gen(function* () {
+                    const scope = child(env.scope);
+                    if (handler.param) yield* bind(handler.param, stop.rejection, scope, env);
+                    return yield* execute(handler.body.body, { ...env, scope });
+                  }),
+                )
+              : attempt;
+            const ended = yield* handled.pipe(
+              Effect.map((returned) => ({ returned, thrown: undefined })),
+              // A generator that is left where it stands runs its `finally` on the way out.
+              Effect.catchIf(
+                (stop): stop is Value.Rejected => thrown(stop) || isLeft(stop),
+                (stop) => Effect.succeed({ returned: undefined, thrown: stop }),
+              ),
+            );
+            if (finalizer) {
+              // What `finally` returns is what the statement returns, whatever came before.
+              const last = yield* execute(finalizer.body, { ...env, scope: child(env.scope) });
+              if (last) return last;
+            }
+            if (ended.thrown) return yield* ended.thrown;
+            if (ended.returned) return ended.returned;
+            break;
+          }
           case "BreakStatement":
-            return statement.label ? yield* fail(site, "breaks to a label") : BREAK;
+            return statement.label ? toLabel("break", statement.label.name) : BREAK;
           case "ContinueStatement":
-            return statement.label ? yield* fail(site, "continues to a label") : CONTINUE;
+            return statement.label ? toLabel("continue", statement.label.name) : CONTINUE;
+          case "LabeledStatement": {
+            const name: string = statement.label.name;
+            const returned = yield* execute([statement.body], { ...env, label: name });
+            // `break outer` in a block that is no loop leaves the block.
+            if (returned && returned !== toLabel("break", name)) return returned;
+            break;
+          }
+          case "DebuggerStatement":
+            break;
+          case "ClassDeclaration":
+            env.scope.variables.set(
+              statement.id.name,
+              yield* classOf(statement, env, statement.id.name),
+            );
+            break;
+          case "TSEnumDeclaration":
+            env.scope.variables.set(statement.id.name, yield* enumOf(statement, env));
+            break;
+          case "TSModuleDeclaration":
+            env.scope.variables.set(statement.id.name, yield* spaceOf(statement, env));
+            break;
           case "ForOfStatement":
           case "ForInStatement": {
             if (statement.await) return yield* reaches(site, "loops with for await");
             const subject = forced(yield* evaluate(statement.right, env));
+            const generator =
+              statement.type === "ForOfStatement" ? generators.get(subject) : undefined;
+            if (generator) {
+              // The generator's body is run, and the loop's body where each value is yielded:
+              // a loop that is left stops the generator there.
+              const target: Node = statement.left;
+              let left: V | undefined;
+              yield* through(generator, (item) =>
+                Effect.gen(function* () {
+                  const scope = child(env.scope);
+                  const inner = { ...env, scope };
+                  if (target.type === "VariableDeclaration")
+                    yield* bind(target.declarations[0].id, item, scope, inner);
+                  else yield* assign(target, item, env, site);
+                  const returned = yield* turn(statement.body, inner, label);
+                  if (returned) left = returned;
+                  return returned === undefined;
+                }),
+              );
+              if (left && left !== BREAK) return left;
+              break;
+            }
             const over =
               statement.type === "ForOfStatement"
                 ? yield* iterate(subject, site)
@@ -2137,7 +3531,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
               if (left.type === "VariableDeclaration")
                 yield* bind(left.declarations[0].id, item, scope, inner);
               else yield* assign(left, item, env, site);
-              const returned = yield* turn(statement.body, inner);
+              const returned = yield* turn(statement.body, inner, label);
               if (returned === BREAK) break;
               if (returned) return returned;
             }
@@ -2153,12 +3547,17 @@ export const make = (loader: Loader, run: Run): Interpreter => {
               if (returned) return returned;
             } else if (init) yield* evaluate(init, inner);
             let turns = 0;
+            const decided = { turns: 0 };
             let first = statement.type === "DoWhileStatement";
-            while (first || (yield* goesOn(statement.test ?? null, inner, site))) {
+            while (first || (yield* goesOn(statement.test ?? null, inner, site, decided))) {
               first = false;
               if (++turns > MAX_TURNS)
                 return yield* fail(site, `loops more than ${MAX_TURNS} times`);
-              const returned = yield* turn(statement.body, { ...inner, scope: child(inner.scope) });
+              const returned = yield* turn(
+                statement.body,
+                { ...inner, scope: child(inner.scope) },
+                label,
+              );
               if (returned === BREAK) break;
               if (returned) return returned;
               if (statement.update) yield* evaluate(statement.update, inner);

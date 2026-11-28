@@ -20,12 +20,11 @@ export const make = (kit: Kit) => {
     arity: number,
     body: (items: ReadonlyArray<V>, rest: ReadonlyArray<V>, site: Site) => Eval<V>,
   ): Model =>
+    // `dual` gives the body what it works on: it is there.
     dual(name, arity, ([self, ...rest], site) =>
-      self
-        ? Effect.flatMap(kit.iterate(self, site), (items) =>
-            items ? body(items, rest, site) : wrongArguments(site, name),
-          )
-        : wrongArguments(site, name),
+      Effect.flatMap(kit.iterate(self!, site), (items) =>
+        items ? body(items, rest, site) : wrongArguments(site, name),
+      ),
     );
 
   const pair = (a: V, b: V): V => arr([a, b]);
@@ -121,7 +120,7 @@ export const make = (kit: Kit) => {
     ),
     "effect/Array:replicate": dual("Array.replicate", 2, ([item, n], site) =>
       Effect.map(counted("Array.replicate", n, site), (count) =>
-        arr(Array.from({ length: Math.max(1, count) }, () => item ?? Value.undef)),
+        arr(Array.from({ length: Math.max(1, count) }, () => item!)),
       ),
     ),
     "effect/Array:fromIterable": onItems("Array.fromIterable", 1, (items) =>
@@ -468,7 +467,8 @@ export const make = (kit: Kit) => {
         const keys = new Map<V, V>();
         for (const item of items) keys.set(item, yield* host.call(f, [item], site));
         const order = kit.order("Array.sortWith", (a, b, at) =>
-          kit.lessThan(by, keys.get(a) ?? a, keys.get(b) ?? b, at),
+          // The order compares only the items, and each has its key.
+          kit.lessThan(by, keys.get(a)!, keys.get(b)!, at),
         );
         return arr(yield* kit.sorted(items, order, site));
       }),
@@ -851,9 +851,7 @@ export const make = (kit: Kit) => {
 
   const structs: Models = {
     "effect/Struct:get": dual("Struct.get", 2, ([self, key], site) =>
-      self
-        ? Effect.flatMap(keyed("Struct.get", key, site), (name) => host.member(self, name, site))
-        : wrongArguments(site, "Struct.get"),
+      Effect.flatMap(keyed("Struct.get", key, site), (name) => host.member(self!, name, site)),
     ),
     "effect/Struct:keys": onRecord("Struct.keys", 1, (fields) =>
       Effect.succeed(arr(Object.keys(fields).map(Value.str))),

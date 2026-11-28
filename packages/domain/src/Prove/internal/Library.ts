@@ -1,10 +1,14 @@
+import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Request from "effect/Request";
 import * as Schema from "effect/Schema";
 import * as Brands from "./Brands.ts";
 import * as Compare from "./Compare.ts";
 import { numeric, promote } from "./Compare.ts";
+import * as Judged from "./Judged.ts";
 import type { Host, Model, Whole } from "./Kit.ts";
 import * as Kit from "./Kit.ts";
 import {
@@ -32,23 +36,30 @@ import {
 import * as Known from "./Known.ts";
 import { hostOf } from "./Known.ts";
 import * as Cells from "./Models/Cells.ts";
+import * as Channels from "./Models/Channels.ts";
 import * as Collections from "./Models/Collections.ts";
 import * as Decimals from "./Models/Decimals.ts";
 import * as Effects from "./Models/Effects.ts";
 import * as Exits from "./Models/Exits.ts";
+import * as Fibers from "./Models/Fibers.ts";
+import * as Flows from "./Models/Flows.ts";
+import * as Folds from "./Models/Folds.ts";
 import * as Hashes from "./Models/Hashes.ts";
 import * as Numbers from "./Models/Numbers.ts";
+import * as Optics from "./Models/Optics.ts";
 import * as Rationals from "./Models/Rationals.ts";
 import * as Results from "./Models/Results.ts";
+import * as Schemas from "./Models/Schemas.ts";
+import * as Sinks from "./Models/Sinks.ts";
 import * as Streams from "./Models/Streams.ts";
 import * as Strings from "./Models/Strings.ts";
-import * as Waits from "./Models/Waits.ts";
 import type { Term } from "./Smt.ts";
 import * as Smt from "./Smt.ts";
 import * as Symbolic from "./Symbolic.ts";
-import type { Eval, OpticStep, Site, V } from "./Value.ts";
+import * as Timeline from "./Timeline.ts";
+import type { Eval, Site, V } from "./Value.ts";
 
-export type { Host, Model } from "./Kit.ts";
+export type { Host, Model, Step } from "./Kit.ts";
 import * as Value from "./Value.ts";
 
 /** Milliseconds in a day. */
@@ -73,80 +84,6 @@ export const make = (host: Host) => {
   const kit = Kit.make(host);
   const { onArray, after: then } = kit;
   const duration = (millis: Whole): V => Brands.duration(valueOfWhole(millis));
-
-  /** Change the part of `source` an optic focuses on; a focus that misses leaves it as it is. */
-  const through = (
-    path: ReadonlyArray<OpticStep>,
-    source: V,
-    change: (focus: V) => Eval<V>,
-    site: Site,
-  ): Eval<V> => {
-    const [step, ...rest] = path;
-    if (step === undefined) return change(source);
-    if (source._tag !== "Obj")
-      return Effect.fail(Value.notTranslated(site, `an optic focuses into a ${source._tag}`));
-    if (step._tag === "Tag") {
-      const tag = source.fields._tag;
-      if (tag?._tag !== "Str")
-        return Effect.fail(
-          Value.notTranslated(site, "an optic matches a tag the prover cannot see"),
-        );
-      return tag.value === step.tag ? through(rest, source, change, site) : Effect.succeed(source);
-    }
-    return Effect.flatMap(host.member(source, step.key, site), (focus) =>
-      through(rest, focus, change, site),
-    ).pipe(
-      Effect.map((changed) => Value.obj({ ...source.fields, [step.key]: changed }, source.brand)),
-    );
-  };
-
-  /** `modify` and `replace`, data-first (`source, optic, x`) or data-last (`optic, x` then `source`). */
-  const update =
-    (name: string, change: (x: V, site: Site) => (focus: V) => Eval<V>): Model =>
-    (args, site) => {
-      const [a, b, c] = args;
-      if (args.length === 3 && a && b?._tag === "Optic" && c)
-        return through(b.path, a, change(c, site), site);
-      if (args.length === 2 && a?._tag === "Optic" && b)
-        return Effect.succeed(
-          native(name, ([source], at) =>
-            source ? through(a.path, source, change(b, at), at) : wrongArguments(at, name),
-          ),
-        );
-      return wrongArguments(site, name);
-    };
-
-  const modify = update("Optic.modify", (f, site) => (focus) => host.call(f, [focus], site));
-  const replace = update("Optic.replace", (value) => () => Effect.succeed(value));
-
-  /** The methods of an optic value. */
-  const opticMember = (optic: V & { readonly _tag: "Optic" }, key: string): V | undefined => {
-    const extend = (make: (name: string) => OpticStep) =>
-      native(`optic.${key}`, ([name], site) => {
-        const value = str(name);
-        return value === undefined
-          ? wrongArguments(site, `optic.${key}`)
-          : Effect.succeed<V>({ _tag: "Optic", path: [...optic.path, make(value)] });
-      });
-    switch (key) {
-      case "tag":
-        return extend((tag) => ({ _tag: "Tag", tag }));
-      case "key":
-        return extend((key) => ({ _tag: "Key", key }));
-      case "modify":
-        return native("optic.modify", ([f], site) =>
-          f ? modify([optic, f], site) : wrongArguments(site, "optic.modify"),
-        );
-      case "replace":
-        return native("optic.replace", ([value, source], site) =>
-          value && source
-            ? through(optic.path, source, () => Effect.succeed(value), site)
-            : wrongArguments(site, "optic.replace"),
-        );
-      default:
-        return undefined;
-    }
-  };
 
   /**
    * `Effect.fn(body)`, `Effect.fn("name")(body)` and `Effect.fn(options)(body)`.
@@ -349,7 +286,7 @@ export const make = (host: Host) => {
     );
 
   /** The library's values that read the clock. */
-  const clocks: Readonly<Record<string, (site: Site) => V>> = {
+  const clocks: Record<string, (site: Site) => V> = {
     "effect/Clock:currentTimeNanos": (site) =>
       clock("Clock.currentTimeNanos", site, (now) => ({
         _tag: "Term",
@@ -360,6 +297,52 @@ export const make = (host: Host) => {
       clock("Clock.currentTimeMillis", site, (now) => ({ _tag: "Term", term: now })),
     "effect/DateTime:now": (site) => clock("DateTime.now", site, time),
   };
+
+  /**
+   * The clock a handler is given: what it reads is the time the command is
+   * handled at. A monotonic clock is the machine's, and is not on it.
+   */
+  const clockObject = (site: Site): V => {
+    const millis = clocks["effect/Clock:currentTimeMillis"]!(site);
+    const nanos = clocks["effect/Clock:currentTimeNanos"]!(site);
+    const now = (read: V, name: string): V =>
+      native(name, () => (read._tag === "Effect" ? read.run : wrongArguments(site, name)));
+    return Value.obj({
+      currentTimeMillis: millis,
+      currentTimeNanos: nanos,
+      currentTimeMillisUnsafe: now(millis, "clock.currentTimeMillisUnsafe"),
+      currentTimeNanosUnsafe: now(nanos, "clock.currentTimeNanosUnsafe"),
+      // A sleep on the clock is a sleep on the handler's timeline, as Effect.sleep is.
+      sleep: native("clock.sleep", (args, at) => models["effect/Effect:sleep"]!(args, at)),
+    });
+  };
+  /** `yield* Clock.Clock`: the clock a handler is given. */
+  clocks["effect/Clock:Clock"] = (site) => Kit.lazy(() => Effect.succeed(clockObject(site)));
+  /** `yield* Console.Console`: a console whose every function writes out, and gives nothing. */
+  clocks["effect/Console:Console"] = () =>
+    Kit.lazy(() =>
+      Effect.succeed(
+        Value.obj(
+          Object.fromEntries(
+            Cells.CONSOLE.map((name): [string, V] => [
+              name,
+              native(`console.${name}`, () => Effect.succeed(Value.undef)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  /** `Clock.clockWith(f)`: the effect the function makes of the clock. */
+  const clockWith: Model = ([f], site) =>
+    f
+      ? host.call(f, [clockObject(site)], site).pipe(
+          Effect.flatMap((made) =>
+            made._tag === "Effect" ? made.run : wrongArguments(site, "Clock.clockWith"),
+          ),
+          effect,
+          Effect.succeed,
+        )
+      : wrongArguments(site, "Clock.clockWith");
 
   /** `DateTime.isPast` and `DateTime.isFuture`: a time against what the clock reads. */
   const against =
@@ -431,6 +414,8 @@ export const make = (host: Host) => {
   interface Matcher {
     readonly subject: V | undefined;
     readonly cases: ReadonlyArray<Case>;
+    /** `Match.fn(select)`: the input is what it gives of the arguments, which each handler is given too. */
+    readonly select?: V;
   }
   const matcher = (state: Matcher): V => Value.obj({}, { kind: "Matcher", cls: state });
   const matcherOf = (value: V | undefined): Matcher | undefined =>
@@ -463,6 +448,43 @@ export const make = (host: Host) => {
           if (yield* host.decide(yield* host.equal(tag, value, site), site)) return true;
         return false;
       });
+
+  /** Whether the field a matcher discriminates on is text the code can see, and starts with `prefix`. */
+  const starting =
+    (field: string, prefix: string): Case["takes"] =>
+    (input, site) =>
+      Effect.gen(function* () {
+        if (input._tag !== "Obj") return false;
+        const tag = host.force(yield* host.member(input, field, site));
+        if (tag._tag === "Str") return tag.value.startsWith(prefix);
+        if (host.kind(tag) !== "string") return false;
+        // Text an input decides: asked as `String.startsWith` is.
+        const asks = yield* strings.models["effect/String:startsWith"]!([Value.str(prefix)], site);
+        return yield* host.decide(yield* host.call(asks, [tag], site), site);
+      });
+  /** One case for each key of an object of handlers: the value is that text, or that number. */
+  const byLiteral = (handlers: V | undefined): ReadonlyArray<Case> | undefined =>
+    handlers?._tag === "Obj" && !handlers.brand
+      ? Object.entries(handlers.fields)
+          .filter(([, handler]) => handler._tag !== "Undef")
+          .map(([key, handler]) => ({
+            takes: (input: V, site: Site) => {
+              const kind = host.kind(input);
+              const wanted =
+                kind === "string"
+                  ? Value.str(key)
+                  : kind === "number" && String(Number(key)) === key
+                    ? Value.num(Number(key))
+                    : undefined;
+              return wanted
+                ? Effect.flatMap(host.equal(input, wanted, site), (equal) =>
+                    host.decide(equal, site),
+                  )
+                : Effect.succeed(false);
+            },
+            handler,
+          }))
+      : undefined;
 
   /** A step of a matcher's pipe that adds cases: `Match.tag("A", f)` and the like. */
   const adding =
@@ -501,34 +523,41 @@ export const make = (host: Host) => {
   const matched = (
     state: Matcher,
     input: V,
-    otherwise: (input: V, site: Site) => Eval<V>,
+    otherwise: (input: V, site: Site, args: ReadonlyArray<V>) => Eval<V>,
     wrap: (result: V) => V,
     site: Site,
+    args: ReadonlyArray<V> = [],
   ): Eval<V> =>
     Effect.gen(function* () {
       for (const one of state.cases)
         if (yield* one.takes(input, site))
-          return wrap(yield* host.call(one.handler, [input], site));
-      return yield* otherwise(input, site);
+          return wrap(yield* host.call(one.handler, [input, ...args], site));
+      return yield* otherwise(input, site, args);
     });
 
   /** The end of a matcher's pipe: the result for `Match.value`, a function for `Match.type`. */
   const finished = (
     name: string,
     state: Matcher | undefined,
-    otherwise: (input: V, site: Site) => Eval<V>,
+    otherwise: (input: V, site: Site, args: ReadonlyArray<V>) => Eval<V>,
     wrap: (result: V) => V,
     site: Site,
-  ): Eval<V> =>
-    !state
-      ? wrongArguments(site, name)
-      : state.subject
-        ? matched(state, state.subject, otherwise, wrap, site)
-        : Effect.succeed(
-            native(name, ([input], at) =>
-              input ? matched(state, input, otherwise, wrap, at) : wrongArguments(at, name),
-            ),
-          );
+  ): Eval<V> => {
+    if (!state) return wrongArguments(site, name);
+    if (state.subject) return matched(state, state.subject, otherwise, wrap, site);
+    const select = state.select;
+    return Effect.succeed(
+      native(name, (args, at) =>
+        select
+          ? Effect.flatMap(host.call(select, args, at), (input) =>
+              matched(state, input, otherwise, wrap, at, args),
+            )
+          : args[0]
+            ? matched(state, args[0], otherwise, wrap, at)
+            : wrongArguments(at, name),
+      ),
+    );
+  };
 
   /** No case takes the value, where the code says one always does. */
   const fellThrough =
@@ -565,6 +594,11 @@ export const make = (host: Host) => {
         ? Effect.succeed(matcher({ subject, cases: [] }))
         : wrongArguments(site, "Match.value"),
     "effect/Match:type": () => Effect.succeed(matcher({ subject: undefined, cases: [] })),
+    // A matcher of a function's arguments: what `select` gives of them is matched.
+    "effect/Match:fn": ([select], site) =>
+      select
+        ? Effect.succeed(matcher({ subject: undefined, cases: [], select }))
+        : wrongArguments(site, "Match.fn"),
     // It only narrows the type of what the cases return.
     "effect/Match:withReturnType": () =>
       Effect.succeed(
@@ -716,6 +750,85 @@ export const make = (host: Host) => {
       ),
     // What a pattern can be besides a literal: `Match.when(Match.defined, f)`.
     "effect/Match:any": () => Effect.succeed(Value.bool(true)),
+    // What a value is, as a matcher asks: a number, text, and the like.
+    ...Object.fromEntries(
+      (["number", "string", "boolean", "bigint", "symbol"] as const).map(
+        (kind): [string, Model] => [
+          `effect/Match:${kind}`,
+          ([input], site) => {
+            const is = input ? host.kind(input) : undefined;
+            return is === undefined
+              ? wrongArguments(site, `Match.${kind}`)
+              : Effect.succeed(Value.bool(is === kind));
+          },
+        ],
+      ),
+    ),
+    "effect/Match:null": ([input], site) =>
+      input && host.kind(input) !== undefined
+        ? Effect.succeed(Value.bool(input._tag === "Null"))
+        : wrongArguments(site, "Match.null"),
+    "effect/Match:undefined": ([input], site) =>
+      input && host.kind(input) !== undefined
+        ? Effect.succeed(Value.bool(input._tag === "Undef"))
+        : wrongArguments(site, "Match.undefined"),
+    "effect/Match:nonEmptyString": ([input], site) => {
+      if (!input || host.kind(input) === undefined)
+        return wrongArguments(site, "Match.nonEmptyString");
+      return host.kind(input) === "string"
+        ? Effect.flatMap(host.member(input, "length", site), (length) =>
+            host.arithmetic(">", length, Value.num(0), site),
+          )
+        : Effect.succeed(Value.bool(false));
+    },
+    // One of the values given: `Match.is("on", "off")`.
+    "effect/Match:is": (wanted) =>
+      Effect.succeed(
+        native("Match.is", ([input], site) =>
+          Effect.gen(function* () {
+            for (const each of wanted)
+              if (yield* host.decide(yield* host.equal(input ?? Value.undef, each, site), site))
+                return Value.bool(true);
+            return Value.bool(false);
+          }),
+        ),
+      ),
+    // `input instanceof cls`, as a predicate of a matcher.
+    "effect/Match:instanceOf": ([cls], site) =>
+      cls
+        ? Effect.succeed(
+            native("Match.instanceOf", ([input], at) =>
+              host.instanceOf(input ?? Value.undef, cls, at),
+            ),
+          )
+        : wrongArguments(site, "Match.instanceOf"),
+    "effect/Match:instanceOfUnsafe": ([cls], site) =>
+      cls
+        ? Effect.succeed(
+            native("Match.instanceOfUnsafe", ([input], at) =>
+              host.instanceOf(input ?? Value.undef, cls, at),
+            ),
+          )
+        : wrongArguments(site, "Match.instanceOfUnsafe"),
+    // An object that is not an array: what `Predicate.isObject` holds of.
+    "effect/Match:record": ([input], site) => {
+      const is = input ? host.kind(input) : undefined;
+      if (!input || is === undefined) return wrongArguments(site, "Match.record");
+      const forced = host.force(input);
+      return Effect.succeed(
+        Value.bool(
+          is === "object" &&
+            forced._tag !== "Null" &&
+            forced._tag !== "Arr" &&
+            forced._tag !== "List",
+        ),
+      );
+    },
+    // A `Date`: the prover makes none, so only one a library gave is.
+    "effect/Match:date": ([input], site) =>
+      input && host.kind(input) !== undefined
+        ? Effect.succeed(Value.bool(input._tag === "Host" && input.value instanceof Date))
+        : wrongArguments(site, "Match.date"),
     "effect/Match:defined": ([input]) =>
       Effect.succeed(
         Value.bool(input !== undefined && input._tag !== "Null" && input._tag !== "Undef"),
@@ -737,7 +850,7 @@ export const make = (host: Host) => {
               finished(
                 "Match.orElse",
                 matcherOf(self),
-                (input, from) => host.call(otherwise, [input], from),
+                (input, from, args) => host.call(otherwise, [input, ...args], from),
                 same,
                 at,
               ),
@@ -746,6 +859,43 @@ export const make = (host: Host) => {
         : wrongArguments(site, "Match.orElse"),
     "effect/Match:option": ([self], site) =>
       finished("Match.option", matcherOf(self), () => Effect.succeed(Value.none), Value.some, site),
+    // What the case gives, or the value none of them took.
+    "effect/Match:result": ([self], site) =>
+      finished(
+        "Match.result",
+        matcherOf(self),
+        (input) => Effect.succeed(Brands.failure(input)),
+        Brands.success,
+        site,
+      ),
+    "effect/Match:tagStartsWith": adding("Match.tagStartsWith", ([prefix, handler], site) =>
+      prefix?._tag === "Str" && handler
+        ? Effect.succeed([{ takes: starting("_tag", prefix.value), handler }])
+        : wrongArguments(site, "Match.tagStartsWith"),
+    ),
+    "effect/Match:discriminatorStartsWith": ([field], site) => {
+      const name = str(field);
+      return name === undefined
+        ? wrongArguments(site, "Match.discriminatorStartsWith")
+        : Effect.succeed(
+            native(
+              "Match.discriminatorStartsWith",
+              adding("Match.discriminatorStartsWith", ([prefix, handler], at) =>
+                prefix?._tag === "Str" && handler
+                  ? Effect.succeed([{ takes: starting(name, prefix.value), handler }])
+                  : wrongArguments(at, "Match.discriminatorStartsWith"),
+              ),
+            ),
+          );
+    },
+    // A handler for each text or number the code writes: `Match.literals({ on: f, off: g })`.
+    "effect/Match:literals": adding("Match.literals", ([handlers], site) => {
+      const cases = byLiteral(handlers);
+      return cases ? Effect.succeed(cases) : wrongArguments(site, "Match.literals");
+    }),
+    "effect/Match:literalsExhaustive": exhaustively("Match.literalsExhaustive", ([handlers]) =>
+      byLiteral(handlers),
+    ),
   };
 
   const own: Readonly<Record<string, Model>> = {
@@ -890,6 +1040,205 @@ export const make = (host: Host) => {
     "effect/Record:isEmptyReadonlyRecord": onRecord("Record.isEmptyReadonlyRecord", 1, (fields) =>
       Effect.succeed(Value.bool(Object.keys(fields).length === 0)),
     ),
+    // ---- What the language gives by name: conversions, and a few functions of arrays and text.
+    "String:": ([value], site) =>
+      value === undefined
+        ? Effect.succeed(Value.str(""))
+        : host.arithmetic("+", Value.str(""), value, site),
+    "Number:": ([value], site) => {
+      if (value === undefined) return Effect.succeed(Value.num(0));
+      if (
+        value._tag === "Num" ||
+        (value._tag === "Term" &&
+          value.term.sort !== "Bool" &&
+          value.term.sort !== "String" &&
+          value.big !== true)
+      )
+        return Effect.succeed(value);
+      if (value._tag === "Str" || value._tag === "Bool" || value._tag === "Big")
+        return Effect.succeed(Value.num(Number(value.value)));
+      if (value._tag === "Null") return Effect.succeed(Value.num(0));
+      if (value._tag === "Undef") return Effect.succeed(Value.num(Number.NaN));
+      if (value._tag === "Term" && value.term.sort === "Bool")
+        return Effect.succeed(Value.term("Int", `(ite ${value.term.text} 1 0)`));
+      return Effect.fail(
+        Value.notTranslated(site, "calls Number on a value the prover cannot see"),
+      );
+    },
+    "Boolean:": ([value], site) =>
+      Effect.map(host.truth(value ?? Value.undef, site), Compare.fromTruth),
+    "Number:isInteger": ([value]) =>
+      Effect.succeed(
+        value?._tag === "Num"
+          ? Value.bool(Number.isInteger(value.value))
+          : value?._tag === "Term" && value.big !== true && value.term.sort === "Int"
+            ? Value.bool(true)
+            : value?._tag === "Term" && value.big !== true && value.term.sort === "Real"
+              ? Compare.fromTruth(`(is_int ${value.term.text})`)
+              : Value.bool(false),
+      ),
+    "Number:isSafeInteger": ([value], site) =>
+      value?._tag === "Num"
+        ? Effect.succeed(Value.bool(Number.isSafeInteger(value.value)))
+        : value?._tag === "Term"
+          ? wrongArguments(site, "Number.isSafeInteger")
+          : Effect.succeed(Value.bool(false)),
+    // A number an input holds is one the prover takes to be a number: never NaN, never without end.
+    "Number:isFinite": ([value]) =>
+      Effect.succeed(
+        Value.bool(
+          value?._tag === "Num"
+            ? Number.isFinite(value.value)
+            : value?._tag === "Term" &&
+                value.big !== true &&
+                (value.term.sort === "Int" || value.term.sort === "Real"),
+        ),
+      ),
+    "Number:isNaN": ([value]) =>
+      Effect.succeed(Value.bool(value?._tag === "Num" && Number.isNaN(value.value))),
+    "Number:parseInt": ([text, radix], site) => parsed("Number.parseInt", text, radix, site),
+    "Number:parseFloat": ([text], site) => parsed("Number.parseFloat", text, undefined, site),
+    "global:parseInt": ([text, radix], site) => parsed("parseInt", text, radix, site),
+    "global:parseFloat": ([text], site) => parsed("parseFloat", text, undefined, site),
+    "Array:isArray": ([value], site) =>
+      value === undefined || value._tag === "Opaque" || value._tag === "Applied"
+        ? wrongArguments(site, "Array.isArray")
+        : Effect.succeed(Value.bool(value._tag === "Arr" || value._tag === "List")),
+    "Array:of": (args) => Effect.succeed(host.fresh(arr(args))),
+    "Array:from": ([given, map], site) =>
+      Effect.gen(function* () {
+        // `Array.from({ length: 3 }, f)`: that many places, each what the function gives.
+        const size =
+          given?._tag === "Obj" && !given.brand && given.fields.length?._tag === "Num"
+            ? given.fields.length.value
+            : undefined;
+        const items =
+          size !== undefined && Number.isInteger(size) && size >= 0 && size <= 1000
+            ? Array.from({ length: size }, () => Value.undef)
+            : given?._tag === "Str"
+              ? // Text the code writes, a letter at a time.
+                Array.from(given.value, Value.str)
+              : given
+                ? yield* kit.iterate(given, site)
+                : undefined;
+        if (!items) return yield* wrongArguments(site, "Array.from");
+        return host.fresh(
+          map && map._tag !== "Undef"
+            ? yield* host.array("map", items, map, undefined, site)
+            : arr(items),
+        );
+      }),
+    "JSON:stringify": ([value, replacer, space], site) => {
+      const real = value ? Known.real(value) : { value: undefined };
+      const bare =
+        (replacer === undefined || replacer._tag === "Null" || replacer._tag === "Undef") &&
+        (space === undefined || space._tag === "Undef");
+      // A value an input decides, where it is made of whole numbers, booleans and text the code writes.
+      if (!real && value && bare)
+        return Effect.flatMap(jsonOf(value, site), (text) =>
+          text
+            ? Effect.succeed(text)
+            : Effect.fail(
+                Value.notTranslated(site, "calls JSON.stringify on a value the prover cannot see"),
+              ),
+        );
+      if (
+        !real ||
+        (replacer !== undefined && replacer._tag !== "Null" && replacer._tag !== "Undef")
+      )
+        return Effect.fail(
+          Value.notTranslated(site, "calls JSON.stringify on a value the prover cannot see"),
+        );
+      const indent = space?._tag === "Num" || space?._tag === "Str" ? space.value : undefined;
+      return Effect.try({
+        try: () => {
+          const text: string | undefined = JSON.stringify(real.value, null, indent);
+          return text === undefined ? Value.undef : Value.str(text);
+        },
+        catch: () => Value.notTranslated(site, "calls JSON.stringify on a value it cannot write"),
+      });
+    },
+    "JSON:parse": ([text], site) => {
+      if (text?._tag !== "Str")
+        return Effect.fail(
+          Value.notTranslated(site, "calls JSON.parse on text the prover cannot see"),
+        );
+      return Effect.try({
+        try: () => Known.known(JSON.parse(text.value) as unknown, "JSON.parse"),
+        catch: () =>
+          new Value.Rejected({
+            rejection: Value.obj({ name: Value.str("SyntaxError") }),
+            defect: true,
+          }),
+      }).pipe(
+        Effect.flatMap((made) =>
+          made ? Effect.succeed(made) : wrongArguments(site, "JSON.parse"),
+        ),
+      );
+    },
+    "global:structuredClone": ([value], site) => {
+      const clone = (v: V): V | undefined => {
+        if (v._tag === "Arr") {
+          const items = v.items.map(clone);
+          return items.every((item) => item !== undefined)
+            ? host.fresh(arr(items as ReadonlyArray<V>))
+            : undefined;
+        }
+        if (v._tag === "Obj" && !v.brand) {
+          const fields: Record<string, V> = {};
+          for (const [key, field] of Object.entries(v.fields)) {
+            const made = clone(field);
+            if (!made) return undefined;
+            fields[key] = made;
+          }
+          return host.fresh(Value.obj(fields));
+        }
+        return ["Num", "Big", "Str", "Bool", "Null", "Undef", "Term"].includes(v._tag)
+          ? v
+          : undefined;
+      };
+      const made = value ? clone(host.force(value)) : Value.undef;
+      return made
+        ? Effect.succeed(made)
+        : Effect.fail(
+            Value.notTranslated(site, "calls structuredClone on a value the prover cannot copy"),
+          );
+    },
+    // A symbol is equal only to itself.
+    "global:Symbol": ([name]) =>
+      Effect.sync((): V => ({
+        _tag: "Host",
+        value: Symbol(name?._tag === "Str" ? name.value : undefined),
+        name: "a symbol",
+      })),
+    // The fields of each after the first are written into the first, which is what it gives.
+    "Object:assign": ([target, ...sources], site) => {
+      if (target?._tag !== "Obj" || target.brand) return wrongArguments(site, "Object.assign");
+      for (const source of sources) {
+        if (source._tag === "Undef" || source._tag === "Null") continue;
+        if (source._tag !== "Obj" || source.brand) return wrongArguments(site, "Object.assign");
+        Object.assign(target.fields as Record<string, V>, source.fields);
+      }
+      return Effect.succeed(target);
+    },
+    "Object:fromEntries": ([entries], site) =>
+      Effect.flatMap(entries ? kit.iterate(entries, site) : Effect.succeed(undefined), (items) => {
+        const fields: Record<string, V> = {};
+        for (const entry of items ?? []) {
+          const pair = kit.itemsOf(entry);
+          const key = pair?.[0];
+          if (!pair || (key?._tag !== "Str" && key?._tag !== "Num"))
+            return wrongArguments(site, "Object.fromEntries");
+          fields[String(key.value)] = pair[1] ?? Value.undef;
+        }
+        return items
+          ? Effect.succeed(host.fresh(Value.obj(fields)))
+          : wrongArguments(site, "Object.fromEntries");
+      }),
+    "Object:hasOwn": ([object, key], site) =>
+      object?._tag === "Obj" && !object.brand && (key?._tag === "Str" || key?._tag === "Num")
+        ? Effect.succeed(Value.bool(Object.hasOwn(object.fields, String(key.value))))
+        : wrongArguments(site, "Object.hasOwn"),
     "Object:keys": onRecord("Object.keys", 1, (fields) =>
       Effect.succeed(arr(Object.keys(fields).map(Value.str))),
     ),
@@ -949,6 +1298,71 @@ export const make = (host: Host) => {
         ? Effect.succeed(items[index.value] ? Value.some(items[index.value]!) : Value.none)
         : wrongArguments(site, "Array.get"),
     ),
+    // A power the code writes: that many multiplications.
+    "Math:pow": ([base, power], site) => {
+      if (base?._tag === "Num" && power?._tag === "Num")
+        return Effect.succeed(Value.num(Math.pow(base.value, power.value)));
+      const times = power?._tag === "Num" ? power.value : undefined;
+      if (!base || times === undefined || !Number.isInteger(times) || times < 0 || times > 16)
+        return Effect.fail(
+          Value.notTranslated(site, "raises a number to a power the prover cannot see"),
+        );
+      return Effect.gen(function* () {
+        let out: V = Value.num(1);
+        for (let turns = 0; turns < times; turns++)
+          out = yield* host.arithmetic("*", out, base, site);
+        return out;
+      });
+    },
+    "Math:sign": ([value], site) =>
+      value?._tag === "Num"
+        ? Effect.succeed(Value.num(Math.sign(value.value)))
+        : value?._tag === "Term" &&
+            value.big !== true &&
+            value.term.sort !== "Bool" &&
+            value.term.sort !== "String"
+          ? Effect.succeed(
+              Value.term(
+                "Int",
+                `(ite (> ${value.term.text} 0) 1 (ite (< ${value.term.text} 0) (- 1) 0))`,
+              ),
+            )
+          : wrongArguments(site, "Math.sign"),
+    // The rest of `Math`, of numbers the code writes: the language's own.
+    ...Object.fromEntries(
+      "sqrt cbrt exp log log2 log10 sin cos tan atan atan2 hypot fround clz32 imul"
+        .split(" ")
+        .map((name): [string, Model] => [
+          `Math:${name}`,
+          (args, site) =>
+            args.every((arg) => arg._tag === "Num")
+              ? Effect.succeed(
+                  Value.num(
+                    (Math[name as "sqrt"] as (...given: ReadonlyArray<number>) => number)(
+                      ...args.map((arg) => (arg._tag === "Num" ? arg.value : Number.NaN)),
+                    ),
+                  ),
+                )
+              : Effect.fail(
+                  Value.notTranslated(
+                    site,
+                    `calls Math.${name}, which the prover has no model for`,
+                    true,
+                  ),
+                ),
+        ]),
+    ),
+    // A half goes up, as the language rounds one.
+    "Math:round": whole(
+      "Math.round",
+      Math.round,
+      (text) => `(to_int (+ ${text} 0.5))`,
+      // Half more than the quotient, as one quotient: the solver divides it exactly.
+      (dividend, divisor) =>
+        divisor > 0
+          ? floorOf(`(+ (* 2 ${dividend}) ${divisor})`, 2 * divisor)
+          : floorOf(`(+ (* 2 (- ${dividend})) ${-divisor})`, -2 * divisor),
+    ),
     "Math:floor": whole("Math.floor", Math.floor, (text) => `(to_int ${text})`, floorOf),
     "Math:ceil": whole("Math.ceil", Math.ceil, (text) => `(- (to_int (- ${text})))`, ceilOf),
     "Math:trunc": whole(
@@ -997,24 +1411,16 @@ export const make = (host: Host) => {
         ? Effect.suspend(() => host.call(thunk, [], site)).pipe(effect, Effect.succeed)
         : wrongArguments(site, "Effect.sync"),
     "effect/Effect:andThen": onEffect("Effect.andThen", 1, (self, [next], site) =>
-      next
-        ? self.pipe(Effect.flatMap((value) => then(next, value, site)))
-        : wrongArguments(site, "Effect.andThen"),
+      self.pipe(Effect.flatMap((value) => then(next!, value, site))),
     ),
     "effect/Effect:flatMap": onEffect("Effect.flatMap", 1, (self, [next], site) =>
-      next
-        ? self.pipe(Effect.flatMap((value) => then(next, value, site)))
-        : wrongArguments(site, "Effect.flatMap"),
+      self.pipe(Effect.flatMap((value) => then(next!, value, site))),
     ),
     "effect/Effect:map": onEffect("Effect.map", 1, (self, [f], site) =>
-      f
-        ? self.pipe(Effect.flatMap((value) => host.call(f, [value], site)))
-        : wrongArguments(site, "Effect.map"),
+      self.pipe(Effect.flatMap((value) => host.call(f!, [value], site))),
     ),
     "effect/Effect:tap": onEffect("Effect.tap", 1, (self, [next], site) =>
-      next
-        ? self.pipe(Effect.tap((value) => then(next, value, site)))
-        : wrongArguments(site, "Effect.tap"),
+      self.pipe(Effect.tap((value) => then(next!, value, site))),
     ),
     "effect/Effect:asVoid": onEffect("Effect.asVoid", 0, (self) =>
       self.pipe(Effect.as(Value.undef)),
@@ -1048,9 +1454,6 @@ export const make = (host: Host) => {
     "effect/Effect:logInfo": ignored,
     "effect/Effect:logWarning": ignored,
     "effect/Effect:logError": ignored,
-    "effect/Optic:id": () => Effect.succeed<V>({ _tag: "Optic", path: [] }),
-    "effect/Optic:modify": modify,
-    "effect/Optic:replace": replace,
     "effect/DateTime:formatIsoDate": isoDate,
     "effect/DateTime:formatIsoDateUtc": isoDate,
     "effect/DateTime:toEpochMillis": ([time], site) =>
@@ -1310,10 +1713,613 @@ export const make = (host: Host) => {
   const streams = Streams.make(kit);
   const cells = Cells.make(kit, (key, args, site) => models[key]!(args, site));
   const exits = Exits.make(kit);
+  const optics = Optics.make(kit);
+  const folds = Folds.make(
+    kit,
+    (key, args, site) => models[key]!(args, site),
+    (key) => values[key] ?? Value.undef,
+  );
   const rationals = Rationals.make(kit);
-  const waits = Waits.make(kit);
+
+  /**
+   * A value as JSON, where the prover can write it: a whole number an input
+   * holds as its digits, a boolean as `true` or `false`. Text an input holds
+   * is not written, since what it holds may need a backslash.
+   */
+  const jsonOf = (value: V, site: Site): Eval<V | undefined> =>
+    Effect.gen(function* () {
+      const joined = (parts: ReadonlyArray<V>): Eval<V> =>
+        Effect.gen(function* () {
+          let out: V = Value.str("");
+          for (const part of parts) out = yield* host.arithmetic("+", out, part, site);
+          return out;
+        });
+      const v = host.force(value);
+      const known = Known.real(v);
+      if (known) {
+        // A bigint is a value JSON has no way to write: the language throws on it.
+        const text = yield* Effect.try({
+          try: (): string | undefined => JSON.stringify(known.value),
+          catch: () => Value.notTranslated(site, "calls JSON.stringify on a value it cannot write"),
+        });
+        return text === undefined ? undefined : Value.str(text);
+      }
+      if (v._tag === "Term" && v.big !== true && v.term.sort === "Int")
+        return yield* host.arithmetic("+", Value.str(""), v, site);
+      if (v._tag === "Term" && v.term.sort === "Bool")
+        return Value.term("String", `(ite ${v.term.text} "true" "false")`);
+      if (v._tag === "Arr") {
+        const parts: Array<V> = [Value.str("[")];
+        for (const [index, item] of v.items.entries()) {
+          const text = item._tag === "Undef" ? Value.str("null") : yield* jsonOf(item, site);
+          if (!text) return undefined;
+          parts.push(Value.str(index === 0 ? "" : ","), text);
+        }
+        return yield* joined([...parts, Value.str("]")]);
+      }
+      if (v._tag === "Obj" && !v.brand) {
+        const parts: Array<V> = [Value.str("{")];
+        let first = true;
+        for (const [key, field] of Object.entries(v.fields)) {
+          if (field._tag === "Undef") continue;
+          if (field._tag === "Pending") return undefined;
+          const text = yield* jsonOf(field, site);
+          if (!text) return undefined;
+          parts.push(Value.str(`${first ? "" : ","}${JSON.stringify(key)}:`), text);
+          first = false;
+        }
+        return yield* joined([...parts, Value.str("}")]);
+      }
+      return undefined;
+    });
+
+  // ---- Services provided to an effect: a layer and a context are the values they provide.
+
+  /** What a layer or a context provides, by service, in the order it was put together. */
+  type Provided = ReadonlyArray<readonly [service: unknown, value: V]>;
+  const builders = new WeakMap<object, (site: Site) => Eval<Provided>>();
+  const contexts = new WeakMap<object, Provided>();
+  const layerOf = (build: (site: Site) => Eval<Provided>): V => {
+    const made = Value.obj({ "~layer": Value.bool(true) });
+    builders.set(made, build);
+    return made;
+  };
+  const contextOf = (provided: Provided): V => {
+    const made = Value.obj({ "~context": Value.bool(true) });
+    contexts.set(made, provided);
+    return made;
+  };
+  const serviceOf = (name: string, tag: V | undefined, site: Site): Eval<unknown> =>
+    tag?._tag === "Host" ? Effect.succeed(tag.value) : wrongArguments(site, name);
+  /** The service the code has read under a key the code gives. */
+  const keyedService = (key: V | undefined): unknown =>
+    key?._tag === "Str" ? host.services.get(key.value) : undefined;
+  const unkeyed = (site: Site, name: string): Eval<never> =>
+    Effect.fail(
+      Value.notTranslated(site, `calls ${name} with a key of no service the code has read`),
+    );
+  /** An effect with services provided around it: it reads them, and nothing after it does. */
+  const providing = <A>(provided: Provided, self: Eval<A>): Eval<A> =>
+    Effect.suspend(() => {
+      const before = provided.map(([service]) => [service, host.provided.get(service)] as const);
+      for (const [service, value] of provided) host.provided.set(service, value);
+      return self.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            for (const [service, value] of before.toReversed())
+              if (value) host.provided.set(service, value);
+              else host.provided.delete(service);
+          }),
+        ),
+      );
+    });
+  /** An effect with only these services provided while it runs: the ones before come back after. */
+  const replacing = <A>(provided: Provided, self: Eval<A>): Eval<A> =>
+    Effect.suspend(() => {
+      const before = [...host.provided.entries()];
+      host.provided.clear();
+      for (const [service, value] of provided) host.provided.set(service, value);
+      return self.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            host.provided.clear();
+            for (const [service, value] of before) host.provided.set(service, value);
+          }),
+        ),
+      );
+    });
+  /** What a layer, a context or a list of layers provides, built now. */
+  const built = (name: string, given: V | undefined, site: Site): Eval<Provided> => {
+    const build = given ? builders.get(given) : undefined;
+    if (build) return build(site);
+    const context = given ? contexts.get(given) : undefined;
+    if (context) return Effect.succeed(context);
+    const several = kit.itemsOf(given);
+    if (!several) return wrongArguments(site, name);
+    return Effect.gen(function* () {
+      const all: Array<readonly [unknown, V]> = [];
+      for (const each of several) all.push(...(yield* built(name, each, site)));
+      return all;
+    });
+  };
+  const merged = (name: string, given: ReadonlyArray<V>): V =>
+    layerOf((site) =>
+      Effect.gen(function* () {
+        const all: Array<readonly [unknown, V]> = [];
+        for (const each of given) all.push(...(yield* built(name, each, site)));
+        return all;
+      }),
+    );
+  /** A layer of one service, made by an effect that reads what is provided around it. */
+  const one =
+    (name: string, value: (given: V | undefined, site: Site) => Eval<V>): Model =>
+    (args) => {
+      const made = (tag: V | undefined, given: V | undefined): V =>
+        layerOf((at) =>
+          Effect.flatMap(serviceOf(name, tag, at), (service) =>
+            Effect.map(value(given, at), (held) => [[service, held] as const]),
+          ),
+        );
+      // `Layer.succeed(Db, db)` and `Layer.succeed(Db)(db)`.
+      return Effect.succeed(
+        args.length >= 2
+          ? made(args[0], args[1])
+          : native(name, ([given]) => Effect.succeed(made(args[0], given))),
+      );
+    };
+  const lookup = (held: Provided, service: unknown): V | undefined =>
+    held.find(([each]) => each === service)?.[1];
+  /** A function of a context and a service. */
+  const heldBy = (
+    name: string,
+    self: V | undefined,
+    tag: V | undefined,
+    site: Site,
+    use: (held: Provided, service: unknown) => Eval<V>,
+  ): Eval<V> => {
+    // Every caller is `dual`: the context comes first, and is there.
+    const held = contexts.get(self!);
+    return held
+      ? Effect.flatMap(serviceOf(name, tag, site), (service) => use(held, service))
+      : wrongArguments(site, name);
+  };
+  const getting = (name: string): Model =>
+    dual(name, 2, ([self, tag], site) =>
+      heldBy(name, self, tag, site, (held, service) => {
+        const found = lookup(held, service);
+        return found ? Effect.succeed(found) : wrongArguments(site, name);
+      }),
+    );
+  /** `Context.pick(A, B)(context)` and `Context.omit(A)(context)`. */
+  const keeping =
+    (name: string, picked: boolean): Model =>
+    (tags, site) =>
+      tags.every((tag) => tag._tag === "Host")
+        ? Effect.succeed(
+            native(name, ([self], at) => {
+              const held = self ? contexts.get(self) : undefined;
+              const services = tags.map((tag) => (tag._tag === "Host" ? tag.value : undefined));
+              return held
+                ? Effect.succeed(
+                    contextOf(held.filter(([each]) => services.includes(each) === picked)),
+                  )
+                : wrongArguments(at, name);
+            }),
+          )
+        : wrongArguments(site, name);
+  /** What a context the code gives holds. */
+  const holding = (name: string, given: V, site: Site): Eval<Provided> => {
+    const held = contexts.get(given);
+    return held ? Effect.succeed(held) : wrongArguments(site, name);
+  };
+  /** The effect a function of the code gives, run. */
+  const ranBy = (name: string, f: V, args: ReadonlyArray<V>, site: Site): Eval<V> =>
+    Effect.flatMap(host.call(f, args, site), (made) =>
+      made._tag === "Effect" ? made.run : wrongArguments(site, name),
+    );
+  /** A failure the code can handle: not a defect, and not what stops the prover. */
+  const failure = (stop: Value.Stop): stop is Value.Rejected =>
+    stop._tag === "Rejected" && stop.defect !== true;
+  /** A failure or a defect of the code: what a cause holds. */
+  const rejection = (stop: Value.Stop): stop is Value.Rejected => stop._tag === "Rejected";
+  /** A failure or a defect, as the cause the code reads. */
+  const causeOf = (stop: Value.Rejected, site: Site): Eval<V> =>
+    exits.models[stop.defect === true ? "effect/Cause:die" : "effect/Cause:fail"]!(
+      [stop.rejection],
+      site,
+    );
+  /** A function that is its argument: `Layer.satisfiesSuccessType<Db>()(layer)`. */
+  const itself =
+    (name: string): Model =>
+    () =>
+      Effect.succeed(native(name, ([self]) => Effect.succeed(self ?? Value.undef)));
+  const wiring: Record<string, Model> = {
+    "effect/Layer:succeed": one("Layer.succeed", (given) => Effect.succeed(given ?? Value.undef)),
+    "effect/Layer:sync": one("Layer.sync", (given, site) =>
+      given ? host.call(given, [], site) : wrongArguments(site, "Layer.sync"),
+    ),
+    "effect/Layer:effect": one("Layer.effect", (given, site) =>
+      given?._tag === "Effect" ? given.run : wrongArguments(site, "Layer.effect"),
+    ),
+    "effect/Layer:effectDiscard": ([given], site) =>
+      given?._tag === "Effect"
+        ? Effect.succeed(layerOf(() => Effect.as(given.run, [])))
+        : wrongArguments(site, "Layer.effectDiscard"),
+    "effect/Layer:succeedContext": ([given], site) => {
+      const context = given ? contexts.get(given) : undefined;
+      return context
+        ? Effect.succeed(layerOf(() => Effect.succeed(context)))
+        : wrongArguments(site, "Layer.succeedContext");
+    },
+    "effect/Layer:merge": dual("Layer.merge", 2, ([self, that]) =>
+      Effect.succeed(merged("Layer.merge", [self!, that ?? Value.undef])),
+    ),
+    "effect/Layer:mergeAll": (args) => Effect.succeed(merged("Layer.mergeAll", args)),
+    // What the second provides is there while the first is built, and is not what the result provides.
+    "effect/Layer:provide": dual("Layer.provide", 2, ([self, needs]) =>
+      Effect.succeed(
+        layerOf((site) =>
+          Effect.flatMap(built("Layer.provide", needs, site), (provided) =>
+            providing(provided, built("Layer.provide", self, site)),
+          ),
+        ),
+      ),
+    ),
+    "effect/Layer:provideMerge": dual("Layer.provideMerge", 2, ([self, needs]) =>
+      Effect.succeed(
+        layerOf((site) =>
+          Effect.flatMap(built("Layer.provideMerge", needs, site), (provided) =>
+            Effect.map(providing(provided, built("Layer.provideMerge", self, site)), (own) => [
+              ...provided,
+              ...own,
+            ]),
+          ),
+        ),
+      ),
+    ),
+    "effect/Layer:fresh": ([self]) => Effect.succeed(self ?? Value.undef),
+    "effect/Layer:isLayer": ([value]) =>
+      Effect.succeed(Value.bool(value !== undefined && builders.has(value))),
+    "effect/Effect:provide": onEffect("Effect.provide", 1, (self, [given], site) =>
+      Effect.flatMap(built("Effect.provide", given, site), (provided) => providing(provided, self)),
+    ),
+    "effect/Context:empty": () => Effect.succeed(contextOf([])),
+    "effect/Context:make": ([tag, value], site) =>
+      Effect.map(serviceOf("Context.make", tag, site), (service) =>
+        contextOf([[service, value ?? Value.undef]]),
+      ),
+    // A context of keys, as the library keys one: each key is the key of a service the code has read.
+    "effect/Context:addUnsafe": ([self, key, value], site) => {
+      const held = self ? contexts.get(self) : undefined;
+      const service = keyedService(key);
+      if (!held || key?._tag !== "Str") return wrongArguments(site, "Context.addUnsafe");
+      if (service === undefined) return unkeyed(site, "Context.addUnsafe");
+      return Effect.succeed(
+        contextOf([...held.filter(([each]) => each !== service), [service, value ?? Value.undef]]),
+      );
+    },
+    "effect/Context:makeUnsafe": ([map, options], site) => {
+      const found = map ? host.keptOf(map) : undefined;
+      if (
+        !found ||
+        found.kind !== "Map" ||
+        (options !== undefined && options._tag !== "Undef" && options._tag !== "Obj")
+      )
+        return wrongArguments(site, "Context.makeUnsafe");
+      const provided: Array<readonly [unknown, V]> = [];
+      for (const [key, value] of found.entries) {
+        const service = keyedService(key);
+        if (key._tag !== "Str") return wrongArguments(site, "Context.makeUnsafe");
+        if (service === undefined) return unkeyed(site, "Context.makeUnsafe");
+        provided.push([service, value]);
+      }
+      return Effect.succeed(contextOf(provided));
+    },
+    "effect/Context:add": dual("Context.add", 3, ([self, tag, value], site) => {
+      const held = contexts.get(self!);
+      return held
+        ? Effect.map(serviceOf("Context.add", tag, site), (service) =>
+            contextOf([
+              ...held.filter(([each]) => each !== service),
+              [service, value ?? Value.undef],
+            ]),
+          )
+        : wrongArguments(site, "Context.add");
+    }),
+    "effect/Context:merge": dual("Context.merge", 2, ([self, that], site) => {
+      // `dual` gives the first context; the second is missing where the code gave none.
+      const [a, b] = [contexts.get(self!), that ? contexts.get(that) : undefined];
+      return a && b
+        ? Effect.succeed(
+            contextOf([...a.filter(([each]) => !b.some(([other]) => other === each)), ...b]),
+          )
+        : wrongArguments(site, "Context.merge");
+    }),
+    "effect/Context:getOption": dual("Context.getOption", 2, ([self, tag], site) => {
+      const held = contexts.get(self!);
+      return held
+        ? Effect.map(serviceOf("Context.getOption", tag, site), (service) => {
+            const found = held.find(([each]) => each === service);
+            return found ? Value.some(found[1]) : Value.none;
+          })
+        : wrongArguments(site, "Context.getOption");
+    }),
+    "effect/Context:isContext": ([value]) =>
+      Effect.succeed(Value.bool(value !== undefined && contexts.has(value))),
+
+    // ---- The rest of `Context`: a context is what it holds, by service.
+    "effect/Context:get": getting("Context.get"),
+    "effect/Context:getUnsafe": getting("Context.getUnsafe"),
+    "effect/Context:getOrUndefined": dual("Context.getOrUndefined", 2, ([self, tag], site) =>
+      heldBy("Context.getOrUndefined", self, tag, site, (held, service) =>
+        Effect.succeed(lookup(held, service) ?? Value.undef),
+      ),
+    ),
+    "effect/Context:getOrElse": dual("Context.getOrElse", 3, ([self, tag, orElse], site) =>
+      heldBy("Context.getOrElse", self, tag, site, (held, service) => {
+        const found = lookup(held, service);
+        if (found) return Effect.succeed(found);
+        return orElse ? host.call(orElse, [], site) : wrongArguments(site, "Context.getOrElse");
+      }),
+    ),
+    "effect/Context:addOrOmit": dual("Context.addOrOmit", 3, ([self, tag, given], site) =>
+      heldBy("Context.addOrOmit", self, tag, site, (held, service) => {
+        const option = Value.optionOf(given);
+        const rest = held.filter(([each]) => each !== service);
+        return option
+          ? Effect.succeed(
+              contextOf(option._tag === "Some" ? [...rest, [service, option.value]] : rest),
+            )
+          : wrongArguments(site, "Context.addOrOmit");
+      }),
+    ),
+    "effect/Context:mergeAll": (args, site) => {
+      const all = args.map((each) => contexts.get(each));
+      return all.every((each) => each !== undefined)
+        ? Effect.succeed(
+            contextOf(
+              all.reduce<Provided>(
+                (a, b) => [...a.filter(([each]) => !b.some(([other]) => other === each)), ...b],
+                [],
+              ),
+            ),
+          )
+        : wrongArguments(site, "Context.mergeAll");
+    },
+    "effect/Context:omit": keeping("Context.omit", false),
+    "effect/Context:pick": keeping("Context.pick", true),
+    "effect/Context:isKey": ([value]) =>
+      Effect.succeed(Value.bool(value?._tag === "Host" && Context.isKey(value.value))),
+    "effect/Context:isReference": ([value]) =>
+      Effect.succeed(
+        Value.bool(
+          value?._tag === "Host" && Context.isKey(value.value) && Context.isReference(value.value),
+        ),
+      ),
+
+    // ---- The rest of `Layer`.
+    "effect/Layer:suspend": ([f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.flatMap(host.call(f, [], at), (made) => built("Layer.suspend", made, at)),
+            ),
+          )
+        : wrongArguments(site, "Layer.suspend"),
+    "effect/Layer:unwrap": ([given], site) =>
+      given?._tag === "Effect"
+        ? Effect.succeed(
+            layerOf((at) => Effect.flatMap(given.run, (made) => built("Layer.unwrap", made, at))),
+          )
+        : wrongArguments(site, "Layer.unwrap"),
+    "effect/Layer:effectContext": ([given], site) =>
+      given?._tag === "Effect"
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.flatMap(given.run, (made) => holding("Layer.effectContext", made, at)),
+            ),
+          )
+        : wrongArguments(site, "Layer.effectContext"),
+    "effect/Layer:syncContext": ([f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.flatMap(host.call(f, [], at), (made) =>
+                holding("Layer.syncContext", made, at),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Layer.syncContext"),
+    // What the first provides is given to the function: the layer it gives is what is provided.
+    "effect/Layer:flatMap": dual("Layer.flatMap", 2, ([self, f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.flatMap(built("Layer.flatMap", self, at), (provided) =>
+                Effect.flatMap(host.call(f, [contextOf(provided)], at), (made) =>
+                  built("Layer.flatMap", made, at),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Layer.flatMap"),
+    ),
+    "effect/Layer:tap": dual("Layer.tap", 2, ([self, f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.tap(built("Layer.tap", self, at), (provided) =>
+                ranBy("Layer.tap", f, [contextOf(provided)], at),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Layer.tap"),
+    ),
+    "effect/Layer:tapError": dual("Layer.tapError", 2, ([self, f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.catchIf(built("Layer.tapError", self, at), failure, (stop) =>
+                Effect.andThen(ranBy("Layer.tapError", f, [stop.rejection], at), Effect.fail(stop)),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Layer.tapError"),
+    ),
+    "effect/Layer:catch": dual("Layer.catch", 2, ([self, f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.catchIf(built("Layer.catch", self, at), failure, (stop) =>
+                Effect.flatMap(host.call(f, [stop.rejection], at), (made) =>
+                  built("Layer.catch", made, at),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Layer.catch"),
+    ),
+    "effect/Layer:catchTag": dual("Layer.catchTag", 3, ([self, tags, f], site) => {
+      const wanted = (kit.itemsOf(tags) ?? (tags ? [tags] : [])).map((each) =>
+        each._tag === "Str" ? each.value : undefined,
+      );
+      return f && wanted.length > 0 && wanted.every((each) => each !== undefined)
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.catchIf(
+                built("Layer.catchTag", self, at),
+                (stop): stop is Value.Rejected => {
+                  const tag = failure(stop) ? Kit.tagOf(stop.rejection) : undefined;
+                  return tag !== undefined && wanted.includes(tag);
+                },
+                (stop) =>
+                  Effect.flatMap(host.call(f, [stop.rejection], at), (made) =>
+                    built("Layer.catchTag", made, at),
+                  ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Layer.catchTag");
+    }),
+    // What the layer failed with, as a cause the code reads.
+    "effect/Layer:catchCause": dual("Layer.catchCause", 2, ([self, f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.catchIf(built("Layer.catchCause", self, at), rejection, (stop) =>
+                Effect.flatMap(causeOf(stop, at), (cause) =>
+                  Effect.flatMap(host.call(f, [cause], at), (made) =>
+                    built("Layer.catchCause", made, at),
+                  ),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Layer.catchCause"),
+    ),
+    "effect/Layer:tapCause": dual("Layer.tapCause", 2, ([self, f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.catchIf(built("Layer.tapCause", self, at), rejection, (stop) =>
+                Effect.flatMap(causeOf(stop, at), (cause) =>
+                  Effect.andThen(ranBy("Layer.tapCause", f, [cause], at), Effect.fail(stop)),
+                ),
+              ),
+            ),
+          )
+        : wrongArguments(site, "Layer.tapCause"),
+    ),
+    "effect/Layer:orDie": ([self]) =>
+      Effect.succeed(
+        layerOf((at) =>
+          Effect.mapError(built("Layer.orDie", self, at), (stop) =>
+            failure(stop) ? new Value.Rejected({ rejection: stop.rejection, defect: true }) : stop,
+          ),
+        ),
+      ),
+    "effect/Layer:mock": one("Layer.mock", (given) => Effect.succeed(given ?? Value.undef)),
+    // The service is another value while the layer is built.
+    "effect/Layer:updateService": dual("Layer.updateService", 3, ([self, tag, f], site) =>
+      f
+        ? Effect.succeed(
+            layerOf((at) =>
+              Effect.flatMap(serviceOf("Layer.updateService", tag, at), (service) => {
+                const before = host.provided.get(service);
+                return before
+                  ? Effect.flatMap(host.call(f, [before], at), (next) =>
+                      providing([[service, next]], built("Layer.updateService", self, at)),
+                    )
+                  : Effect.fail(
+                      Value.notTranslated(
+                        at,
+                        "calls Layer.updateService of a service that nothing provides",
+                      ),
+                    );
+              }),
+            ),
+          )
+        : wrongArguments(site, "Layer.updateService"),
+    ),
+    "effect/Layer:satisfiesSuccessType": itself("Layer.satisfiesSuccessType"),
+    "effect/Layer:satisfiesErrorType": itself("Layer.satisfiesErrorType"),
+    "effect/Layer:satisfiesServicesType": itself("Layer.satisfiesServicesType"),
+    // A span says how the layer is watched: it is the layer it was.
+    "effect/Layer:withSpan": ([first]) =>
+      Effect.succeed(
+        first && builders.has(first)
+          ? first
+          : native("Layer.withSpan", ([self]) => Effect.succeed(self ?? Value.undef)),
+      ),
+    "effect/Layer:build": ([self], site) =>
+      Effect.succeed(Kit.lazy(() => Effect.map(built("Layer.build", self, site), contextOf))),
+    "effect/Layer:buildWithScope": dual("Layer.buildWithScope", 2, ([self], site) =>
+      Effect.succeed(
+        Kit.lazy(() => Effect.map(built("Layer.buildWithScope", self, site), contextOf)),
+      ),
+    ),
+    // The effect runs with these services and no others.
+    "effect/Effect:setContext": onEffect("Effect.setContext", 1, (self, [given], site) =>
+      Effect.flatMap(holding("Effect.setContext", given!, site), (provided) =>
+        replacing(provided, self),
+      ),
+    ),
+    // The services the function makes of the ones provided where the effect runs.
+    "effect/Effect:updateContext": onEffect("Effect.updateContext", 1, (self, [f], site) =>
+      Effect.flatMap(host.call(f!, [contextOf([...host.provided.entries()])], site), (made) =>
+        Effect.flatMap(holding("Effect.updateContext", made, site), (provided) =>
+          replacing(provided, self),
+        ),
+      ),
+    ),
+    // Every service that is provided where the effect runs.
+    "effect/Effect:context": () =>
+      Effect.succeed(Kit.lazy(() => Effect.sync(() => contextOf([...host.provided.entries()])))),
+    "effect/Effect:contextWith": ([f], site) =>
+      f
+        ? Effect.succeed(
+            Kit.lazy(() =>
+              ranBy("Effect.contextWith", f, [contextOf([...host.provided.entries()])], site),
+            ),
+          )
+        : wrongArguments(site, "Effect.contextWith"),
+  };
+
+  /** `parseInt` and `parseFloat`, of text the code writes. */
+  const parsed = (name: string, text: V | undefined, radix: V | undefined, site: Site): Eval<V> =>
+    text?._tag === "Str" && (radix === undefined || radix._tag === "Undef" || radix._tag === "Num")
+      ? Effect.succeed(
+          Value.num(
+            name.endsWith("parseFloat")
+              ? Number.parseFloat(text.value)
+              : Number.parseInt(text.value, radix?._tag === "Num" ? radix.value : undefined),
+          ),
+        )
+      : Effect.fail(Value.notTranslated(site, `calls ${name} on text the prover cannot see`));
 
   const written: Record<string, Model> = {
+    "effect/Clock:clockWith": clockWith,
+    "effect/Effect:clockWith": clockWith,
     ...own,
     ...timeModels,
     ...dataModels,
@@ -1327,9 +2333,134 @@ export const make = (host: Host) => {
     ...streams.models,
     ...cells.models,
     ...exits.models,
+    ...optics.models,
     ...rationals.models,
-    ...waits.models,
+    ...folds.models,
+    ...Schemas.make(kit).models,
   };
+  /** Classes of the library other than `effect/Data`'s, each with what a class that extends it is. */
+  const extending = new WeakMap<object, (name: string) => V>();
+  const asClass = (made: V, extended: (name: string) => V): V => {
+    classes.add(made);
+    extending.set(made, extended);
+    return made;
+  };
+  Object.assign(written, wiring);
+  const fibers = Fibers.make(kit, { ...written }, asClass);
+  Object.assign(written, fibers.models);
+  // An effect run at once with only the services of a context, as `runSync` and `runSyncExit` run one.
+  const runningWith =
+    (name: string, run: string): Model =>
+    ([context], site) => {
+      const provided = context ? contexts.get(context) : undefined;
+      return provided
+        ? Effect.succeed(
+            native(name, ([self], at) =>
+              self?._tag === "Effect"
+                ? written[run]!([Kit.effect(replacing(provided, self.run))], at)
+                : wrongArguments(at, name),
+            ),
+          )
+        : wrongArguments(site, name);
+    };
+  written["effect/Effect:runSyncWith"] = runningWith("Effect.runSyncWith", "effect/Effect:runSync");
+  written["effect/Effect:runSyncExitWith"] = runningWith(
+    "Effect.runSyncExitWith",
+    "effect/Effect:runSyncExit",
+  );
+  // An entry of a request, as a resolver is given one: what completes it is a function of the code, called at once.
+  written["effect/Request:makeEntry"] = ([given_], site) => {
+    const fields = given_?._tag === "Obj" && !given_.brand ? given_.fields : undefined;
+    const request = fibers.tools.heldOf<Request.Request<unknown, unknown>>(
+      "Request",
+      fields?.request,
+    );
+    const provided = fields?.context ? contexts.get(fields.context) : undefined;
+    const uninterruptible = fields?.uninterruptible;
+    const complete = fields?.completeUnsafe;
+    if (
+      !request ||
+      !provided ||
+      uninterruptible?._tag !== "Bool" ||
+      !complete ||
+      !Kit.callable(complete)
+    )
+      return wrongArguments(site, "Request.makeEntry");
+    return Effect.map(Timeline.current(site, "calls Request.makeEntry"), (timeline) => {
+      const context = provided.reduce(
+        (all, [service, value]) => Context.add(all, service as Context.Key<unknown, V>, value),
+        Context.empty() as Context.Context<unknown>,
+      );
+      const entry = Request.makeEntry({
+        request,
+        context: context as Context.Context<never>,
+        uninterruptible: uninterruptible.value,
+        completeUnsafe: (exit) => {
+          const held = fibers.tools.exitOf(timeline, exit).pipe(Effect.exit, Effect.runSync);
+          try {
+            if (Exit.isSuccess(held)) host.atOnce(complete, [held.value], site);
+            else throw held;
+          } catch {
+            timeline.fatal ??= Value.notTranslated(
+              site,
+              "completes a request with a function the prover cannot run at once",
+            );
+          }
+        },
+      });
+      entryServices.set(entry, provided);
+      return fibers.tools.wrap("Entry", entry);
+    });
+  };
+  /** What `Request.makeEntry` was given to run each entry it made with. */
+  const entryServices = new WeakMap<object, Provided>();
+  /** `entry.context`: the services an entry of a request is run with, by the keys the code has read. */
+  const entryContext = (value: V, key: string): V | undefined => {
+    const entry =
+      key === "context" ? fibers.tools.heldOf<Request.Entry<never>>("Entry", value) : undefined;
+    if (!entry) return undefined;
+    const given = entryServices.get(entry);
+    if (given) return contextOf(given);
+    const provided: Array<readonly [unknown, V]> = [];
+    for (const [service, held] of entry.context.mapUnsafe) {
+      const read = host.services.get(service);
+      if (read === undefined) return undefined;
+      provided.push([read, held as V]);
+    }
+    return contextOf(provided);
+  };
+  Object.assign(clocks, fibers.sited);
+  const contextNow = (): V => contextOf([...host.provided.entries()]);
+  const flows = Flows.make(kit, { ...written }, fibers.tools, {
+    providing,
+    provides: built,
+    replacing,
+    context: contextNow,
+  });
+  Object.assign(written, flows.models);
+  Object.assign(clocks, flows.sited);
+  const channels = Channels.make(kit, {
+    ...fibers.tools,
+    real: flows.real,
+    flow: flows.flow,
+    provides: built,
+    context: contextNow,
+  });
+  Object.assign(written, channels.models);
+  Object.assign(clocks, channels.sited);
+  const sinks = Sinks.make(
+    kit,
+    { ...written },
+    streams.values,
+    { ...fibers.tools, provides: built },
+    {
+      ...flows.lifts,
+      read: streams.isSink,
+      channel: channels.channel,
+      chanOf: channels.chanOf,
+    },
+  );
+  Object.assign(written, sinks.models);
 
   // A `Chunk` and an `Iterable` are read as the array of their items: the
   // functions the three modules share do the same to one.
@@ -1372,7 +2503,7 @@ export const make = (host: Host) => {
   const spanOrder = kit.order("Duration.Order", by("Duration.Order", span, "<"));
 
   /** Library values that are not functions. */
-  const values: Readonly<Record<string, V>> = {
+  const values: Record<string, V> = {
     "effect/Effect:void": done,
     "effect/Duration:zero": duration(0),
     "effect/Data:Class": plainClass,
@@ -1396,7 +2527,16 @@ export const make = (host: Host) => {
     ...decimals.values,
     ...rationals.values,
     ...streams.values,
+    ...sinks.values,
+    ...folds.constants,
+    "effect/Layer:empty": layerOf(() => Effect.succeed([])),
+    "effect/Console:clear": done,
+    "Number:MAX_SAFE_INTEGER": Value.num(Number.MAX_SAFE_INTEGER),
+    "Number:MIN_SAFE_INTEGER": Value.num(Number.MIN_SAFE_INTEGER),
+    ...exits.values,
   };
+  // The reducers the modules give are made of the orders and the zeros above.
+  Object.assign(values, folds.values());
 
   const keyOf = (lib: V & { readonly _tag: "Lib" }): string =>
     `${lib.module}:${lib.path.join(".")}`;
@@ -1547,9 +2687,14 @@ export const make = (host: Host) => {
       library: [...Object.keys(models), ...Object.keys(values), ...Object.keys(clocks)].sort(),
       strings: [...strings.names].sort(),
     },
-    opticMember,
+    opticMember: optics.member,
     /** A member of a latch or a semaphore: `latch.open`, `semaphore.withPermits`. */
-    waitMember: waits.member,
+    waitMember: (value: V, key: string, site: Site): V | undefined =>
+      entryContext(value, key) ?? fibers.member(value, key, site) ?? folds.member(value, key),
+    /** A sink: `Sink.count.pipe(Sink.map(f))` gives it to each function in turn. */
+    piped: sinks.isSink,
+    /** An instance of a class of the library that a file exports, other than one of `effect/Data`'s. */
+    constructHost: fibers.constructs,
     /** A helper of a tagged union of `effect/Schema`, as a value the code calls. */
     unionMember,
     /** A method of a string, as a value the code calls. */
@@ -1560,8 +2705,14 @@ export const make = (host: Host) => {
     iterate: kit.iterate,
     /** Whether a value is a class of `effect/Data`, which `new` makes an instance of. */
     isClass: (value: V): boolean => classes.has(value),
+    /** A class of the library the code makes an instance of with `new`: its model is what makes it. */
+    constructed: (module: string, path: ReadonlyArray<string>): boolean =>
+      (module === "effect/Cause" && path.length === 1 && path[0]!.endsWith("Error")) ||
+      (module === "effect/PubSub" && path.length === 1 && path[0]!.endsWith("Strategy")),
     /** A class a file declares by extending one of `effect/Data`'s: its own class, with the same fields. */
     subclass: (base: V, name: string): V | undefined => {
+      const extended = extending.get(base);
+      if (extended) return extended(name);
       const kind = bases.get(base);
       return kind && dataClass(name, kind.tag, kind.error);
     },
@@ -1581,13 +2732,19 @@ export const make = (host: Host) => {
       // A pure function is run as it is, where the prover knows every argument.
       const computed = () => {
         const fn = hostOf(lib.module, lib.path);
-        return typeof fn === "function"
-          ? Known.applied(
-              fn as (...args: ReadonlyArray<unknown>) => unknown,
-              args,
-              `${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}`,
-            )
-          : undefined;
+        if (typeof fn !== "function") return undefined;
+        // A function of the code the library is given is run where the library calls it.
+        const before = Known.calling.run;
+        Known.calling.run = (given, with_) => host.atOnce(given, with_, site);
+        try {
+          return Known.applied(
+            fn as (...args: ReadonlyArray<unknown>) => unknown,
+            args,
+            `${lib.module.replace(/^effect\//, "")}.${lib.path.join(".")}`,
+          );
+        } finally {
+          Known.calling.run = before;
+        }
       };
       const model = host.extra.get(keyOf(lib)) ?? models[keyOf(lib)];
       // A model that has no reading of a call gives way to the function itself.
@@ -1603,12 +2760,11 @@ export const make = (host: Host) => {
       if (made) return Effect.succeed(made);
       // A schema is built, never run: what it describes is read where it is used.
       if (lib.module === "effect/Schema") return Effect.succeed(schemaOf(lib, args));
+      const named = [lib.module.replace(/^effect\//, ""), ...lib.path].join(".");
+      const judged = Judged.reasonOf(lib.module, lib.path);
+      if (judged) return Effect.fail(Value.notTranslated(site, `calls ${named}, which ${judged}`));
       return Effect.fail(
-        Value.notTranslated(
-          site,
-          `calls ${[lib.module.replace(/^effect\//, ""), ...lib.path].join(".")}, which the prover has no model for`,
-          true,
-        ),
+        Value.notTranslated(site, `calls ${named}, which the prover has no model for`, true),
       );
     },
   };

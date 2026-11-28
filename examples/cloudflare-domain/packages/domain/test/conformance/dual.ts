@@ -24,9 +24,33 @@ const ONE_WAY: ReadonlySet<string> = new Set([
   ...["effect/Effect:gen", "effect/Filter:fromPredicate", "effect/Function:dual"],
   ...["effect/HashMap:isHashMap", "effect/HashSet:isHashSet", "effect/Match:typeTags"],
   ...["effect/Sink:find", "effect/Filter:tagged"],
+  // Each is written as an overloaded function and has one way to be called.
+  ...["effect/Sink:takeWhile", "effect/Sink:takeWhileEffect", "effect/Schedule:cron"],
   // Each of these takes the latch or the semaphore first either way, and then the effect.
   ...["effect/Latch:whenOpen", "effect/Semaphore:withPermit", "effect/Semaphore:withPermits"],
   "effect/Semaphore:withPermitsIfAvailable",
+  // An effect and a function of how it ended: the effect comes first either way.
+  ...["effect/Effect:forkChild", "effect/Effect:forkDetach"],
+  // The set or the handle comes first either way, and then the effect.
+  ...["effect/FiberSet:run", "effect/FiberHandle:run", "effect/FiberMap:run"],
+  ...["effect/TxSemaphore:withPermit", "effect/TxSemaphore:withPermits"],
+  "effect/PartitionedSemaphore:withPermitsIfAvailable",
+  // Written with the channel or the stream first, and no other way.
+  ...["effect/Channel:transformPull", "effect/Stream:transformPull"],
+  "effect/Stream:transformPullBracket",
+  ...["effect/PartitionedSemaphore:withPermit", "effect/PartitionedSemaphore:withPermits"],
+  // Two ways to write its options, with a capacity and without: neither takes a value from `pipe`.
+  "effect/RcMap:make",
+  // A function of the language, which is never given a value by `pipe`.
+  "Array:isArray",
+  // A metric of numbers and one of bigints: two ways to write its options, neither given by `pipe`.
+  ...["effect/Metric:counter", "effect/Metric:gauge"],
+  // The service comes first either way: `Layer.succeed(Rate)(value)`.
+  ...["effect/Layer:succeed", "effect/Layer:sync", "effect/Layer:effect", "effect/Layer:mock"],
+  // A key and a value, or a record of them: neither is given by `pipe`.
+  "effect/Effect:annotateLogsScoped",
+  // Reported both ways, and never run: the `unread` lines of a table call it each way.
+  "effect/RequestResolver:persisted",
 ]);
 
 const declared = new Map<string, ReadonlySet<string>>();

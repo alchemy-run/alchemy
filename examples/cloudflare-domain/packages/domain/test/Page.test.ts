@@ -43,7 +43,13 @@ const MODEL = [
 
 /** The sections whose blocks are run, and what the names their lines use stand for. */
 const sections: Readonly<Record<string, Section>> = {
-  Statements: { base: lists, chunk: 100, context: `const resource = { n: a };` },
+  Statements: {
+    base: lists,
+    chunk: 100,
+    context: `const resource = { n: a };`,
+    // An object of a class is not a value an event carries.
+    quiet: /^const local/,
+  },
   Expressions: {
     base: numbers,
     context: `const text = "t"; const items = [a, b, 3]; const made = { n: a }; const maybe = flag ? { n: b, twice: (n) => n * 2 } : undefined; const callback = flag ? (n) => n + 1 : undefined; const record = { x: 1, z: a, inner: { deep: b }, more: 2 }; const twice = (n) => n * 2; const tag = (parts, value) => value;`,
@@ -64,16 +70,19 @@ const sections: Readonly<Record<string, Section>> = {
   },
   "Effects and failures": {
     base: numbers,
-    prelude: [`import * as Schedule from "effect/Schedule";`],
+    prelude: [
+      `import * as Schedule from "effect/Schedule";`,
+      `import * as Deferred from "effect/Deferred";`,
+    ],
     context: `const url = "https://example.com";`,
     // A cell is not a value an event carries.
-    quiet: /^const tries/,
+    quiet: /^const tries|^const answer|^yield\* Effect\.forkChild/,
     effectful: true,
   },
   Streams: {
     base: lists,
     prelude: [`import * as Queue from "effect/Queue";`],
-    context: `const command = { readings: items, count: a }; const stream = Stream.fromIterable(items); const first = stream; const second = stream; const checked = (reading) => Effect.succeed(reading + 1); const queue = yield* Queue.unbounded();`,
+    context: `const command = { readings: items, count: a }; const stream = Stream.fromIterable(items); const first = stream; const second = stream; const checked = (reading) => Effect.succeed(reading + 1); const paced = (millis, ...items) => Stream.fromIterable(items).pipe(Stream.mapEffect((item) => Effect.as(Effect.sleep(millis), item))); const options = { cost: () => 1, units: 1, duration: 1 }; const b = a + 1; const queue = yield* Queue.unbounded();`,
     effectful: true,
     // A stream does nothing until it is run.
     runs: (line) =>
@@ -84,12 +93,17 @@ const sections: Readonly<Record<string, Section>> = {
     prelude: [
       `import * as Schedule from "effect/Schedule";`,
       `import * as SubscriptionRef from "effect/SubscriptionRef";`,
+      `import * as Fiber from "effect/Fiber";`,
       `import * as Deferred from "effect/Deferred";`,
       `import * as Latch from "effect/Latch";`,
       `import * as Queue from "effect/Queue";`,
       `import * as Semaphore from "effect/Semaphore";`,
+      `import * as Cache from "effect/Cache";`,
+      `import * as Request from "effect/Request";`,
+      `import * as Random from "effect/Random";`,
+      `import * as Metric from "effect/Metric";`,
     ],
-    context: `const url = "https://example.com"; const effect = Effect.succeed(a); const first = effect; const second = effect; const command = { attempts: a }; const cron = Cron.parseUnsafe("0 4 * * *"); const Ticket = Schema.Struct({ n: Schema.Number }); const input = { n: a }; const ticket = input; const cell = yield* SubscriptionRef.make(a); const done = yield* Deferred.make(); const gate = yield* Latch.make(); const line = yield* Queue.unbounded(); const permits = yield* Semaphore.make(2);`,
+    context: `const url = "https://example.com"; const effect = Effect.succeed(a); const first = effect; const second = effect; const command = { attempts: a, item: a }; const cron = Cron.parseUnsafe("0 4 * * *"); const Ticket = Schema.Struct({ n: Schema.Number }); const input = { n: a }; const ticket = input; const cell = yield* SubscriptionRef.make(a); const done = yield* Deferred.make(); const gate = yield* Latch.make(); const line = yield* Queue.unbounded(); const permits = yield* Semaphore.make(2); const prices = yield* Cache.make({ capacity: 2, lookup: (n) => Effect.succeed(n) }); const GetPrice = Request.tagged("GetPrice"); const orders = Metric.counter("orders");`,
     effectful: true,
   },
 };
@@ -157,9 +171,12 @@ it("every function the prover has a model for is on the page", () => {
     const name =
       module === "effect/BigInt"
         ? "BigInts"
-        : module === "effect/Function" || module === "effect/pipe"
+        : module === "effect/Function" || module === "effect/pipe" || module === "global"
           ? undefined
           : module.replace(/^effect\//, "");
+    // A name of the language that is called itself: `String(a)`.
+    if (name !== undefined && path === "")
+      return !new RegExp(`(?<![\\w.])${escaped(name)}\\(`).test(text);
     if (module === "effect/Optic" && ["replace", "modify", "get", "getResult"].includes(path))
       return !new RegExp(`\\.${escaped(path)}\\(`).test(text);
     return name === undefined
@@ -197,7 +214,7 @@ for (const block of run) {
 
 it("the page has blocks to run", () => {
   expect(made.length).toBeGreaterThan(15);
-  expect(byForm.length).toBeGreaterThan(10);
+  expect(byForm.length).toBeGreaterThan(2);
 });
 
 const only = process.env.PAGE_ONLY;

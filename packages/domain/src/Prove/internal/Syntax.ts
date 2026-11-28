@@ -54,7 +54,7 @@ export const FORMS: ReadonlyArray<Form> = [
   form("Literal: a boolean", (n) => n.type === "Literal" && typeof n.value === "boolean"),
   form("Literal: null", (n) => n.type === "Literal" && n.value === null && !n.regex && !n.bigint),
   form("Literal: a bigint", (n) => n.type === "Literal" && typeof n.bigint === "string"),
-  form("Literal: a regular expression", (n) => n.type === "Literal" && Boolean(n.regex), false),
+  form("Literal: a regular expression", (n) => n.type === "Literal" && Boolean(n.regex)),
   form(
     "TemplateLiteral: text alone",
     (n) => n.type === "TemplateLiteral" && n.expressions.length === 0,
@@ -64,10 +64,10 @@ export const FORMS: ReadonlyArray<Form> = [
     (n) => n.type === "TemplateLiteral" && n.expressions.length > 0,
   ),
   form("TemplateElement", kind("TemplateElement")),
-  form("TaggedTemplateExpression", kind("TaggedTemplateExpression"), false),
+  form("TaggedTemplateExpression", kind("TaggedTemplateExpression")),
   form("Identifier", kind("Identifier")),
-  form("ThisExpression", kind("ThisExpression"), false),
-  form("Super", kind("Super"), false),
+  form("ThisExpression", kind("ThisExpression")),
+  form("Super", kind("Super")),
   form("MetaProperty", kind("MetaProperty"), false),
 
   // Objects and arrays.
@@ -107,8 +107,8 @@ export const FORMS: ReadonlyArray<Form> = [
       n.method === true &&
       n.kind === "init",
   ),
-  form("Property: a getter", (n) => n.type === "Property" && n.kind === "get", false),
-  form("Property: a setter", (n) => n.type === "Property" && n.kind === "set", false),
+  form("Property: a getter", (n) => n.type === "Property" && n.kind === "get"),
+  form("Property: a setter", (n) => n.type === "Property" && n.kind === "set"),
   form("ArrayExpression", kind("ArrayExpression")),
   form(
     "ArrayExpression: with a hole",
@@ -144,7 +144,7 @@ export const FORMS: ReadonlyArray<Form> = [
   form("NewExpression", kind("NewExpression")),
   form("ImportExpression", kind("ImportExpression"), false),
   form("ParenthesizedExpression", kind("ParenthesizedExpression")),
-  form("SequenceExpression", kind("SequenceExpression"), false),
+  form("SequenceExpression", kind("SequenceExpression")),
   form("ConditionalExpression", kind("ConditionalExpression")),
 
   // Functions.
@@ -172,12 +172,11 @@ export const FORMS: ReadonlyArray<Form> = [
   form(
     "FunctionDeclaration: a generator",
     (n) => n.type === "FunctionDeclaration" && !n.async && n.generator === true,
-    false,
   ),
   form("an async function", (n) => isFunction(n) && n.async === true, false),
   form("AwaitExpression", kind("AwaitExpression"), false),
   form("YieldExpression: yield*", (n) => n.type === "YieldExpression" && n.delegate === true),
-  form("YieldExpression: yield", (n) => n.type === "YieldExpression" && !n.delegate, false),
+  form("YieldExpression: yield", (n) => n.type === "YieldExpression" && !n.delegate),
   form("ReturnStatement: a value", (n) => n.type === "ReturnStatement" && Boolean(n.argument)),
   form("ReturnStatement: nothing", (n) => n.type === "ReturnStatement" && !n.argument),
 
@@ -236,16 +235,35 @@ export const FORMS: ReadonlyArray<Form> = [
   // Operators.
   ...operators(
     "BinaryExpression",
-    ["+", "-", "*", "/", "%", "<", "<=", ">", ">=", "===", "!==", "==", "!=", "in"],
-    ["**", "&", "|", "^", "<<", ">>", ">>>", "instanceof"],
+    [
+      "+",
+      "-",
+      "*",
+      "/",
+      "%",
+      "<",
+      "<=",
+      ">",
+      ">=",
+      "===",
+      "!==",
+      "==",
+      "!=",
+      "in",
+      "**",
+      "instanceof",
+    ],
+    [],
   ),
+  ...operators("BinaryExpression", ["&", "|", "^", "<<", ">>", ">>>"], []),
   ...operators("LogicalExpression", ["&&", "||", "??"], []),
-  ...operators("UnaryExpression", ["!", "-", "+", "void", "typeof"], ["~", "delete"]),
+  ...operators("UnaryExpression", ["!", "-", "+", "void", "typeof", "~", "delete"], []),
   ...operators(
     "AssignmentExpression",
-    ["=", "+=", "-=", "*=", "/=", "%=", "??=", "||=", "&&="],
-    ["**=", "<<=", ">>=", ">>>=", "&=", "|=", "^="],
+    ["=", "+=", "-=", "*=", "/=", "%=", "??=", "||=", "&&=", "**=", "<<=", ">>=", ">>>="],
+    [],
   ),
+  ...operators("AssignmentExpression", ["&=", "|=", "^="], []),
   form(
     "AssignmentExpression: to a variable",
     (n) => n.type === "AssignmentExpression" && n.left.type === "Identifier",
@@ -305,9 +323,8 @@ export const FORMS: ReadonlyArray<Form> = [
   form(
     "a break or a continue to a label",
     (n) => (n.type === "BreakStatement" || n.type === "ContinueStatement") && Boolean(n.label),
-    false,
   ),
-  form("LabeledStatement", kind("LabeledStatement"), false),
+  form("LabeledStatement", kind("LabeledStatement")),
   form("ForOfStatement", (n) => n.type === "ForOfStatement" && !n.await),
   form("ForOfStatement: for await", (n) => n.type === "ForOfStatement" && n.await === true, false),
   form(
@@ -324,16 +341,15 @@ export const FORMS: ReadonlyArray<Form> = [
   form("ForStatement: without a step", (n) => n.type === "ForStatement" && !n.update),
   form("WhileStatement", kind("WhileStatement")),
   form("DoWhileStatement", kind("DoWhileStatement")),
-  form("TryStatement", kind("TryStatement"), false),
-  form("CatchClause", kind("CatchClause"), false),
-  form("ThrowStatement", kind("ThrowStatement"), false),
-  form("DebuggerStatement", kind("DebuggerStatement"), false),
-  form("ClassExpression", kind("ClassExpression"), false),
+  form("TryStatement", kind("TryStatement")),
+  form("CatchClause", kind("CatchClause")),
+  form("ThrowStatement", kind("ThrowStatement")),
+  form("DebuggerStatement", kind("DebuggerStatement")),
+  form("ClassExpression", kind("ClassExpression")),
   form(
     "ClassDeclaration: in a function",
     (n, p) =>
       n.type === "ClassDeclaration" && p?.type !== "Program" && !p?.type.startsWith("Export"),
-    false,
   ),
 
   // TypeScript that changes nothing at run time, and TypeScript that does.
@@ -344,8 +360,8 @@ export const FORMS: ReadonlyArray<Form> = [
   form("TSInstantiationExpression", kind("TSInstantiationExpression")),
   form("TSTypeAliasDeclaration", kind("TSTypeAliasDeclaration")),
   form("TSInterfaceDeclaration", kind("TSInterfaceDeclaration")),
-  form("TSEnumDeclaration", kind("TSEnumDeclaration"), false),
-  form("TSModuleDeclaration", kind("TSModuleDeclaration"), false),
+  form("TSEnumDeclaration", kind("TSEnumDeclaration")),
+  form("TSModuleDeclaration", kind("TSModuleDeclaration")),
 
   // A file: what it imports, declares and exports.
   form("Program", kind("Program")),
@@ -386,6 +402,8 @@ export const FORMS: ReadonlyArray<Form> = [
   ),
   form("ImportNamespaceSpecifier", kind("ImportNamespaceSpecifier")),
   form("ImportDefaultSpecifier", kind("ImportDefaultSpecifier")),
+  // `with { type: "json" }`: how the runtime loads what is imported.
+  form("ImportAttribute", kind("ImportAttribute")),
   form(
     "ExportNamedDeclaration: a declaration",
     (n) => n.type === "ExportNamedDeclaration" && Boolean(n.declaration),
@@ -419,9 +437,11 @@ export const FORMS: ReadonlyArray<Form> = [
       (p?.type === "Program" || p?.type.startsWith("Export") === true),
   ),
   form("ClassBody", kind("ClassBody")),
-  form("PropertyDefinition", kind("PropertyDefinition"), false),
-  form("MethodDefinition", kind("MethodDefinition"), false),
-  form("StaticBlock", kind("StaticBlock"), false),
+  form("PropertyDefinition", kind("PropertyDefinition")),
+  form("MethodDefinition", kind("MethodDefinition")),
+  form("StaticBlock", kind("StaticBlock")),
+  form("PrivateIdentifier", kind("PrivateIdentifier")),
+  form("TSParameterProperty", kind("TSParameterProperty")),
 ];
 
 /** The keys of a node that hold types, which are not there when the code runs. */

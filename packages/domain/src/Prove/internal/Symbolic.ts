@@ -888,6 +888,58 @@ export const fits = (value: V, ast: SchemaAST.AST, run?: Run): string => {
   }
 };
 
+/**
+ * Whether `fits` says exactly which values a schema allows: every part of it
+ * is one the prover reads, so a value fits when the formula holds and only then.
+ */
+export const exact = (ast: SchemaAST.AST, seen: Set<SchemaAST.AST> = new Set()): boolean => {
+  // A schema that holds itself is not read to its end.
+  if (seen.has(ast)) return false;
+  seen.add(ast);
+  if (checksOf(ast).unread.length > 0) return false;
+  switch (ast._tag) {
+    case "String":
+    case "BigInt":
+    case "Boolean":
+    case "Null":
+    case "Undefined":
+    case "Void":
+    case "Number":
+    case "Unknown":
+    case "Any":
+      return true;
+    case "Literal":
+      return ["string", "number", "boolean"].includes(typeof ast.literal);
+    case "Arrays":
+      // A tuple may leave out an item, which `fits` does not ask about.
+      return ast.elements.length === 0 && ast.rest.length === 1 && exact(ast.rest[0]!, seen);
+    case "Objects":
+      return (
+        ast.indexSignatures.length === 0 &&
+        ast.propertySignatures.every(
+          (property) => typeof property.name === "string" && exact(property.type, seen),
+        )
+      );
+    case "Union":
+      return ast.types.every((member) => exact(member, seen));
+    case "Declaration": {
+      if (isDecimal(ast)) return true;
+      const held = ast.typeParameters[0];
+      return isOption(ast) && held !== undefined && exact(held, seen);
+    }
+    default:
+      return false;
+  }
+};
+
+/** The members of a schema of several, and the schema of what an `Option` or a list holds. */
+export const partsOf = (
+  ast: SchemaAST.AST,
+): { readonly _tag: "Option"; readonly value: SchemaAST.AST } | { readonly _tag: "Other" } => {
+  const held = ast._tag === "Declaration" && isOption(ast) ? ast.typeParameters[0] : undefined;
+  return held ? { _tag: "Option", value: held } : { _tag: "Other" };
+};
+
 /** A reason a counterexample's input cannot be built as a real value. */
 export interface Unbuildable {
   readonly _tag: "Unbuildable";
@@ -1199,7 +1251,11 @@ export const show = (value: unknown): string => {
   if (typeof value === "string") return JSON.stringify(value);
   if (typeof value === "bigint") return `${value}n`;
   if (value === null || typeof value !== "object") return String(value);
-  if (DateTime.isDateTime(value)) return DateTime.formatIso(value);
+  // A time past what a date holds has no ISO text: it is written out as one that is not valid.
+  if (DateTime.isDateTime(value))
+    return Number.isFinite(DateTime.toEpochMillis(value))
+      ? DateTime.formatIso(value)
+      : "DateTime(invalid)";
   if (Duration.isDuration(value)) return `Duration.millis(${Duration.toMillis(value)})`;
   if (Option.isOption(value))
     return Option.isSome(value) ? `Option.some(${show(value.value)})` : "Option.none()";

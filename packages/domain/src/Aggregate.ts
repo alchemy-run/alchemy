@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { Annotations } from "./Annotations.ts";
@@ -13,7 +14,14 @@ import type * as Command from "./Command.ts";
 import type * as Compaction from "./Compaction.ts";
 import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
-import { decidedAt, judge, settle, targetId as internalTargetId } from "./internal.ts";
+import {
+  decidedAt,
+  judge,
+  NeverSettles,
+  runInstantly,
+  settle,
+  targetId as internalTargetId,
+} from "./internal.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as Rewrite from "./Rewrite.ts";
 import type * as Telemetry from "./Telemetry.ts";
@@ -692,11 +700,13 @@ export const predict = (
     };
   }
   if (Effect.isEffect(decision)) {
-    const settled = decidedAt(decision, options.now).pipe(
-      Effect.provideContext((options.context ?? Context.empty()) as Context.Context<unknown>),
-      Effect.runSyncExit,
-      settle,
+    // A handler that sleeps or runs fibers is run on time that passes at once.
+    const exit = runInstantly(
+      decidedAt(decision, options.now).pipe(
+        Effect.provideContext((options.context ?? Context.empty()) as Context.Context<unknown>),
+      ),
     );
+    const settled = settle(exit ?? Exit.die(new NeverSettles()));
     if (settled._tag === "Failed") return { _tag: "Unpredictable", cause: settled.cause };
     decision = settled.decision;
   }

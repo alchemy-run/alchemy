@@ -155,10 +155,8 @@ it.effect(
         expect(verdicts.Sample).toMatchObject(bounded("command.readings"));
         // `Stream.iterate` never ends, and `take` cuts it.
         expect(verdicts.Skip).toEqual({ _tag: "Proved" });
-        expect(verdicts.Pad).toMatchObject({
-          _tag: "NotTranslated",
-          reason: "Stream.take is given a count the prover cannot see",
-        });
+        // A count an input decides, held between 1 and 3: each count is a path.
+        expect(verdicts.Pad).toEqual({ _tag: "Proved" });
       }
       agrees(report);
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -226,20 +224,20 @@ it.effect(
           ]),
         ),
       ).toEqual({
-        Race: "Stream.mapEffect runs more than one item at a time, which the prover does not read",
+        Race: "calls Stream.toAsyncIterable, which gives or goes over an async iterable, whose values come as promises",
         Share:
           "BigDecimal.divide divides decimals an input holds, which BigDecimal rounds and the prover does not",
         Walk: "reads the 5 items of a HashSet in order, which is the order of their hashes: the prover reads up to 4 in every order",
         Rank: "orders strings an input holds, which the prover does not translate",
         Unwrap: "yields a value the prover has no model for",
-        Roll: "calls Random.nextIntBetween, which the prover has no model for",
+        Roll: "draws a random number with no seed: no two runs draw the same",
         Spin: "runs a stream that has not ended after 10000 items",
         Turn: "calls Array.rotate, which the prover has no model for",
         // Each of these was checked against the package: none is a function of the command alone.
-        Remember: "calls Cache.make, which the prover has no model for",
-        Borrow: "calls Effect.scoped, which the prover has no model for",
+        Remember: "calls Cache.get with a key the prover cannot see",
+        Borrow: "calls Effect.timed, which measures with the machine's clock, not the handler's",
         Guard:
-          "waits for more permits of a Semaphore than are free: a handler runs to its end without waiting, so it never would",
+          "waits for permits of a Semaphore that nothing releases: the handler would never end",
         Configure: "calls Config.Int, which the prover has no model for",
         Link: "calls Graph.directed, which the prover has no model for",
         Tick: "calls Cron.next, which the prover has no model for",

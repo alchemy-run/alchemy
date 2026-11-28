@@ -107,12 +107,28 @@ export const make = (kit: Kit) => {
       new Value.Rejected({ rejection: Value.str(`${name} divides by zero`), defect: true }),
     );
 
+  /**
+   * A bigint the code writes, or one an input holds: `Rational.make` takes
+   * nothing else, and on anything else the library never ends. The report is
+   * final: the function itself is not run in its place.
+   */
+  const bigOf = (name: string, v: V | undefined, site: Site): Eval<Fraction> =>
+    v?._tag === "Big" || (v?._tag === "Term" && v.big === true)
+      ? whole(name, v, site)
+      : Effect.fail(
+          Value.notTranslated(
+            site,
+            `calls ${name} with something other than a bigint, on which the library never ends`,
+            true,
+          ),
+        );
+
   const made =
     (name: string): Model =>
     ([numerator, denominator], site) =>
       Effect.gen(function* () {
-        const n = yield* whole(name, numerator, site);
-        const d = yield* whole(name, denominator, site);
+        const n = yield* bigOf(name, numerator, site);
+        const d = yield* bigOf(name, denominator, site);
         return (yield* quotient(name, n, d, site)) ?? Value.undef;
       });
 

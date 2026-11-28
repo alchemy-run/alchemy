@@ -33,7 +33,11 @@ export type Declaration =
   /** A name a pattern binds: `const { a, b: [c] } = made` declares `a` and `c`. */
   | { readonly _tag: "Pattern"; readonly pattern: Node; readonly init: Node }
   | { readonly _tag: "Function"; readonly node: Node }
-  | { readonly _tag: "Class"; readonly node: Node };
+  | { readonly _tag: "Class"; readonly node: Node }
+  /** `enum Kind { Good, Gift }`: an object of its members, made where it is declared. */
+  | { readonly _tag: "Enum"; readonly node: Node }
+  /** `namespace Space { export const n = 1 }`: an object of what it exports. */
+  | { readonly _tag: "Space"; readonly node: Node };
 
 export interface Import {
   readonly specifier: string;
@@ -50,6 +54,8 @@ export interface Scope {
 export interface Env {
   readonly scope: Scope;
   readonly module: Module;
+  /** The label of the statement being run: `outer: for (...)`. */
+  readonly label?: string | undefined;
 }
 
 /** A domain class instance: an event, a rejection or a command. */
@@ -93,9 +99,17 @@ export interface Brand {
   readonly cls: unknown;
 }
 
-export type OpticStep =
-  | { readonly _tag: "Tag"; readonly tag: string }
-  | { readonly _tag: "Key"; readonly key: string };
+/** The kinds of the library's optics: what each finds, and how it puts a value back. */
+export type OpticKind = "Iso" | "Lens" | "Prism" | "Optional";
+/** What a step of an optic finds: nothing, where a Prism or an Optional misses. */
+export type OpticGot = { readonly ok: true; readonly value: V } | { readonly ok: false };
+/** A step of an optic: an Iso, a Lens, a Prism or an Optional. */
+export interface OpticStep {
+  readonly kind: OpticKind;
+  readonly get: (source: V, site: Site) => Eval<OpticGot>;
+  /** The value with the focus put back; an Iso and a Prism are given no source. */
+  readonly set: (value: V, source: V, site: Site) => Eval<OpticGot>;
+}
 
 /**
  * A value while the prover runs the code. Concrete values are computed as
@@ -241,6 +255,13 @@ const OPTION: Brand = { kind: "Option", cls: undefined };
 
 /** `Option.none()`: there is one, as in the library. */
 export const none: V = obj({ _tag: str("None") }, OPTION);
+
+/**
+ * An error the library makes, such as a `NoSuchElementError`: its tag, and
+ * the mark the library gives its own, which `Cause.isNoSuchElementError` looks for.
+ */
+export const libraryError = (tag: string, fields: Record<string, V> = {}): V =>
+  obj({ [`~effect/Cause/${tag}`]: str(`~effect/Cause/${tag}`), _tag: str(tag), ...fields });
 /** `Option.some(value)`. */
 export const some = (value: V): V => obj({ _tag: str("Some"), value }, OPTION);
 
@@ -350,6 +371,11 @@ export class Rejected extends Data.TaggedError("Rejected")<{
   readonly rejection: V;
   /** The effect died: nothing that handles a failure handles it. */
   readonly defect?: boolean;
+  /**
+   * It came out of a `yield*`. The generator it was yielded in is left where
+   * it stands, so no `catch` and no `finally` of that generator sees it.
+   */
+  readonly yielded?: boolean;
 }> {}
 
 /** The prover met code it cannot turn into a formula. */

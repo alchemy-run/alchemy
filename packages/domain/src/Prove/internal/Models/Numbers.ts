@@ -472,10 +472,17 @@ export const make = (kit: Kit) => {
     "effect/Function:cast": ([value]) => Effect.succeed(value ?? Value.undef),
     "effect/Function:memoize": ([f], site) =>
       f ? Effect.succeed(f) : wrongArguments(site, "memoize"),
+    // A function of an object that gives the same for the same one, and for what it gave: the function itself, read each time.
+    "effect/Function:memoizeIdempotent": ([f], site) =>
+      f ? Effect.succeed(f) : wrongArguments(site, "memoizeIdempotent"),
     "effect/Function:absurd": (_, site) =>
       Effect.fail(
         Value.notTranslated(site, "reaches absurd, which the code says cannot be reached"),
       ),
+    "effect/Function:hole": (_, site) =>
+      Effect.fail(Value.notTranslated(site, "reaches hole, which the code says cannot be reached")),
+    // The second of two values.
+    "effect/Function:SK": ([, second]) => Effect.succeed(second ?? Value.undef),
     // A brand is a name for a type: the value is what it was.
     "effect/Brand:nominal": () =>
       Effect.succeed(native("Brand.nominal", ([value]) => Effect.succeed(value ?? Value.undef))),

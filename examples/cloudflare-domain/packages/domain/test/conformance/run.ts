@@ -44,8 +44,8 @@ export const PRELUDE = [
     ...["Inspectable", "JsonPatch", "JsonPointer", "LogLevel", "Newtype", "NonEmptyIterable"],
     ...["PrimaryKey", "Reducer", "RegExp", "SemVer", "SemVerRange", "TextDiff", "Trie"],
   ].map((module) => `import * as ${module} from "effect/${module}";`),
-  `import { absurd } from "effect/Function";`,
-  `import { apply, cast, compose, constant, constFalse, constNull, constTrue, constUndefined, constVoid, dual, flip, flow, identity, memoize, pipe, satisfies, tupled, untupled } from "effect/Function";`,
+  `import { absurd, hole, SK } from "effect/Function";`,
+  `import { apply, cast, compose, constant, constFalse, constNull, constTrue, constUndefined, constVoid, dual, flip, flow, identity, memoize, memoizeIdempotent, pipe, satisfies, tupled, untupled } from "effect/Function";`,
   `const Small = Schema.Int.check(Schema.isBetween({ minimum: -20, maximum: 20 }));`,
   `export class Done extends Domain.Event("Done", { results: Schema.Unknown }) {}`,
   `export class Odd extends Data.TaggedError("Odd")<{ readonly n: number }> {}`,
@@ -70,6 +70,8 @@ interface Chunk {
   readonly expressions: ReadonlyArray<string>;
   /** What the report has to say, for a command the prover is not to read. */
   readonly unread?: RegExp;
+  /** A misuse: reported, or read and compared, whichever the prover does. */
+  readonly misuse?: boolean;
 }
 
 export const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
@@ -94,12 +96,29 @@ export const chunksOf = (group: Group): ReadonlyArray<Chunk> => {
       expressions: [expression],
       unread,
     });
+  for (const expression of group.misuse ?? [])
+    out.push({
+      command: `${group.name}${out.length}Misuse`,
+      known: false,
+      expressions: [group.effectful ? expression : `[${expression}]`],
+      misuse: true,
+    });
   return out;
 };
 
+/** What a file that imports none of the library's modules starts with. */
+const BARE = [
+  "// @ts-nocheck",
+  `import * as Domain from "@alchemy.run/domain";`,
+  `import * as Schema from "effect/Schema";`,
+  `import * as Effect from "effect/Effect";`,
+  `const Small = Schema.Int.check(Schema.isBetween({ minimum: -20, maximum: 20 }));`,
+  `export class Done extends Domain.Event("Done", { results: Schema.Unknown }) {}`,
+];
+
 export const sourceOf = (group: Group, chunks: ReadonlyArray<Chunk>): string =>
   [
-    ...PRELUDE,
+    ...(group.bare ? BARE : PRELUDE),
     ...(group.prelude ?? []),
     `const PINS = ${group.pins};`,
     `const input = { id: Schema.String, pick: Schema.Literals(PINS.map((_, index) => index)), ${group.input} };`,
@@ -187,10 +206,12 @@ export const check = (groups: ReadonlyArray<Group>): void => {
               : [{ expression: chunk.expressions[0], verdict: command.schema._tag, reason }];
           });
           expect(misreported).toEqual([]);
+          const misused = new Set(chunks.flatMap((chunk) => (chunk.misuse ? [chunk.command] : [])));
           const unread = report.commands.flatMap((command) =>
             command.schema._tag === "Proved" ||
             command.schema._tag === "Bounded" ||
-            stopped.has(command.command)
+            stopped.has(command.command) ||
+            misused.has(command.command)
               ? []
               : [
                   {
@@ -203,11 +224,21 @@ export const check = (groups: ReadonlyArray<Group>): void => {
                 ],
           );
           expect(unread).toEqual([]);
-          expect(report.agreement.differs.map((reason) => reason.slice(0, 400))).toEqual([]);
+          // A misuse is code TypeScript refuses, outside what the prover answers for: the real code may
+          // throw on it, or curry it where the prover reads it at once. Only that it is read or reported is held.
+          const ofMisuse = (reason: string) =>
+            [...misused].some((command) => reason.includes(`read ${command} `));
+          expect(
+            report.agreement.differs
+              .filter((reason) => !ofMisuse(reason))
+              .map((reason) => reason.slice(0, 400)),
+          ).toEqual([]);
           // A path that takes the items of a hash set in an order the real one does not give
           // cannot be run: the order the real one gives is compared on its own path.
-          expect(report.agreement.uncompared - report.agreement.unordered).toBe(0);
-          if (chunks.some((chunk) => !chunk.unread))
+          // A misuse the real code cannot run to its end is not compared: the prover reported it, or read it as a value.
+          if (misused.size === 0)
+            expect(report.agreement.uncompared - report.agreement.unordered).toBe(0);
+          if (chunks.some((chunk) => !chunk.unread && !chunk.misuse))
             expect(report.agreement.compared).toBeGreaterThan(0);
         }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
       600_000,

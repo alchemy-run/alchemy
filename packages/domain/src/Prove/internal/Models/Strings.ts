@@ -14,6 +14,11 @@ const known = (v: V | undefined): string | undefined => (v?._tag === "Str" ? v.v
 const index = (v: V | undefined): number | undefined =>
   v?._tag === "Num" && Number.isInteger(v.value) ? v.value : undefined;
 const absent = (v: V | undefined): boolean => v === undefined || v._tag === "Undef";
+/** A regular expression the code writes: the language's own, run on text the code writes too. */
+export const patternOf = (v: V | undefined): RegExp | undefined =>
+  v?._tag === "Host" && Object.prototype.toString.call(v.value) === "[object RegExp]"
+    ? (v.value as RegExp)
+    : undefined;
 
 /**
  * Strings: the methods of a string, and `effect/String`, which is the same
@@ -42,7 +47,9 @@ export const make = (kit: Kit) => {
           ? { value: arg.value as unknown }
           : arg._tag === "Undef"
             ? { value: undefined as unknown }
-            : undefined,
+            : patternOf(arg)
+              ? { value: patternOf(arg) as unknown }
+              : undefined,
       );
       if (text === undefined || given.some((arg) => arg === undefined)) return unread(site, name);
       // A method that throws on what it is given stops the code: nothing is read past it.
@@ -64,11 +71,52 @@ export const make = (kit: Kit) => {
           : typeof made === "boolean"
             ? Effect.succeed(Value.bool(made))
             : Array.isArray(made)
-              ? Effect.succeed(arr(made.map((part) => Value.str(String(part)))))
+              ? Effect.succeed(
+                  arr(
+                    made.map((part) =>
+                      // A group that matched nothing.
+                      part === undefined ? Value.undef : Value.str(String(part)),
+                    ),
+                  ),
+                )
               : made === undefined
                 ? Effect.succeed(Value.undef)
-                : unread(site, name);
+                : made === null
+                  ? Effect.succeed(Value.nil)
+                  : unread(site, name);
     };
+
+  /**
+   * `padStart` and `padEnd`, of text an input holds: how much is added is
+   * decided by how long the text is, one length at a time up to the width.
+   */
+  function padded(
+    name: "padStart" | "padEnd",
+    order: (pad: string, text: string) => readonly [string, string],
+  ): Method {
+    return (self, args, site) => {
+      const text = known(self);
+      const width = index(args[0]);
+      const fill = absent(args[1]) ? " " : known(args[1]);
+      const term = Compare.textual(self);
+      if (text !== undefined || width === undefined || !fill || width > 32 || !term)
+        return computed(name, (held, [n, with_]) =>
+          held[name](Number(n), with_ as string | undefined),
+        )(self, args, site);
+      const length = `(str.len ${term.text})`;
+      return Effect.gen(function* () {
+        for (let has = 0; has < width; has++)
+          if (yield* host.decide(Value.term("Bool", `(= ${length} ${has})`), site)) {
+            const [first, second] = order(
+              Smt.string("".padStart(width - has, fill)).text,
+              term.text,
+            );
+            return Value.term("String", `(str.++ ${first} ${second})`);
+          }
+        return self;
+      });
+    };
+  }
 
   /** A test of one string against another: `startsWith`, `endsWith`, `includes`. */
   const test =
@@ -90,9 +138,9 @@ export const make = (kit: Kit) => {
       );
     };
 
-  const part = (self: V, from: number, to: number | undefined, name: string, site: Site) => {
-    const text = Compare.textual(self);
-    if (!text || from < 0 || (to !== undefined && to < 0)) return unread(site, name);
+  // Called on text, at places its callers have checked are not before its start.
+  const part = (self: V, from: number, to: number | undefined) => {
+    const text = Compare.textual(self)!;
     const length =
       to === undefined ? `(- (str.len ${text.text}) ${from})` : `${Math.max(0, to - from)}`;
     return Effect.succeed(Value.term("String", `(str.substr ${text.text} ${from} ${length})`));
@@ -291,7 +339,7 @@ export const make = (kit: Kit) => {
       const b = absent(to) ? undefined : index(to);
       if (a !== undefined && (absent(to) || b !== undefined)) {
         if (text !== undefined) return Effect.succeed(Value.str(text.slice(a, b)));
-        if (a >= 0 && (b === undefined || b >= 0)) return part(self, a, b, "slice", site);
+        if (a >= 0 && (b === undefined || b >= 0)) return part(self, a, b);
       }
       // A place an input decides: where a separator is, or a number the command holds.
       const start = absent(from) ? 0 : wholeOf(from);
@@ -308,7 +356,7 @@ export const make = (kit: Kit) => {
       if (a !== undefined && (absent(to) || b !== undefined)) {
         if (text !== undefined) return Effect.succeed(Value.str(text.substring(a, b)));
         // `substring` swaps its bounds when the first is the larger.
-        if (a >= 0 && (b === undefined || b >= a)) return part(self, a, b, "substring", site);
+        if (a >= 0 && (b === undefined || b >= a)) return part(self, a, b);
       }
       const start = absent(from) ? 0 : wholeOf(from);
       const end = absent(to) ? undefined : wholeOf(to);
@@ -359,7 +407,13 @@ export const make = (kit: Kit) => {
       );
     },
     // A string is replaced by a string the code writes: a `$` in it would stand for part of what was found.
+    match: computed("match", (self, [pattern]) => self.match(pattern as RegExp)),
+    search: computed("search", (self, [pattern]) => self.search(pattern as RegExp)),
     replace: (self, [pattern, replacement], site) => {
+      if (patternOf(pattern))
+        return computed("replace", (held, [by, with__]) =>
+          held.replace(by as RegExp, String(with__)),
+        )(self, [pattern, replacement ?? Value.undef], site);
       const a = Compare.textual(self);
       const b = pattern ? Compare.textual(pattern) : undefined;
       const with_ = known(replacement);
@@ -373,6 +427,10 @@ export const make = (kit: Kit) => {
       );
     },
     replaceAll: (self, [pattern, replacement], site) => {
+      if (patternOf(pattern))
+        return computed("replaceAll", (held, [by, with__]) =>
+          held.replaceAll(by as RegExp, String(with__)),
+        )(self, [pattern, replacement ?? Value.undef], site);
       const a = Compare.textual(self);
       const y = known(pattern);
       const with_ = known(replacement);
@@ -396,8 +454,8 @@ export const make = (kit: Kit) => {
         const found = text.at(i);
         return Effect.succeed(found === undefined ? Value.undef : Value.str(found));
       }
-      const term = Compare.textual(self);
-      if (!term) return unread(site, "at");
+      // A method of a string is called on text.
+      const term = Compare.textual(self)!;
       // A place from the end is counted back from the length; one past either end has nothing.
       const length = `(str.len ${term.text})`;
       const [outside, place] =
@@ -406,19 +464,53 @@ export const make = (kit: Kit) => {
         missing ? Value.undef : Value.term("String", `(str.at ${term.text} ${place})`),
       );
     },
+    // The number of the letter at a place: none past the end, which the language writes as NaN.
+    charCodeAt: (self, [at], site) => {
+      const text = known(self);
+      const i = absent(at) ? 0 : index(at);
+      if (i === undefined || i < 0) return unread(site, "charCodeAt");
+      if (text !== undefined) return Effect.succeed(Value.num(text.charCodeAt(i)));
+      // A method of a string is called on text.
+      const term = Compare.textual(self)!;
+      return Effect.map(
+        host.decide(Value.term("Bool", `(<= (str.len ${term.text}) ${i})`), site),
+        (missing) =>
+          missing
+            ? Value.num(Number.NaN)
+            : Value.term("Int", `(str.to_code (str.at ${term.text} ${i}))`),
+      );
+    },
     toUpperCase: computed("toUpperCase", (self) => self.toUpperCase()),
     toLowerCase: computed("toLowerCase", (self) => self.toLowerCase()),
     trim: computed("trim", (self) => self.trim()),
     trimStart: computed("trimStart", (self) => self.trimStart()),
     trimEnd: computed("trimEnd", (self) => self.trimEnd()),
-    padStart: computed("padStart", (self, [n, fill]) =>
-      self.padStart(Number(n), fill as string | undefined),
-    ),
-    padEnd: computed("padEnd", (self, [n, fill]) =>
-      self.padEnd(Number(n), fill as string | undefined),
-    ),
-    repeat: computed("repeat", (self, [n]) => self.repeat(Number(n))),
+    padStart: padded("padStart", (pad, text) => [pad, text]),
+    padEnd: padded("padEnd", (pad, text) => [text, pad]),
+    // Text an input holds, a number of times the code writes: that many of it, one after another.
+    repeat: (self, args, site) => {
+      const text = known(self);
+      const times = index(args[0]);
+      if (text !== undefined || times === undefined || times < 0 || times > 16)
+        return computed("repeat", (held, [n]) => held.repeat(Number(n)))(self, args, site);
+      // A method of a string is called on text.
+      const term = Compare.textual(self)!;
+      return Effect.succeed(
+        times === 0
+          ? Value.str("")
+          : times === 1
+            ? self
+            : Value.term(
+                "String",
+                `(str.++ ${Array.from({ length: times }, () => term.text).join(" ")})`,
+              ),
+      );
+    },
     split: (self, args, site) => {
+      if (patternOf(args[0]))
+        return computed("split", (held, [by, limit]) =>
+          held.split(by as RegExp, limit as number | undefined),
+        )(self, args, site);
       const separator = known(args[0]);
       return self._tag === "Term" &&
         self.term.sort === "String" &&
@@ -432,7 +524,6 @@ export const make = (kit: Kit) => {
       const placed = place(self, args[0], args[1], "last");
       return placed ? Effect.succeed(placed) : lastIndexKnown(self, args, site);
     },
-    charCodeAt: computed("charCodeAt", (self, [i]) => self.charCodeAt(Number(i ?? 0))),
   };
 
   const splitKnown = computed("split", (self, [separator]) =>

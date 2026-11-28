@@ -7,6 +7,7 @@ import type { Interpreter } from "./Interpreter.ts";
 import * as Smt from "./Smt.ts";
 import * as Source from "./Source.ts";
 import * as Symbolic from "./Symbolic.ts";
+import * as Timeline from "./Timeline.ts";
 import type { Eval, Module, Node, Site, V } from "./Value.ts";
 import * as Value from "./Value.ts";
 
@@ -189,7 +190,7 @@ export const step = (
       .pipe(
         Effect.flatMap((made) => (made._tag === "Effect" ? made.run : Effect.succeed(made))),
         Effect.catchTag("Rejected", (rejected) => Effect.succeed(rejected)),
-        decidedAt(interpreter, now),
+        decidedAt(interpreter, now, site),
       );
     if (decision._tag === "Rejected")
       return { inputs, applied: { _tag: "Rejected", rejection: decision.rejection } } as const;
@@ -231,12 +232,13 @@ const commandOf = (command: CommandClass, label: string, run: Value.Run): V => {
  * sets the clock to the command's time the same way.
  */
 const decidedAt =
-  (interpreter: Interpreter, now: V) =>
-  <A, E>(decide: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  (interpreter: Interpreter, now: V, site: Site) =>
+  <A>(decide: Eval<A>): Eval<A> =>
     Effect.suspend(() => {
       const before = interpreter.hooks.now;
       interpreter.hooks.now = now;
-      return decide.pipe(
+      // The handler's sleeps, time limits and fibers are run on a timeline of its own.
+      return Timeline.run(() => interpreter.current.run, site, decide).pipe(
         Effect.ensuring(
           Effect.sync(() => {
             interpreter.hooks.now = before;
@@ -468,7 +470,7 @@ export const decided = (
       .pipe(
         Effect.flatMap((made) => (made._tag === "Effect" ? made.run : Effect.succeed(made))),
         Effect.catchTag("Rejected", (rejected) => Effect.succeed(rejected)),
-        decidedAt(interpreter, now),
+        decidedAt(interpreter, now, site),
       );
     if (decision_._tag === "Rejected")
       return done({ _tag: "Rejected", rejection: decision_.rejection });

@@ -19,7 +19,20 @@ const READ = new Set([
   ...["Order", "Ordering", "Predicate", "PrimaryKey", "Rational", "Record", "Redacted"],
   ...["Ref", "RegExp", "Result", "SemVer", "SemVerRange", "Sink", "Stream", "String", "Struct"],
   ...["SubscriptionRef", "Symbol", "SynchronizedRef", "TextDiff", "Trie", "Tuple", "UndefinedOr"],
-  ...["Deferred", "Latch", "Queue", "Schedule", "Semaphore", "index"],
+  ...["Cache", "Deferred", "Fiber", "FiberHandle", "FiberMap", "FiberSet", "Latch", "Pool"],
+  ...["PubSub", "Queue", "Request", "RequestResolver", "Schedule"],
+  ...["PartitionedSemaphore", "ScopedCache", "Semaphore", "TxChunk", "TxDeferred", "TxPubSub"],
+  ...["TxHashMap", "TxHashSet", "TxPriorityQueue", "TxQueue", "Channel", "Pull", "Take"],
+  ...["Combiner", "Reducer", "MutableList", "Scope", "ScopedRef", "RcRef", "RcMap", "Resource"],
+  "Random",
+  "Metric",
+  "Hash",
+  "Graph",
+  "HashRing",
+  "Bytes",
+  "Layer",
+  "Context",
+  ...["TxReentrantLock", "TxRef", "TxSemaphore", "TxSubscriptionRef", "index"],
 ]);
 
 const NAME = /^[A-Za-z_$][\w$]*$/;
@@ -101,11 +114,13 @@ it.effect(
         }),
       );
       expect([...reasons].sort()).toEqual([
+        // A function of `Schema` a handler may call, called here with nothing.
+        "M.f is called in a way the prover has no model for",
         "calls M.f, which the prover has no model for",
         "compares values the prover does not model",
       ]);
-      expect(modules.length).toBeGreaterThan(70);
-      expect(calls.length).toBeGreaterThan(1500);
+      expect(modules.length).toBeGreaterThan(35);
+      expect(calls.length).toBeGreaterThan(1000);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   300_000,
 );

@@ -7,6 +7,12 @@ import type { Eval, Run, Site, V } from "./Value.ts";
 import * as Value from "./Value.ts";
 
 /** What the library models need from the interpreter. */
+/** What an iterator's `next` gives: a value, or the end and what it ends with. */
+export interface Step {
+  readonly done: boolean;
+  readonly value: V;
+}
+
 export interface Host {
   readonly current: { run: Run };
   /** Take one side of a condition of the inputs: only a side some inputs reach. */
@@ -28,6 +34,28 @@ export interface Host {
   readonly kind: (value: V) => string | undefined;
   /** A list with its items, when the value is one. */
   readonly force: (value: V) => V;
+  /**
+   * What a function of the code gives where the library calls it at once.
+   * It throws where the function cannot be run to its end there: one an
+   * input decides is not.
+   */
+  readonly atOnce: (fn: V, args: ReadonlyArray<V>, site: Site) => V;
+  /** `value instanceof cls`, as the language has it. */
+  readonly instanceOf: (value: V, cls: V, site: Site) => Eval<V>;
+  /** A `Set` of the language, of these items, as the code reads one. */
+  readonly setOf: (items: ReadonlyArray<V>) => V;
+  /** What a `Map` or a `Set` the code made holds, in the order it was put in. */
+  readonly keptOf: (
+    value: V,
+  ) =>
+    | { readonly kind: "Map" | "Set"; readonly entries: ReadonlyArray<readonly [V, V]> }
+    | undefined;
+  /** The services the code has read, by key. */
+  readonly services: ReadonlyMap<string, unknown>;
+  /** A generator the code called, one value at a time: none for a value that is not one. */
+  readonly stepper: (value: V) => (() => Eval<Step>) | undefined;
+  /** A value the code being read has just made: it may change it, as it may what it wrote itself. */
+  readonly fresh: <A extends V>(value: A) => A;
   /** An array's method that takes a function, such as `map`. */
   readonly array: (
     name: string,
@@ -51,6 +79,12 @@ export type Model = (args: ReadonlyArray<V>, site: Site) => Eval<V>;
 export type Models = Readonly<Record<string, Model>>;
 
 export const native = (name: string, call: Model): V => ({ _tag: "Native", name, call });
+
+/** Bytes, as the language holds them: `new Uint8Array(...)`, and what the library gives of one. */
+export const bytes = (value: Uint8Array): V => ({ _tag: "Host", value, name: "bytes" });
+/** The bytes a value holds, when it holds bytes. */
+export const bytesOf = (v: V | undefined): Uint8Array | undefined =>
+  v?._tag === "Host" && v.value instanceof Uint8Array ? v.value : undefined;
 export const effect = (run: Eval<V>): V => ({ _tag: "Effect", run });
 export const done: V = effect(Effect.succeed(Value.undef));
 
@@ -251,6 +285,8 @@ const orders = (n: number): number => (n <= 1 ? 1 : n * orders(n - 1));
 
 /** The most items of a hash set or a hash map the prover reads in every order. */
 export const MAX_ORDERED = 4;
+/** The largest count an input may decide where the library takes a number. */
+export const MAX_PICKED = 64;
 
 /** The helpers that need the interpreter. */
 export const make = (host: Host) => {
@@ -271,6 +307,20 @@ export const make = (host: Host) => {
             .call(next, [value], site)
             .pipe(Effect.flatMap((made) => (made._tag === "Effect" ? made.run : invalid)))
         : invalid;
+
+  /**
+   * A count the library is given: one the code writes, or a small one an
+   * input decides. Each value the input allows, up to `MAX_PICKED`, is a path
+   * of its own, since the library takes a number and not a formula.
+   */
+  const picked = (n: V | undefined): Eval<number | undefined> =>
+    Effect.gen(function* () {
+      if (n?._tag === "Num") return Number.isInteger(n.value) && n.value >= 0 ? n.value : undefined;
+      if (n?._tag !== "Term" || n.big === true || n.term.sort !== "Int") return undefined;
+      for (let count = 0; count <= MAX_PICKED; count++)
+        if (yield* host.branch(`(= ${n.term.text} ${count})`)) return count;
+      return undefined;
+    });
 
   /** What the effect a function gives, gives. A function that gives anything else is not one the library runs. */
   const ran = (fn: V, args: ReadonlyArray<V>, site: Site): Eval<V> =>
@@ -453,6 +503,7 @@ export const make = (host: Host) => {
     sorted,
     after,
     ran,
+    picked,
     either,
     itemsOf,
     onArray,

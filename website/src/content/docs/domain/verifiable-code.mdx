@@ -26,6 +26,7 @@ total = total + fee; // assignment to a local variable
 [total, count] = [count, total]; // to several at once
 ({ total } = { total: 0 }); // into a pattern
 total += fee; // and -=, *=, /=, %=, ??=, ||=, &&=
+total **= 2;
 count++; // and count--, ++count, --count
 
 const made = { n: 0, list: [0] }; // an object or an array the code made can be changed
@@ -60,6 +61,7 @@ for (const key in made) seen++;
 for (let i = 0; i < 3; i++) total += i;
 for (let i = 0; i < items.length; i++) total += items[i]!;
 while (count < 3) count++;
+while (count < a) count++; // a number of turns an input decides, up to 64: a bound on the input ends it
 do {
   count++;
 } while (count < 6);
@@ -77,43 +79,81 @@ function countdown(n: number): number {
   return n <= 0 ? 0 : 1 + countdown(n - 1); // a function that calls itself, on a number the code writes
 }
 
+enum Kind {
+  Good,
+  Gift = 5, // a member is found by its number too: Kind[5]
+}
+
+function* each() {
+  yield a; // a generator, gone over by a loop or a spread: a loop that is left stops it there
+  yield* [1, 2];
+}
+for (const n of each()) total += n;
+[...each()];
+
+class Local {
+  static made = 0; // what the class itself holds
+  count = 0;
+  #step = a; // a private field
+  constructor(readonly name: string) {} // a parameter that is a field
+  add() {
+    this.count += this.#step;
+    return this;
+  }
+  get doubled() {
+    return this.count * 2;
+  }
+}
+class Deeper extends Local {
+  constructor() {
+    super("deeper");
+  }
+  add() {
+    super.add(); // the method of the class it extends
+    return this;
+  }
+}
+const local = new Deeper().add();
+
+outer: for (const n of items) {
+  for (const m of [1, 2]) {
+    if (n < 0) continue outer; // a label, on a loop or on a block
+    if (m > a) break outer;
+    total += n * m;
+  }
+}
+debugger; // does nothing
+
+try {
+  if (a > 2) throw new Error("too many"); // caught by the try around it
+  total += a;
+} catch (thrown) {
+  total = 0;
+} finally {
+  count++;
+}
+
 type Amount = number; // types and interfaces
 interface Line {
   readonly amount: Amount;
 }
 ```
 
-```typescript title="Not supported"
-try {
-  total = twice(a);
-} catch {
-  total = 0;
-} // try, catch and finally
-throw new Error("no");
-await saved; // async, await and for await
-outer: for (const n of items) break outer; // labels
-function* each() {
-  yield a;
-} // a generator, other than the one given to Effect.gen, Effect.fn, Option.gen and Result.gen
-class Local {
-  n = a;
-} // a class in a function
-enum Kind {
-  Good,
-  Gift,
-}
-using held = resource;
-debugger;
+A `try` catches what code throws. An effect that fails where it is yielded leaves the generator: neither the `catch` nor the `finally` around the `yield*` runs, as in the deployed handler. Handle a failure with `Effect.catch`.
 
-while (count < a) count++; // a loop that an input decides the length of
-for (let i = 0; i < a; i++) count++;
+```typescript title="Not supported"
+await saved; // async, await and for await
+each().next(); // a generator stepped by hand: go over it with a loop or a spread
+using held = resource;
+
+while (count < a * 100) count++; // a loop an input decides the length of, past 64 turns
 
 items.push(1); // changing a value the handler was given
 items[0] = 1;
 items.sort();
 items.reverse();
 
-total **= 2; // and <<=, >>=, >>>=, &=, |=, ^=
+total &= a; // the bits of a number an input holds: and |=, ^=, <<=, >>=, >>>=
 ```
 
 ## Expressions
@@ -123,6 +163,20 @@ total **= 2; // and <<=, >>=, >>>=, &=, |=, ^=
 [1, 1.5, "text", true, false, null, undefined, 10n];
 `${text}:${a}:${flag}:${null}`; // each value written as JavaScript writes it
 "n" + a;
+
+new Error("no") instanceof Error; // and a class of effect/Data, and the language's own Array
+tag`x${a}`; // a tagged template: the function is given the text and then each value
+delete made.n; // of an object the code made
+items[a]; // a place an input decides: one of the places the list has, or undefined
+a.toString(); // as a template writes it
+({ n: a, twice() { return this.n * 2; }, get half() { return this.n / 2; } }).twice(); // this, a getter and a setter
+new Map([[a, b]]).size; // a Map and a Set: found by ===, kept in the order things were put in
+new Set([a, b]).size;
+/a+/.test("caat"); // a regular expression, on text the code writes
+a ** 2; // a power the code writes
+(a, b); // the comma: both are run, and the last is what it gives
+a == b; // == and != between two values of one kind, as === and !==
+1 == "1"; // and between two values the code writes, of whatever kinds
 
 // Whole numbers
 a + b;
@@ -196,17 +250,11 @@ identity<number>(a);
 ```
 
 ```typescript title="Not supported"
-a ** 2;
-a & b; // and |, ^, ~, <<, >>, >>>
-a == b; // == and != between two values: write === and !==
-items instanceof Array;
-(a, b); // the comma operator
-/a+/.test(text); // regular expressions
-tag`x${a}`; // tagged templates
-delete made.n;
-this;
-({ get n() { return a; } }); // a getter or a setter
-items[a]; // a place an input decides
+2 ** a; // a power an input decides
+a & b; // the bits of a number an input holds: and |, ^, ~, <<, >>, >>>
+a == "1"; // == and != between two kinds of value, one an input holds: write === and !==
+a instanceof Small; // something that is not a class
+/a+/.test("aa" + a); // a regular expression on text an input decides
 import.meta.url;
 
 Date.now(); // globals that are not the same every time
@@ -214,19 +262,12 @@ new Date();
 Math.random();
 globalThis.name;
 
-JSON.stringify(made); // globals with no model
-parseInt(text);
-Number(text);
-String(a);
-Boolean(a);
-a.toString();
-a.toFixed(2);
-new Map();
-new Set();
-Symbol("s");
-structuredClone(made);
+JSON.stringify({ n: "t" + a }); // of text an input decides: it may need a backslash
+parseInt("1" + a); // of text an input decides: so are parseFloat and Number
+a.toFixed(2); // a number an input holds, rounded as text
 
 absurd(a); // what code calls where it cannot be: reaching it is reported
+hole(); // the same, where a value is wanted
 ```
 
 ## Numbers
@@ -236,6 +277,12 @@ A whole number is exact, and a `bigint` is exact with no limit. A number is assu
 ```typescript title="Supported"
 a + b * 2 - 1;
 a % 3;
+Math.round(a / 2); // a half goes up
+Math.pow(a, 2); // a power the code writes
+Math.sign(a);
+Math.sqrt(16); // and the rest of Math, of numbers the code writes:
+[Math.cbrt(27), Math.hypot(3, 4), Math.log2(8), Math.atan2(0, 1), Math.imul(3, 4), Math.clz32(1)];
+[Math.atan(0), Math.cos(0), Math.sin(0), Math.tan(0), Math.exp(0), Math.log(1), Math.log10(100), Math.fround(1.5)];
 10n + BigInt(a) * 2n;
 
 a / 4; // a division by a whole number the code writes
@@ -260,10 +307,8 @@ a / 3 + 0.5; // arithmetic on a number that may not be whole
 (a / 3) * 3;
 a * 0.5;
 
-Math.round(a / 2);
-Math.sqrt(a);
-Math.pow(a, 2);
-Number.isInteger(a);
+Math.sqrt(a); // and the rest of Math, of a number an input holds
+Math.pow(2, a); // a power an input decides
 ```
 
 JavaScript rounds a number that is not whole and a solver does not, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Keep money in whole cents, or in a [decimal](#decimals).
@@ -296,12 +341,14 @@ BigDecimal.negate(amount);
 BigDecimal.floor(amount);
 BigDecimal.ceil(amount);
 BigDecimal.truncate(amount);
+BigDecimal.format(BigDecimal.floor(amount, 2)); // written out, once it is rounded to a number of places
 
 BigDecimal.divide(RATE, BigDecimal.fromNumberUnsafe(4)); // a division between decimals the code writes
 ```
 
 ```typescript title="Not supported"
 BigDecimal.divide(amount, fee); // the library rounds a division that does not end, and the solver does not
+BigDecimal.format(amount); // a decimal an input holds has no last place: round it first
 ```
 
 ## Strings
@@ -311,6 +358,10 @@ text === other;
 text + other;
 `${text}:${other.length}`;
 text.length;
+text[0]; // the letter at a place, or undefined past the end
+text.charCodeAt(0);
+text.repeat(2); // a number of times the code writes
+text.padStart(3, "-"); // to a width the code writes: and padEnd
 
 text.startsWith(other);
 text.endsWith("z");
@@ -350,11 +401,7 @@ String.startsWith("ab")(text); // effect/String has the same as functions
 text.toUpperCase(); // changing the letters of a string an input holds
 text.toLowerCase();
 text.trim();
-text.padStart(4, "-");
-text.repeat(2);
 
-text[0];
-text.charCodeAt(0);
 text.split(""); // into letters
 text.split(other); // by a separator an input holds
 
@@ -383,6 +430,14 @@ items[0];
 items.at(-1);
 [...items, a];
 items.concat([a], 7);
+items.toSorted((x, y) => x - y);
+[10, 9, 1].toSorted(); // with no function, by the text of each: 1, 10, 9
+items.lastIndexOf(a);
+[a, ...items].with(0, 1); // throws for a place the list does not have
+items.reduceRight((total, n) => total + n, 0);
+Object.assign({ x: a }, { y: a });
+Object.fromEntries([["x", a], ["y", a]]);
+Object.hasOwn({ x: a }, "x");
 items.slice(1);
 items.includes(a);
 items.indexOf(a);
@@ -417,19 +472,12 @@ Array.sort(items, Order.Number); // effect/Array: see the list below
 ```
 
 ```typescript title="Not supported"
-items.push(1); // changing a list the handler was given
-items.sort(); // and every method that changes an array in place:
-items.reverse(); // sort, reverse, splice, fill, pop, shift, unshift
+items.push(1); // changing a list the handler was given: so are sort, reverse, splice, fill, pop, shift and unshift
+items.sort();
+items.reverse();
 
-items.toSorted();
-items.reduceRight((total, n) => total + n, 0);
-items.lastIndexOf(a);
-items.with(0, a);
+items.toSorted(); // by the text of each item, where an input holds one
 Array.from(items);
-
-Object.assign({}, made);
-Object.fromEntries([["a", a]]);
-Object.hasOwn(made, "n");
 ```
 
 A list of the state or a command has no known length, so it is tried with every length up to two items more than its schema asks for. A rule that passes that way is `Checked`, not `Proved`, and the report says how long the lists were.
@@ -695,6 +743,7 @@ Effect.reduce(
 );
 Effect.result(even(a));
 Effect.sync(() => Effect.runSync(Effect.succeed(a + b)));
+Effect.withSpanScoped("s"); // in a scope
 Effect.succeed(a);
 Effect.succeedNone;
 Effect.succeedSome(a);
@@ -708,28 +757,133 @@ Effect.zip(Effect.succeed(a), Effect.succeed(b));
 Effect.zipWith(Effect.succeed(a), Effect.succeed(b), (x, y) => x - y);
 ```
 
-```typescript title="effect/Effect: an effect run again, and a time limit"
+```typescript title="effect/Effect: time"
+// Time passes only when no fiber can run, so a handler that waits is read without waiting.
+Effect.sleep("1 second");
+Effect.sleep(Duration.seconds(2));
+Effect.sleep(Duration.millis(a)); // a time an input decides
+Effect.succeed(a).pipe(Effect.delay("1 second"));
+Effect.yieldNow;
+
+// A time limit stops the effect where it is, and its finalizers run.
+Effect.timeout(Effect.as(Effect.sleep("2 seconds"), a), "1 second"); // fails with a TimeoutError
+Effect.timeout(Effect.succeed(a), "1 second");
+Effect.timeoutOption(Effect.as(Effect.sleep("2 seconds"), a), "1 second");
+Effect.timeoutOption(Effect.as(Effect.sleep(a * 10), "slept"), b * 10 + 5); // each order of the two is tried
+Effect.timeoutOrElse(Effect.as(Effect.sleep("2 seconds"), a), {
+  duration: "1 second",
+  orElse: () => Effect.succeed(b),
+});
+Effect.onInterrupt(Effect.sleep(20), () => log(seen, "stopped"));
+Effect.onExit(even(a), (exit) => log(seen, Exit.isSuccess(exit) ? "even" : "odd"));
+```
+
+```typescript title="effect/Effect: an effect run again"
 const ran = yield* Ref.make(0);
 const step = Ref.updateAndGet(ran, (n) => n + 1);
 
-// Nothing in a handler waits, so each run follows the last at once.
 Effect.retry(even(a), { times: 2 }); // a count the code writes
 Effect.retry(even(a), { times: 5, while: (error) => error.n !== 2 });
 Effect.retry(even(a), { times: 5, until: (error) => error.n === 1 });
-Effect.retry(even(a), Schedule.recurs(2)); // the one schedule that does not wait
+Effect.retry(even(a), Schedule.recurs(2));
+Effect.retry(step, Schedule.spaced("1 second")); // a schedule that waits
+Effect.retry(step, { schedule: Schedule.exponential("1 second"), times: 3 });
+Effect.timeout(Effect.retry(step, Schedule.exponential("1 second")), "10 seconds");
 Effect.repeat(step, { times: 2 }); // gives what the last run gave
 Effect.repeat(step, { times: 4, while: (n) => n < a + 3 });
 Effect.repeat(step, { times: 4, until: (n) => n === a + 2 });
 Effect.repeat(step, { schedule: Schedule.recurs(2) });
-Effect.repeat(step, Schedule.recurs(2)); // gives how many times it ran again
+Effect.repeat(step, Schedule.recurs(2)); // gives what the schedule gives: how many times it ran again
+Effect.repeat(step, { schedule: Schedule.spaced("1 second"), times: 2 });
+```
 
-// An effect is done before any time is up.
-Effect.timeout(even(a), "1 second");
-Effect.timeoutOption(even(a), "1 second");
-Effect.timeoutOrElse(even(a), { duration: "1 second", orElse: () => Effect.succeed(b) });
+```typescript title="effect/Schedule"
+Schedule.recurs(2);
+Schedule.spaced("1 second");
+Schedule.fixed("1 second");
+Schedule.windowed("1 second");
+Schedule.duration("1 second");
+Schedule.exponential("1 second");
+Schedule.fibonacci("1 second");
+Schedule.forever;
+Schedule.once;
+Schedule.spaced("1 second").pipe(Schedule.upTo({ times: 2 }));
+Schedule.max([Schedule.recurs(2), Schedule.spaced("1 second")]);
+Schedule.min([Schedule.recurs(2), Schedule.recurs(4)]);
+Schedule.concat(Schedule.recurs(1), Schedule.recurs(2));
+Schedule.concatResult(Schedule.recurs(1), Schedule.recurs(1)); // what each gives, as a failure of the first and a success of the second
+Schedule.toStep(Schedule.recurs(2)); // the library's step: what it gives at a time, of an input
+Schedule.toStepWithSleep(Schedule.spaced("5 millis")); // one that waits on the handler's clock
+Schedule.toStepWithMetadata(Schedule.recurs(3));
+Schedule.fromStep(Effect.sync(() => (now, input) => (count >= 2 ? Cause.done(count + a) : Effect.succeed([count++, Duration.millis(1)])))); // a step of the code
+Schedule.fromStepWithMetadata(Effect.succeed((meta) => (meta.attempt > 2 ? Cause.done(meta.attempt * a) : Effect.succeed([meta.attempt, Duration.millis(2)]))));
+Schedule.cron("*/5 * * * *", "UTC"); // in a time zone it names
+Schedule.CurrentMetadata; // what a repeat's schedule is told of the turn it is on
+Schedule.passthrough(Schedule.recurs(2));
+```
+
+```typescript title="effect/Effect: fibers, and effects run together"
+// A race: the first to give a value, and the other is stopped.
+Effect.race(Effect.as(Effect.sleep(20), a), Effect.as(Effect.sleep(10), b));
+Effect.race(even(a), positive(b));
+Effect.raceFirst(even(a), Effect.as(Effect.sleep(10), b));
+Effect.raceAll([
+  Effect.as(Effect.sleep(30), "slow"),
+  Effect.as(Effect.sleep(10), "fast"),
+  Effect.as(Effect.sleep(20), "middle"),
+]);
+Effect.raceAllFirst([Effect.as(Effect.sleep(30), a), Effect.andThen(Effect.sleep(10), even(a))]);
+
+// A fiber begins when the one that made it gives way.
+const fiber = yield* Effect.forkChild(even(a));
+Effect.forkDetach(Effect.andThen(Effect.sleep(1), log(seen, "detached")));
+Fiber.join(fiber);
+Fiber.await(fiber);
+Fiber.interrupt(fiber);
+Fiber.joinAll([first, second]);
+Fiber.interruptAll([first, second]);
+Fiber.isFiber(fiber);
+Fiber.awaitAll([one, two]);
+Fiber.interruptAs(fiber, 7);
+Fiber.interruptAllAs([one, two], 7);
+Fiber.runIn(fiber, scope); // interrupted when the scope closes
+Effect.uninterruptible(Effect.andThen(Effect.sleep(5), log(seen, "kept")));
+Effect.interruptible(Effect.andThen(Effect.sleep(5), log(seen, "never")));
+Effect.exit(Effect.interrupt);
+
+// Effects run together, as many at once as the code says.
+Effect.all({ slow: Effect.as(Effect.sleep(2), a), fast: Effect.as(Effect.sleep(1), b) }, { concurrency: 2 });
+Effect.forEach([5, 1, 2], (n) => Effect.andThen(Effect.sleep(n), log(seen, n)), {
+  concurrency: 2,
+  discard: true,
+});
+Effect.zipWith(Effect.as(Effect.sleep(2), a), Effect.as(Effect.sleep(1), b), (x, y) => x - y, {
+  concurrent: true,
+});
+
+// A scope: what is acquired is released when it closes, last first, however it closes.
+Effect.scoped(
+  Effect.gen(function* () {
+    yield* Effect.addFinalizer((exit) => log(seen, Exit.isSuccess(exit) ? "after" : "failed"));
+    yield* log(seen, "body");
+  }),
+);
+Effect.acquireRelease(Effect.as(log(seen, "open one"), a), () => log(seen, "close one"));
+Effect.addFinalizer((exit) => log(seen, Exit.isSuccess(exit) ? "after" : "failed"));
+Effect.acquireUseRelease(
+  Effect.as(log(seen, "open"), a),
+  (n) => Effect.andThen(log(seen, "use"), even(n)),
+  (n, exit) => log(seen, Exit.isSuccess(exit) ? "closed" : "closed after a failure"),
+);
+Effect.forkScoped(
+  Effect.onInterrupt(Effect.andThen(Effect.sleep(20), log(seen, "late")), () =>
+    log(seen, "stopped with the scope"),
+  ),
+);
 ```
 
 ```typescript title="effect/Exit"
+Exit.hasInterrupts(exit);
 Effect.exit(even(a)).pipe(
   Effect.map((exit) => [
     Exit.isSuccess(exit),
@@ -774,6 +928,8 @@ Effect.exit(even(a)).pipe(
 ```
 
 ```typescript title="effect/Cause"
+Cause.hasInterrupts(exit.cause);
+Cause.hasInterruptsOnly(exit.cause);
 Effect.succeed([
   Cause.squash(Cause.fail(a)),
   Cause.hasDies(Cause.die(a)),
@@ -908,6 +1064,16 @@ Match.type().pipe(
   Match.orElse(() => "none"),
 )({ n: a });
 Match.value({ _tag: a > 0 ? "Up" : "Down" }).pipe(Match.tags({ Up: () => 1 }), Match.option);
+Match.value(a).pipe(Match.when((n) => n > b, (n) => n * 2), Match.result); // what the case gives, or the value none of them took
+Match.tagStartsWith("Up", ({ n }) => n);
+Match.discriminatorStartsWith("kind")("x", ({ n }) => n + 1);
+Match.literals({ on: () => 1 });
+Match.literalsExhaustive({ 1: () => "one", 2: (n) => "two" + n });
+Match.record({ n: a }); // an object that is not an array
+Match.date(a);
+Match.instanceOf(Odd); // as instanceof is
+Match.instanceOfUnsafe(Odd);
+Match.fn((x, y) => x - y).pipe(Match.when((n) => n > 0, (n, x, y) => [n, x, y]), Match.orElse((n, x) => [-n, x]))(a, b); // a matcher of the arguments: each handler is given them too
 Match.value(shape.kind).pipe(
   Match.tag("Gift", () => 1),
   Match.orElse(() => 0),
@@ -1311,7 +1477,116 @@ Array.sort(Array.fromIterable(HashMap.values(scores)), Order.Number);
 MutableHashSet.size(MutableHashSet.empty());
 ```
 
+```typescript title="What the language gives by name"
+// In a file that does not import a module of the library under the same name.
+String(a); // as a template writes it
+Number("12");
+Number(flag);
+Boolean(a);
+Number.isInteger(a);
+Number.isSafeInteger(7);
+Number.isFinite(a);
+Number.isNaN(a);
+Number.MAX_SAFE_INTEGER;
+Number.MIN_SAFE_INTEGER;
+parseInt("ff", 16); // of text the code writes
+parseFloat("1.5e2");
+Number.parseInt("7");
+Number.parseFloat("2.5");
+Array.isArray([a]);
+Array.of(a, b, 3);
+Array.from([a, b], (n, index) => n + index);
+Array.from({ length: 3 }, (_, index) => index + a);
+Array.from("abc");
+JSON.stringify({ n: 1, list: [true, null] });
+JSON.stringify({ n: a }); // a whole number or a boolean an input holds is written too
+JSON.parse('{"n":1,"list":[true,null,"x"]}');
+structuredClone(made); // a copy the code may change
+Symbol("s"); // equal only to itself
+globalThis.String(a);
+[a] instanceof Array;
+Infinity;
+NaN;
+```
+
+```typescript title="effect/MutableList"
+(() => {
+  const list = MutableList.make();
+  MutableList.append(list, a);
+  MutableList.prepend(list, b);
+  MutableList.appendAll(list, [1, 2]);
+  MutableList.prependAll(list, [8, 9]);
+  return [MutableList.toArray(list), list.length];
+})();
+(() => {
+  const list = MutableList.make();
+  return [MutableList.take(list) === MutableList.Empty, MutableList.takeAll(list)]; // the first, or Empty when there is none
+})();
+MutableList.takeN(list, 2);
+MutableList.takeNVoid(list, 1);
+MutableList.toArrayN(list, 1);
+MutableList.filter(list, (n, index) => n > 0 && index < 2);
+MutableList.remove(list, a);
+MutableList.clear(list);
+MutableList.appendAllUnsafe(list, [1, 2]);
+MutableList.prependAllUnsafe(list, [b]);
+```
+
+```typescript title="effect/Combiner and effect/Reducer"
+// A combiner is a function of two values. A reducer is one with a value to start from.
+Combiner.make((x, y) => x + y).combine(a, b);
+Combiner.flip(Combiner.make((x, y) => x - y));
+Combiner.min(Order.Number);
+Combiner.max(byN);
+Combiner.first();
+Combiner.last();
+Combiner.constant(7);
+Combiner.intercalate("-")(Combiner.make((x, y) => x + y));
+Reducer.make((x, y) => x + y, 0).combineAll([a, b]);
+Reducer.make((x, y) => x * y, 1).initialValue;
+Reducer.make((x, y) => x + y, 0, (all) => Array.fromIterable(all).length);
+Reducer.flip(Reducer.make((x, y) => x - y, 0));
+
+Number.ReducerSum.combineAll([a, b, 1]);
+Number.ReducerMultiply.combineAll([a, b]);
+Number.ReducerMax.combine(a, b);
+Number.ReducerMin.combine(a, b);
+BigInts.ReducerSum.combineAll([BigInt(a), BigInt(b)]);
+BigInts.ReducerMultiply.combineAll([BigInt(a), 2n]);
+BigInts.CombinerMax.combine(BigInt(a), BigInt(b));
+BigInts.CombinerMin.combine(BigInt(a), BigInt(b));
+Boolean.ReducerAnd.combineAll([flag, a > b]);
+Boolean.ReducerOr.combineAll([flag, a > b]);
+String.ReducerConcat.combineAll(["l" + a, "/", "r" + b]);
+Duration.ReducerSum.combineAll([Duration.millis(a + 20), Duration.millis(b + 20)]);
+Duration.CombinerMax.combine(Duration.millis(a + 20), Duration.millis(b + 20));
+Duration.CombinerMin.combine(Duration.millis(a + 20), Duration.millis(b + 20));
+
+Array.makeReducerConcat().combineAll([[a], [b, 1]]);
+Array.getReadonlyReducerConcat().combine([a], [b]);
+Option.makeReducer(sum).combineAll([Option.some(a), Option.none(), Option.some(b)]); // the ones there are
+Option.makeCombinerFailFast(sum); // nothing when one is missing
+Option.makeReducerFailFast(Number.ReducerSum);
+UndefinedOr.makeReducer(sum).combineAll([a, undefined, b]);
+UndefinedOr.makeCombinerFailFast(sum);
+UndefinedOr.makeReducerFailFast(Number.ReducerSum);
+Record.makeReducerUnion(sum).combineAll([{ x: a }, { x: b, y: 1 }]);
+Record.makeReducerIntersection(sum).combine({ x: a, y: 2 }, { x: b });
+Tuple.makeCombiner([sum, Combiner.last()]).combine([a, "l"], [b, "r"]);
+Tuple.makeReducer([Number.ReducerSum, String.ReducerConcat]);
+Struct.makeCombiner({ n: sum, s: Combiner.first() }).combine({ n: a, s: "l" }, { n: b, s: "r" });
+Struct.makeCombiner({ n: sum, m: sum }, { omitKeyWhen: (n) => n === 0 });
+Struct.makeReducer({ n: Number.ReducerSum, s: String.ReducerConcat });
+Newtype.makeCombiner(sum);
+Newtype.makeReducer(Number.ReducerSum);
+```
+
 ```typescript title="effect/MutableHashMap"
+MutableHashMap.forEach(held, (value, key) => {
+  seen.push(key);
+});
+MutableHashMap.isMutableHashMap(held);
+MutableHashSet.isMutableHashSet(set);
 (() => {
   const held = MutableHashMap.make(["a", a]);
   MutableHashMap.modifyAt(held, "b", () => Option.some(1));
@@ -1447,6 +1722,9 @@ BigDecimal.sum(amount, fee);
 BigDecimal.sumAll([amount, fee, decimal(a)]);
 BigDecimal.toNumberUnsafe(amount); // on values the code writes
 BigDecimal.truncate(amount);
+BigDecimal.format(BigDecimal.floor(amount, 2)); // a decimal an input holds, once it is rounded
+BigDecimal.format(BigDecimal.ceil(amount, 1));
+BigDecimal.format(BigDecimal.truncate(amount));
 ```
 
 ```typescript title="effect/Rational"
@@ -1708,10 +1986,11 @@ SubscriptionRef.updateEffect(cell, (n) => Effect.succeed(n + 1)); // a change th
 SubscriptionRef.updateAndGetEffect(cell, (n) => positive(n));
 SubscriptionRef.getAndUpdateEffect(cell, (n) => Effect.succeed(n * 2));
 SubscriptionRef.modifyEffect(cell, (n) => Effect.succeed([n > b, n - 1]));
+Stream.take(SubscriptionRef.changes(cell), 3); // its value now, then each one it is given
 ```
 
 ```typescript title="effect/Deferred"
-// A handler is one fiber, so a Deferred is what the handler itself completed it with.
+// A Deferred is completed once, by any fiber of the handler.
 const done = yield* Deferred.make();
 const made = Deferred.makeUnsafe();
 Deferred.succeed(done, a); // gives whether it was the first to complete it
@@ -1720,7 +1999,10 @@ Deferred.fail(done, new Odd({ n: a }));
 Deferred.failSync(done, () => a);
 Deferred.die(done, "gone");
 Deferred.dieSync(done, () => "gone");
-Deferred.await(done); // once the handler has completed it
+Deferred.await(done); // waits for the fiber that completes it
+Deferred.completeWith(done, even(a));
+Deferred.interrupt(done);
+Deferred.interruptWith(done, 7);
 Deferred.isDone(done);
 Deferred.isDoneUnsafe(done);
 Deferred.poll(done);
@@ -1732,7 +2014,7 @@ const made = Latch.makeUnsafe(false);
 gate.open;
 gate.close;
 gate.release;
-gate.await; // once the handler has opened it
+gate.await; // waits for the fiber that opens it
 gate.whenOpen(Effect.succeed(a));
 gate.isOpen();
 gate.openUnsafe();
@@ -1751,7 +2033,7 @@ Latch.closeUnsafe(gate);
 ```typescript title="effect/Semaphore"
 const permits = yield* Semaphore.make(2); // a count the code writes
 const made = Semaphore.makeUnsafe(1);
-permits.withPermits(1)(Effect.succeed(a)); // while there are that many free
+permits.withPermits(1)(Effect.succeed(a)); // waits for a fiber to give permits back
 permits.withPermit(Effect.succeed(b));
 permits.withPermitsIfAvailable(2)(Effect.succeed(b));
 permits.take(1);
@@ -1762,6 +2044,7 @@ permits.resize(3);
 Semaphore.withPermits(permits, 2)(Effect.succeed(a));
 Semaphore.withPermits(permits, 2, Effect.succeed(b));
 Semaphore.withPermit(permits, Effect.succeed(a));
+Semaphore.takeScoped(permits, 1); // in a scope: given back when it closes
 Semaphore.withPermit(permits)(Effect.succeed(b));
 Semaphore.withPermitsIfAvailable(permits, 4)(Effect.succeed(a));
 Semaphore.withPermitsIfAvailable(permits, 1, Effect.succeed(a));
@@ -1775,10 +2058,21 @@ Semaphore.releaseAll(permits);
 ```typescript title="effect/Queue"
 const line = yield* Queue.unbounded();
 const short = yield* Queue.bounded(2); // a size the code writes
-Queue.offer(line, a); // while there is room
+Queue.dropping(1);
+Queue.sliding(1);
+Queue.offer(line, a); // waits for room, where the queue is full
 Queue.offerAll(line, [b, a + b]);
 Queue.offerUnsafe(line, a);
-Queue.take(line); // while there is something in it
+Queue.take(line); // waits for a fiber to offer
+Queue.takeBetween(line, 1, 2);
+Queue.fail(line, new Odd({ n: b }));
+Queue.end(line);
+Queue.await(queue); // until the queue has ended
+Queue.flush(queue);
+Queue.flushUnsafe(queue);
+Queue.takeUnsafe(queue); // what is there now, how it ended, or nothing
+Queue.failCauseUnsafe(queue, Cause.fail(a));
+Queue.shutdown(line);
 Queue.takeAll(line);
 Queue.takeN(line, 1);
 Queue.peek(line);
@@ -1790,7 +2084,1253 @@ Queue.isFull(line);
 Queue.isFullUnsafe(line);
 ```
 
+```typescript title="effect/FiberSet and effect/FiberHandle"
+// A set of fibers, and a place for one. Each is stopped when its scope closes.
+const set = yield* FiberSet.make(); // in a scope
+FiberSet.run(set, Effect.sleep(1));
+FiberSet.runtime(set)(); // a function that starts a fiber at once, into the set
+FiberSet.makeRuntime(); // in a scope, with a set of its own
+FiberSet.run(set)(Effect.onInterrupt(Effect.sleep(20), () => log(seen, "stopped")));
+FiberSet.add(set, fiber);
+FiberSet.join(set); // fails when one of its fibers does
+FiberSet.awaitEmpty(set);
+FiberSet.clear(set);
+FiberSet.size(set);
+FiberSet.addUnsafe(set, one);
+FiberSet.isFiberSet(set);
+const handle = yield* FiberHandle.make();
+FiberHandle.run(handle, Effect.andThen(Effect.sleep(1), even(a))); // stops the fiber it held
+FiberHandle.runtime(handle)();
+FiberHandle.makeRuntime();
+FiberHandle.join(handle);
+FiberHandle.awaitEmpty(handle);
+FiberHandle.clear(handle);
+FiberHandle.set(handle, one); // the fiber it held is interrupted
+FiberHandle.setUnsafe(handle, two);
+FiberHandle.isFiberHandle(handle);
+FiberHandle.get(handle);
+FiberHandle.getUnsafe(handle);
+```
+
+```typescript title="effect/TxRef, effect/TxQueue and Effect.tx"
+// A transaction: what it reads and writes is seen by other fibers all at once.
+const cell = yield* TxRef.make(a);
+const from = TxRef.makeUnsafe(10);
+TxRef.get(cell);
+TxRef.set(cell, a + b);
+TxRef.update(cell, (n) => n * 2);
+TxRef.modify(cell, (n) => [n, n + 1]);
+Effect.tx(Effect.all([TxRef.get(from), TxRef.get(to)]));
+Effect.txRetry; // begin the transaction again when what it read changes
+const line = yield* TxQueue.unbounded();
+TxQueue.bounded(1);
+TxQueue.offer(line, a);
+TxQueue.offerAll(line, [b, 1, 2]);
+TxQueue.take(line); // waits for a fiber to offer
+TxQueue.takeAll(line);
+TxQueue.takeN(line, 1);
+TxQueue.peek(line);
+TxQueue.poll(line);
+TxQueue.size(line);
+TxQueue.isEmpty(line);
+TxQueue.isFull(line);
+TxQueue.dropping(1);
+TxQueue.sliding(1);
+TxQueue.takeBetween(line, 1, 2);
+TxQueue.clear(line);
+TxQueue.end(line);
+TxQueue.fail(line, a);
+TxQueue.failCause(line, Cause.fail(b));
+TxQueue.interrupt(one);
+TxQueue.shutdown(two);
+TxQueue.awaitCompletion(line);
+TxQueue.isOpen(line);
+TxQueue.isNonEmpty(line);
+TxQueue.isClosing(line);
+TxQueue.isDone(line);
+TxQueue.isShutdown(line);
+TxQueue.isTxQueue(line);
+TxQueue.isTxEnqueue(line);
+TxQueue.isTxDequeue(a);
+```
+
+```typescript title="effect/Cache, effect/FiberMap and effect/Pool"
+// What is kept by a key is found by a key the code writes.
+const prices = yield* Cache.make({
+  capacity: 2,
+  lookup: (name) => Effect.as(log(asked, name), name.length + a),
+});
+Cache.get(prices, "tea"); // runs the lookup once for a key
+Cache.getOption(prices, "milk");
+Cache.set(prices, "milk", b);
+Cache.has(prices, "tea");
+Cache.invalidate(prices, "tea");
+Cache.invalidateAll(prices);
+Cache.refresh(prices, "tea");
+Cache.size(prices);
+Cache.getSuccess(prices, "tea");
+Cache.values(prices);
+Cache.keys(prices);
+Cache.makeWith((name) => Effect.as(Ref.update(asked, (n) => n + 1), name.length + a), { capacity: 4, timeToLive: (exit, key) => (Exit.isSuccess(exit) && key === "tea" ? "1 second" : "1 hour") }); // how long, as a function of how the lookup ended and the key
+Cache.entries(prices);
+Cache.invalidateWhen(prices, "tea", (n) => n > b);
+const jobs = yield* FiberMap.make(); // in a scope
+FiberMap.run(jobs, "one", Effect.andThen(Effect.sleep(3), log(seen, "one again"))); // stops the fiber the key had
+FiberMap.runtime(map)(); // a function of a key and an effect
+FiberMap.makeRuntime();
+FiberMap.get(jobs, "one");
+FiberMap.has(jobs, "two");
+FiberMap.remove(jobs, 4);
+FiberMap.clear(jobs);
+FiberMap.size(jobs);
+FiberMap.awaitEmpty(jobs);
+FiberMap.set(jobs, "one", one);
+FiberMap.setUnsafe(jobs, "two", two);
+FiberMap.hasUnsafe(jobs, "one");
+FiberMap.getUnsafe(jobs, "two");
+FiberMap.join(jobs); // fails when one of its fibers does
+FiberMap.isFiberMap(jobs);
+const pool = yield* Pool.make({ acquire: Ref.updateAndGet(made, (n) => n + 1), size: 2 });
+Pool.get(pool); // in a scope: waits for an item to be given back
+Pool.isPool(pool);
+Pool.use(pool, (item) => Effect.succeed(item + b)); // an item for as long as the effect runs
+Pool.reserve(pool, item);
+Pool.stats(pool);
+Pool.makeWithStrategy({ acquire: Ref.updateAndGet(made, (n) => n + a), min: 1, max: 2, strategy: { run: () => Effect.void, onAcquire: (item) => Effect.sync(() => { seen.push(item.refCount); }), reclaim: () => Effect.succeed(undefined) } }); // the pool and its items, as the library holds them
+Pool.makeWithTTL({
+  acquire: Ref.updateAndGet(made, (n) => n + 1),
+  min: 1,
+  max: 2,
+  timeToLive: "1 minute",
+});
+Pool.invalidate(pool, item);
+```
+
+```typescript title="What a transaction shares, and what is shared by a key"
+const held = yield* TxChunk.make(Chunk.make(a, b));
+TxChunk.fromIterable([a, b, 1]);
+TxChunk.empty();
+TxChunk.get(held);
+TxChunk.set(other, Chunk.make(9));
+TxChunk.append(held, 1);
+TxChunk.prepend(held, 2);
+TxChunk.appendAll(held, Chunk.make(3, 4));
+TxChunk.prependAll(held, Chunk.make(5));
+TxChunk.concat(held, other);
+TxChunk.take(held, 5);
+TxChunk.drop(held, 1);
+TxChunk.slice(held, 1, 4);
+TxChunk.map(held, (n) => n * 2);
+TxChunk.filter(held, (n) => n > a);
+TxChunk.update(held, (chunk) => Chunk.append(chunk, a));
+TxChunk.modify(held, (chunk) => [Chunk.size(chunk), Chunk.drop(chunk, 1)]);
+TxChunk.size(held);
+TxChunk.isEmpty(held);
+TxChunk.isTxChunk(chunk);
+TxChunk.makeUnsafe(ref); // of a TxRef that holds a chunk: the two share what they hold
+TxChunk.isNonEmpty(held);
+const done = yield* TxDeferred.make();
+TxDeferred.succeed(done, a);
+TxDeferred.fail(done, new Odd({ n: a }));
+TxDeferred.await(done);
+TxDeferred.poll(done);
+TxDeferred.done(done, a > 1 ? Result.succeed(a) : Result.fail(new Odd({ n: a }))); // ends it as the Result says
+TxDeferred.isTxDeferred(done);
+const permits = yield* TxSemaphore.make(3);
+TxSemaphore.acquire(permits);
+TxSemaphore.acquireN(permits, 2);
+TxSemaphore.tryAcquire(permits);
+TxSemaphore.tryAcquireN(permits, 2);
+TxSemaphore.release(permits);
+TxSemaphore.releaseN(permits, 2);
+TxSemaphore.available(permits);
+TxSemaphore.isTxSemaphore(permits);
+TxSemaphore.capacity(permits);
+TxSemaphore.withPermit(permits)(Effect.succeed(a));
+TxSemaphore.withPermitScoped(permits); // in a scope: given back when it closes
+TxSemaphore.withPermits(permits, 1, Effect.succeed(b));
+const hub = yield* TxPubSub.unbounded();
+TxPubSub.bounded(2);
+TxPubSub.dropping(1);
+TxPubSub.sliding(1);
+const one = yield* TxPubSub.subscribe(hub); // in a scope: a TxQueue
+TxPubSub.acquireSubscriber(hub); // inside a transaction: no scope ends it
+TxPubSub.releaseSubscriber(hub, queue);
+TxPubSub.publish(hub, a);
+TxPubSub.publishAll(hub, [b, 1]);
+TxPubSub.size(hub);
+TxPubSub.isEmpty(hub);
+TxPubSub.isFull(hub);
+TxPubSub.isShutdown(hub);
+TxPubSub.awaitShutdown(hub);
+TxPubSub.isNonEmpty(hub);
+TxPubSub.capacity(hub);
+TxPubSub.isTxPubSub(hub);
+TxPubSub.shutdown(hubs[0]);
+const cell = yield* TxSubscriptionRef.make(a);
+const changes = yield* TxSubscriptionRef.changes(cell); // in a scope: a TxQueue
+TxSubscriptionRef.get(cell);
+TxSubscriptionRef.set(cell, b);
+TxSubscriptionRef.getAndSet(cell, 1);
+TxSubscriptionRef.update(cell, (n) => n + a);
+TxSubscriptionRef.updateAndGet(cell, (n) => n * 2);
+TxSubscriptionRef.getAndUpdate(cell, (n) => n - 1);
+TxSubscriptionRef.modify(cell, (n) => [n + 1, n * b]); // what to give back, and the value after
+TxSubscriptionRef.isTxSubscriptionRef(cell);
+TxSubscriptionRef.changesStream(cell); // what it holds now, then each value it is given
+const lock = yield* TxReentrantLock.make();
+TxReentrantLock.acquireRead(lock);
+TxReentrantLock.acquireWrite(lock);
+TxReentrantLock.releaseRead(lock);
+TxReentrantLock.releaseWrite(lock);
+TxReentrantLock.readLocks(lock);
+TxReentrantLock.writeLocks(lock);
+TxReentrantLock.locked(lock);
+TxReentrantLock.readLocked(lock);
+TxReentrantLock.isTxReentrantLock(lock);
+TxReentrantLock.writeLocked(lock);
+TxReentrantLock.withLock(lock, log(seen, "locked"));
+TxReentrantLock.readLock(lock); // in a scope, as is the next
+TxReentrantLock.writeLock(lock);
+TxReentrantLock.withReadLock(lock, Effect.andThen(log(seen, name + " reads"), Effect.sleep(millis)));
+TxReentrantLock.withWriteLock(lock, Effect.andThen(log(seen, "writes"), Effect.sleep(2)));
+pipe(lock, TxReentrantLock.withLock(Effect.succeed(a)));
+const slots = yield* PartitionedSemaphore.make({ permits: 2 }); // permits shared out by a key the code writes
+PartitionedSemaphore.take(permits, "x", 1);
+PartitionedSemaphore.release(permits, 1);
+PartitionedSemaphore.available(permits);
+PartitionedSemaphore.makeUnsafe({ permits: 2 });
+PartitionedSemaphore.capacity(permits);
+PartitionedSemaphore.withPermitsIfAvailable(permits, 1)(Effect.succeed(a)); // nothing, where the permits are not there
+PartitionedSemaphore.withPermit(permits, 3)(Effect.succeed(a));
+PartitionedSemaphore.withPermits(permits, "y", 1, Effect.succeed(b));
+const files = yield* ScopedCache.make({
+  capacity: 2,
+  lookup: (name) =>
+    Effect.acquireRelease(Effect.as(log(seen, "open " + name), name.length + a), () =>
+      log(seen, "close " + name),
+    ),
+}); // a Cache whose lookup may acquire: in a scope
+ScopedCache.get(files, "tea");
+ScopedCache.has(files, "milk");
+ScopedCache.set(files, "milk", b);
+ScopedCache.invalidate(files, "tea");
+ScopedCache.size(files);
+ScopedCache.getOption(files, "tea"); // what is kept, and nothing is looked up
+ScopedCache.getSuccess(files, "milk");
+ScopedCache.refresh(files, "tea");
+ScopedCache.values(files);
+ScopedCache.invalidateAll(files);
+ScopedCache.keys(files);
+ScopedCache.makeWith({ capacity: 4, lookup: (name) => Effect.as(Ref.update(asked, (n) => n + 1), name.length + b), timeToLive: () => "1 second" });
+ScopedCache.entries(files);
+ScopedCache.invalidateWhen(files, "tea", (n) => n > b);
+```
+
+```typescript title="effect/Request and effect/RequestResolver"
+// Requests asked for together are answered together, in one call of the resolver.
+const GetPrice = Request.tagged("GetPrice"); // a request of values the code writes
+const ask = Request.of();
+class GetPrice extends Request.TaggedClass("GetPrice")<{ readonly item: number }, number> {}
+class Ask extends Request.Class<{ readonly n: number }, number> {}
+Effect.request(new GetPrice({ item: 2 }), prices);
+Effect.request(new Ask({ n: 3 }), asked);
+RequestResolver.fromFunction((entry) => entry.request.n * 2 + a);
+const prices = RequestResolver.make((entries) =>
+  Effect.andThen(
+    log(batches, entries.length),
+    Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.item * 2 + a), {
+      discard: true,
+    }),
+  ),
+);
+RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a));
+RequestResolver.batchN(2);
+RequestResolver.setDelay("1 second");
+RequestResolver.setDelayEffect(Effect.sleep("1 second"));
+RequestResolver.around((entries) => Effect.as(log(seen, ["before", entries.length]), b), (entries, given) => log(seen, ["after", given]));
+RequestResolver.grouped((entry) => entry.request.n % 2); // one batch for each key the code writes
+RequestResolver.makeGrouped({ key: (entry) => (entry.request.n > 2 ? "big" : "small"), resolver: (entries, key) => Effect.andThen(log(batches, key), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n + b), { discard: true })) });
+RequestResolver.race(slow, quick);
+RequestResolver.fromFunctionBatched((entries) => entries.map((entry) => entry.request.n * 2 + a));
+RequestResolver.withCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n + a)), { capacity: 4 });
+RequestResolver.withSpan("doubled");
+RequestResolver.isRequestResolver(a);
+RequestResolver.asCache(RequestResolver.fromEffect((entry) => Effect.as(log(seen, entry.request.n), entry.request.n * 2 + a)), { capacity: 4 }); // a Cache found by the request
+RequestResolver.makeWith({ batchKey: (entry) => (entry.request.n > 2 ? "big" : "small"), delay: Effect.yieldNow, collectWhile: (requests) => requests.size < 3, runAll: (entries, key) => Effect.andThen(log(batches, [key, entries.length]), Effect.forEach(entries, (entry) => Request.succeed(entry, entry.request.n * 2 + a), { discard: true })) });
+Request.makeEntry({ request: Double({ n: 2 }), context: Context.empty(), uninterruptible: false, completeUnsafe: (exit) => { seen.push(Exit.isSuccess(exit) ? exit.value : "failed"); } }); // completed at once by the function
+RequestResolver.fromEffectTagged()({ Double: (requests) => Effect.succeed(requests.map((entry) => entry.request.n * 2 + a)), Half: (requests) => (requests.length > 1 ? Effect.fail(new Odd({ n: b })) : Effect.succeed(requests.map((entry) => entry.request.n / 2))) }); // a function for each tag of request
+Effect.request(GetPrice({ item }), prices);
+pipe(ask({ n }), Effect.request(answers));
+Request.succeed(entry, entry.request.n + b);
+Request.fail(entry, new Odd({ n: entry.request.n }));
+Request.completeEffect(entry, even(entry.request.n + a));
+Request.complete(entry, Exit.succeed(entry.request.n + b));
+Request.failCause(entry, Cause.fail(new Odd({ n: entry.request.n + a })));
+Request.isRequest(a);
+```
+
+```typescript title="effect/TxHashMap, effect/TxHashSet and effect/TxPriorityQueue"
+// A HashMap, a HashSet and a queue kept in order, in a transaction. A key may be one an input decides.
+const stock = yield* TxHashMap.make([a, 1], [b, 2]);
+TxHashMap.empty();
+TxHashMap.fromIterable([["tea", a], ["milk", b]]);
+TxHashMap.get(stock, a);
+TxHashMap.has(stock, b);
+TxHashMap.set(stock, 99, 3);
+TxHashMap.setMany(stock, [["milk", b], ["salt", 1]]);
+TxHashMap.remove(stock, a); // gives whether the key was there
+TxHashMap.removeMany(stock, ["salt"]);
+TxHashMap.modify(stock, "tea", (n) => n + 10); // gives what the key held before
+TxHashMap.modifyAt(stock, "rice", (held) => Option.some(Option.getOrElse(held, () => 0) + 5));
+TxHashMap.union(stock, HashMap.make(["oil", 7]));
+TxHashMap.clear(stock);
+TxHashMap.size(stock);
+TxHashMap.isEmpty(stock);
+TxHashMap.isNonEmpty(stock);
+TxHashMap.keys(stock);
+TxHashMap.values(stock);
+TxHashMap.toValues(stock);
+TxHashMap.entries(stock);
+TxHashMap.toEntries(stock);
+TxHashMap.snapshot(stock);
+TxHashMap.map(stock, (n) => n * 2); // a new one
+TxHashMap.filter(stock, (n) => n > 0);
+TxHashMap.filterMap(kept, (n) => (n > b ? Result.succeed(n * 2) : Result.fail(n)));
+TxHashMap.compact(stock);
+TxHashMap.forEach(stock, (n, key) => log(seen, [key, n])); // an effect for each entry
+TxHashMap.flatMap(stock, (n, key) => TxHashMap.make([key, n + 1], [key + "!", b]));
+TxHashMap.isTxHashMap(stock);
+TxHashMap.getHash(stock, "tea", Hash.hash("tea")); // the hash has to be the key's
+TxHashMap.hasHash(stock, "milk", Hash.hash("milk"));
+TxHashMap.reduce(stock, 0, (total, n) => total + n);
+TxHashMap.some(stock, (n) => n > a);
+TxHashMap.every(stock, (n) => n >= a);
+TxHashMap.hasBy(stock, (n, name) => name === "tea" && n === a);
+TxHashMap.findFirst(stock, (n) => n === a);
+const seen = yield* TxHashSet.make(a, b);
+TxHashSet.empty();
+TxHashSet.isTxHashSet(set);
+TxPriorityQueue.isTxPriorityQueue(set);
+TxHashSet.fromIterable([1, 2, a]);
+TxHashSet.fromHashSet(HashSet.make(2, 3));
+TxHashSet.add(seen, 99);
+TxHashSet.remove(seen, b);
+TxHashSet.has(seen, a);
+TxHashSet.size(seen);
+TxHashSet.isEmpty(seen);
+TxHashSet.isNonEmpty(seen);
+TxHashSet.clear(none);
+TxHashSet.union(left, right);
+TxHashSet.intersection(left, right);
+TxHashSet.difference(left, right);
+TxHashSet.isSubset(both, left);
+TxHashSet.toHashSet(set);
+TxHashSet.map(left, (n) => n * 2);
+TxHashSet.filter(left, (n) => n > 1);
+TxHashSet.some(left, (n) => n > 1);
+TxHashSet.every(left, (n) => n > 1);
+TxHashSet.reduce(left, 0, (total, n) => total + n);
+const line = yield* TxPriorityQueue.make(Order.Number)(3, a);
+TxPriorityQueue.empty(byN);
+TxPriorityQueue.fromIterable(Order.Number, [5, 1, 3, a]);
+TxPriorityQueue.offer(line, b);
+TxPriorityQueue.offerAll(line, [0, 5]);
+TxPriorityQueue.take(line); // the least: waits for a fiber to offer
+TxPriorityQueue.takeOption(line);
+TxPriorityQueue.takeUpTo(line, 2);
+TxPriorityQueue.takeAll(line);
+TxPriorityQueue.peek(line);
+TxPriorityQueue.peekOption(line);
+TxPriorityQueue.toArray(line);
+TxPriorityQueue.size(line);
+TxPriorityQueue.isEmpty(line);
+TxPriorityQueue.isNonEmpty(line);
+TxPriorityQueue.removeIf(other, (n) => n === 3);
+TxPriorityQueue.retainIf(other, (n) => n > 1);
+```
+
+```typescript title="effect/Channel, effect/Pull and effect/Take"
+// What a stream is made of. A channel gives values and then ends with one. A pull is an
+// effect that fails with Cause.Done when there is no more, and a take is one result of a pull.
+Channel.fromIterable([a, b, 3]);
+Channel.fromArray([a, b]);
+Channel.fromIterableArray([a, b, 3], 2);
+Channel.succeed(a);
+Channel.end(a); // gives nothing, and ends with a
+Channel.sync(() => a + b);
+Channel.endSync(() => a + b);
+Channel.empty;
+Channel.never;
+Channel.fail(new Odd({ n: a }));
+Channel.failSync(() => a);
+Channel.failCause(Cause.fail(a));
+Channel.failCauseSync(() => Cause.fail(b));
+Channel.die("boom");
+Channel.fromEffect(even(a));
+Channel.fromEffectDone(Effect.succeed(a));
+Channel.fromEffectDrain(Effect.succeed(a));
+Channel.fromEffectTake(Effect.succeed(Exit.succeed(a)));
+Channel.fromChunk(Chunk.make(a, b));
+Channel.fromQueue(queue);
+Channel.fromQueueArray(queue);
+Channel.fromPubSub(hub);
+Channel.fromPubSubArray(hub);
+Channel.fromSubscription(subscription);
+Channel.fromSubscriptionArray(subscription);
+Channel.callback((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue)));
+Channel.callbackArray((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue))); // what is in the queue, a chunk at a time
+Channel.fromSchedule(Schedule.recurs(2));
+Channel.fromPull(Effect.succeed(Cause.done(a)));
+Channel.transformPull(Channel.fromIterable([a, b]), (pull) => Effect.succeed(Effect.map(pull, (n) => n + 1))); // given the pull of the channel, and gives one back
+Channel.fromTransform((upstream) => Effect.succeed(Effect.map(upstream, (n) => n * 10))); // made of the pull of its input
+Channel.toTransform(Channel.fromIterable([a, b]))(Cause.done(), scope);
+Channel.embedInput(() => Effect.void);
+Channel.combine(Channel.fromIterable([a, b]), Channel.fromIterable([10, 20, 30]), () => true, (left, pullLeft, pullRight) => Effect.map(left ? pullLeft : pullRight, (n) => [n, !left]));
+Channel.fromTransformBracket((upstream) => Effect.succeed(Effect.map(upstream, (n) => n * 10)));
+Channel.toPullScoped(Channel.fromIterable([a, b]), scope);
+Channel.splitLines(); // of text the code can see
+Channel.provideService(Rate, { percent: a }); // while the channel runs, as are the next four
+Channel.provideServiceEffect(Rate, Effect.succeed({ percent: b }));
+Channel.provideContext(Context.make(Rate, { percent: a }));
+Channel.provide(Layer.succeed(Rate, { percent: b }));
+Channel.updateService(Rate, (rate) => ({ percent: rate.percent + 1 }));
+Channel.updateContext((context) => Context.add(context, Rate, { percent: Context.get(context, Rate).percent * 2 }));
+Channel.contextWith((context) => Channel.succeed(Context.get(context, Rate).percent + b));
+Stream.transformPullBracket(Stream.make(a, b), (pull) => Effect.succeed(Effect.map(pull, (chunk) => chunk.map((n) => n + 1))));
+Stream.transformPull(Stream.rechunk(Stream.make(a, b, 3), 1), (pull) => Effect.succeed(Effect.map(pull, (chunk) => chunk.map((n) => n * 2))));
+Channel.suspend(() => Channel.succeed(a));
+Channel.unwrap(Effect.succeed(Channel.fromEffectDrain(Effect.succeed(a))));
+Channel.acquireRelease(Effect.succeed(a), () => Effect.void);
+Channel.identity();
+Channel.isChannel(a);
+Channel.Do;
+Channel.bind("x", () => Channel.fromArray([a, b]));
+Channel.bindTo("n");
+Channel.let("m", ({ n }) => n + b);
+Channel.runIntoQueueArray(Channel.fromIterable([[a, b], [3]]), queue); // each item of each array
+Channel.runIntoPubSubArray(Channel.fromIterable([[a, b]]), hub);
+Channel.toPubSubArray(Channel.fromEffect(Effect.as(Effect.sleep(2), [a, b])), { capacity: 4 });
+Channel.toPubSubTake(Channel.fromEffect(Effect.as(Effect.sleep(2), [a, b])), { capacity: 4 }); // each array, then how it ended
+Channel.fromIterator(() => (function* () { yield a; yield b; })()); // a step of the generator each time one is pulled
+Channel.fromIteratorArray(() => (function* () { yield a; yield b; yield 3; })(), 2);
+Channel.encodeText(); // arrays of text as arrays of bytes
+Channel.decodeText();
+Channel.mkUint8Array(Channel.fromIterable([[new Uint8Array([1, 2]), new Uint8Array([a > 1 ? 3 : 4])]])); // all the bytes, together
+Channel.fromPubSubTake(hub);
+
+Channel.map((n) => n + 1);
+Channel.mapEffect((n) => even(n));
+Channel.mapDone((n) => n + b);
+Channel.mapDoneEffect((n) => Effect.succeed(n * 2));
+Channel.tap((n) => Effect.succeed(n));
+Channel.filter((n) => n > 0);
+Channel.filterMapArray((n) => (n > 2 ? Result.succeed(n * 2) : Result.fail(n))); // of a channel of arrays
+Channel.filterMapArrayEffect((n) => Effect.succeed(n > 1 ? Result.succeed(n) : Result.fail(n)));
+Channel.filterMap((n) => (n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
+Channel.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n + 1) : Result.fail(n)));
+Channel.acquireUseRelease(Effect.as(log(seen, "open"), a), (n) => Channel.fromIterable([n, b]), (n, exit) => log(seen, [n, Exit.isSuccess(exit)]));
+Channel.withSpan("used");
+Channel.DefaultChunkSize;
+Channel.filterEffect((n) => Effect.succeed(n !== 0));
+Channel.scan(a, (sum, n) => sum + n);
+Channel.scanEffect(b, (sum, n) => Effect.succeed(sum + n));
+Channel.mapAccum(() => 0, (sum, n) => [sum + n, [n, sum + n]]);
+Channel.flatMap((n) => Channel.fromArray([n, n + 1]));
+Channel.switchMap((n) => Channel.succeed(n + 1));
+Channel.mergeAll({ concurrency: 1 });
+Channel.flatten;
+Channel.flattenArray;
+Channel.flattenTake;
+Channel.concat(Channel.succeed(a), Channel.succeed(b));
+Channel.concatWith(() => Channel.succeed(9));
+Channel.merge(Channel.fromEffect(Effect.as(Effect.sleep(2), a)), Channel.fromEffect(Effect.as(Effect.sleep(1), b)));
+Channel.pipeTo(Channel.identity());
+Channel.pipeToOrFail(Channel.identity());
+Channel.mapInput((n) => Effect.succeed(n * 2));
+Channel.mapInputError((error) => error);
+Channel.mergeEffect(Effect.sleep(1));
+Channel.filterArray((n) => n > 0);
+Channel.filterArrayEffect((n) => Effect.succeed(n !== b));
+Channel.bufferArray({ capacity: 4 });
+Channel.orElseIfEmpty(() => Channel.succeed(b));
+Channel.drain;
+Channel.forever;
+Channel.scoped;
+Channel.buffer({ capacity: 2 });
+Channel.interruptWhen(Effect.as(Effect.sleep(1), a)); // ends with what the effect gives
+Channel.haltWhen(Effect.as(Effect.sleep(1), b)); // stops between two values
+Channel.repeat(Schedule.recurs(2));
+Channel.retry(Schedule.recurs(4));
+Channel.schedule(Schedule.spaced(1));
+
+Channel.catch((error) => Channel.succeed(error.n * 2));
+Channel.catchTag("Odd", (error) => Channel.succeed(-error.n));
+Channel.catchIf((error) => error.n < -2, () => Channel.succeed(0));
+Channel.catchFilter((error) => (error.n > 2 ? Result.succeed(error.n) : Result.fail("small")), (n) => Channel.succeed(n));
+Channel.catchCauseFilter((cause) => (Cause.hasFails(cause) ? Result.succeed(b) : Result.fail(cause)), (given, cause) => Channel.succeed([given, Cause.hasDies(cause)]));
+Channel.catchReason("Call", "Slow", (reason) => Channel.succeed(reason.ms), () => Channel.succeed(-1));
+Channel.catchReasons("Call", { Slow: (reason) => Channel.succeed(reason.ms), Lost: () => Channel.succeed(0) });
+Channel.unwrapReason("Call");
+Channel.catchCause((cause) => Channel.succeed(Cause.hasFails(cause)));
+Channel.catchCauseIf(Cause.hasFails, () => Channel.succeed(b));
+Channel.catchDefect((defect) => Channel.succeed(defect));
+Channel.tapCause((cause) => log(seen, Cause.hasFails(cause)));
+Channel.ignoreCause;
+Channel.mapError((error) => error.n);
+Channel.tapError((error) => log(seen, error.n));
+Channel.orDie;
+Channel.ignore;
+Channel.onStart(log(seen, "start"));
+Channel.onFirst((n) => log(seen, n));
+Channel.onEnd(log(seen, "end"));
+Channel.ensuring(log(seen, "closed"));
+Channel.onExit((exit) => log(seen, Exit.isSuccess(exit)));
+Channel.onError((cause) => log(seen, Cause.hasFails(cause)));
+
+Channel.runCollect(Channel.fromIterable([a, b, 3]));
+Channel.runDrain(Channel.end(a)); // what the channel ends with
+Channel.runCount;
+Channel.runHead(Channel.empty);
+Channel.runLast(Channel.fromIterable([a, b]));
+Channel.runFold(Channel.fromIterable([a, b, 3]), () => 0, (sum, n) => sum + n);
+Channel.runFoldEffect(Channel.fromIterable([a, b]), () => 1, (sum, n) => Effect.succeed(sum + n));
+Channel.runForEach(Channel.fromIterable([a, b]), (n) => log(seen, n));
+Channel.runForEachWhile(Channel.fromIterable([a, b, 3]), (n) => Effect.as(log(seen, n), n !== b));
+Channel.runIntoQueue(Channel.fromIterable([a, b]), queue);
+Channel.runIntoPubSub(Channel.fromIterable([a, b]), hub);
+Channel.toQueue(Channel.fromIterable([a, b]), { capacity: 4 }); // inside Effect.scoped
+Channel.toQueueArray(Channel.fromIterableArray([a, b, 3], 2), { capacity: 4 });
+Channel.toPubSub(Channel.fromEffect(Effect.as(Effect.sleep(2), a)), { capacity: 4 });
+const pull = yield* Channel.toPull(Channel.fromIterable([a, b])); // inside Effect.scoped
+
+Cause.done(a); // no more, with what is left
+Cause.Done(a);
+Cause.isDone(b);
+Pull.catchDone(pull, (left) => Effect.succeed(left + b));
+Pull.matchEffect(pull, { onSuccess: () => Effect.succeed("more"), onFailure: () => Effect.succeed("failed"), onDone: () => Effect.succeed("done") });
+Pull.isDoneCause(exit.cause);
+Pull.isDoneFailure(reason);
+Pull.doneExitFromCause(exit.cause);
+Pull.filterDone(exit.cause);
+Pull.filterDoneVoid(exit.cause);
+Pull.filterNoDone(exit.cause);
+Pull.filterDoneLeftover(exit.cause);
+Take.toPull([a, b]);
+Take.toPull(Exit.succeed(a));
+Take.toPull(Exit.fail(new Odd({ n: a })));
+
+Stream.fromChannel(Channel.fromIterableArray([a, b, 3])); // a channel of lists, as a stream
+Stream.toChannel(Stream.make(a, b));
+Stream.toPull(Stream.make(a, b)); // inside Effect.scoped
+Stream.fromPull(Effect.succeed(Cause.done()));
+Stream.pipeThroughChannel(Stream.make(a, b, 3), Channel.identity());
+Stream.pipeThroughChannelOrFail(Channel.identity()); // the stream's error goes on through the channel
+Stream.callback((queue) => Effect.andThen(Queue.offerAll(queue, [a, b]), Queue.end(queue)));
+```
+
+A channel that reads what another gives starts from `Channel.identity()`. One written from a pull of its input with `Channel.fromTransform`, or from a web stream, is not supported.
+
+```typescript title="effect/Scope, effect/ScopedRef, effect/RcRef, effect/RcMap and effect/Resource"
+// A scope the code holds, and what lives as long as one. A key of an RcMap is one the code writes.
+const scope = yield* Scope.make();
+Scope.make("parallel");
+Effect.scope; // the scope around: inside Effect.scoped
+Scope.Scope;
+Scope.fork(scope, "sequential");
+Scope.makeUnsafe();
+Scope.forkUnsafe(scope, "sequential");
+Scope.closeUnsafe(scope, Exit.void); // the effect that closes it, or nothing where it is closed
+Scope.addFinalizer(scope, log(seen, a));
+Scope.addFinalizerExit(scope, (exit) => log(seen, Exit.isSuccess(exit)));
+Scope.provide(opened(seen, "x"), scope);
+Scope.use(scope);
+Scope.close(scope, Exit.void);
+Exit.interrupt();
+Exit.failCause(Cause.fail(a));
+Cause.interrupt();
+
+const ref = yield* ScopedRef.fromAcquire(opened(seen, "one")); // inside Effect.scoped, as the ones below
+ScopedRef.make(() => a);
+ScopedRef.get(ref);
+ScopedRef.getUnsafe(ref);
+ScopedRef.set(ref, opened(seen, "two")); // what it held is released
+RcRef.make({ acquire: opened(seen, "r") });
+RcRef.make({ acquire: opened(seen, "kept"), idleTimeToLive: "1 second" });
+RcRef.get(ref); // acquired for the first who asks, released when the last is done
+RcRef.invalidate(ref);
+const map = yield* RcMap.make({ lookup: (key) => opened(seen, "k" + key) });
+RcMap.make({ lookup: (key) => Effect.succeed(key + a), capacity: 1, idleTimeToLive: "1 second" });
+RcMap.get(map, 1);
+RcMap.getOption(map, 9);
+RcMap.has(map, 2);
+RcMap.keys(map);
+RcMap.touch(map, 2);
+RcMap.invalidate(map, 2);
+const resource = yield* Resource.manual(Ref.updateAndGet(turns, (n) => n + 1));
+Resource.auto(Ref.updateAndGet(turns, (n) => n + 1), Schedule.spaced("1 second")); // acquired again as the schedule says
+Resource.get(resource);
+Resource.refresh(resource);
+Resource.isResource(resource);
+```
+
+```typescript title="effect/Schema, used in a handler"
+// A schema that only checks a value: the value passes where the prover's formula for it holds.
+// Decoding gives the value back, less the fields the schema does not name.
+Schema.is(Ticket)({ n: a });
+Schema.is(Names)(["x", "y"]);
+Schema.is(Kind)({ kind: "count", n: a });
+Schema.is(Schema.Literals(["on", "off"]))(flag ? "on" : "up");
+Schema.is(Schema.NullOr(Schema.Number))(flag ? null : a);
+Schema.asserts(Names, ["x", "y"]); // throws where it does not pass
+Schema.decodeUnknownSync(Ticket)({ n: 3, extra: a });
+Schema.decodeUnknownOption(Ticket)({ n: a, extra: b });
+Schema.decodeUnknownResult(Ticket)({ n: a });
+Schema.decodeUnknownExit(Ticket)({ n: a });
+Schema.decodeUnknownEffect(Ticket)({ n: a }); // fails with a SchemaError
+Schema.decodeSync(Ticket)({ n: 4 });
+Schema.decodeOption(Ticket)({ n: a, note: "kept" });
+Schema.decodeResult(Ticket)({ n: 3, extra: a });
+Schema.decodeExit(Ticket)({ n: b });
+Schema.decodeEffect(Ticket)({ n: b });
+Schema.encodeUnknownSync(Ticket)({ n: 6 });
+Schema.encodeUnknownOption(Ticket)({ n: a });
+Schema.encodeUnknownResult(Ticket)({ n: a });
+Schema.encodeUnknownExit(Ticket)({ n: a });
+Schema.encodeUnknownEffect(Ticket)({ n: a });
+Schema.encodeSync(Ticket)({ n: 5, extra: a });
+Schema.encodeOption(Ticket)({ n: a, extra: 1 });
+Schema.encodeResult(Ticket)({ n: b });
+Schema.encodeExit(Ticket)({ n: a });
+Schema.encodeEffect(Ticket)({ n: 2, note: "n" });
+Schema.isSchemaError;
+```
+
+```typescript title="More of Console, Ref, Match and DateTime"
+// What is written out decides nothing.
+Console.assert(true, "fine");
+Console.count("n");
+Console.countReset("n");
+Console.dir({ n: 1 });
+Console.dirxml("x");
+Console.group({ label: "g" });
+Console.table([1]);
+Console.time("t");
+Console.timeLog("t");
+Console.clear;
+Console.trace("here");
+Console.withGroup({ label: "g" });
+Console.withTime("t");
+
+// A change that is made only where the function gives one.
+Ref.updateSome(ref, (n) => (n > 0 ? Option.some(n * 2) : Option.none()));
+Ref.updateSomeAndGet(ref, (n) => Option.some(n + 1));
+Ref.modifySome(ref, (n) => [n + 1, n > b ? Option.some(b) : Option.none()]); // what to give back, and a new value where there is one
+SynchronizedRef.updateSome(cell, (n) => (n > 1 ? Option.some(n * 2) : Option.none()));
+SynchronizedRef.updateSomeAndGet(cell, (n) => Option.some(n + b));
+SynchronizedRef.getAndUpdateSome(cell, () => Option.none());
+SynchronizedRef.modifySome(cell, (n) => [n > b, n > b ? Option.some(0) : Option.none()]);
+SynchronizedRef.updateSomeEffect(cell, (n) => Effect.succeed(n > 1 ? Option.some(n * 2) : Option.none()));
+SynchronizedRef.updateSomeAndGetEffect(cell, (n) => Effect.succeed(Option.some(n + b)));
+SynchronizedRef.getAndUpdateSomeEffect(cell, () => Effect.succeed(Option.none()));
+SynchronizedRef.modifySomeEffect(cell, (n) => Effect.succeed([n > b, n > b ? Option.some(0) : Option.none()]));
+SubscriptionRef.updateSome(cell, (n) => (n > 1 ? Option.some(n * 2) : Option.none()));
+SubscriptionRef.updateSomeAndGet(cell, (n) => Option.some(n + b));
+SubscriptionRef.getAndUpdateSome(cell, () => Option.none());
+SubscriptionRef.modifySome(cell, (n) => [n > b, n > b ? Option.some(0) : Option.none()]);
+SubscriptionRef.updateSomeEffect(cell, (n) => Effect.succeed(n > 1 ? Option.some(n * 2) : Option.none()));
+SubscriptionRef.updateSomeAndGetEffect(cell, (n) => Effect.succeed(Option.some(n + b)));
+SubscriptionRef.getAndUpdateSomeEffect(cell, () => Effect.succeed(Option.none()));
+SubscriptionRef.modifySomeEffect(cell, (n) => Effect.succeed([n > b, n > b ? Option.some(0) : Option.none()]));
+SubscriptionRef.isSubscriptionRef(cell);
+Ref.getAndUpdateSome(ref, () => Option.none());
+
+// What a value is, as a matcher asks.
+Match.when(Match.string, () => "text");
+Match.when(Match.number, (n) => "number " + n);
+Match.boolean(flag);
+Match.bigint(1n);
+Match.null(null);
+Match.undefined(a);
+Match.nonEmptyString("x");
+Match.symbol(a);
+Match.is(1, 2)(a);
+
+// The rest of DateTime, of a time the code writes: the library's own.
+DateTime.formatIso(noon);
+DateTime.getPartUtc(noon, "hours");
+DateTime.toPartsUtc(noon);
+DateTime.startOf(noon, "day");
+DateTime.endOf(noon, "hour");
+DateTime.isDateTime(noon);
+DateTime.isUtc(noon);
+DateTime.toEpochSeconds(noon);
+```
+
+```typescript title="The rest of effect/Queue, effect/PubSub and effect/Deferred"
+Queue.make({ capacity: 4 });
+Queue.collect(queue); // every item, until the queue is ended
+Queue.asDequeue(queue);
+Queue.asEnqueue(queue);
+Queue.isQueue(queue);
+Queue.isDequeue(queue);
+Queue.isEnqueue(Queue.asEnqueue(queue));
+Queue.offerAllUnsafe(queue, [a, b]);
+Queue.endUnsafe(queue);
+Queue.shutdownUnsafe(queue);
+Queue.failCause(queue, Cause.fail("broken"));
+Queue.interrupt(queue);
+Queue.into(Effect.succeed(a), queue); // what the effect gives is offered, and the queue is ended
+PubSub.publishUnsafe(hub, a);
+PubSub.takeBetween(subscription, 1, 2);
+PubSub.capacity(hub);
+PubSub.sizeUnsafe(hub);
+PubSub.isPubSub(hub);
+PubSub.isShutdown(hub);
+PubSub.isShutdownUnsafe(hub);
+PubSub.awaitShutdown(hub);
+Deferred.complete(done, Effect.succeed(a)); // the effect is run once, for every one who waits
+Deferred.done(done, Exit.succeed(b));
+Deferred.doneUnsafe(done, a > 1 ? Exit.succeed(a) : Exit.fail(new Odd({ n: a })));
+Deferred.failCause(one, Cause.fail("no"));
+Deferred.failCauseSync(two, () => Cause.die("gone"));
+Deferred.into(even(a), done); // how the effect ends is how the Deferred is completed
+Deferred.isDeferred(done);
+```
+
+```typescript title="A cause and an exit as data"
+Cause.isCause(Cause.fail(a));
+Cause.empty;
+Cause.isReason(reason);
+Cause.isFailReason(reason);
+Cause.isDieReason(reason);
+Cause.isInterruptReason(reason);
+Cause.makeFailReason(a);
+Cause.makeDieReason("d");
+Cause.makeInterruptReason();
+Cause.fromReasons([Cause.makeFailReason(a), Cause.makeDieReason(b)]);
+Cause.combine(Cause.fail(a), Cause.die(b));
+Cause.map(Cause.fail(a), (n) => n + b);
+Cause.findError(Cause.empty); // what the cause holds, or the cause where it holds none
+Cause.findFail(Cause.fail(a));
+Cause.findDefect(Cause.die(b));
+Cause.findDie(Cause.fail(a));
+Cause.findInterrupt(Cause.interrupt());
+Cause.isNoSuchElementError(a); // an error the library made, by the library's own mark
+Cause.isTimeoutError({ _tag: "TimeoutError" });
+Cause.isTimeoutError({ _tag: "TimeoutError" });
+new Cause.NoSuchElementError("gone"); // the library's own errors, made by the code
+new Cause.TimeoutError("slow");
+new Cause.IllegalArgumentError("bad");
+new Cause.ExceededCapacityError("full");
+new Cause.UnknownError(a, "what");
+Cause.isUnknownError(a);
+Cause.isIllegalArgumentError(a);
+Cause.isExceededCapacityError(a);
+Cause.isAsyncFiberError(a);
+Exit.isExit(a);
+Exit.mapBoth(Exit.succeed(a), { onFailure: (n) => n - 1, onSuccess: (n) => n + b });
+Exit.asVoidAll([Exit.succeed(a), Exit.void]);
+Exit.filterSuccess(Exit.succeed(a));
+Exit.filterValue(Exit.succeed(a));
+Exit.filterFailure(Exit.succeed(a));
+Exit.filterCause(Exit.fail(b));
+Exit.findError(Exit.fail(a));
+Exit.findDefect(Exit.die(b));
+```
+
+```typescript title="A schedule changed by a function of the code"
+// The function is told of each turn: what was put in, what the schedule gives, which attempt it is.
+Schedule.map((turn) => turn.attempt + a);
+Schedule.tap(Schedule.recurs(2), (turn) => log(seen, [turn.input, turn.output, turn.attempt]));
+Schedule.while(Schedule.spaced(1), (turn) => turn.input < 3 + (a > 0 ? 1 : 0)); // it goes on while the function says so
+Schedule.addDelay(() => Effect.succeed(10)); // a wait added to the one the schedule gives
+Schedule.modifyDelay(() => Effect.succeed(Duration.millis(4)));
+Schedule.identity();
+Schedule.setInputType();
+Schedule.during("1 second");
+Schedule.isSchedule(a);
+```
+
+```typescript title="More of effect/Effect"
+// What handles a cause: a failure, a defect or an interrupt, as data.
+Effect.catchCause((cause) => Effect.succeed(Cause.hasFails(cause)));
+Effect.catchCauseIf(Cause.hasFails, () => Effect.succeed(-1));
+Effect.tapCause((cause) => log(seen, Cause.hasFails(cause)));
+Effect.tapCauseIf(Cause.hasDies, () => log(seen, "died"));
+Effect.onError((cause) => log(seen, "error"));
+Effect.onErrorIf(Cause.hasFails, () => log(seen, "failed"));
+Effect.matchCause(even(a), { onFailure: (cause) => (Cause.hasFails(cause) ? -1 : -2), onSuccess: (n) => n + b });
+Effect.matchCauseEffect(even(a), { onFailure: () => Effect.succeed(-1), onSuccess: (n) => positive(n - b) });
+Effect.sandbox(even(a)); // the cause is what it fails with
+Effect.ignoreCause(Effect.die("d"));
+Effect.catchDefect((defect) => Effect.succeed(defect + 1));
+Effect.tapDefect((defect) => log(seen, defect));
+Effect.try(() => {
+  if (a > 2) throw new Error("big"); // what the function throws is what the effect fails with
+  return a;
+});
+Effect.try({ try: () => { throw a; }, catch: (thrown) => new Odd({ n: thrown }) });
+Effect.runSyncExit(even(a));
+Effect.isEffect(a);
+Effect.undefined;
+
+// What runs an effect again, or more than once.
+Effect.forever(Effect.flatMap(Ref.updateAndGet(turns, (n) => n + 1), (n) => (n > 2 ? Effect.fail("stop") : Effect.void))); // until it fails
+Effect.eventually(Effect.flatMap(Ref.updateAndGet(turns, (n) => n + 1), (n) => (n < 3 ? Effect.fail("again") : Effect.succeed(n + a)))); // until it succeeds
+Effect.replicate(Effect.succeed(a), 3);
+Effect.replicateEffect(Effect.succeed(b), 2);
+Effect.firstSuccessOf([even(a), Effect.succeed(-1)]);
+Effect.whileLoop({ while: () => n < 3, body: () => Effect.succeed(a), step: (x) => { total += x; n++; } });
+Effect.schedule(Ref.update(runs, (n) => n + 1), Schedule.recurs(2));
+Effect.retryOrElse(even(a), Schedule.recurs(1), (error) => Effect.succeed(-error.n));
+Effect.cached(Ref.updateAndGet(runs, (n) => n + 1)); // run the first time what it gives is run, and never again
+Effect.cachedWithTTL(Ref.updateAndGet(runs, (n) => n + 1), "1 second");
+Effect.cachedInvalidateWithTTL(Ref.updateAndGet(runs, (n) => n + 1), "1 second"); // and an effect that forgets it
+Effect.repeatOrElse(Effect.flatMap(Ref.updateAndGet(runs, (n) => n + 1), (n) => (n > 2 ? Effect.fail(n + a) : Effect.succeed(n))), Schedule.recurs(5), (error, last) => Effect.succeed([error, Option.isSome(last)]));
+Effect.scheduleFrom(Ref.update(runs, (n) => n + 1), a, Schedule.recurs(2));
+Effect.validate([a, b], (n) => even(n)); // every item is tried, and it fails with all their errors
+Effect.validate((n, i) => positive(n - i), { discard: true });
+Effect.transposeOption(Option.some(even(a)));
+Effect.head(Effect.succeed([a, b])); // the first item, or a NoSuchElementError
+
+// A filter passes a value on as a success, or turns it away as a failure.
+Effect.filterMap([a, b, 3], (n) => (n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
+Effect.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n + 1) : Result.fail(n)));
+Effect.filterMapOrElse(Effect.succeed(a), (n) => (n > b ? Result.succeed(n) : Result.fail(b - n)), (gap) => Effect.succeed(-gap));
+Effect.filterMapOrFail((n) => (n > 2 ? Result.succeed(n) : Result.fail(n)));
+Effect.findFirstFilter([a, b, 3], (n, i) => Effect.succeed(n > 2 ? Result.succeed([n, i]) : Result.fail(n)));
+Effect.catchFilter((error) => (error.n > 2 ? Result.succeed(error.n) : Result.fail("small")), (n) => Effect.succeed(-n)); // an error that is turned away is still what it fails with
+Effect.catchFilter((error) => (error.n > 2 ? Result.succeed(error.n) : Result.fail(error.n + 1)), (n) => Effect.succeed(-n), (m) => Effect.succeed(m * 10));
+Effect.catchCauseFilter((cause) => (Cause.hasFails(cause) ? Result.succeed(1) : Result.fail(cause)), (one, cause) => Effect.succeed(one + (Cause.hasDies(cause) ? 1 : 0)));
+Effect.onErrorFilter((cause) => (Cause.hasFails(cause) ? Result.succeed("failed") : Result.fail(cause)), (what) => log(seen, what));
+Effect.tapCauseFilter((cause) => (Cause.hasDies(cause) ? Result.succeed("died") : Result.fail(cause)), (what) => log(seen, what));
+Effect.onExitFilter((exit) => (Exit.isSuccess(exit) ? Result.succeed("ok") : Result.fail(exit)), (what) => log(seen, what));
+
+// An error that holds a reason, handled by the reason.
+Effect.catchReason("Call", "Slow", (reason, error) => Effect.succeed(reason.ms + 1), (reason) => Effect.succeed(-1));
+Effect.catchReasons("Call", { Slow: (reason) => Effect.succeed(reason.ms), Lost: () => Effect.succeed(0) });
+Effect.unwrapReason("Call"); // it fails with the reason
+Effect.failCauseSync(() => Cause.fail(new Odd({ n: a })));
+Effect.onExitIf(Exit.isFailure, () => log(seen, "failed"));
+Effect.onExitPrimitive(even(a), (exit) => (Exit.isSuccess(exit) ? log(seen, "even") : undefined)); // what the function gives is run, where it gives an effect
+Effect.awaitAllChildren(Effect.forkChild(Effect.andThen(Effect.sleep(1), log(seen, a))));
+Effect.uninterruptibleMask((restore) => Effect.map(restore(even(a)), (n) => n + b));
+Effect.interruptibleMask((restore) => Effect.andThen(restore(Effect.sleep(1)), Effect.succeed(a)));
+Effect.callback((resume) => {
+  resume(Effect.succeed(a + b)); // called before the function returns
+});
+Effect.forkIn(Effect.as(Effect.sleep(1), a), scope);
+Effect.scopedWith((scope) => Effect.as(Scope.addFinalizer(scope, log(seen, "closed")), a));
+
+// Other names for the same, and what only says how an effect is watched.
+Effect.mapEager(Effect.succeed(a), (n) => n + 1);
+Effect.flatMapEager((n) => Effect.succeed(n * b));
+Effect.mapErrorEager((error) => error.n);
+Effect.mapBothEager({ onFailure: (n) => n + 1, onSuccess: (n) => n - 1 });
+Effect.matchEager({ onFailure: (n) => ["no", n], onSuccess: (n) => ["yes", n] });
+Effect.catchEager(() => Effect.succeed(0));
+Effect.matchCauseEager(even(a), { onFailure: (cause) => (Cause.hasFails(cause) ? -1 : -2), onSuccess: (n) => n + b });
+Effect.matchCauseEffectEager(even(a), { onFailure: () => Effect.succeed(-1), onSuccess: (n) => Effect.succeed(n - b) });
+Effect.satisfiesSuccessType()(Effect.succeed(a));
+Effect.satisfiesErrorType();
+Effect.satisfiesServicesType();
+Effect.track(Metric.counter("runs"));
+Effect.trackDuration(Metric.timer("took"));
+Effect.trackErrors(Metric.counter("errors"));
+Effect.trackSuccesses(Metric.counter("ok"));
+Effect.trackDefects(Metric.counter("defects"));
+Effect.logWithLevel("Debug")("seen", a);
+Effect.yieldNowWith(1);
+Effect.fnUntracedEager(function* (n) {
+  return (yield* Effect.succeed(n)) + 1;
+});
+Effect.withTracerEnabled(false);
+Effect.withTracerTiming(false);
+Effect.annotateLogsScoped({ kind: "test" });
+
+// A service, read or given another value.
+Effect.serviceOption(Rate);
+Effect.updateService(Rate, (rate) => ({ percent: rate.percent + 1 }));
+Effect.provideServiceEffect(Effect.map(Rate, (rate) => rate.percent), Rate, Effect.succeed({ percent: b }));
+Effect.provideContext(priced, Context.make(Rate, { percent: 1 }).pipe(Context.add(Fee, { flat: a })));
+```
+
+```typescript title="More of effect/Stream"
+// Each is the library's own, given the code's functions and streams, on the handler's clock.
+Stream.onStart(log(seen, "start"));
+Stream.onFirst((n) => log(seen, n));
+Stream.onEnd(log(seen, "end"));
+Stream.ensuring(log(seen, "closed"));
+Stream.onExit((exit) => log(seen, Exit.isSuccess(exit)));
+Stream.onError((cause) => log(seen, "error"));
+Stream.tapError((error) => log(seen, error.n));
+Stream.tapCause((cause) => log(seen, Cause.hasFails(cause)));
+Stream.tapBoth({ onElement: (n) => log(seen, n), onError: (error) => log(seen, "no") });
+Stream.catchCause((cause) => Stream.make(Cause.hasFails(cause) ? -1 : -2));
+Stream.catchCauseIf(Cause.hasFails, () => Stream.make(0));
+Stream.ignore;
+Stream.ignoreCause;
+Stream.mapBoth({ onElement: (n) => n + 1, onError: (error) => error.n });
+Stream.result; // each item as a Result, and a failure as the last one
+Stream.flatten(); // a stream of streams
+Stream.flattenEffect(); // a stream of effects
+Stream.flattenIterable;
+Stream.flattenArray;
+Stream.switchMap((n) => Stream.make(n, n + 1));
+Stream.forever;
+Stream.scanEffect(() => a, (sum, n) => Effect.succeed(sum + n));
+Stream.mapAccumEffect(() => 0, (sum, n) => Effect.succeed([sum + n, [n, sum + n]]));
+Stream.takeWhileEffect((n) => Effect.succeed(n < 3));
+Stream.takeUntilEffect((n) => Effect.succeed(n > 1));
+Stream.dropWhileEffect((n) => Effect.succeed(n < 2));
+Stream.dropUntilEffect((n) => Effect.succeed(n > 1));
+Stream.dropUntil((n) => n > 1);
+Stream.dropRight(1);
+Stream.intersperse(0);
+Stream.intersperseAffixes({ start: "[", middle: ",", end: "]" });
+Stream.sliding(2);
+Stream.chunks;
+Stream.repeatElements(Schedule.recurs(1));
+Stream.timeoutOrElse({ duration: "5 seconds", orElse: () => Stream.make(-1) });
+Stream.mergeEffect(Effect.sleep(1));
+Stream.orElseIfEmpty(() => Stream.make(a));
+Stream.interleave(Stream.make(a, b), Stream.make(1, 2, 3));
+Stream.mergeLeft(paced(1, a), paced(2, b));
+Stream.mergeRight(Stream.make(a, b));
+Stream.cross(Stream.make(a, b), Stream.make(1, 2));
+Stream.crossWith(Stream.make(1, 2), (left, right) => left * right);
+Stream.bindTo("x");
+Stream.bind("y", ({ x }) => Stream.make(x + 1));
+Stream.let("z", ({ x, y }) => x + y);
+Stream.fromEffectDrain(Effect.succeed(a));
+Stream.fromEffectRepeat(Ref.updateAndGet(turns, (n) => n + 1));
+Stream.fromEffectSchedule(Ref.updateAndGet(turns, (n) => n + b), Schedule.recurs(2));
+Stream.failSync(() => a);
+Stream.fromArrays([a, b], [3]);
+Stream.runForEachArray(Stream.make(a, b), (chunk) => log(seen, chunk.length));
+Stream.runIntoQueue(Stream.make(a, b), queue);
+Stream.runIntoPubSub(Stream.make(a, b), hub);
+Stream.toQueue(Stream.make(a, b), { capacity: 4 }); // in a scope, as are the next two
+Stream.toPubSub(paced(2, a, b), { capacity: 4 });
+Stream.broadcastN(paced(2, a, b), { n: 2, capacity: 4 });
+Stream.isStream(a);
+Stream.zipLeft(Stream.make(a, b, a), Stream.make(1, 2));
+Stream.zipRight(Stream.make(b, a, 1));
+Stream.zipFlatten(Stream.make([a, 1], [b, 2]), Stream.make("x", "y"));
+Stream.zipWithNext;
+Stream.zipWithPrevious;
+Stream.zipWithPreviousAndNext;
+Stream.zipLatestWith(paced(2, a, b), paced(3, 10, 20), (l, r) => l + r);
+Stream.zipLatestAll(paced(2, a, b), paced(3, 10, 20), paced(5, "x"));
+Stream.raceAll(paced(3, a), paced(2, b, 7), paced(5, 9));
+Stream.interleaveWith(Stream.make(a, 1, 2), Stream.make(b, 3), Stream.make(true, false, a > b, true, true));
+Stream.when(Effect.succeed(a > 1));
+Stream.failCause(Cause.fail(new Odd({ n: a })));
+Stream.failCauseSync(() => Cause.die(a));
+Stream.catchDefect((defect) => Stream.make(defect, b));
+Stream.tapDefect((defect) => log(seen, defect));
+Stream.tapErrorTag("Odd", (error) => log(seen, error.n));
+Stream.mapArray((chunk, i) => chunk.map((n) => n + i)); // a chunk at a time, as are the next three
+Stream.mapArrayEffect((chunk) => Effect.succeed([chunk.length, ...chunk]));
+Stream.mapAccumArray(() => 0, (sum, chunk) => [sum + chunk.length, [sum, ...chunk]]);
+Stream.mapAccumArrayEffect(() => a, (sum, chunk) => Effect.succeed([sum + 1, [sum + chunk[0]]]));
+Stream.bufferArray({ capacity: 2 });
+Stream.changesWithEffect((x, y) => Effect.succeed(x === y));
+Stream.drainFork(Stream.fromEffect(log(seen, "ran")));
+Stream.mergeResult(paced(2, a, b), paced(3, 7));
+Stream.scoped;
+Stream.slidingSize(2, 2);
+Stream.accumulate;
+Stream.collect;
+Stream.splitLines; // of text the code can see
+Stream.groupBy((n) => Effect.succeed([n % 2 === 0 ? 0 : 1, n * 10])); // a key and a value of each item
+Stream.partitionQueue(Stream.make([a, true], [b, false]), ([n, keep]) => (keep ? Result.succeed(n) : Result.fail(-n))); // in a scope: a queue of each
+Stream.pipeThrough(Sink.take(1)); // what the sink leaves over
+Stream.combine(Stream.make(a, b), Stream.make(10, 20, 30), () => true, (left, pullLeft, pullRight) => Effect.map(left ? pullLeft : pullRight, (n) => [n, !left])); // pulled as the function says
+Stream.combineArray(Stream.make(10, 20), () => 0, (turn, pullLeft, pullRight) => Effect.map(turn % 2 === 0 ? pullLeft : pullRight, (items) => [items, turn + 1]));
+Stream.zipWithArray(Stream.make(a, b, 3), Stream.make(10, 20), (l, r) => [[l[0] + r[0]], l.slice(1), r.slice(1)]);
+Stream.flattenTake; // a stream of Takes, as the items they hold
+Stream.fromPubSubTake(hub);
+Stream.toPubSubTake(paced(2, a, b), { capacity: 4 }); // in a scope: each array, then how the stream ended
+Stream.fromIteratorSucceed((function* () { yield a; yield b; yield 3; })());
+Stream.encodeText(Stream.make(a > 1 ? "hé" : "x", "y")); // text as bytes
+Stream.decodeText(Stream.make(new Uint8Array([104, a > 1 ? 105 : 106])));
+Stream.mkUint8Array(Stream.make(new Uint8Array([1, 2]), new Uint8Array([a > 1 ? 3 : 4])));
+Stream.mkArrayBuffer(Stream.make(new Uint8Array([1, 2]), new Uint8Array([3])));
+Stream.limitBytes(2, () => Stream.fail("too big")); // the bytes up to a limit, then the stream the function gives
+Stream.groupByKey((n) => (n % 2 === 0 ? 0 : 1)); // by a key the code can see
+Stream.filterMapEffect((n) => Effect.succeed(n > 2 ? Result.succeed(n * 2) : Result.fail(n)));
+Stream.takeWhileFilter((n) => (n > 2 ? Result.succeed(n + 1) : Result.fail(n)));
+Stream.dropWhileFilter((n) => (n > 2 ? Result.succeed(n) : Result.fail(n)));
+Stream.catchFilter((error) => (error.n > 2 ? Result.succeed(error.n) : Result.fail("small")), (n) => Stream.make(n, b));
+Stream.partition(Stream.make(a, b, 3), (n) => (n > 2 ? Result.succeed(n) : Result.fail(-n))); // in a scope: a stream of each
+Stream.partitionEffect(Stream.make(a, b, 3), (n) => Effect.succeed(n > 2 ? Result.succeed(n) : Result.fail(-n)));
+Stream.catchCauseFilter((cause) => (Cause.hasFails(cause) ? Result.succeed(b) : Result.fail(cause)), (given, cause) => Stream.make(given, Cause.hasDies(cause)));
+Stream.catchReason("Call", "Slow", (reason) => Stream.make(reason.ms), () => Stream.make(-1));
+Stream.catchReasons("Call", { Slow: (reason) => Stream.make(reason.ms), Lost: () => Stream.make(0) });
+Stream.unwrapReason("Call");
+Stream.split((n) => n === 0); // the items between two the function holds of
+Stream.groupAdjacentBy((n) => n % 2); // items that follow one another with the same key
+Stream.fromIterableEffectRepeat(Effect.map(Ref.updateAndGet(turns, (n) => n + 1), (n) => [n, -n]));
+Stream.aggregateWithin(four(a, b), Sink.foldUntil(() => 0, 2, (total, n) => Effect.succeed(total + n)), Schedule.spaced("1 second"));
+Stream.Do;
+Stream.DefaultChunkSize;
+
+// A stream that reads a service, and what is provided to it.
+Stream.service(Rate);
+Stream.serviceOption(Rate);
+Stream.provideService(Rate, { percent: a });
+Stream.provideServiceEffect(Rate, Effect.succeed({ percent: a }));
+Stream.provideContext(Context.make(Rate, { percent: a }));
+Stream.provide(Layer.succeed(Rate, { percent: b }));
+Stream.updateService(Rate, (rate) => ({ percent: rate.percent + 1 }));
+Stream.updateContext((context) => Context.add(context, Rate, { percent: Context.get(context, Rate).percent + b })); // these services and no others
+Stream.bindEffect("y", ({ x }) => Effect.succeed(x + 1));
+Stream.throttleEffect({ cost: (chunk) => Effect.succeed(chunk.length), units: 1, duration: "1 second" });
+Stream.transduce(Sink.take(3)); // the sink, run again and again over the stream
+Stream.aggregate(four(a, b), Sink.foldUntil(() => 0, 2, (total, n) => Effect.succeed(total + n)));
+Stream.tapSink(Sink.forEach((n) => log(seen, n)));
+Stream.peel(four(a, b), Sink.take(1)); // what the sink gives, and a stream of the rest
+```
+
+```typescript title="More of effect/Sink"
+// What a sink takes, and what it leaves over for the next one.
+Sink.takeWhile((n) => n < 3);
+Sink.takeWhileEffect((n) => Effect.succeed(n !== b));
+Sink.takeUntil((n) => n > a);
+Sink.takeUntilEffect((n) => Effect.succeed(n === 3));
+Sink.findEffect((n) => Effect.succeed(n > a));
+Sink.takeWhileFilter((n) => (n < 3 ? Result.succeed(n * 2) : Result.fail(n)));
+Sink.takeWhileFilterEffect((n) => Effect.succeed(n !== b ? Result.succeed(n) : Result.fail(n)));
+Sink.reduceEffect(() => 0, (total, n) => Effect.succeed(total + n));
+Sink.reduceArray(() => 0, (total, chunk) => total + chunk.length);
+Sink.reduceWhile(() => 0, (total) => total < 5, (total, n) => total + n);
+Sink.reduceWhileEffect(() => a, (total) => total < 5, (total, n) => Effect.succeed(total + n));
+Sink.reduceWhileArray(() => 0, (total) => total < 2, (total, chunk) => total + chunk.length);
+Sink.reduceWhileArrayEffect(() => 0, (total) => total < a, (total, chunk) => Effect.succeed(total + chunk[0]));
+Sink.foldArray(() => 0, (total) => total < 3, (total, chunk) => Effect.succeed(total + chunk.length));
+Sink.foldUntil(() => 0, 3, (total, n) => Effect.succeed(total + n));
+Sink.forEachArray((chunk) => log(seen, chunk.length));
+Sink.forEachWhile((n) => Effect.as(log(seen, n), n < 3));
+Sink.forEachWhileArray((chunk) => Effect.as(log(seen, chunk), chunk[0] > a));
+
+// A sink made of a value, an effect, a queue or another sink.
+Sink.sync(() => a + b);
+Sink.failSync(() => a);
+Sink.failCause(Cause.fail(new Odd({ n: a })));
+Sink.failCauseSync(() => Cause.die("gone"));
+Sink.die(a);
+Sink.fromEffect(Effect.succeed(a));
+Sink.fromEffectEnd(Effect.succeed([a, [b]])); // a value, and what is left over
+Sink.fromQueue(queue);
+Sink.fromPubSub(hub);
+Sink.suspend(() => Sink.take(a > 1 ? 2 : 1));
+Sink.unwrap(Effect.succeed(Sink.head()));
+Sink.isSink(a);
+Sink.toChannel(Sink.take(3)); // a channel given lists, which ends with the value and what is left
+Sink.fromChannel(Sink.toChannel(Sink.take(1)));
+Sink.make()(Stream.map((n) => n * 2), Stream.runSum); // functions of a stream of what it takes, the last giving an effect
+Sink.fromTransform((upstream) => Effect.map(upstream, (chunk) => [chunk.length + a])); // what it does with the pull of its input
+
+// A function of a sink.
+Sink.as(Sink.take(1), b);
+Sink.mapEffect((taken) => positive(taken[0]));
+Sink.mapEnd(Sink.take(1), ([taken, left]) => [taken.length + (left ? left.length : 0)]);
+Sink.mapEffectEnd(Sink.take(1), ([taken]) => Effect.succeed([taken[0] + 1]));
+Sink.mapLeftover((n) => n + 10);
+Sink.ignoreLeftover;
+Sink.mapError((n) => n + 1);
+Sink.mapInput((n) => n * 2);
+Sink.mapInputEffect(Sink.collect(), (n) => Effect.succeed(n + 1));
+Sink.mapInputArray(Sink.count, (chunk) => [...chunk, 0]);
+Sink.mapInputArrayEffect(Sink.collect(), (chunk) => Effect.succeed([chunk.length]));
+Sink.flatMap(Sink.take(1), ([first]) => Sink.map(Sink.take(2), (next) => [first, ...next])); // the second is given what the first left
+Sink.orElse(Sink.fail(a), (error) => Sink.map(Sink.head(), (head) => [error, Option.isSome(head)]));
+Sink.catch(Sink.fail(a), (error) => Effect.succeed(error + b));
+Sink.catchCause((cause) => Effect.succeed(Cause.hasFails(cause)));
+Sink.ensuring(log(seen, "ended"));
+Sink.onExit((exit) => log(seen, Exit.isSuccess(exit)));
+Sink.summarized(Sink.forEach(() => Ref.update(turns, (n) => n + 1)), Ref.get(turns), (start, end) => end - start);
+Sink.provideService(Rate, { percent: a });
+Sink.provideContext(Context.make(Rate, { percent: b }));
+```
+
+```typescript title="effect/Layer, effect/Context and services"
+// A service is an effect that gives what the code around provides for it.
+Effect.provideService(Effect.map(Rate, (rate) => rate.percent + a), Rate, { percent: b });
+Rate.pipe(Effect.map((rate) => rate.percent * 2), Effect.provideService(Rate, { percent: a }));
+Layer.succeed(Rate, { percent: a });
+Layer.succeed(Fee)({ flat: b });
+Layer.sync(Rate, () => ({ percent: a * 2 }));
+Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.percent + 1 }))); // it reads what is provided while it is built
+Layer.effectDiscard(Effect.void);
+Layer.empty;
+Layer.merge(Layer.empty);
+Layer.mergeAll(Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee)({ flat: b }));
+Layer.provide(Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.percent * 3 }))), Layer.succeed(Rate, { percent: b }));
+Layer.provideMerge(Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.percent + 1 }))), Layer.succeed(Rate, { percent: a }));
+Layer.succeedContext(Context.merge(Context.make(Rate, { percent: 1 }), Context.make(Fee, { flat: a })));
+Layer.fresh;
+Layer.isLayer(a);
+Layer.suspend(() => Layer.mergeAll(Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee, { flat: b })));
+Layer.unwrap(Effect.succeed(Layer.succeed(Rate, { percent: a })));
+Layer.effectContext(Effect.succeed(Context.make(Rate, { percent: a })));
+Layer.syncContext(() => Context.make(Fee, { flat: b }));
+Layer.flatMap((context) => Layer.mergeAll(Layer.succeedContext(context), Layer.succeed(Fee, { flat: Context.get(context, Rate).percent + 1 })));
+Layer.tap((context) => Ref.update(seen, (all) => [...all, Context.get(context, Fee).flat]));
+Layer.tapError((error) => Ref.update(seen, (all) => [...all, error.n]));
+Layer.catch((error) => Layer.succeed(Rate, { percent: error.n }));
+Layer.catchCause((cause) => Layer.succeed(Rate, { percent: Cause.hasDies(cause) ? -1 : a })); // a defect too
+Layer.tapCause((cause) => Ref.update(seen, (all) => [...all, Cause.hasFails(cause)]));
+Layer.catchTag(Layer.effect(Rate, Effect.fail(new Odd({ n: a }))), "Odd", (error) => Layer.succeed(Rate, { percent: error.n + 1 }));
+Layer.orDie(Layer.effect(Rate, Effect.fail(new Odd({ n: a }))));
+Layer.mock(Fee, { flat: 1 });
+Layer.updateService(Layer.effect(Fee, Effect.map(Rate, (rate) => ({ flat: rate.percent }))), Rate, (rate) => ({ percent: rate.percent + 1 })); // while the layer is built
+Layer.satisfiesSuccessType();
+Layer.satisfiesErrorType();
+Layer.satisfiesServicesType();
+Layer.withSpan("wiring");
+Layer.build(Layer.succeed(Rate, { percent: a })); // the context the layer provides
+Layer.buildWithScope(Layer.succeed(Fee, { flat: b }), scope);
+Effect.provide(priced, Layer.merge(Layer.sync(Rate, () => ({ percent: a * 2 })), Layer.effect(Fee, Effect.succeed({ flat: 1 }))));
+Effect.provide([Layer.succeed(Rate, { percent: a }), Layer.succeed(Fee, { flat: 2 })]);
+Context.make(Rate, { percent: a });
+Context.add(Fee, { flat: b });
+Context.empty();
+Context.getOption(Context.make(Rate, { percent: a }), Rate);
+Context.isContext(a);
+Context.get(Context.make(Rate, { percent: a }), Rate);
+Context.getUnsafe(Context.make(Fee, { flat: b }), Fee);
+Context.getOrUndefined(Context.empty(), Rate);
+Context.getOrElse(Context.empty(), Fee, () => a);
+Context.addOrOmit(Context.empty(), Fee, Option.some({ flat: b }));
+Context.addUnsafe(Context.empty(), Rate.key, { percent: a }); // by the key of a service the code has read
+Context.makeUnsafe(new Map([[Rate.key, { percent: a }], [Fee.key, { flat: b }]]));
+Effect.runSyncWith(Context.make(Rate, { percent: a })); // run at once, with only the services of the context
+Effect.runSyncExitWith(Context.empty());
+Context.mergeAll(Context.make(Rate, { percent: a }), Context.make(Fee, { flat: b }));
+Context.omit(Rate)(Context.make(Rate, { percent: a }));
+Context.pick(Rate);
+Context.isKey(Rate);
+Context.isReference(Step);
+Effect.context(); // every service that is provided where the effect runs
+Effect.contextWith((context) => Effect.succeed(Context.getOption(context, Fee)));
+Effect.setContext(Context.make(Rate, { percent: a })); // these services and no others
+Effect.updateServiceScoped(Rate, (rate) => ({ percent: rate.percent + b })); // until the scope closes
+Effect.updateContext((context) => Context.add(context, Fee, { flat: Context.get(context, Rate).percent + b }));
+Effect.provideService(Step, Step, a); // a Context.Reference gives its own value where nothing provides one
+```
+
+```typescript title="effect/Bytes"
+// Bytes the code writes.
+Bytes.concat(new Uint8Array([1, 2]), new Uint8Array([3]));
+Bytes.Equivalence(new Uint8Array([1]), new Uint8Array([1]));
+Bytes.Order(new Uint8Array([1]), new Uint8Array([2]));
+```
+
+```typescript title="effect/Graph and effect/HashRing"
+// Of values the code writes, these are the library's own: a function the code gives one is called where the library calls it.
+const roads = Graph.directed((mutable) => {
+  const a_ = Graph.addNode(mutable, "A");
+  const b_ = Graph.addNode(mutable, "B");
+  const c_ = Graph.addNode(mutable, "C");
+  Graph.addEdge(mutable, a_, b_, 2);
+  Graph.addEdge(mutable, b_, c_, 3);
+  Graph.addEdge(mutable, a_, c_, 9);
+});
+Graph.nodeCount(roads);
+Graph.edgeCount(roads);
+Graph.getNode(roads, 1);
+Graph.hasNode(roads, 7);
+Graph.isAcyclic(roads);
+Graph.neighbors(roads, 0);
+Graph.mutate(roads, (mutable) => {
+  Graph.addNode(mutable, "D");
+});
+Graph.isGraph(roads);
+
+const ring = HashRing.make();
+HashRing.add(ring, new Host({ name: "one" })); // a node is a class of effect/Data with a primary key
+HashRing.addMany(ring, [new Host({ name: "two" }), new Host({ name: "three" })]);
+HashRing.get(ring, "key-" + 7);
+HashRing.has(ring, new Host({ name: "two" }));
+HashRing.isHashRing(ring);
+```
+
+```typescript title="effect/Metric and effect/Hash"
+// What a handler writes to a metric decides nothing, so it is read as doing nothing.
+const orders = Metric.counter("orders");
+Metric.gauge("level");
+Metric.frequency("kinds");
+Metric.histogram("size", { boundaries: Metric.linearBoundaries({ start: 0, width: 10, count: 3 }) });
+Metric.summary("s", { maxAge: "1 minute", maxSize: 10, quantiles: [0.5] });
+Metric.summaryWithTimestamp("st", { maxAge: "1 minute", maxSize: 10, quantiles: [0.5] });
+Metric.timer("t");
+Metric.update(orders, a);
+Metric.modify(Metric.gauge("level"), b);
+Metric.withAttributes(orders, { kind: "gift" });
+Metric.mapInput((n) => n);
+Metric.withConstantInput(1);
+Metric.isMetric(a);
+Metric.exponentialBoundaries({ start: 1, factor: 2, count: 3 });
+Metric.boundariesFromIterable([3, 1, 2]);
+
+// A hash of a value the code writes is the library's own.
+Hash.hash("text");
+Hash.string("s");
+Hash.number(42);
+Hash.optimize(12345);
+Hash.combine(1, 2);
+Hash.array([1, "a", true]);
+Hash.structure({ n: 1, s: "x" });
+Hash.structureKeys({ n: 1, s: "x" }, ["n"]); // of the fields named
+Hash.isHash(7);
+```
+
+```typescript title="effect/Random"
+// A seed the code writes decides every draw, so a seeded draw is the one the deployed handler makes.
+Random.next.pipe(Random.withSeed("seed"));
+Random.withSeed(Random.nextInt, 7);
+Random.Random; // drawn from with a seed, as Random.next is
+Random.nextBoolean.pipe(Random.withSeed("coin"));
+Random.nextBetween(1, 5);
+Random.nextIntBetween(1, 10);
+Random.nextIntBetween(1, 3, { halfOpen: true });
+Random.shuffle([a, b, 3, 4]);
+Random.choice([a, b, 3]);
+Schedule.jittered(Schedule.spaced("1 second")); // each wait is drawn, so it is run inside Random.withSeed
+```
+
+```typescript title="effect/PubSub"
+// What is published reaches each one who subscribed before it was.
+const hub = yield* PubSub.unbounded();
+PubSub.unbounded({ replay: 1 });
+PubSub.bounded(2);
+PubSub.dropping(1);
+PubSub.sliding(1);
+PubSub.make({ atomicPubSub: () => PubSub.makeAtomicBounded(1), strategy: () => new PubSub.DroppingStrategy() }); // a PubSub of its parts
+PubSub.makeAtomicUnbounded({ replay: 1 });
+new PubSub.SlidingStrategy();
+new PubSub.BackPressureStrategy();
+const one = yield* PubSub.subscribe(hub); // in a scope
+PubSub.publish(hub, a);
+PubSub.publishAll(hub, [b, 1]);
+PubSub.take(one); // waits for a fiber to publish
+PubSub.takeAll(two);
+PubSub.takeUpTo(one, 5);
+PubSub.remaining(one);
+PubSub.remainingUnsafe(sub);
+PubSub.end(hub, b); // the last message: then it has ended
+PubSub.endUnsafe(hub, 0);
+PubSub.size(hub);
+PubSub.isEmpty(hub);
+PubSub.isFull(hub);
+PubSub.shutdown(hub);
+```
+
 ```typescript title="effect/MutableRef"
+MutableRef.compareAndSet(cell, a, b); // set where it holds what is expected
 (() => {
   const count = MutableRef.make(a);
   MutableRef.set(count, a + b);
@@ -1845,12 +3385,23 @@ Effect.gen(function* () {
   yield* Console.error("e");
   return a;
 });
+Console.consoleWith((console) =>
+  Effect.sync(() => {
+    console.log("x", a);
+    console.error("y");
+    return a + b;
+  }),
+);
 ```
 
 ```typescript title="effect/Clock"
 Effect.gen(function* () {
   return [(yield* Clock.currentTimeMillis) >= 0, (yield* Clock.currentTimeNanos) >= 0n];
 });
+Clock.clockWith((clock) => Effect.map(clock.currentTimeMillis, (now) => [now >= 0, clock.currentTimeMillisUnsafe() >= 0])); // the clock the handler is given
+Clock.Clock; // the clock a handler is given, yielded as a service
+Console.Console; // a console whose every function writes out, and gives nothing
+Effect.clockWith((clock) => Effect.map(clock.currentTimeNanos, (now) => now >= 0n));
 ```
 
 ```typescript title="effect/DateTime"
@@ -1930,11 +3481,13 @@ constTrue();
 constUndefined() ?? "undefined";
 constVoid() ?? "void";
 constant(a)();
+SK(a, b); // the second of two values
 dual(2, (x, y) => x - y)(a, b);
 flip((x) => (y) => x - y)(a)(b);
 flow(Number.increment, Number.multiply(2))(a);
 identity(a);
 memoize((pair) => pair.n + 1)({ n: a });
+memoizeIdempotent((pair) => ({ n: pair.n + 1 }))({ n: a });
 pipe(a, Number.sum(b));
 satisfies()(a);
 tupled((x, y) => x - y)([a, b]);
@@ -1950,6 +3503,32 @@ Optic.modify({ n: a, m: b }, Optic.id().key("n"), (n) => n + 1);
 pipe({ n: a, m: b }, Optic.modify(Optic.id().key("n"), (n) => n + 1));
 Optic.replace({ n: a, m: b }, Optic.id().key("m"), a);
 pipe({ n: a, m: b }, Optic.replace(Optic.id().key("m"), a));
+pipe({ n: a, m: b }, Optic.replace(Optic.id().key("m"), a));
+Optic.id().key("n").get({ n: a, m: b });
+Optic.get({ n: { deep: a } }, Optic.id().key("n").key("deep"));
+Optic.getResult({ n: a }, Optic.id().at("n")); // a Result: the focus, or that there is none
+Optic.replaceResult({ n: a }, Optic.id().at("n"), b);
+Optic.id().key("n").optionalKey("m").replace(undefined, { n: { m: a, k: b } }); // undefined takes the key out
+Optic.id().at("m").replace(b, { n: a }); // nothing to replace: it is as it was
+Optic.some().replace(b, Option.none()); // a Prism makes the whole value, whatever it was
+Optic.set(a, Optic.some());
+Optic.set(b, Optic.success());
+Optic.set(a, Optic.failure());
+Optic.set(undefined, Optic.none());
+Optic.id().key("n").compose(Optic.some()).modify((n) => n * 2)({ n: Option.some(a) });
+Optic.makeLens((s) => s.n, (n, s) => ({ ...s, n }));
+Optic.makeIso((n) => n * 2, (m) => m / 2);
+Optic.makePrism((n) => (n > 1 ? Result.succeed(n) : Result.fail("small")), (n) => n);
+Optic.makeOptional((s) => (s.n > b ? Result.succeed(s.n) : Result.fail("no")), (n, s) => Result.succeed({ ...s, n }));
+Optic.entries().modify((all) => all.map(([key, value]) => [key, value + 1]))({ x: a, y: b });
+Optic.id().key("n").notUndefined();
+Optic.id().refine((n) => n > b);
+Optic.id().tag("A");
+Optic.fromChecks(Schema.isGreaterThan(0), Schema.isLessThan(10)); // the value, where the checks hold
+Optic.id().forEach((each) => each.key("n")); // a traversal: an optic onto each item of an array
+Optic.getAll([{ n: a }, { n: b }], Optic.id().forEach((each) => each.key("n")));
+Optic.modifyAll(Optic.id().forEach((each) => each.key("n")), (n) => n * 2);
+Optic.id().forEach((each) => each.key("n")).modifyAll((n) => n - b)([{ n: a }]);
 ```
 
 ```typescript title="effect/Stream"
@@ -2108,6 +3687,41 @@ Stream.runCollect(Stream.unwrap(Effect.succeed(Stream.make(a))));
 stream.pipe(Stream.withSpan("s"), Stream.runCount);
 stream.pipe(Stream.zip(Stream.make("x", "y")), Stream.runCollect);
 stream.pipe(Stream.zipWithIndex, Stream.runCollect);
+
+// Streams over time, and streams run together.
+const paced = (millis, ...items) =>
+  Stream.fromIterable(items).pipe(
+    Stream.mapEffect((item) => Effect.as(Effect.sleep(millis), item)),
+  );
+Stream.tick("1 second").pipe(Stream.take(3), Stream.runCount);
+Stream.fromSchedule(Schedule.spaced("1 second")).pipe(Stream.take(3), Stream.runCollect);
+Stream.fromQueue(line).pipe(Stream.take(3), Stream.runCollect);
+Stream.merge(paced(3, a, b), paced(5, "x", "y")).pipe(Stream.runCollect);
+Stream.mergeAll([paced(7, "slow"), paced(2, a), paced(4, b)], { concurrency: 2 });
+Stream.zipLatest(paced(3, a, b), paced(5, "x", "y")).pipe(Stream.runCollect);
+Stream.make(3, 1, 2).pipe(
+  Stream.mapEffect((n) => Effect.as(Effect.sleep(n * 2 + 1), n + a), { concurrency: 3 }),
+  Stream.runCollect,
+);
+Stream.make(5, 1).pipe(
+  Stream.flatMap((n) => paced(n, n, n + a), { concurrency: 2 }),
+  Stream.runCollect,
+);
+paced(4, a, b, 1).pipe(Stream.timeout(10), Stream.runCollect);
+Stream.concat(paced(1, a, b), paced(20, 1)).pipe(Stream.debounce(5), Stream.runCollect);
+Stream.make(a, b, 3).pipe(Stream.throttle({ cost: (chunk) => chunk.length, units: 1, duration: "1 second" }), Stream.runCollect); // a cost the code works out
+Stream.concat(paced(1, a, b, 1), paced(20, 2)).pipe(Stream.groupedWithin(2, 10), Stream.runCollect);
+Stream.make(a, b, 1).pipe(Stream.schedule(Schedule.spaced("1 second")), Stream.runCollect);
+Stream.make(a, b).pipe(Stream.repeat(Schedule.recurs(1)), Stream.runCollect);
+paced(3, a, b, 1).pipe(Stream.interruptWhen(Effect.sleep(7)), Stream.runCollect);
+paced(3, a, b, 1).pipe(Stream.haltWhen(Effect.sleep(7)), Stream.runCollect);
+Stream.race(paced(5, "slow", "slower"), paced(3, a, b)).pipe(Stream.runCollect);
+paced(2, a, b, 1).pipe(Stream.buffer({ capacity: 2 }), Stream.runCollect);
+Stream.fromPubSub(hub).pipe(Stream.take(2), Stream.runCollect);
+Stream.fromSubscription(one).pipe(Stream.take(2), Stream.runCollect);
+Stream.retry(Schedule.spaced("1 second"));
+Stream.broadcast(paced(2, a, b, 1), { capacity: "unbounded", replay: 3 }); // in a scope: one stream read by many
+paced(2, a, b, 1).pipe(Stream.share({ capacity: "unbounded", replay: 3 }));
 ```
 
 ```typescript title="effect/Sink"
@@ -2191,7 +3805,6 @@ A call to one of these is reported with its name, and the rule is not proved.
 A handler depends on the state, the command and the time. What it needs from the outside world comes in as a field of the command.
 
 ```typescript title="The outside world"
-import * as Random from "effect/Random";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as FileSystem from "effect/FileSystem";
@@ -2202,76 +3815,66 @@ import * as Stdio from "effect/Stdio";
 
 Effect.promise(() => fetch(url));
 Effect.tryPromise(() => fetch(url));
+RequestResolver.persisted(RequestResolver.fromEffect((entry) => Effect.succeed(entry.request.n)), { storeId: "prices" }); // keeps results in a Persistence store
+Effect.runPromise(effect); // runs an effect outside the handler, for a promise: so do runPromiseExit and their With forms
+Effect.runFork(effect); // on a fiber of its own: so do runForkWith, runCallback and runCallbackWith
+Effect.effectify((callback) => callback(null, a)); // a Node callback
+Effect.abortSignal; // the language's AbortSignal
+Effect.requestUnsafe(GetPrice({ item: "tea" }), { resolver: RequestResolver.never, onExit: () => undefined, context: Context.empty() }); // a request outside the handler's fibers
+Stream.toAsyncIterable(Stream.make(a)); // an async iterable, whose values come as promises: and Stream.fromAsyncIterable, Channel.fromAsyncIterable
+Stream.toReadableStream(Stream.make(a)); // a Web stream: and Stream.fromReadableStream, Channel.fromWritableStream, Sink.fromWritableStream
+// and Stream.fromEventListener, which listens to an EventTarget, and FiberSet.runtimePromise and the like, which run an effect for a promise
 ```
 
-Which of two things happens first is not something a handler decides. A deployed handler can wait, but a proof is held against the handler run at once, without waiting, so a `sleep`, a `delay` and a schedule that waits are reported. A handler is one fiber that runs to its end, so a `Deferred`, a `Queue`, a `Semaphore` and a `Latch` are [supported](#library-functions) where the handler itself has done what the call waits for, and reported where it has not.
+A handler's sleeps, time limits, races, fibers, queues, transactions and requests are [supported](#time-and-fibers). A count an input decides is read where the input is held between 0 and 64: each count it can be is a path of its own. What is left is a wait that never ends, two waits that end at the same moment, a key an input decides, and the few modules below.
 
 ```typescript title="Time passing and things running together"
-import * as Scheduler from "effect/Scheduler";
-import * as Fiber from "effect/Fiber";
-import * as FiberHandle from "effect/FiberHandle";
-import * as FiberMap from "effect/FiberMap";
-import * as FiberSet from "effect/FiberSet";
-import * as PartitionedSemaphore from "effect/PartitionedSemaphore";
-import * as PubSub from "effect/PubSub";
-import * as Pool from "effect/Pool";
-import * as Cache from "effect/Cache";
-import * as ScopedCache from "effect/ScopedCache";
-import * as Request from "effect/Request";
-import * as RequestResolver from "effect/RequestResolver";
-import * as Channel from "effect/Channel";
-import * as Pull from "effect/Pull";
-import * as Take from "effect/Take";
-import * as ExecutionPlan from "effect/ExecutionPlan";
-import * as TxChunk from "effect/TxChunk";
-import * as TxDeferred from "effect/TxDeferred";
-import * as TxHashMap from "effect/TxHashMap";
-import * as TxHashSet from "effect/TxHashSet";
-import * as TxPriorityQueue from "effect/TxPriorityQueue";
-import * as TxPubSub from "effect/TxPubSub";
-import * as TxQueue from "effect/TxQueue";
-import * as TxReentrantLock from "effect/TxReentrantLock";
-import * as TxRef from "effect/TxRef";
-import * as TxSemaphore from "effect/TxSemaphore";
-import * as TxSubscriptionRef from "effect/TxSubscriptionRef";
+import * as Scheduler from "effect/Scheduler"; // what decides which fiber runs: a proof has its own
+import * as ExecutionPlan from "effect/ExecutionPlan"; // each step provides a Layer, which is wiring
 
-Effect.sleep("1 second");
-Effect.delay(effect, "1 second");
-Deferred.await(done); // a wait for what the handler has not done itself: it would never end
+Deferred.await(done); // a wait for what no fiber of the handler does: the handler would never end
 gate.await;
 Queue.take(line);
 permits.take(3);
-Effect.repeat(effect, { schedule: Schedule.spaced("1 second") }); // a schedule that waits: every one but Schedule.recurs
-Effect.retry(effect, { times: command.attempts }); // a count an input decides
-Effect.race(first, second);
-SubscriptionRef.changes(cell); // a stream of what a cell held
-Effect.forkChild(effect); // and every other way to start a fiber
+Effect.never;
+Effect.race(Effect.as(Effect.sleep(10), a), Effect.as(Effect.sleep(10), b)); // two waits that end at the same moment
+Effect.repeat(effect, { schedule: Schedule.spaced("1 second") }); // an effect run again more than 100 times
+Effect.retry(effect, { times: command.attempts }); // a count an input decides, where it may be below 0 or above 64
+Random.next; // a random number drawn with no seed: so is a wait of Schedule.jittered
+Random.next.pipe(Random.withSeed(command.attempts)); // a seed an input decides
+Cache.get(prices, command.item); // a key an input decides: the library finds one by its hash
+Effect.request(GetPrice({ item: command.item }), prices); // a request of values an input decides
+Effect.request(GetPrice({ item: "tea" }), RequestResolver.never); // a resolver that never answers
+Stream.run(stream, Sink.never); // a sink that never ends
 
 Cron.next(cron); // next, prev and sequence use the clock when they are given no time
+Metric.value(orders); // reads a metric: what one holds is not what a handler decides by
+Effect.timed(effect); // measured with the machine's clock: so are Sink.timed and Sink.withDuration
+Clock.monotonicTimeNanos; // the machine's monotonic clock
+Effect.fiberId; // a fiber's id is a count over the whole process: and Effect.fiber, Effect.withFiber, Fiber.getCurrent, Cause.interruptors
+Hash.random(input); // a random hash for each object
+Layer.launch(Layer.empty); // a layer built, and never ended
 ```
 
-These say how a program is put together and watched, not what it decides. A [request context](#effects-and-failures) a handler yields is supported.
+These say how a program is put together and watched, not what it decides. A [request context](#effects-and-failures) a handler yields is supported, and so is a service an effect is [provided with](#library-functions) by a layer or a context.
 
 ```typescript title="Wiring"
-import * as Layer from "effect/Layer";
 import * as LayerMap from "effect/LayerMap";
 import * as LayerRef from "effect/LayerRef";
-import * as Context from "effect/Context";
 import * as References from "effect/References";
-import * as Scope from "effect/Scope";
-import * as ScopedRef from "effect/ScopedRef";
-import * as RcMap from "effect/RcMap";
-import * as RcRef from "effect/RcRef";
-import * as Resource from "effect/Resource";
 import * as Runtime from "effect/Runtime";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Logger from "effect/Logger";
 import * as Tracer from "effect/Tracer";
-import * as Metric from "effect/Metric";
 import * as ErrorReporter from "effect/ErrorReporter";
+
+Effect.currentSpan; // the tracer's spans: and Effect.makeSpan, Effect.useSpan, Effect.linkSpans, Effect.withParentSpan, Effect.tracer, Layer.span
+Layer.makeMemoMap; // a MemoMap: and Layer.buildWithMemoMap, Layer.fromBuild, Layer.CurrentMemoMap
+Metric.snapshot; // the runtime's metrics: and Metric.dump, Metric.enableRuntimeMetrics, Metric.MetricRegistry
+// and Effect.withLogger, Effect.withTracer, Effect.withErrorReporting and Effect.withExecutionPlan, which take one of the modules above
 ```
 
-A schema is supported where it describes the state, a command or an event. Decoding with one inside a handler is not.
+A schema is supported where it describes the state, a command or an event, and where a handler [checks a value with one](#library-functions). One that changes the value it reads, or that the prover does not read in full, is not: a record, a tuple, a class, a pattern.
 
 ```typescript title="Schemas as code"
 import * as SchemaAST from "effect/SchemaAST";
@@ -2285,26 +3888,8 @@ import * as JsonSchema from "effect/JsonSchema";
 import * as StandardSchema from "effect/StandardSchema";
 import * as Arbitrary from "effect/Arbitrary";
 
-Schema.decodeUnknownSync(Ticket)(input); // and every other decode, encode and is
-Schema.encodeSync(Ticket)(ticket);
-Schema.is(Ticket)(input);
-```
-
-A graph and a ring are built by changing one, and a hash of an object is where it sits in memory. Put a call to one in an exported function, which is then [opaque](#opaque-functions).
-
-```typescript title="Values changed in place, or known by where they are"
-import * as Graph from "effect/Graph";
-import * as HashRing from "effect/HashRing";
-import * as MutableList from "effect/MutableList";
-import * as Hash from "effect/Hash";
-```
-
-`Combiner` and `Reducer` are made from functions, and `Bytes` works on byte arrays: write the fold.
-
-```typescript title="Made from functions, or working on bytes"
-import * as Combiner from "effect/Combiner";
-import * as Reducer from "effect/Reducer";
-import * as Bytes from "effect/Bytes";
+Schema.decodeUnknownSync(Schema.NumberFromString)("1"); // a schema that changes the value it reads
+Schema.is(Schema.Record(Schema.String, Schema.Number))(input); // a schema the prover does not read in full
 ```
 
 These hold types and the library's own machinery, with nothing for a handler to call.
@@ -2320,7 +3905,14 @@ import * as Differ from "effect/Differ";
 import * as PlatformError from "effect/PlatformError";
 import * as Redactable from "effect/Redactable";
 import * as Version from "effect/Version";
-// and effect/Newtype and effect/Brand beyond Newtype.value and Brand.nominal
+// and effect/Newtype and effect/Brand beyond Newtype.value, Newtype.makeCombiner, Newtype.makeReducer and Brand.nominal
+
+Cause.pretty(Cause.fail(a)); // a cause with its stack frames: and Cause.prettyErrors, Cause.annotations, Cause.annotate, Cause.StackTrace
+Effect.acquireDisposable(Effect.succeed(input)); // released by Symbol.dispose, a name the prover does not read
+Hash.symbol; // names a class's own hash method, which the prover does not call
+Request.RequestPrototype; // what Request.tagged, Request.of and Request.Class build a request on
+Effect.Transaction; // the library's record of a transaction: Effect.tx makes one
+// and Channel.hasUpstreamFailure and the like, Context.getOrUndefinedUnsafe and Context.hasSameCache, which the library's types do not export
 ```
 
 ## Effects and failures
@@ -2346,7 +3938,6 @@ Pack: Effect.fn(function* (parcel, command) {
 ```typescript title="Not supported"
 yield* Effect.promise(() => fetch(url)); // the outside world
 yield* Effect.tryPromise(() => fetch(url));
-yield* Effect.sleep("1 second"); // time passing: sleep, delay, a schedule that waits, race, a fiber
 yield a; // yield without the star
 yield* Option.some(a); // an Option or a Result in Effect.gen: use Option.gen, Result.gen, Effect.fromOption, Effect.fromResult
 ```
@@ -2371,7 +3962,23 @@ Each run can succeed or fail, and the proof takes both. Here `a` is a field of t
 
 `Effect.repeat(effect, { times: 2 })` gives what the last run gave. `Effect.repeat(effect, Schedule.recurs(2))` gives how many times it ran again, as Effect does.
 
-`Effect.all`, `forEach` and the others run one effect after another. Their `concurrency` option changes nothing a handler can see, since nothing in a handler waits.
+### Time and fibers
+
+A handler that sleeps, sets a time limit, races two effects or starts a fiber is read as the library runs it. The prover does not model these: it hands the library the handler's effects and lets it run them, on time that passes only when no fiber can run. A wait then ends in the order the durations give, and no test waits for one.
+
+```typescript title="Time and fibers"
+const answer = yield* Deferred.make<number>();
+yield* Effect.forkChild(Effect.andThen(Effect.sleep(5), Deferred.succeed(answer, a)));
+const made = yield* Deferred.await(answer).pipe(Effect.timeoutOption(10));
+```
+
+The fiber sleeps, completes the `Deferred` at 5 milliseconds, and the wait for it ends before its limit of 10. With a limit of 3 the wait is stopped first, and `made` is `Option.none()`.
+
+A duration may be a field of the command. Each order two waits can end in is then a way through the handler, and a rule is checked on each.
+
+Three things are taken for granted. Code between two waits takes no time, so a limit never stops a computation that does not wait. Two waits that end at the same moment are reported, since which the deployed handler ends first is not known. And a deployed handler really waits: one that sleeps for a second holds its aggregate for a second.
+
+`Effect.all`, `forEach` and `zip` run one effect after another unless their `concurrency` says otherwise.
 
 ## Streams
 
@@ -2388,15 +3995,18 @@ const kept = yield* Stream.fromIterable(command.readings).pipe(
 
 A step that runs an effect for each item takes the items one at a time, so a stream that stops early runs the effects the real one runs and no others: above, a reading after the second is never checked, and a failure it would have given never happens.
 
+A stream over time, and streams run together, are run by the library on the handler's [timeline](#time-and-fibers): `Stream.tick`, `debounce`, `merge`, `mapEffect` with a `concurrency`, a stream of a queue.
+
 Every function of `effect/Stream` and `effect/Sink` that is supported is under [Library functions](#library-functions). A sink that has what it wants pulls nothing more.
 
 ```typescript title="Not supported"
 Stream.iterate(1, (n) => n + 1).pipe(Stream.runCollect); // a stream with no end: cut it with Stream.take(3)
-Stream.take(stream, command.count); // a count an input decides
-Stream.tick("1 second"); // a stream of time: tick, debounce, throttle, a schedule
-Stream.fromQueue(queue); // of a queue or a pub-sub
-Stream.merge(first, second); // which item comes first is not something the code decides
-Stream.mapEffect(stream, checked, { concurrency: 2 });
+Stream.take(stream, command.count); // a count an input decides, where it may be below 0 or above 64
+Stream.tick("1 second").pipe(Stream.runCollect); // a stream of time with no end: cut it with Stream.take(3)
+Stream.never.pipe(Stream.runCollect); // a stream that gives nothing and does not end
+Stream.never.pipe(Stream.timeout("1 second"), Stream.runCollect); // a stream's time limit is worked out from the clock, which a handler's does not move
+Stream.merge(paced(3, a), paced(3, b)).pipe(Stream.runCollect); // two items that come at the same moment
+Stream.throttle(stream, { cost: (chunk) => chunk[0], units: 1, duration: 1 }); // a cost an input decides: the library asks for it at once
 ```
 
 ## Your own files
@@ -2424,15 +4034,13 @@ function within(n: number) {
 export default isDue;
 
 export class Overweight extends Data.TaggedError("Overweight")<{ over: number }> {} // a class of effect/Data or effect/Schema that adds nothing
-export enum Kind { Good, Gift } // an exported enum or namespace
-```
-
-```typescript title="Not supported"
-enum Local { Good, Gift } // an enum or a namespace the file does not export
+export enum Kind { Good, Gift } // an enum and a namespace, exported or not
 class Parcel {
-  grams = 0; // a class with a body
+  grams = 0; // a class with a body, exported or not: its fields, its constructor, its methods
 }
 ```
+
+A namespace is supported too, exported or not: `namespace Local { export const n = 1; }` is an object of what it exports.
 
 Two files can import each other.
 
@@ -2540,6 +4148,8 @@ Renew: Effect.fn(function* (lease) {
 }),
 ```
 
+How long an effect took is not read from that clock. `Effect.timed`, `Sink.timed` and `Sink.withDuration` measure with the machine's own, so they are not supported, and the report names the call.
+
 A time is compared and moved in whole milliseconds. A month and a year are not one length, so `DateTime.add(time, { months: 1 })` is not supported, and neither is the clock anywhere but `decide`, where it is not the time of a command.
 
 A request context a handler yields is any value its schema allows. Middleware is not run, so a rule is proved for every caller, including ones your middleware would turn away.
@@ -2572,7 +4182,7 @@ Math.floor(a / 2); // divide by a number the code writes, and say how it rounds
 // applies * to numbers that may not be whole, which JavaScript rounds and the prover does not
 BigDecimal.multiply(amount, RATE); // keep the number whole, or in a BigDecimal
 
-// loops a number of times that depends on an input
+// loops more than 64 times, a number of times that depends on an input
 for (const n of items) total += n; // go over a list, or count up to a number the code writes
 
 // pushes onto an array it was given, which changes it
@@ -2589,15 +4199,18 @@ a === b;
 //   Fail with a Data.TaggedError and handle it with Effect.catchTag.
 
 // calls Effect.retry without a count of times the prover can see
-// calls Schedule.spaced, which the prover has no model for
+// runs an effect again more than 100 times, with Effect.repeat
 Effect.retry(even(a), { times: 2 }); // a count the code writes
 Effect.retry(even(a), Schedule.recurs(2));
 
-// takes from a Queue with nothing in it
-// waits for a Deferred the handler has not completed
-//   The deployed handler would never finish here. Ask without waiting:
+// takes from a Queue that nothing offers to: the handler would never end
+// waits for a Deferred that nothing completes: the handler would never end
+//   The deployed handler would never finish here. Ask without waiting, or give the wait a limit:
 Queue.poll(line);
 Deferred.poll(done);
+
+// two waits end at the same moment, and which the deployed handler ends first is not known
+//   Give the two different durations.
 ```
 
 ### The last line of a proof

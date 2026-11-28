@@ -138,9 +138,41 @@ export const make = (kit: Kit) => {
         const unit = `${10n ** BigInt(places)}.0`;
         const scaled = places === 0 ? a.text : `(* ${a.text} ${unit})`;
         const rounded = `(to_real ${whole(scaled)})`;
-        return Brands.decimal(real(places === 0 ? rounded : `(/ ${rounded} ${unit})`));
+        const made = real(places === 0 ? rounded : `(/ ${rounded} ${unit})`);
+        // A decimal rounded to so many places is a whole number of that many: it can be written out.
+        places_.set(made, { whole: whole(scaled), places });
+        return Brands.decimal(made);
       }),
     );
+
+  /** Each decimal an input holds that was rounded: the whole number it is, of so many places. */
+  const places_ = new WeakMap<object, { readonly whole: string; readonly places: number }>();
+
+  /** The most places a decimal an input holds is written out with. */
+  const MAX_PLACES = 6;
+
+  /**
+   * `BigDecimal.format` of a decimal rounded to a number of places: its sign,
+   * its whole part, and what follows the point with no zeros at its end.
+   */
+  const written = (whole: string, places: number): string => {
+    const unit = 10n ** BigInt(places);
+    const size = `(abs ${whole})`;
+    const sign = `(ite (< ${whole} 0) "-" "")`;
+    const before = `(str.from_int (div ${size} ${unit}))`;
+    if (places === 0) return `(str.++ ${sign} ${before})`;
+    const after = `(mod ${size} ${unit})`;
+    // The digits after the point once `zeros` of them are dropped: a number one digit longer, less its first.
+    const digits = (zeros: number): string => {
+      const kept = places - zeros;
+      return `(str.substr (str.from_int (+ ${10n ** BigInt(kept)} (div ${after} ${10n ** BigInt(zeros)}))) 1 ${kept})`;
+    };
+    // As many zeros as end it are dropped: the most is tried first.
+    let fraction = digits(0);
+    for (let zeros = 1; zeros < places; zeros++)
+      fraction = `(ite (= (mod ${after} ${10n ** BigInt(zeros)}) 0) ${digits(zeros)} ${fraction})`;
+    return `(str.++ ${sign} ${before} (ite (= ${after} 0) "" (str.++ "." ${fraction})))`;
+  };
 
   const floored = (text: string) => `(to_int ${text})`;
   const ceiled = (text: string) => `(- (to_int (- ${text})))`;
@@ -290,9 +322,19 @@ export const make = (kit: Kit) => {
       BigDecimal.truncate,
       (text) => `(ite (>= ${text} 0.0) ${floored(text)} ${ceiled(text)})`,
     ),
-    "effect/BigDecimal:format": computed("BigDecimal.format", (a) =>
-      a.pipe(BigDecimal.format, Value.str),
-    ),
+    "effect/BigDecimal:format": ([self], site) =>
+      Effect.flatMap(decimalOf("BigDecimal.format", self, site), (a) => {
+        if (Brands.isKnown(a)) return a.pipe(BigDecimal.format, Value.str, Effect.succeed);
+        const rounded = places_.get(a);
+        return rounded && rounded.places <= MAX_PLACES
+          ? Effect.succeed(Value.term("String", written(rounded.whole, rounded.places)))
+          : Effect.fail(
+              Value.notTranslated(
+                site,
+                "calls BigDecimal.format on a decimal an input holds, which has no last place: round it with BigDecimal.floor, ceil or truncate first",
+              ),
+            );
+      }),
     "effect/BigDecimal:toNumberUnsafe": computed("BigDecimal.toNumberUnsafe", (a) =>
       a.pipe(BigDecimal.toNumberUnsafe, Value.num),
     ),

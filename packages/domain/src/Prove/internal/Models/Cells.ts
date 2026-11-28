@@ -8,8 +8,17 @@ import * as Value from "../Value.ts";
 const REF: Value.Brand = { kind: "Ref", cls: undefined };
 /** The functions of a `Ref` that a `SynchronizedRef` and a `SubscriptionRef` have too. */
 const SHARED =
-  "make get getUnsafe set setAndGet getAndSet update updateAndGet getAndUpdate modify".split(" ");
+  "make get getUnsafe set setAndGet getAndSet update updateAndGet getAndUpdate modify updateSome updateSomeAndGet getAndUpdateSome modifySome".split(
+    " ",
+  );
+/** The field of a `SubscriptionRef` that holds how its readers are told of a value. */
+export const CHANGES = "~changes";
 const REDACTED: Value.Brand = { kind: "Redacted", cls: undefined };
+/** What a console has: each writes something out, and gives nothing. */
+export const CONSOLE =
+  "assert clear count countReset debug dir dirxml error group groupCollapsed groupEnd info log table time timeEnd timeLog trace warn".split(
+    " ",
+  );
 
 /**
  * `Ref` and the `Mutable` cells, `Redacted`, `Filter`, `Ordering`,
@@ -42,6 +51,36 @@ export const make = (
     });
 
   const held = (fields: Record<string, V>): V => fields.value ?? Value.undef;
+
+  /** What a function gives of what a cell holds, where it gives a new value: nothing where it gives none. */
+  const some = (
+    name: string,
+    fn: V | undefined,
+    fields: Record<string, V>,
+    site: Site,
+  ): Eval<V | undefined> =>
+    fn
+      ? Effect.flatMap(host.call(fn, [held(fields)], site), (made) => {
+          const option = Value.optionOf(made);
+          return option
+            ? Effect.succeed(option._tag === "Some" ? option.value : undefined)
+            : wrongArguments(site, name);
+        })
+      : wrongArguments(site, name);
+
+  /** A function of an effect that only says how it is written out: the effect is what it was. */
+  const watched =
+    (name: string): Model =>
+    (args) => {
+      const first = args[0];
+      return first?._tag === "Effect"
+        ? Effect.succeed(first)
+        : Effect.succeed(
+            native(name, ([self], at) =>
+              self?._tag === "Effect" ? Effect.succeed(self) : wrongArguments(at, name),
+            ),
+          );
+    };
 
   const changed = (name: string, fn: V | undefined, fields: Record<string, V>, site: Site) =>
     fn ? host.call(fn, [held(fields)], site) : wrongArguments(site, name);
@@ -85,7 +124,8 @@ export const make = (
         : wrongArguments(site, name);
     });
 
-  const one = (before: V): V => (Value.isBig(before) ? { _tag: "Big", value: 1n } : Value.num(1));
+  // The library adds the number 1, as the language does: to a bigint, that throws.
+  const one = (): V => Value.num(1);
 
   const stepped =
     (operator: "+" | "-", gives: "self" | "after" | "before"): Model =>
@@ -93,7 +133,7 @@ export const make = (
       const fields = cellOf(self);
       if (!fields || !self) return wrongArguments(site, "MutableRef");
       const before = held(fields);
-      return Effect.map(host.arithmetic(operator, before, one(before), site), (after) => {
+      return Effect.map(host.arithmetic(operator, before, one(), site), (after) => {
         fields.value = after;
         return gives === "self" ? self : gives === "after" ? after : before;
       });
@@ -113,6 +153,12 @@ export const make = (
     });
 
   /** A mutable hash set or hash map, made as the one it holds is. */
+  /** Whether a value is a mutable cell that holds a hash map, or a hash set. */
+  const holds = (value: V | undefined, kind: "HashMap" | "HashSet"): boolean => {
+    const fields = cellOf(value);
+    const inside = fields ? held(fields) : undefined;
+    return inside?._tag === "Obj" && inside.brand?.kind === kind;
+  };
   const holding =
     (key: string): Model =>
     (args, site) =>
@@ -135,12 +181,104 @@ export const make = (
    * holds it and nothing runs beside a handler, so it is the same cell: a
    * change that fails leaves it as it was.
    */
+  /**
+   * A `SubscriptionRef` tells whoever reads its changes of every value it is
+   * given. The cell does so wherever it is written: {@link CHANGES} holds
+   * what is told, once a stream of its changes was asked for.
+   */
+  const subscribed = new WeakSet<object>();
+  const published = (made: V): V => {
+    const fields = cellOf(made);
+    if (!fields) return made;
+    subscribed.add(fields);
+    let value = fields.value ?? Value.undef;
+    Object.defineProperty(fields, "value", {
+      enumerable: true,
+      get: () => value,
+      set: (next: V) => {
+        value = next;
+        const told = fields[CHANGES];
+        if (told?._tag === "Host") (told.value as (value: V) => void)(next);
+      },
+    });
+    return made;
+  };
+
+  /** What an effect of a function gives of what a cell holds, where it gives a new value. */
+  const someBy = (
+    name: string,
+    fn: V | undefined,
+    fields: Record<string, V>,
+    site: Site,
+  ): Eval<V | undefined> =>
+    Effect.flatMap(changedBy(name, fn, fields, site), (made) => {
+      const option = Value.optionOf(made);
+      return option
+        ? Effect.succeed(option._tag === "Some" ? option.value : undefined)
+        : wrongArguments(site, name);
+    });
+  /** The pair a function gives: what to give back, and a new value where there is one. */
+  const told = (name: string, made: V, site: Site): Eval<readonly [V, V | undefined]> => {
+    const pair = kit.itemsOf(made);
+    const option = pair?.length === 2 ? Value.optionOf(pair[1]) : undefined;
+    return pair && option
+      ? Effect.succeed([pair[0]!, option._tag === "Some" ? option.value : undefined] as const)
+      : wrongArguments(site, name);
+  };
+  const telling = (name: string, made: V, fields: Record<string, V>, site: Site): Eval<V> =>
+    Effect.map(told(name, made, site), ([gives, next]) => {
+      if (next) fields.value = next;
+      return gives;
+    });
+
   const synchronized = (module: string): Models => ({
+    [`effect/${module}:updateSomeEffect`]: onRef(
+      `${module}.updateSomeEffect`,
+      2,
+      (fields, [fn], site) =>
+        Effect.map(someBy(`${module}.updateSomeEffect`, fn, fields, site), (next) => {
+          if (next) fields.value = next;
+          return Value.undef;
+        }),
+    ),
+    [`effect/${module}:updateSomeAndGetEffect`]: onRef(
+      `${module}.updateSomeAndGetEffect`,
+      2,
+      (fields, [fn], site) =>
+        Effect.map(someBy(`${module}.updateSomeAndGetEffect`, fn, fields, site), (next) => {
+          if (next) fields.value = next;
+          return held(fields);
+        }),
+    ),
+    [`effect/${module}:getAndUpdateSomeEffect`]: onRef(
+      `${module}.getAndUpdateSomeEffect`,
+      2,
+      (fields, [fn], site) => {
+        const before = held(fields);
+        return Effect.map(someBy(`${module}.getAndUpdateSomeEffect`, fn, fields, site), (next) => {
+          if (next) fields.value = next;
+          return before;
+        });
+      },
+    ),
+    [`effect/${module}:modifySomeEffect`]: onRef(
+      `${module}.modifySomeEffect`,
+      2,
+      (fields, [fn], site) =>
+        Effect.flatMap(changedBy(`${module}.modifySomeEffect`, fn, fields, site), (made) =>
+          telling(`${module}.modifySomeEffect`, made, fields, site),
+        ),
+    ),
     ...Object.fromEntries(
       SHARED.concat(module === "SynchronizedRef" ? ["makeUnsafe"] : []).map(
         (name): [string, Model] => [
           `effect/${module}:${name}`,
-          (args, site) => call(`effect/Ref:${name}`, args, site),
+          (args, site) =>
+            Effect.map(call(`effect/Ref:${name}`, args, site), (made) =>
+              module === "SubscriptionRef" && name === "make" && made._tag === "Effect"
+                ? lazy(() => Effect.map(made.run, published))
+                : made,
+            ),
         ],
       ),
     ),
@@ -191,6 +329,19 @@ export const make = (
     "effect/MutableRef:setAndGet": reading("MutableRef.setAndGet", 2, (_, [value]) =>
       Effect.succeed({ after: value ?? Value.undef, gives: value ?? Value.undef }),
     ),
+    // Set where it holds what the code expects: whether it was.
+    "effect/MutableRef:compareAndSet": reading(
+      "MutableRef.compareAndSet",
+      3,
+      (before, [expected, value], site) =>
+        Effect.flatMap(host.equal(before, expected ?? Value.undef, site), (equal) =>
+          Effect.map(host.decide(equal, site), (same) =>
+            same
+              ? { after: value ?? Value.undef, gives: Value.bool(true) }
+              : { gives: Value.bool(false) },
+          ),
+        ),
+    ),
     "effect/MutableRef:getAndSet": reading("MutableRef.getAndSet", 2, (before, [value]) =>
       Effect.succeed({ after: value ?? Value.undef, gives: before }),
     ),
@@ -234,6 +385,16 @@ export const make = (
     "effect/MutableHashMap:empty": holding("effect/HashMap:empty"),
     "effect/MutableHashMap:make": holding("effect/HashMap:make"),
     "effect/MutableHashMap:fromIterable": holding("effect/HashMap:fromIterable"),
+    "effect/MutableHashMap:isMutableHashMap": ([value]) =>
+      Effect.succeed(Value.bool(holds(value, "HashMap"))),
+    "effect/MutableHashSet:isMutableHashSet": ([value]) =>
+      Effect.succeed(Value.bool(holds(value, "HashSet"))),
+    "effect/MutableHashMap:forEach": delegated(
+      "MutableHashMap.forEach",
+      "effect/HashMap:forEach",
+      2,
+      false,
+    ),
     "effect/MutableHashMap:get": delegated("MutableHashMap.get", "effect/HashMap:get", 2, false),
     "effect/MutableHashMap:has": delegated("MutableHashMap.has", "effect/HashMap:has", 2, false),
     "effect/MutableHashMap:set": delegated("MutableHashMap.set", "effect/HashMap:set", 3, true),
@@ -341,10 +502,63 @@ export const make = (
       callable(self) ? Effect.succeed(self) : wrongArguments(site, "Filter.toResult"),
     // Output: nothing a handler decides depends on it.
     "effect/Console:log": () => Effect.succeed(done),
+    // The console a handler is given: what is written to it decides nothing.
+    "effect/Console:consoleWith": ([f], site) =>
+      f
+        ? Effect.succeed<V>({
+            _tag: "Effect",
+            run: Effect.flatMap(
+              host.call(
+                f,
+                [
+                  Value.obj(
+                    Object.fromEntries(
+                      CONSOLE.map((name): [string, V] => [
+                        name,
+                        native(`console.${name}`, () => Effect.succeed(Value.undef)),
+                      ]),
+                    ),
+                  ),
+                ],
+                site,
+              ),
+              (made) =>
+                made._tag === "Effect" ? made.run : wrongArguments(site, "Console.consoleWith"),
+            ),
+          })
+        : wrongArguments(site, "Console.consoleWith"),
     "effect/Console:error": () => Effect.succeed(done),
     "effect/Console:warn": () => Effect.succeed(done),
     "effect/Console:info": () => Effect.succeed(done),
     "effect/Console:debug": () => Effect.succeed(done),
+    ...Object.fromEntries(
+      "assert count countReset dir dirxml group table time timeLog trace"
+        .split(" ")
+        .map((name): [string, Model] => [`effect/Console:${name}`, () => Effect.succeed(done)]),
+    ),
+    // The effect, written under a heading or timed: what it gives is what it gave.
+    "effect/Console:withGroup": watched("Console.withGroup"),
+    "effect/Console:withTime": watched("Console.withTime"),
+    // A change that is made only where the function gives one.
+    "effect/Ref:updateSome": onRef("Ref.updateSome", 2, (fields, [fn], site) =>
+      Effect.map(some("Ref.updateSome", fn, fields, site), (next) => {
+        if (next) fields.value = next;
+        return Value.undef;
+      }),
+    ),
+    "effect/Ref:updateSomeAndGet": onRef("Ref.updateSomeAndGet", 2, (fields, [fn], site) =>
+      Effect.map(some("Ref.updateSomeAndGet", fn, fields, site), (next) => {
+        if (next) fields.value = next;
+        return held(fields);
+      }),
+    ),
+    "effect/Ref:getAndUpdateSome": onRef("Ref.getAndUpdateSome", 2, (fields, [fn], site) =>
+      Effect.map(some("Ref.getAndUpdateSome", fn, fields, site), (next) => {
+        const before = held(fields);
+        if (next) fields.value = next;
+        return before;
+      }),
+    ),
     "effect/Ref:make": ([value]) =>
       Effect.succeed(lazy(() => Effect.sync(() => cell(value ?? Value.undef)))),
     "effect/Ref:makeUnsafe": ([value]) => Effect.succeed(cell(value ?? Value.undef)),
@@ -400,8 +614,17 @@ export const make = (
         return Effect.succeed(pair[0]!);
       }),
     ),
+    "effect/Ref:modifySome": onRef("Ref.modifySome", 2, (fields, [fn], site) =>
+      Effect.flatMap(changed("Ref.modifySome", fn, fields, site), (made) =>
+        telling("Ref.modifySome", made, fields, site),
+      ),
+    ),
     ...synchronized("SynchronizedRef"),
     ...synchronized("SubscriptionRef"),
+    "effect/SubscriptionRef:isSubscriptionRef": ([value]) => {
+      const fields = cellOf(value);
+      return Effect.succeed(Value.bool(fields !== undefined && subscribed.has(fields)));
+    },
     "effect/Ordering:reverse": ([ordering], site) =>
       ordering
         ? host.arithmetic("-", Value.num(0), ordering, site)
@@ -450,7 +673,7 @@ export const make = (
         : self === undefined || self._tag === "Undef"
           ? Effect.fail(
               new Value.Rejected({
-                rejection: Value.obj({ _tag: Value.str("NoSuchElementError") }),
+                rejection: Value.libraryError("NoSuchElementError"),
                 defect: true,
               }),
             )

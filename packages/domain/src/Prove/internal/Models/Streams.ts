@@ -60,8 +60,22 @@ const rejected = (rejection: V, defect = false) =>
  * runs, and no others. A stream of time, of a queue or of several fibers is
  * not read.
  */
-export const make = (kit: Kit): { readonly models: Models; readonly values: Record<string, V> } => {
+export const make = (
+  kit: Kit,
+): {
+  readonly models: Models;
+  readonly values: Record<string, V>;
+  readonly isSink: (v: V) => boolean;
+} => {
   const { host, ran } = kit;
+
+  /** How many items a stream takes or drops: a count the code writes, or a small one an input decides. */
+  const few = (name: string, n: V | undefined, site: Site): Eval<number> =>
+    n?._tag === "Num"
+      ? counted(name, n, site)
+      : Effect.flatMap(kit.picked(n), (count) =>
+          count === undefined ? counted(name, n, site) : Effect.succeed(count),
+        );
 
   let pulls = 0;
   let depth = 0;
@@ -85,7 +99,8 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
           const chunk = yield* pull;
           if (chunk === undefined || !(yield* each(chunk))) return;
         }
-      }).pipe(Effect.ensuring(Effect.sync(() => void depth--)));
+        // What the stream opened is closed when the run ends, wherever it stops.
+      }).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => void depth--)));
     });
 
   /** A function of a stream, written with the stream first or last. */
@@ -215,14 +230,6 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
         (concurrency._tag === "Num" && concurrency.value === 1))
     );
   };
-
-  const parallel = (site: Site, name: string): Eval<never> =>
-    Effect.fail(
-      Value.notTranslated(
-        site,
-        `${name} runs more than one item at a time, which the prover does not read`,
-      ),
-    );
 
   /** A stream that goes on with another when it fails with an error the code can handle. */
   const recovering = (self: Stream, handle: (error: V) => Eval<Stream | undefined>): Stream =>
@@ -651,22 +658,25 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       ),
     ),
     "effect/Stream:mapEffect": over("Stream.mapEffect", (self, [f, options], site) =>
+      // More than one at a time is the library's own model's, which hands this one the rest.
       !sequential(options)
-        ? parallel(site, "Stream.mapEffect")
+        ? wrongArguments(site, "Stream.mapEffect")
         : Effect.map(fnOf("Stream.mapEffect", f, site), (fn) =>
             single(self, (item) => ran(fn, [item], site)),
           ),
     ),
     "effect/Stream:tap": over("Stream.tap", (self, [f, options], site) =>
+      // More than one at a time is the library's own model's, which hands this one the rest.
       !sequential(options)
-        ? parallel(site, "Stream.tap")
+        ? wrongArguments(site, "Stream.tap")
         : Effect.map(fnOf("Stream.tap", f, site), (fn) =>
             single(self, (item) => Effect.as(ran(fn, [item], site), item)),
           ),
     ),
     "effect/Stream:flatMap": over("Stream.flatMap", (self, [f, options], site) =>
+      // More than one at a time is the library's own model's, which hands this one the rest.
       !sequential(options)
-        ? parallel(site, "Stream.flatMap")
+        ? wrongArguments(site, "Stream.flatMap")
         : Effect.map(fnOf("Stream.flatMap", f, site), (fn) =>
             through(self, (pull) => {
               let chunk: Chunk = [];
@@ -700,7 +710,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
           ),
     ),
     "effect/Stream:take": over("Stream.take", (self, [n], site) =>
-      Effect.map(counted("Stream.take", n, site), (count) =>
+      Effect.map(few("Stream.take", n, site), (count) =>
         count <= 0
           ? fromChunk([])
           : until(self, (_, index) => Effect.succeed(index === count - 1), false),
@@ -733,7 +743,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       ),
     ),
     "effect/Stream:drop": over("Stream.drop", (self, [n], site) =>
-      Effect.map(counted("Stream.drop", n, site), (count) =>
+      Effect.map(few("Stream.drop", n, site), (count) =>
         count <= 0
           ? self
           : chunked(self, () => {
@@ -766,7 +776,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     ),
     // Everything is gathered, and the last `n` given when the stream ends.
     "effect/Stream:takeRight": over("Stream.takeRight", (self, [n], site) =>
-      Effect.map(counted("Stream.takeRight", n, site), (count) =>
+      Effect.map(few("Stream.takeRight", n, site), (count) =>
         count <= 0
           ? fromChunk([])
           : through(self, (pull) => {
@@ -1244,6 +1254,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
               Effect.suspend(() => {
                 if (depth++ === 0) pulls = 0;
                 return Effect.flatMap(self.open, (pull) => feed(pull, site)).pipe(
+                  Effect.scoped,
                   Effect.ensuring(Effect.sync(() => void depth--)),
                 );
               }),
@@ -1254,7 +1265,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     "effect/Sink:collect": () =>
       Effect.succeed(
         reducing("Sink.collect", given(arr([])), (state, chunk) =>
-          Effect.succeed(arr([...(kit.itemsOf(state) ?? []), ...chunk])),
+          Effect.succeed(arr([...kit.itemsOf(state)!, ...chunk])),
         ),
       ),
     "effect/Sink:head": () =>
@@ -1328,13 +1339,13 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
           )
         : wrongArguments(site, "Sink.find"),
     "effect/Sink:take": ([n], site) =>
-      Effect.map(counted("Sink.take", n, site), (count) =>
+      Effect.map(few("Sink.take", n, site), (count) =>
         reducingWhile(
           "Sink.take",
           true,
           given(arr([])),
-          (state) => Effect.succeed((kit.itemsOf(state)?.length ?? 0) < Math.max(0, count)),
-          (state, item) => Effect.succeed(arr([...(kit.itemsOf(state) ?? []), item])),
+          (state) => Effect.succeed(kit.itemsOf(state)!.length < Math.max(0, count)),
+          (state, item) => Effect.succeed(arr([...kit.itemsOf(state)!, item])),
         ),
       ),
     "effect/Sink:forEach": ([f], site) =>
@@ -1354,7 +1365,8 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       Effect.succeed(sink("Sink.fail", () => rejected(error ?? Value.undef))),
     "effect/Sink:map": (args, site) => {
       const mapped = (self: V | undefined, f: V | undefined, at: Site): Eval<V> => {
-        const feed = self ? sinks.get(self) : undefined;
+        // The sinks' own model gives this one the sink, first.
+        const feed = sinks.get(self!);
         return feed && f
           ? Effect.succeed(
               sink("Sink.map", (pull, where) =>
@@ -1363,9 +1375,8 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
             )
           : wrongArguments(at, "Sink.map");
       };
-      return args.length >= 2
-        ? mapped(args[0], args[1], site)
-        : Effect.succeed(native("Sink.map", ([self], at) => mapped(self, args[0], at)));
+      // `Sink.map(f)` given a sink later is the sinks' own model, which calls this one with both.
+      return mapped(args[0], args[1], site);
     },
   };
 
@@ -1386,5 +1397,10 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     ),
   };
 
-  return { models: { ...models, ...sinkModels } as Models, values };
+  return {
+    models: { ...models, ...sinkModels } as Models,
+    values,
+    /** A sink the prover reads itself. */
+    isSink: (v: V): boolean => sinks.has(v),
+  };
 };

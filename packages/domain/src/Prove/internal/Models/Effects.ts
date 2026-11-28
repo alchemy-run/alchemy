@@ -1,4 +1,8 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
 import * as Brands from "../Brands.ts";
 import type { Kit, Model, Models } from "../Kit.ts";
 import {
@@ -19,7 +23,7 @@ import type { Eval, Site, V } from "../Value.ts";
 import * as Value from "../Value.ts";
 
 /** What `Effect.fromOption` and the like fail with when there is nothing. */
-export const noSuchElement: V = Value.obj({ _tag: Value.str("NoSuchElementError") });
+export const noSuchElement: V = Value.libraryError("NoSuchElementError");
 
 const rejected = (rejection: V, defect = false) =>
   Effect.fail(new Value.Rejected(defect ? { rejection, defect } : { rejection }));
@@ -43,11 +47,11 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     name: string,
     run: (self: Eval<V>, args: ReadonlyArray<V>, site: Site) => Eval<V>,
   ): Model =>
-    dualBy(name, isEffect, ([self, ...rest], site) =>
-      self?._tag === "Effect"
-        ? Effect.succeed(lazy(() => Effect.suspend(() => run(self.run, rest, site))))
-        : wrongArguments(site, name),
-    );
+    // `dualBy` gives the body an effect first.
+    dualBy(name, isEffect, ([self, ...rest], site) => {
+      const effect_ = self as V & { readonly _tag: "Effect" };
+      return Effect.succeed(lazy(() => Effect.suspend(() => run(effect_.run, rest, site))));
+    });
 
   /**
    * A function of two effects, written `f(self, that, ...)` or `f(that, ...)`
@@ -78,9 +82,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
 
   /** A function that leaves an effect as it is: a span, an annotation. */
   const transparent = (name: string): Model =>
-    dualBy(name, isEffect, ([self], site) =>
-      self ? Effect.succeed(self) : wrongArguments(site, name),
-    );
+    dualBy(name, isEffect, ([self]) => Effect.succeed(self!));
 
   /** The items a function goes over, in order. */
   const each = (name: string, items: V | undefined, site: Site): Eval<ReadonlyArray<V>> =>
@@ -161,101 +163,9 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     );
   };
 
-  /** `Schedule.recurs(n)`: so many more runs, each at once. It is the one schedule that does not wait. */
-  const RECURS = "~recurs";
-  const recursOf = (schedule: V | undefined): number | undefined => {
-    const count = schedule?._tag === "Obj" && !schedule.brand ? schedule.fields[RECURS] : undefined;
-    return count?._tag === "Num" && Number.isInteger(count.value) && count.value >= 0
-      ? count.value
-      : undefined;
-  };
-
-  /** How often an effect is run again: a count the code writes, and a test of what the last run gave. */
-  const again = (
-    name: string,
-    options: V | undefined,
-    site: Site,
-  ): Eval<{
-    readonly times: number;
-    readonly goesOn: (last: V) => Eval<boolean>;
-    /** Given the schedule alone, `repeat` gives what the schedule does: how many times it ran again. */
-    readonly counts?: boolean;
-  }> => {
-    const always = { goesOn: () => Effect.succeed(true) };
-    // `Effect.retry(effect, Schedule.recurs(3))`.
-    const recurs = recursOf(options);
-    if (recurs !== undefined) return Effect.succeed({ times: recurs, counts: true, ...always });
-    const fields = options?._tag === "Obj" && !options.brand ? options.fields : undefined;
-    const scheduled = fields && "schedule" in fields ? recursOf(fields.schedule) : undefined;
-    // Any other schedule waits between runs, and a handler does not wait.
-    if (
-      !fields ||
-      !Object.keys(fields).every((key) => ["times", "while", "until", "schedule"].includes(key)) ||
-      ("schedule" in fields && scheduled === undefined)
-    )
-      return Effect.fail(
-        Value.notTranslated(
-          site,
-          `calls ${name} with a schedule that waits: the prover reads a count of times or Schedule.recurs, with while or until`,
-        ),
-      );
-    const times = fields.times;
-    const counted =
-      times?._tag === "Num" && Number.isInteger(times.value) && times.value >= 0
-        ? times.value
-        : undefined;
-    if ((times !== undefined && counted === undefined) || (counted ?? scheduled) === undefined)
-      return Effect.fail(
-        Value.notTranslated(site, `calls ${name} without a count of times the prover can see`),
-      );
-    const whilst = fields.while;
-    const until = fields.until;
-    return Effect.succeed({
-      times: Math.min(counted ?? Infinity, scheduled ?? Infinity),
-      goesOn: (last) =>
-        Effect.gen(function* () {
-          if (whilst && !(yield* kit.holds(whilst, [last], site))) return false;
-          if (until && (yield* kit.holds(until, [last], site))) return false;
-          return true;
-        }),
-    });
-  };
-
-  /** The effect run again while it fails: nothing waits, so each run follows the last at once. */
-  const retry: Model = onEffect("Effect.retry", 1, (self, [options], site) =>
-    Effect.gen(function* () {
-      const { times, goesOn } = yield* again("Effect.retry", options, site);
-      for (let left = times; ; left--) {
-        const made = yield* attempt(self);
-        const read = Brands.resultOf(made);
-        if (!read) return yield* wrongArguments(site, "Effect.retry");
-        if (read._tag === "Success") return read.success;
-        if (left <= 0 || !(yield* goesOn(read.failure))) return yield* rejected(read.failure);
-      }
-    }),
-  );
-
-  /** The effect run again while it succeeds: what it gives is what its last run gave. */
-  const repeat: Model = onEffect("Effect.repeat", 1, (self, [options], site) =>
-    Effect.gen(function* () {
-      const { times, goesOn, counts } = yield* again("Effect.repeat", options, site);
-      for (let left = times; ; left--) {
-        const made = yield* self;
-        if (left <= 0 || !(yield* goesOn(made))) return counts ? Value.num(times) : made;
-      }
-    }),
-  );
-
   const models: Models = {
-    "effect/Schedule:recurs": ([count], site) =>
-      count?._tag === "Num" && Number.isInteger(count.value) && count.value >= 0
-        ? Effect.succeed(Value.obj({ [RECURS]: count }))
-        : Effect.fail(
-            Value.notTranslated(site, "calls Schedule.recurs without a count the prover can see"),
-          ),
-    "effect/Effect:as": onEffect("Effect.as", 1, (self, [value]) =>
-      Effect.as(self, value ?? Value.undef),
-    ),
+    // `onEffect` gives the body every argument it takes: each is there.
+    "effect/Effect:as": onEffect("Effect.as", 1, (self, [value]) => Effect.as(self, value!)),
     "effect/Effect:asSome": onEffect("Effect.asSome", 0, (self) => Effect.map(self, Value.some)),
     "effect/Effect:succeedSome": ([value]) =>
       Effect.succeed(lazy(() => Effect.succeed(Value.some(value ?? Value.undef)))),
@@ -360,9 +270,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
         : wrongArguments(site, "Effect.partition"),
     ),
     "effect/Effect:catch": onEffect("Effect.catch", 1, (self, [handler], site) =>
-      handler
-        ? onFailure(self, (error) => ran(handler, [error], site))
-        : wrongArguments(site, "Effect.catch"),
+      onFailure(self, (error) => ran(handler!, [error], site)),
     ),
     "effect/Effect:catchTag": over("Effect.catchTag", (self, [tag, handler, orElse], site) => {
       const tags = tagsOf(tag);
@@ -407,9 +315,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       ),
     ),
     "effect/Effect:mapError": onEffect("Effect.mapError", 1, (self, [f], site) =>
-      f
-        ? onFailure(self, (error) => Effect.flatMap(host.call(f, [error], site), rejected))
-        : wrongArguments(site, "Effect.mapError"),
+      onFailure(self, (error) => Effect.flatMap(host.call(f!, [error], site), rejected)),
     ),
     "effect/Effect:mapBoth": onEffect("Effect.mapBoth", 1, (self, [cases], site) => {
       const failed = handlerOf(cases, "onFailure");
@@ -422,14 +328,10 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
         : wrongArguments(site, "Effect.mapBoth");
     }),
     "effect/Effect:orElseSucceed": onEffect("Effect.orElseSucceed", 1, (self, [f], site) =>
-      f
-        ? onFailure(self, (error) => host.call(f, [error], site))
-        : wrongArguments(site, "Effect.orElseSucceed"),
+      onFailure(self, (error) => host.call(f!, [error], site)),
     ),
     "effect/Effect:tapError": onEffect("Effect.tapError", 1, (self, [f], site) =>
-      f
-        ? onFailure(self, (error) => Effect.flatMap(ran(f, [error], site), () => rejected(error)))
-        : wrongArguments(site, "Effect.tapError"),
+      onFailure(self, (error) => Effect.flatMap(ran(f!, [error], site), () => rejected(error))),
     ),
     "effect/Effect:tapErrorTag": onEffect("Effect.tapErrorTag", 2, (self, [tag, f], site) => {
       const tags = tagsOf(tag);
@@ -504,30 +406,27 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       "Effect.filterOrElse",
       2,
       (self, [predicate, orElse], site) =>
-        predicate && orElse
-          ? Effect.flatMap(self, (value) =>
-              Effect.flatMap(kit.holds(predicate, [value], site), (held) =>
-                held ? Effect.succeed(value) : ran(orElse, [value], site),
-              ),
-            )
-          : wrongArguments(site, "Effect.filterOrElse"),
+        Effect.flatMap(self, (value) =>
+          Effect.flatMap(kit.holds(predicate!, [value], site), (held) =>
+            held ? Effect.succeed(value) : ran(orElse!, [value], site),
+          ),
+        ),
     ),
     // The effect runs when the condition holds, and gives its value in an `Option`.
-    "effect/Effect:when": onEffect("Effect.when", 1, (self, [condition], site) =>
-      condition
-        ? Effect.flatMap(
-            condition._tag === "Effect"
-              ? condition.run
-              : callable(condition)
-                ? kit.either(condition, [], site)
-                : Effect.succeed(condition),
-            (held) =>
-              Effect.flatMap(host.decide(held, site), (runs) =>
-                runs ? Effect.map(self, Value.some) : Effect.succeed(Value.none),
-              ),
-          )
-        : wrongArguments(site, "Effect.when"),
-    ),
+    "effect/Effect:when": onEffect("Effect.when", 1, (self, [given], site) => {
+      const condition = given!;
+      return Effect.flatMap(
+        condition._tag === "Effect"
+          ? condition.run
+          : callable(condition)
+            ? kit.either(condition, [], site)
+            : Effect.succeed(condition),
+        (held) =>
+          Effect.flatMap(host.decide(held, site), (runs) =>
+            runs ? Effect.map(self, Value.some) : Effect.succeed(Value.none),
+          ),
+      );
+    }),
     "effect/Effect:fromOption": ([option], site) => {
       const read = Value.optionOf(option);
       return read
@@ -556,16 +455,19 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
           )
         : wrongArguments(site, "Effect.fromResult");
     },
-    // The finalizer runs after the effect, whether it gave a value or failed.
+    // The finalizer runs after the effect, whether it gave a value, failed or was interrupted.
     "effect/Effect:ensuring": onEffect("Effect.ensuring", 1, (self, [finalizer], site) =>
       finalizer?._tag === "Effect"
-        ? Effect.matchEffect(self, {
-            onSuccess: (value) => Effect.as(finalizer.run, value),
-            onFailure: (stop) =>
-              stop._tag === "Rejected"
-                ? Effect.flatMap(finalizer.run, () => Effect.fail(stop))
-                : Effect.fail(stop),
-          })
+        ? Effect.onExit(self, (exit) =>
+            // What stops the prover stops it: nothing more of the path is read.
+            Exit.isFailure(exit) &&
+            exit.cause.reasons.some(
+              (reason) => Cause.isFailReason(reason) && reason.error._tag !== "Rejected",
+            )
+              ? Effect.void
+              : // A finalizer that fails fails the effect, as the library's does.
+                finalizer.run,
+          )
         : wrongArguments(site, "Effect.ensuring"),
     ),
     "effect/Effect:bind": onEffect("Effect.bind", 2, (self, [name, f], site) => {
@@ -606,17 +508,30 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     // What the effect gives. One that fails throws, which nothing that handles a failure handles.
     "effect/Effect:runSync": ([self], site) =>
       self?._tag === "Effect"
-        ? onFailure(self.run, (error) => rejected(error, true))
+        ? onFailure(self.run, (error) => rejected(error, true)).pipe(
+            // It throws here, whatever was yielded inside: a `try` around the call catches it.
+            Effect.mapError((stop) =>
+              stop._tag === "Rejected" && stop.yielded === true
+                ? new Value.Rejected({ rejection: stop.rejection, defect: true })
+                : stop,
+            ),
+          )
         : wrongArguments(site, "Effect.runSync"),
-    "effect/Effect:retry": retry,
-    "effect/Effect:repeat": repeat,
-    // Nothing in a handler waits, so an effect is done before any time is up.
-    "effect/Effect:timeout": onEffect("Effect.timeout", 1, (self) => self),
-    "effect/Effect:timeoutOption": onEffect("Effect.timeoutOption", 1, (self) =>
-      Effect.map(self, Value.some),
-    ),
-    "effect/Effect:timeoutOrElse": onEffect("Effect.timeoutOrElse", 1, (self) => self),
     "effect/Effect:withSpan": transparent("Effect.withSpan"),
+    // A span the scope around ends: what the effect does is unchanged, and it needs that scope.
+    "effect/Effect:withSpanScoped": dualBy("Effect.withSpanScoped", isEffect, ([self], site) => {
+      const effect_ = self as V & { readonly _tag: "Effect" };
+      return Effect.succeed<V>({
+        _tag: "Effect",
+        run: Effect.flatMap(Effect.serviceOption(Scope.Scope), (scope) =>
+          Option.isSome(scope)
+            ? effect_.run
+            : Effect.fail(
+                Value.notTranslated(site, "calls Effect.withSpanScoped outside Effect.scoped"),
+              ),
+        ),
+      });
+    }),
     "effect/Effect:annotateSpans": transparent("Effect.annotateSpans"),
     "effect/Effect:annotateLogs": transparent("Effect.annotateLogs"),
     "effect/Effect:withLogSpan": transparent("Effect.withLogSpan"),
@@ -626,7 +541,6 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
 
   const values: Record<string, V> = {
     "effect/Effect:Do": lazy(() => Effect.sync(() => Value.obj({}))),
-    "effect/Effect:yieldNow": done,
     "effect/Effect:succeedNone": lazy(() => Effect.succeed(Value.none)),
   };
 

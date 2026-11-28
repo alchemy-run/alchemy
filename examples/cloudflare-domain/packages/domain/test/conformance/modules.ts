@@ -28,7 +28,13 @@ export const files: Readonly<Record<string, string>> = {
     `export namespace Space { export const inside = 21; }`,
     `export class Counter { constructor(readonly n: number) {} }`,
     `export default function byDefault(n: number) { return n - 1; }`,
+    `export const { length: stamp } = new Intl.NumberFormat("en-US").format(1234);`,
+    `export const { format: grouped } = new Intl.NumberFormat("en-US");`,
+    `export const { p: truth, q: whole, r: empty, s: absent } = Object.fromEntries([["p", true], ["q", 1n], ["r", null], ["s", undefined]]);`,
+    `export let unset;`,
+    `export namespace Inner { const hidden = 20; export const shown = hidden + 1; }`,
   ].join("\n"),
+  "data.json": `{ "n": 3 }`,
   "value.ts": [`const value = 9;`, `export default value;`].join("\n"),
   "arrow.ts": `export default (n: number) => n + 10;`,
   "more.ts": [
@@ -74,6 +80,11 @@ export const imports: ReadonlyArray<string> = [
   `import { uno, double as barrelDouble, four, plus, deepest, packed, theDefault, triple as barrelTriple } from "./barrel.ts";`,
   `import * as Barrel from "./barrel.ts";`,
   `import { round } from "./loop-a.ts";`,
+  `import { stamp, grouped, truth, whole, empty, absent, unset, Inner } from "./lib.ts";`,
+  `import data from "./data.json" with { type: "json" };`,
+  `import * as NodePath from "node:path";`,
+  `import * as NodeOs from "os";`,
+  `import vitestPackage from "vitest/package.json" with { type: "json" };`,
 ];
 
 /** The aggregate's own top-level lines. */
@@ -149,17 +160,34 @@ export const cases: ReadonlyArray<Case> = [
   // An exported enum and namespace are the values the file's module holds.
   read("ExportedEnum", `Level.High + a`),
   read("ExportedNamespace", `Space.inside + a`),
-  unread("OwnEnum", `OwnLevel.High + a`, /refers to OwnLevel, which the prover cannot find/),
-  unread("OwnNamespace", `OwnSpace.inside + a`, /refers to OwnSpace, which the prover cannot find/),
-  unread("OwnPlainClass", `new Plain(a).n`, /Plain is a class that its file does not export/),
-  unread(
-    "OwnClassWithABody",
-    `new Child().twice() + a`,
-    /Child is a class that its file does not export/,
-  ),
-  unread("ExportedPlainClass", `new Lib.Counter(a).n`, /./),
+  // An enum the file keeps to itself is read where it is declared.
+  read("OwnEnum", `OwnLevel.High + a`),
+  read("OwnNamespace", `OwnSpace.inside + a`),
+  // A class the file keeps to itself is read from what it writes.
+  read("OwnPlainClass", `new Plain(a).n`),
+  read("OwnClassWithABody", `new Child().twice() + a + Child.made`),
+  read("ExportedPlainClass", `new Lib.Counter(a).n`),
   // A name a file declares and does not export is not on its namespace.
   read("NotExported", `Lib.hidden === undefined ? a : -1`),
+  // An export the prover does not read is the value the file's module holds.
+  read("ExportedReadFromTheModule", `stamp + a`),
+  read("ExportedKindsFromTheModule", `[truth, whole === 1n, empty, absent, a]`),
+  read("ExportedLetWithNothing", `unset === undefined ? a : -1`),
+  read("NamespaceWithAHiddenName", `Inner.shown + a`),
+  // A function the module holds whose source is not a function the file writes is not read.
+  unread(
+    "CallsAFunctionOfTheModule",
+    `grouped(1234).length + a`,
+    /calls grouped, which is outside the code the prover reads/,
+  ),
+  unread("ImportedJson", `data.n + a`, /./),
+  unread(
+    "ImportedPackageJson",
+    `vitestPackage.name.length + a`,
+    /applies \+ to values the prover cannot do arithmetic on/,
+  ),
+  unread("ImportedBareBuiltin", `NodeOs.EOL.length + a`, /./),
+  unread("ImportedNodeModule", `NodePath.basename("x/y") + a`, /./),
   read("NotExportedOfBarrel", `[Barrel.one, Barrel.hidden, Barrel.half].length + a`),
 ];
 

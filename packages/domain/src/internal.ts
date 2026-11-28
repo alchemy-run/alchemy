@@ -1,9 +1,12 @@
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import * as Scheduler from "effect/Scheduler";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
@@ -346,4 +349,208 @@ export const sendPayload = (
     ...(commandId === undefined ? {} : { commandId }),
     ...(consistency === undefined ? {} : { consistency }),
   });
+};
+
+/** A handler waits for something that never comes: a promise, a timer of its own, a fiber that never ends. */
+export class NeverSettles extends Data.TaggedError("NeverSettles")<{}> {
+  override get message() {
+    return "the handler waits for something outside it, which a prediction does not run";
+  }
+}
+
+/** How an {@link Instant} counts time: in milliseconds, or in what the prover holds for them. */
+export interface Timekeeping<T> {
+  readonly zero: T;
+  readonly of: (millis: number) => T;
+  readonly add: (time: T, span: T) => T;
+  /** Which comes first: `-1` the first, `1` the second, `0` when they are the same moment. */
+  readonly order: (a: T, b: T) => -1 | 0 | 1;
+  /** Whether a span is longer than nothing: a sleep of none ends at once. */
+  readonly positive: (span: T) => boolean;
+}
+
+const MILLIS: Timekeeping<number> = {
+  zero: 0,
+  of: (millis) => millis,
+  add: (time, span) => time + span,
+  order: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+  positive: (span) => span > 0,
+};
+
+/**
+ * Time that passes only when nothing can run. A handler run on it does what
+ * the deployed one does, without waiting: a sleep, a delay, a schedule and a
+ * time limit end in the order their durations give, and code between them
+ * takes no time. `Aggregate.predict` runs a handler on it, and the prover
+ * reads one on it.
+ *
+ * @internal
+ */
+export class Instant<T = number> {
+  /** The time gone by since the run began. */
+  elapsed: T;
+  /** Work that is under way outside the run: time stands still while there is any. */
+  busy = 0;
+  /** Whether two waits ended at the same time: which the deployed handler ends first is not known. */
+  tied = false;
+  /** Called when nothing can run and nothing waits for a time. */
+  onIdle: (() => void) | undefined;
+  private order = 0;
+  private readonly sleepers: Array<{
+    readonly at: T;
+    readonly order: number;
+    readonly wake: () => void;
+  }> = [];
+  private tasks: Array<[priority: number, tasks: Array<() => void>]> = [];
+  private urgent: Array<() => void> = [];
+  private pumping = false;
+  private scheduled = false;
+  private readonly time: Timekeeping<T>;
+  private readonly defer: ((pump: () => void) => void) | undefined;
+
+  /** With `defer`, the run goes on by itself: work scheduled outside a pump is pumped later. */
+  constructor(time: Timekeeping<T>, defer?: (pump: () => void) => void) {
+    this.time = time;
+    this.elapsed = time.zero;
+    this.defer = defer;
+  }
+
+  static readonly millis = (): Instant<number> => new Instant(MILLIS);
+
+  readonly scheduler: Scheduler.Scheduler = {
+    executionMode: "sync",
+    // Code takes no time, so no fiber is made to give way to another.
+    shouldYield: () => false,
+    makeDispatcher: () => ({
+      scheduleTask: (task, priority) => this.schedule(task, priority),
+      flush: () => this.pump(),
+    }),
+  };
+
+  /** Wait for a span of time: it ends when no fiber can run and no other wait ends sooner. */
+  readonly sleep = (span: T): Effect.Effect<void> =>
+    Effect.callback<void>((resume) => {
+      if (!this.time.positive(span)) return resume(Effect.void);
+      const sleeper = {
+        at: this.time.add(this.elapsed, span),
+        order: this.order++,
+        wake: () => resume(Effect.void),
+      };
+      this.sleepers.push(sleeper);
+      this.kick();
+      return Effect.sync(() => {
+        const index = this.sleepers.indexOf(sleeper);
+        if (index >= 0) this.sleepers.splice(index, 1);
+      });
+    });
+
+  /** The clock of a run: what it reads is `clock`'s, and a sleep ends when time gets to it. */
+  readonly clock = (clock: Clock.Clock): Clock.Clock => ({
+    currentTimeMillisUnsafe: () => clock.currentTimeMillisUnsafe(),
+    currentTimeMillis: clock.currentTimeMillis,
+    currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+    currentTimeNanos: clock.currentTimeNanos,
+    monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+    monotonicTimeNanos: clock.monotonicTimeNanos,
+    sleep: (duration) => this.sleep(this.time.of(Duration.toMillis(duration))),
+  });
+
+  private schedule(task: () => void, priority: number): void {
+    // While work is under way outside the run, only the fiber that waits for it is scheduled.
+    if (this.busy > 0) this.urgent.push(task);
+    else this.queue(priority, [task], false);
+    this.kick();
+  }
+
+  /**
+   * See that what can run is run. A fiber that goes on after work outside
+   * the run does so on its own, not in a pump: what it then waits for is
+   * found by the pump this asks for.
+   */
+  kick(): void {
+    if (this.defer && !this.pumping && !this.scheduled) {
+      this.scheduled = true;
+      this.defer(() => {
+        this.scheduled = false;
+        this.pump();
+      });
+    }
+  }
+
+  private queue(priority: number, tasks: ReadonlyArray<() => void>, first: boolean): void {
+    const bucket = this.tasks.find(([at]) => at === priority);
+    if (bucket) bucket[1][first ? "unshift" : "push"](...tasks);
+    else {
+      this.tasks.push([priority, [...tasks]]);
+      this.tasks.sort(([a], [b]) => a - b);
+    }
+  }
+
+  /** Run what can run, and let time pass to the next wait that ends, until nothing is left. */
+  pump(): void {
+    if (this.pumping) return;
+    this.pumping = true;
+    try {
+      for (;;) {
+        if (this.urgent.length > 0) {
+          const urgent = this.urgent;
+          this.urgent = [];
+          for (const task of urgent) task();
+          continue;
+        }
+        if (this.busy > 0) return;
+        if (this.tasks.length > 0) {
+          const buckets = this.tasks;
+          this.tasks = [];
+          let held = false;
+          for (const [priority, tasks] of buckets) {
+            let ran = 0;
+            // Work begun outside the run stops the rest, which is put back in its place.
+            while (!held && ran < tasks.length) {
+              tasks[ran++]!();
+              held = this.busy > 0;
+            }
+            if (ran < tasks.length) this.queue(priority, tasks.slice(ran), true);
+          }
+          continue;
+        }
+        if (this.sleepers.length === 0) break;
+        let next = this.sleepers[0]!;
+        for (const sleeper of this.sleepers.slice(1)) {
+          const order = this.time.order(sleeper.at, next.at);
+          // Two waits that never end do not end at the same moment: they do not end.
+          if (order === 0 && next.at !== Infinity) this.tied = true;
+          if (order < 0) next = sleeper;
+        }
+        this.sleepers.splice(this.sleepers.indexOf(next), 1);
+        this.elapsed = next.at;
+        next.wake();
+      }
+    } finally {
+      this.pumping = false;
+    }
+    this.onIdle?.();
+  }
+}
+
+/**
+ * Run an effect to its end at once, on time that passes only when nothing
+ * can run. `undefined` when it waits for something that never comes.
+ *
+ * @internal
+ */
+export const runInstantly = <A, E>(effect: Effect.Effect<A, E>): Exit.Exit<A, E> | undefined => {
+  const instant = Instant.millis();
+  let exit: Exit.Exit<A, E> | undefined;
+  const fiber = Effect.runFork(
+    Clock.clockWith((clock) => Effect.provideService(effect, Clock.Clock, instant.clock(clock))),
+    { scheduler: instant.scheduler },
+  );
+  fiber.addObserver((done) => {
+    exit = done;
+  });
+  instant.pump();
+  const settled = exit;
+  if (settled === undefined) fiber.interruptUnsafe();
+  return settled;
 };

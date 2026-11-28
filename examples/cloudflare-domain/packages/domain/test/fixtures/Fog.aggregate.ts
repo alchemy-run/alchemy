@@ -9,7 +9,6 @@ import * as Graph from "effect/Graph";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
-import * as Pool from "effect/Pool";
 import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
@@ -74,14 +73,11 @@ export class Fog extends Domain.Aggregate("Fog", {
   ],
   keyOf: (command) => command.id,
   decide: {
-    // Several items at a time: which finishes first is not a thing the code decides.
-    Race: Effect.fn(function* (_fog, command) {
-      const seen = yield* Stream.make(command.n, 1).pipe(
-        Stream.mapEffect((n) => Effect.succeed(n), { concurrency: 2 }),
-        Stream.runCollect,
-      );
-      return [new Seen({ n: seen.length })];
-    }),
+    // A stream as what `for await` goes over, which the prover has no model for.
+    Race: (_fog, command) => {
+      const seen = Stream.toAsyncIterable(Stream.make(command.n, 1));
+      return [new Seen({ n: Symbol.asyncIterator in seen ? 1 : 0 })];
+    },
     // A division the library rounds where it does not end.
     Share: (_fog, command) =>
       Option.match(BigDecimal.divide(command.price, BigDecimal.fromNumberUnsafe(3)), {
@@ -114,16 +110,16 @@ export class Fog extends Domain.Aggregate("Fog", {
     }),
     // A function the prover has no model for is run as it is, but only on values the code writes.
     Turn: (_fog, command) => [new Seen({ n: Array.rotate([command.n, 2, 3], 1)[0] ?? 0 })],
-    // A cache remembers across calls: what it gives depends on what was asked before.
+    // A cache finds what it kept by its key, so the key has to be one the code writes.
     Remember: Effect.fn(function* (_fog, command) {
       const cache = yield* Cache.make({ capacity: 8, lookup: (n: number) => Effect.succeed(n) });
       return [new Seen({ n: yield* Cache.get(cache, command.n) })];
     }),
-    // A pool hands out what others may hold.
+    // A duration the machine's clock measures, which is not the handler's.
     Borrow: Effect.fn(function* (_fog, command) {
-      const pool = yield* Pool.make({ acquire: Effect.succeed(command.n), size: 1 });
-      return [new Seen({ n: yield* Pool.get(pool) })];
-    }, Effect.scoped),
+      const [, n] = yield* Effect.timed(Effect.succeed(command.n));
+      return [new Seen({ n })];
+    }),
     // A semaphore with too few permits free waits for another fiber, and a handler is one fiber.
     Guard: Effect.fn(function* (_fog, command) {
       const permits = yield* Semaphore.make(1);
