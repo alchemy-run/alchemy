@@ -104,6 +104,12 @@ export interface FrameworkSiteProps {
    */
   environment?: Ref<EnvironmentResource | ProjectResource | { readonly environmentId: string }>;
   /**
+   * Name of the site's Railway Service. Unique per Project. If omitted, a
+   * unique name is generated from the stack, stage and logical ID.
+   * Changing it renames the Service in place.
+   */
+  name?: string;
+  /**
    * Project root directory (the directory containing `package.json`).
    * @default "."
    */
@@ -340,6 +346,7 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
   const service = yield* Service("Service", {
     project,
     environment,
+    name: props.name,
     main: main as unknown as string,
     port: WEBSITE_PORT,
     healthcheck: "/health",

@@ -26,7 +26,7 @@ import {
 export interface StaticSiteProps
   extends
     Omit<Command.BuildProps, "env">,
-    Pick<FrameworkSiteProps, "project" | "environment" | "domain" | "tags" | "env"> {
+    Pick<FrameworkSiteProps, "project" | "environment" | "name" | "domain" | "tags" | "env"> {
   /**
    * Local dev configuration. When `alchemy dev` runs with `dev.command`,
    * the build is skipped and `command` is spawned as a long-lived child
@@ -211,6 +211,7 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
     const service = yield* Service(id, {
       project,
       environment,
+      name: props.name,
       main: servePath,
       port: WEBSITE_PORT,
       healthcheck: "/health",
