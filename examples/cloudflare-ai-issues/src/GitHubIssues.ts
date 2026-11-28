@@ -9,9 +9,10 @@ import { MARKER } from "./PostAnswer.tool.ts";
 import { owner, repository } from "./Repo.ts";
 
 /**
- * The repository's events, as commands on the board. Nothing here knows
- * about a process: an opened issue is reported, a reply is recorded, and
- * the board's policy decides what follows.
+ * The repository's events, as commands on the board: the one place the
+ * outside world comes in. Nothing here knows about a process: an opened
+ * issue is reported, a reply is recorded, and the board's policy decides
+ * what follows.
  */
 export const GitHubIssues = Effect.gen(function* () {
   const issues = yield* Issue;

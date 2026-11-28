@@ -60,11 +60,10 @@ describe.skipIf(process.platform === "win32" || process.env.FAST)(
   "alchemy dev CLI process cleanup",
   { tags: ["local"] },
   () => {
-    // Expected failure: SIGKILL cannot be trapped, so nothing kills the
-    // exec child, the provider sidecar, or workerd on the CLI's behalf.
-    // When the orphan story lands this starts passing — flip it to a
-    // regular test then.
-    it.live.fails(
+    // SIGKILL cannot be trapped, so the CLI stops nothing itself: the exec
+    // child exits once it is reparented, and the sidecar shuts down (stopping
+    // workerd) when its parent connection closes (#3369).
+    it.live(
       "every spawned process exits after the CLI is SIGKILLed",
       () =>
         Effect.gen(function* () {

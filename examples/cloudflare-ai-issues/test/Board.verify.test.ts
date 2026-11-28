@@ -1,16 +1,26 @@
+import * as AI from "@alchemy.run/ai";
 import { Story } from "@alchemy.run/domain/Story";
 import * as Verify from "@alchemy.run/domain/Verify";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { Board } from "../src/Board/Board.model.ts";
 import { BoardApi } from "../src/Board/BoardApi.api.ts";
-import { BoardHandlers } from "../src/Board/Handlers.ts";
-import { Triager } from "../src/Board/Triager.external.ts";
+import { IssueWorkLive } from "../src/Board/IssueWork.policy.ts";
+import { Triage } from "../src/Triage.process.ts";
 
 // Each sequence the explorer finds is also run on the real board, in memory.
-// The triager is stubbed: the rules must hold whatever a session does.
-const story = Story.make(Board, { layer: BoardHandlers, stub: [Triager] });
+// Triage is played by a stand-in that does nothing: the rules must hold
+// whatever a session does, and the explorer sends a session's commands itself.
+const TriageIdle = AI.scripted(
+  Triage,
+  Effect.succeed(() => Effect.succeed("")),
+);
+const story = Story.make(Board, {
+  layer: IssueWorkLive,
+  host: (board) => AI.layerInMemory(TriageIdle.pipe(Layer.provide(board))),
+});
 
 it.effect(
   "no command, from a person or a session, breaks the board's rules",

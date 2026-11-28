@@ -116,7 +116,6 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   "Messaging & events": l("send"),
   Email: l("mail"),
   AI: l("sparkles"),
-  "Models & tools": l("wrench"),
   Conversations: l("messages-square"),
   Sessions: l("messages-square"),
   Tools: l("wrench"),

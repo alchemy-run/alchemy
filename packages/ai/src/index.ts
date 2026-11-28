@@ -41,6 +41,8 @@ export {
   SessionEvent,
   SessionItem,
   SessionPage,
+  SessionState,
+  SessionStatus,
 } from "./Harness.ts";
 export {
   Acting,
@@ -58,6 +60,8 @@ export {
   type StartOptions,
   type Stored,
 } from "./Process.ts";
+export { layerInMemory } from "./Host.ts";
+export { scripted, type Turn } from "./Scripted.ts";
 export { isModel, Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export {
   Sandbox,

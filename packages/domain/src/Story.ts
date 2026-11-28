@@ -994,7 +994,7 @@ interface ObservedCall {
 }
 
 /** Options for {@link make}. */
-interface StoryOptions<Policies, LE, LR, Systems> {
+interface StoryOptions<Policies, LE, LR, Systems, Provided = never, Hosted = never> {
   /** The policies' and projections' Layers. Required when the model has either. */
   readonly layer?: Layer.Layer<Policies, LE, LR>;
   /**
@@ -1004,6 +1004,20 @@ interface StoryOptions<Policies, LE, LR, Systems> {
    * each call returned with `returned`, `failed` or `died`.
    */
   readonly stub?: ReadonlyArray<Systems>;
+  /**
+   * What the model's handlers need hosted beside the model: an AI process a
+   * policy holds. It is given the model as the story hosts it, which a
+   * process that mentions the model needs in turn.
+   *
+   * **Example:** A process played in memory
+   * ```typescript
+   * const story = Story.make(Board, {
+   *   layer: IssueWorkLive,
+   *   host: (board) => AI.layerInMemory(TriagePlayed.pipe(Layer.provide(board))),
+   * });
+   * ```
+   */
+  readonly host?: (model: Layer.Layer<Provided>) => Layer.Layer<Hosted>;
 }
 
 /**
@@ -1173,14 +1187,19 @@ const make =
     LR = never,
     Systems extends ExternalSystem.Any = never,
     Cmds extends Command.Any = never,
+    Hosted = never,
   >(
     // The model's command classes: each `when` is checked against the one with its tag.
     domain: Model.ModelClass<Name, Provided, Policies> & {
       readonly commands: ReadonlyArray<Cmds>;
     },
     ...[options = {}]: [Policies] extends [never]
-      ? [options?: StoryOptions<Policies, LE, LR, Systems>]
-      : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
+      ? [options?: StoryOptions<Policies, LE, LR, Systems, Provided, Hosted>]
+      : [
+          options: StoryOptions<Policies, LE, LR, Systems, Provided, Hosted> & {
+            readonly layer: unknown;
+          },
+        ]
   ) =>
   <const S extends ReadonlyArray<Step>>(
     ...steps: S & Checked<S, Cmds>
@@ -1191,6 +1210,7 @@ const make =
     Exclude<
       LR,
       | Provided
+      | Hosted
       | ExternalSystem.Identifier<Systems>
       | WorkflowEngine.WorkflowEngine
       | RuntimeContext
@@ -1268,10 +1288,16 @@ const make =
           options.layer ?? (Layer.empty as unknown as Layer.Layer<Policies, LE, LR>)
         ).pipe(Layer.provide(Layer.mergeAll(systems, VaultTest)));
         // A story seals with the test Vault, so what it seals can be expected.
+        const model = domain
+          .layer(policies)
+          .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems, VaultTest)));
         const hosted = Layer.mergeAll(
-          domain
-            .layer(policies)
-            .pipe(Layer.provide(Layer.mergeAll(platform.layer, systems, VaultTest))),
+          options.host === undefined
+            ? model
+            : model.pipe(
+                // The same Layer the story hosts: what is hosted beside the model reaches this model.
+                Layer.provide(options.host(model as unknown as Layer.Layer<Provided>)),
+              ),
           VaultTest,
         );
 
@@ -2032,6 +2058,7 @@ const make =
       Exclude<
         LR,
         | Provided
+        | Hosted
         | ExternalSystem.Identifier<Systems>
         | WorkflowEngine.WorkflowEngine
         | RuntimeContext

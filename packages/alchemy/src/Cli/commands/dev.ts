@@ -14,7 +14,7 @@ import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import { LOG_FD_ENV, parseRecord, replayRecord } from "../../Util/LogRecord.ts";
 import { nodeLoaderArgs } from "../../Util/Node.ts";
-import { timedShutdownStep } from "../../Util/Shutdown.ts";
+import { PARENT_PID_ENV, timedShutdownStep } from "../../Util/Shutdown.ts";
 import { traceParentEnv } from "../../Util/TraceParent.ts";
 import { DEV_RELOAD_EXIT_CODE, DevOptions } from "../DevOptions.ts";
 import { consoleSettingsEnv, currentConsoleSettings, RunLog } from "../GlobalLog.ts";
@@ -90,7 +90,9 @@ export const devCommand = Command.make(
       let command: [string, ...string[]];
       const entry = fileURLToPath(import.meta.resolve("alchemy/bin/exec.js"));
       if (typeof globalThis.Bun !== "undefined") {
-        command = ["bun", "run", ...process.execArgv, entry];
+        // This bun, not "bun" from PATH: a wrapper there would sit between
+        // this process and the exec child, which watches its parent (#3369).
+        command = [process.execPath, "run", ...process.execArgv, entry];
       } else {
         // Node: the exec entry runs with alchemy's Oxc loader hooks,
         // exactly as bin/cli.js started this process. Select the loader from
@@ -119,6 +121,8 @@ export const devCommand = Command.make(
         env: {
           ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
           ALCHEMY_DEV: "true",
+          // The exec child shuts down once this process is gone (#3369).
+          [PARENT_PID_ENV]: String(yield* Effect.sync(() => process.pid)),
           // The exec child never sees `--env-file`, so it gets the resolved directory.
           ALCHEMY_DIR: (yield* AlchemyContext).dotAlchemy,
           [LOG_FD_ENV]: "3",

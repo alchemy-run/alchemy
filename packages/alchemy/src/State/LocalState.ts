@@ -107,7 +107,13 @@ export const makeLocalState = () =>
     // test reading shared `.alchemy/state`) never observes a truncated,
     // mid-write file — which would otherwise surface as `JSON.parse("")` →
     // "Unexpected end of JSON input".
-    const writeAtomic = (file: string, contents: string) => writeFileAtomic(fs, file, contents);
+    //
+    // Mode 0600: a state file holds resource attributes in the clear unless a
+    // StateEncryption is configured, so it must not be world- or group-readable
+    // on a shared machine. The enclosing directories are created 0700 in
+    // `ensure`.
+    const writeAtomic = (file: string, contents: string) =>
+      writeFileAtomic(fs, file, contents, 0o600);
 
     // Parse a state file, tolerating an empty read. A zero-length file can
     // linger from a write that was interrupted before this atomic-write change
@@ -125,7 +131,13 @@ export const makeLocalState = () =>
         ? Effect.void
         : fs
             .makeDirectory(dir, { recursive: true })
-            .pipe(Effect.tap(() => Effect.sync(() => created.add(dir))));
+            // 0700: state directories hold possibly-plaintext secrets, so keep
+            // them owner-only on shared machines (best-effort — ignored where
+            // chmod is unsupported).
+            .pipe(
+              Effect.flatMap(() => fs.chmod(dir, 0o700).pipe(Effect.ignore)),
+              Effect.tap(() => Effect.sync(() => created.add(dir))),
+            );
 
     // The store's format record: checked before reading, written before the
     // first write, so a directory this version never wrote to stays as it is.

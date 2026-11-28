@@ -52,7 +52,7 @@ and the bundle's `code.hash`.
 One SSH session, using the Server's Alchemy-managed deploy key:
 
 1. Bundle `main` with Rolldown into a single ESM file (a generated
-   bootstrap wires up the Bun HTTP server, logging, and config from
+   bootstrap wires up the Node HTTP server, logging, and config from
    the environment).
 2. Attach and mount any [bound Volumes](/hetzner/data/volumes).
 3. Unpack the bundle to `/opt/<unitName>/`, write the env file, and
@@ -62,7 +62,8 @@ One SSH session, using the Server's Alchemy-managed deploy key:
    [Service]
    WorkingDirectory=/opt/<unitName>
    EnvironmentFile=-/opt/<unitName>/env
-   ExecStart=/root/.bun/bin/bun --no-install /opt/<unitName>/index.mjs
+   Environment=HOST=0.0.0.0
+   ExecStart=/usr/bin/env node /opt/<unitName>/index.mjs
    Restart=always
    RestartSec=5
    ```

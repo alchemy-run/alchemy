@@ -7,6 +7,7 @@ import type * as Aggregate from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type * as Key from "./Key.ts";
+import { memo, type Thunk } from "./Thunk.ts";
 import type * as View from "./View.ts";
 
 /** One source, or several. */
@@ -208,15 +209,18 @@ export const make = <
   Key extends Key.Any | undefined = undefined,
 >(
   name: Name,
-  definition: Definition<F, On, Key>,
+  definition: Thunk<Definition<F, On, Key>>,
   annotations: Annotations = {},
 ): PolicyClass<Name, F, On, Key extends Key.Any ? Key : View.SourceKey<SourcesOf<F>>> => {
+  const given = memo(definition);
   const Tag = Context.Service<PolicyKey<Name>, Handler<unknown>>()(`alchemy/Domain/Policy/${name}`);
   return class extends Tag {
     static readonly kind = "Policy" as const;
     static readonly annotations: Annotations = annotations;
     static readonly policyName: Name = name;
-    static readonly definition = definition;
+    static get definition() {
+      return given();
+    }
     static toLayer<Self extends Any, E, R>(
       this: Self,
       build: Effect.Effect<Handler<TriggerOf<Self>>, E, R>,

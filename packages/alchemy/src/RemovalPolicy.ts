@@ -118,6 +118,10 @@ export const destroy: {
  * refused too. To replace or delete the resource on purpose, deploy it with
  * another policy first (e.g. drop `protect()`), then make the change.
  *
+ * A provider can also refuse an in-place update that would destroy data the
+ * resource holds, such as a `Cloudflare.Worker` deleting a Durable Object
+ * class. That check follows the declared policy: drop `protect()` to allow it.
+ *
  * Applies to every resource declared inside the piped effect, so it can
  * decorate a single resource or a whole scope.
  *

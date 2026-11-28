@@ -49,6 +49,7 @@ import type * as Read from "./Read.ts";
 import { nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
+import { isThunk, memo, type Thunk, withLateClass } from "./Thunk.ts";
 import type * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
@@ -1488,9 +1489,15 @@ export const make = <
   const Q extends ReadonlyArray<QueryName<M>> = ReadonlyArray<QueryName<M>>,
 >(
   name: Name,
-  options: Options<M, C, V, S, Q>,
+  options: Thunk<Options<M, C, V, S, Q>>,
   annotations: Annotations = {},
 ): ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, Q>>> => {
+  // Options given as a thunk name a model that may not have loaded yet:
+  // the Api is made the first time it is used.
+  if (isThunk(options)) {
+    const made = memo(() => make(name, options(), annotations));
+    return withLateClass(made) as ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, Q>>>;
+  }
   const { model } = options;
   // What the Api lists but cannot serve, as the message it dies with when served.
   const unresolved: Array<Unservable> = [];
