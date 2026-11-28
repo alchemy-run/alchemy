@@ -448,7 +448,8 @@ export const make = (
     v?._tag === "Obj" && v.brand?.kind === "Ref" && v.fields[LIST]
       ? (v.fields as Record<string, V>)
       : undefined;
-  const itemsIn = (fields: Record<string, V>): ReadonlyArray<V> => kit.itemsOf(fields.value) ?? [];
+  // A list keeps its items as an array: the model makes it so, and nothing else writes it.
+  const itemsIn = (fields: Record<string, V>): ReadonlyArray<V> => kit.itemsOf(fields.value)!;
   const keep = (fields: Record<string, V>, items: ReadonlyArray<V>): void => {
     fields.value = arr(items);
     fields.length = Value.num(items.length);

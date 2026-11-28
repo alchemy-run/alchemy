@@ -2841,7 +2841,8 @@ export const make = (given: Loader, run: Run): Interpreter => {
           : Value.term("Bool", text),
       );
     }
-    if (operator === "+") {
+    // `+` joins text only where one side is text: otherwise it adds, as numbers.
+    if (operator === "+" && (textual(a) || textual(b))) {
       // A number in a string is its text. The solver knows the text of a
       // number only as the real `String` gives it, one number at a time.
       const written = (v: V) =>

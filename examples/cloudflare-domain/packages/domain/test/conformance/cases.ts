@@ -2291,6 +2291,7 @@ const syntax: ReadonlyArray<Group> = [
       `new Circle({ radius: a })._tag`,
       `new Odd({ n: a }).n`,
       `[new Spot({ x: a })._tag, new Spot({ x: b }).x, Equal.equals(new Spot({ x: a }), new Spot({ x: a }))]`,
+      `["x" + undefined, a + "x", null + "y"]`,
     ],
     known: [
       `a + b * 2 - a / 2`,
@@ -2301,6 +2302,8 @@ const syntax: ReadonlyArray<Group> = [
       `[BigInt(a) & 3n, BigInt(a) | 4n, BigInt(a) ^ 1n, ~BigInt(a), BigInt(a) << 2n, BigInt(a) >> 1n].map((n) => n === 0n)`,
     ],
     unread: [
+      [`a + undefined`, /applies \+ to/],
+      [`(a > 0) + 1`, /applies \+ to/],
       [`Tally(a)`, /calls the class Tally without new/],
       [`a.toFixed(2)`, /calls toFixed on a number an input holds, which it rounds/],
       [`a.toString(2)`, /writes a number an input holds in another base/],
@@ -3564,6 +3567,30 @@ const rest: ReadonlyArray<Group> = [
       `(() => { const list = listed(a, b, 3, 4); return [MutableList.takeN(list, 2), MutableList.toArrayN(list, 1), MutableList.takeN(list, 5), list.length]; })()`,
       `(() => { const list = listed(a, b, 3, 4); MutableList.takeNVoid(list, 1); MutableList.filter(list, (n, index) => n > 0 && index < 2); return MutableList.takeAll(list); })()`,
       `(() => { const list = listed(a, b, a, 5); MutableList.remove(list, a); const left = MutableList.toArray(list); MutableList.clear(list); return [left, list.length]; })()`,
+      `[Combiner.constant().combine(a, b) === undefined, a]`,
+      `Combiner.intercalate()(Combiner.make((x, y) => x + y)).combine("p" + a, "q")`,
+      `Struct.makeReducer({ n: Number.ReducerSum, s: String.ReducerConcat }, { omitKeyWhen: (v) => v === "" }).combineAll([{ n: a, s: "l" }, { n: b, s: "m" }])`,
+      `[Number.ReducerMax.combine(a, Number.ReducerMax.initialValue), Number.ReducerMin.combine(b, Number.ReducerMin.initialValue)]`,
+      `(() => { const list = MutableList.make(a, b, undefined); MutableList.remove(list); return [list.length, a]; })()`,
+    ],
+    unread: [
+      [`Combiner.first().combine(a)`, /is called in a way the prover has no model for/],
+      [
+        `Reducer.make((x, y) => x + y, 0).combineAll()`,
+        /is called in a way the prover has no model for/,
+      ],
+      [
+        `Reducer.make((x, y) => x + y, 0).combineAll(a)`,
+        /is called in a way the prover has no model for/,
+      ],
+      [
+        `Option.makeReducerFailFast(Number.ReducerSum).combineAll()`,
+        /is called in a way the prover has no model for/,
+      ],
+      [
+        `Option.makeReducerFailFast(Number.ReducerSum).combineAll(a)`,
+        /is called in a way the prover has no model for/,
+      ],
     ],
   },
   {
