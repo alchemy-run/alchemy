@@ -1,7 +1,11 @@
 import * as identitystore from "@distilled.cloud/aws/identitystore";
 import * as ssoAdmin from "@distilled.cloud/aws/sso-admin";
+import { AdoptPolicy } from "alchemy/AdoptPolicy";
+import { AlchemyContext } from "alchemy/AlchemyContext";
+import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -134,4 +138,38 @@ export const listGroups = Effect.fn(function* (identityStoreId: string) {
       Stream.runCollect,
       Effect.map((groups) => Array.from(groups) as identitystore.Group[]),
     );
+});
+
+/**
+ * Normalize an identity store or user ID/ARN to its bare ID.
+ */
+export const bareIdentifier = (idOrArn: string): string =>
+  idOrArn.slice(idOrArn.lastIndexOf("/") + 1);
+
+/**
+ * The user ID behind a `userName`, via `GetUserId`; `undefined` when the
+ * identity store has no such user.
+ */
+export const getUserIdByUserName = Effect.fn(function* (identityStoreId: string, userName: string) {
+  const response = yield* retryIdentityCenter(
+    identitystore
+      .getUserId({
+        IdentityStoreId: identityStoreId,
+        AlternateIdentifier: {
+          UniqueAttribute: { AttributePath: "userName", AttributeValue: userName },
+        },
+      })
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
+  );
+  return response?.UserId;
+});
+
+/** Whether the deploy may take over a resource it did not create (`--adopt` or `adopt(true)`). */
+export const adoptionAllowed = Effect.fn(function* (fqn: string) {
+  const stack = yield* Stack;
+  return (
+    stack.resources[fqn]?.Adopt ??
+    Option.getOrUndefined(yield* Effect.serviceOption(AdoptPolicy)) ??
+    (yield* AlchemyContext).adopt
+  );
 });
