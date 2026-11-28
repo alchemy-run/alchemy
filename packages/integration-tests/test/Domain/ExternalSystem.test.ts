@@ -1,5 +1,6 @@
 import * as Domain from "@alchemy.run/domain";
 import { describe, expect, it } from "@alchemy.run/test";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -29,6 +30,9 @@ const adapter = (answer: (args: { settlementId: string; amount: number }) => unk
       },
       ping: () => Effect.succeed("pong" as unknown as void),
     }),
+  ).pipe(
+    // An operation runs inside a runtime: the test is one.
+    Layer.merge(RuntimeContext.phantom),
   );
   return { seen, layer };
 };
@@ -128,7 +132,7 @@ describe("Domain ExternalSystem", { tags: ["unit", "local"] }, () => {
               ? Effect.fail(new CardFrozen())
               : Effect.fail(new RefundDeclined({ reason: "low" })),
         }),
-      );
+      ).pipe(Layer.merge(RuntimeContext.phantom));
       const charge = (amount: number) =>
         Effect.gen(function* () {
           const cards = yield* Cards;
@@ -168,7 +172,7 @@ describe("Domain ExternalSystem", { tags: ["unit", "local"] }, () => {
           ping: () => Effect.void,
         }),
         { validate: false },
-      );
+      ).pipe(Layer.merge(RuntimeContext.phantom));
       const result = yield* refund({ settlementId: "st_1", amount: 1.5 }).pipe(
         Effect.provide(layer),
       );

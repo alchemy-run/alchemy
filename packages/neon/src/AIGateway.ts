@@ -1,4 +1,4 @@
-import { getProjectBranchAiGateway } from "@distilled.cloud/neon";
+import { getProjectBranchAiGateway } from "@distilled.cloud/neon/unstable/neon";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";

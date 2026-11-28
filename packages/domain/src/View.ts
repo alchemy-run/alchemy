@@ -16,6 +16,7 @@ import type * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
+import { memo, type Thunk } from "./Thunk.ts";
 
 /**
  * Raised by `waitFor` when the predicate does not hold before the timeout.
@@ -528,7 +529,7 @@ export const make = <
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<From, Key, S, Events, Computed, Ms, Rejects>,
+  definition: Thunk<Definition<From, Key, S, Events, Computed, Ms, Rejects>>,
   annotations: Annotations = {},
 ): ViewClass<
   Name,
@@ -539,6 +540,7 @@ export const make = <
   ComputedFns<StateType<S>, Computed>,
   Output<From, Events>
 > => {
+  const given = memo(definition);
   const Tag = Context.Service<ViewKey<Name>, Host<StateType<S>, Key, Output<From, Events>>>()(
     `alchemy/Domain/View/${name}`,
   );
@@ -556,15 +558,20 @@ export const make = <
     static readonly kind = "View" as const;
     static readonly annotations: Annotations = annotations;
     static readonly viewName: Name = name;
-    static readonly definition: Definition<From, Key, S, Events, Computed, Ms, Rejects> =
-      definition;
+    static get definition(): Definition<From, Key, S, Events, Computed, Ms, Rejects> {
+      return given();
+    }
     /** The view's state schema. */
-    static readonly State = definition.state;
+    static get State(): S {
+      return given().state as S;
+    }
     /** Derived values, computed from a state when read. */
-    static readonly computed = definition.computed ?? {};
+    static get computed() {
+      return given().computed ?? {};
+    }
     /** Apply one input to one key's state, as the server's view does. */
     static evolve(state: unknown, input: LocalViewInput) {
-      return evolveView({ definition }, state, input);
+      return evolveView({ definition: given() }, state, input);
     }
   } as unknown as ViewClass<
     Name,

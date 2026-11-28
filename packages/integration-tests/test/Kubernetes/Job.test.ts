@@ -79,7 +79,7 @@ describe(
     beforeAll(
       Effect.gen(function* () {
         yield* kindStack.destroy();
-        cluster = yield* kindStack.deploy(KindTestCluster("job", 5065));
+        cluster = yield* kindStack.deploy(KindTestCluster("job"));
       }),
       { timeout: 300_000 },
     );

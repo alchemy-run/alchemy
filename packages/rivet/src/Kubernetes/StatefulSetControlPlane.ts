@@ -16,6 +16,7 @@ import {
 } from "../internal/ObjectStorage.ts";
 import { stackDnsLabel } from "../internal/PoolHost.ts";
 import { Namespace } from "../Namespace.ts";
+import { Network } from "./Network.ts";
 
 export { ObjectStorageRequired, type ObjectStorage } from "../internal/ObjectStorage.ts";
 
@@ -36,12 +37,13 @@ export type ControlPlaneExposure =
   | {
       /**
        * A fixed node port, reached at `endpoint` (e.g. a kind cluster's
-       * port mapping, `http://localhost:16450`). Callers inside the cluster
-       * use the cluster-internal address.
+       * port mapping, `http://localhost:16450`, or an Effect reading the
+       * port from the cluster). Callers inside the cluster use the
+       * cluster-internal address.
        */
       readonly type: "NodePort";
       readonly nodePort: number;
-      readonly endpoint: string;
+      readonly endpoint: Input<string> | Effect.Effect<Input<string>, never, any>;
     }
   | {
       /** A cluster-internal Service, reached at `endpoint` through your own ingress. */
@@ -167,6 +169,28 @@ const storageEnvironment = Effect.fn(function* (
  * export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", {
  *   cluster: Kind,
  *   expose: { type: "NodePort", nodePort: 30642, endpoint: "http://localhost:16450" },
+ * });
+ * ```
+ *
+ * **Example:** On the host port kind picked for the node port
+ * ```typescript
+ * export const Kind = Kubernetes.LocalCluster("Kind", {
+ *   nodes: [{ role: "control-plane", extraPortMappings: [{ containerPort: 30642, hostPort: 0 }] }],
+ * });
+ * export const Cluster = RivetKubernetes.StatefulSetControlPlane("Rivet", {
+ *   cluster: Kind,
+ *   expose: {
+ *     type: "NodePort",
+ *     nodePort: 30642,
+ *     endpoint: Effect.map(Kind, (kind) =>
+ *       kind.ports.pipe(
+ *         Output.map((ports) => {
+ *           const port = ports.find((p) => p.containerPort === 30642);
+ *           return `http://localhost:${port?.hostPort}`;
+ *         }),
+ *       ),
+ *     ),
+ *   },
  * });
  * ```
  *
@@ -316,14 +340,20 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
       });
 
       const internal = `http://${name}.${k8sNamespace}.svc.cluster.local:${API_PORT}`;
-      const external: Output.Output<string> =
+      const endpoint =
         expose.type === "LoadBalancer"
+          ? undefined
+          : !Output.isOutput(expose.endpoint) && Effect.isEffect(expose.endpoint)
+            ? yield* expose.endpoint
+            : expose.endpoint;
+      const external: Output.Output<string> =
+        endpoint === undefined
           ? Output.all(api.connection, api.ref).pipe(
               Output.mapEffect(([connection, ref]) => loadBalancerEndpoint(connection, ref)),
             )
-          : Output.isOutput(expose.endpoint)
-            ? (expose.endpoint as Output.Output<string>)
-            : Output.literal(expose.endpoint as string);
+          : Output.isOutput(endpoint)
+            ? (endpoint as Output.Output<string>)
+            : Output.literal(endpoint as string);
 
       const namespace = yield* Namespace(`${id}Namespace`, {
         // Created through the API the engines serve, once they are declared.
@@ -336,7 +366,7 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
         // A node port's endpoint is the deploying machine's (a local cluster's
         // port mapping); callers in the cluster use the Service.
         clientEndpoint: expose.type === "NodePort" ? internal : external,
-        network: { kind: "kubernetes", cluster, namespace: k8sNamespace },
+        network: Network({ cluster, namespace: k8sNamespace }),
         token: token.text,
         namespace: namespace.name,
       };

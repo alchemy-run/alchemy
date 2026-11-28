@@ -10,11 +10,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { ensureDockerSwarm, publishedUrl } from "../Docker/Runtime.ts";
 import { conformanceTests, get, waitForReady } from "./conformance.ts";
-import { FRONT_PORT as URL_FRONT_PORT, Postgres } from "./fixtures/docker-url/cluster.ts";
+import { Postgres } from "./fixtures/docker-url/cluster.ts";
 import UrlFront from "./fixtures/docker-url/front.ts";
-import { FRONT_PORT } from "./fixtures/docker/cluster.ts";
 import Front from "./fixtures/docker/front.ts";
 import { Lives } from "./fixtures/docker/index.ts";
 import { scheduledConformanceTests } from "./scheduled-conformance.ts";
@@ -25,7 +24,8 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "ClusterDocker", import.meta.url);
 const urlStack = Core.scratchStack(testOptions, "ClusterDockerUrl", import.meta.url);
 
-const baseUrl = `http://localhost:${FRONT_PORT}`;
+// The front's port is one Swarm picks, read from the deploy.
+let baseUrl = "";
 
 // The Effect Cluster conformance cases, against entities on two local Docker
 // runners coordinating through Postgres, called from a Docker service through
@@ -41,10 +41,11 @@ describe.skipIf(!!process.env.FAST)(
         const outputs = yield* sharedStack.deploy(
           Effect.gen(function* () {
             const front = yield* Front;
-            return { front: front.name };
+            return { front: front.name, ports: front.ports };
           }).pipe(Effect.provide(Lives)),
         );
         expect(outputs.front).toBeTruthy();
+        baseUrl = publishedUrl(outputs.ports);
         yield* waitForReady(baseUrl);
       }),
       { timeout: 600_000 },
@@ -127,14 +128,14 @@ describe.skipIf(!!process.env.FAST)(
       Effect.gen(function* () {
         yield* ensureDockerSwarm;
         yield* urlStack.destroy();
-        yield* urlStack.deploy(
+        const { ports } = yield* urlStack.deploy(
           Effect.gen(function* () {
             yield* Postgres;
             const front = yield* UrlFront;
-            return { front: front.name };
+            return { front: front.name, ports: front.ports };
           }),
         );
-        const response = yield* get(`http://localhost:${URL_FRONT_PORT}/echo/hi`).pipe(
+        const response = yield* get(`${publishedUrl(ports)}/echo/hi`).pipe(
           Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
         );
         expect(response.value).toBe("echo hi");

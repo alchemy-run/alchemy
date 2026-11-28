@@ -1,4 +1,5 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type { DockerfileBuild, DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
@@ -305,7 +306,7 @@ export interface EffectfulImageProps {
    * entrypoint. The image must be able to run the {@link runtime}.
    * Exclusive with {@link dockerfile}.
    *
-   * @default `oven/bun:1` for `runtime: "bun"`, `node:22-slim` for `runtime: "node"`
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
   /**
@@ -322,11 +323,13 @@ export interface EffectfulImageProps {
    */
   handler?: string;
   /**
-   * Runtime environment for the container program.
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with. `"node"` runs on `node:26-slim`,
+   * `"node24"` on `node:24-slim`, `"bun1.3.13"` on `oven/bun:1.3.13`.
    *
-   * @default "bun"
+   * @default "node"
    */
-  runtime?: "bun" | "node";
+  runtime?: ContainerRuntime;
   /**
    * Module specifiers that Rolldown should mark as external when bundling
    * the container entrypoint. The matching packages are installed inside the
@@ -577,7 +580,7 @@ export interface AnyContainerApplicationProps extends Omit<
   context?: string;
   dockerfile?: string | InlineDockerfile;
   handler?: string;
-  runtime?: "bun" | "node";
+  runtime?: ContainerRuntime;
   external?: string[];
   autoInstallExternals?: boolean;
   /** Bundler config for `main`; Docker build args and secrets for `context`; the layer cache for both. */
@@ -664,8 +667,8 @@ export type ContainerShape = Main<ContainerServices>;
  * managed registry instead of building anything.
  *
  * ### Bundling & Dependencies
- * By default the entrypoint is bundled for the `bun` runtime. Use `runtime` to
- * switch to Node, `external` to keep native/precompiled packages out of the
+ * By default the entrypoint runs on Node.js 26. Use `runtime` to pick another
+ * version or Bun (`"node24"`, `"bun1.3"`), `external` to keep native/precompiled packages out of the
  * bundle (auto-installed in the image unless `autoInstallExternals` is `false`),
  * `image` (or an inline `dockerfile`) to pick the environment the generated
  * Dockerfile starts `FROM`, and `registryId` to override the registry host.

@@ -48,6 +48,15 @@ import { readFramedPrerenderResponse } from "./prerender-response.ts";
 import type { PrerenderRequest, StaticPathsResponse } from "./runtime/prerender-types.ts";
 import { PRERENDER_ENDPOINT, STATIC_PATHS_ENDPOINT } from "./runtime/utils/prerender-constants.ts";
 
+/**
+ * Cloudflare credentials, resolved on first use. Only remote bindings read
+ * them, so a local-only dev server starts without any.
+ */
+const lazyCredentials = Layer.succeed(
+  Credentials.Credentials,
+  Credentials.resolveFromEnv.pipe(Effect.orDie),
+);
+
 /** The subdirectory of the server output dir that hosts the prerender build. */
 const PRERENDER_OUTPUT_SUBDIR = "./.prerender/";
 
@@ -302,7 +311,7 @@ const buildDefaultContext = (
     },
   }).pipe(
     Layer.provideMerge(PlatformServices),
-    Layer.provide(Layer.merge(Credentials.fromEnv(), FetchHttpClient.layer)),
+    Layer.provide(Layer.merge(lazyCredentials, FetchHttpClient.layer)),
     Layer.buildWithScope(scope),
     Effect.runPromise,
   );

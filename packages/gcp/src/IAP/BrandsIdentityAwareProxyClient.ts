@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 import {
   brandNameOf,
@@ -122,7 +123,7 @@ const toAttrs = (
     brand: parsed.brand,
     project,
     displayName: parseOwnership(client.displayName).text,
-    secret: client.secret ?? previousSecret,
+    secret: revealOptional(client.secret) ?? previousSecret,
   };
 };
 

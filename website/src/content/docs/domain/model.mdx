@@ -228,6 +228,8 @@ A [projection](/domain/projection) writes events into a store you own, such as a
 
 A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and never replays.
 
+An [AI process](/ai/domain) is not a member: it works with a model, or several, from beside them. A policy or a saga hands one of its sessions work by key, and a session reports back by sending the model's commands. Domain knows nothing of it: the process is a service the policy's Layer requires.
+
 A [query](/domain/query) is not a consumer: it serves what a projection wrote to clients, across keys, guarded by middleware and rejections like the model's other reads, with a handler that checks the caller.
 
 ## Declare the model
@@ -295,6 +297,29 @@ export class Bank extends Domain.Model("Bank", {
 
 export const BankHandlers = MainAccountProvisioningLive;
 ```
+
+## Break an import cycle
+
+Files can need each other. An AI process's prose mentions the model's commands, and a policy the model lists holds the process. Whichever file loads first reads another's class before it exists, and fails with `Cannot access 'Bank' before initialization`.
+
+Give the props as a thunk to break the cycle. The thunk is read the first time the declaration is used, when every file has loaded:
+
+```typescript
+// src/Bank.model.ts
+export class Bank extends Domain.Model("Bank", () => ({
+  aggregates: [Account],
+  views: [AccountSummary],
+  policies: [Assist],
+})) {}
+```
+
+Its type is the same as with the props given directly. What the thunk returns is checked as an object would be, though a mistake in it is reported on the whole thunk rather than on its line.
+
+A thunk is for a cycle only. Props given directly are checked as the file loads, so a mistake is reported at once. A thunk's mistake shows up the first time the declaration is used.
+
+Every declaration that lists other declarations takes a thunk: `Domain.Model`, `Domain.Aggregate`, `Domain.View`, `Domain.Projection`, `Domain.Stream`, `Domain.Policy`, `Domain.Saga`, `Domain.Query`, `Domain.Decision` and `Domain.Api`. Events, commands, rejections and rewrites do not, because each of those classes is its schema, made from its fields when it is declared. A field that refers back to its own class is a `Schema.suspend`.
+
+Break each cycle where it is read. A cycle runs through every file that reads a class as it loads. For a process whose prose mentions the model, that is the prose (`${() => Bank.DepositMoney}`), the model, and any view that lists the process in its `from`.
 
 ## Describe it
 
@@ -410,6 +435,6 @@ Account `a-1` in Billing and account `a-1` in Audit are different instances, wit
 
 The chapters that follow take each building block in turn, in the order a command meets them.
 
-A [Command](/domain/command) asks for a change, and an [Event](/domain/event) records one. An [Aggregate](/domain/aggregate) sits between them, deciding each command against the rules it protects. On the query side, a [View](/domain/view) answers a question from events, a [Projection](/domain/projection) feeds a store you own, and a [Stream](/domain/stream) keeps an ordered log a client can follow. A [Policy](/domain/policy) applies the business's standing rules about what to do next, and a [Saga](/domain/saga) carries out a process that takes several steps. An [External System](/domain/external-system) is how the model talks to the world outside it, and an [Api](/domain/api) is what the model publishes to its clients. Finally, a [Story](/domain/story) states each rule as an example you can run.
+A [Command](/domain/command) asks for a change, and an [Event](/domain/event) records one. An [Aggregate](/domain/aggregate) sits between them, deciding each command against the rules it protects. On the query side, a [View](/domain/view) answers a question from events, a [Projection](/domain/projection) feeds a store you own, and a [Stream](/domain/stream) keeps an ordered log a client can follow. A [Policy](/domain/policy) applies the business's standing rules about what to do next, and a [Saga](/domain/saga) carries out a process that takes several steps. A [Rewrite](/domain/rewrite) changes events already recorded, and a [Compaction](/domain/compaction) replaces an instance's history with a roll-up. A [Sealed Value](/domain/sealed-value) is a field the model stores and can't read, encrypted under a key you can delete. An [External System](/domain/external-system) is how the model talks to the world outside it, and an [Api](/domain/api) is what the model publishes to its clients. Finally, a [Story](/domain/story) states each rule as an example you can run.
 
 Next, [Command](/domain/command): how a change is asked for.

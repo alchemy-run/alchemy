@@ -7,10 +7,16 @@ import {
   type Evaluator,
 } from "@alchemy.run/ai/CodeMode";
 import type { DeclaredNamespace, DeclaredTool, JsonSchema } from "@alchemy.run/ai/Declarations";
+import type {
+  HistoryOptions,
+  QueuedMessage,
+  SessionEntry,
+  SessionEvent,
+  SessionPage,
+} from "@alchemy.run/ai/Harness";
 import { isMcpServer, type AnyMcpServer, type McpServerService } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { Sandbox, SandboxError, Sandboxes, sandboxOf } from "@alchemy.run/ai/Sandbox";
-import type { AnySkill } from "@alchemy.run/ai/Skill";
 import {
   callTool,
   parametersJsonSchema,
@@ -35,6 +41,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 import { NotOnHarness, OpenCodeError } from "./Errors.ts";
 import { chatResponse, complete, type ChatRequest } from "./internal/chat.ts";
 import { Storage, type Host } from "./Storage.ts";
@@ -53,7 +60,6 @@ import {
 export interface HarnessOptions<
   Models extends ReadonlyArray<AnyModel>,
   Tools extends ReadonlyArray<Listed>,
-  Skills extends ReadonlyArray<AnySkill> = readonly [],
 > {
   /**
    * What OpenCode calls this harness: the provider its models belong to,
@@ -74,8 +80,6 @@ export interface HarnessOptions<
    * writes; the others are direct calls.
    */
   readonly tools?: Tools;
-  /** Skills every session can load when a task calls for one. */
-  readonly skills?: Skills;
   /**
    * The directory sessions work in: where a tool's `AI.Sandbox` runs
    * commands and resolves relative paths, and the directory OpenCode files
@@ -106,6 +110,12 @@ export interface PromptOptions {
    * for the original and gets its answer.
    */
   readonly requestId?: string;
+  /**
+   * What a busy session does with the prompt: `queue` runs it after the
+   * turn that is running, `steer` gives it to that turn at its next step.
+   * @default "queue"
+   */
+  readonly delivery?: "queue" | "steer";
 }
 
 /**
@@ -161,6 +171,14 @@ export interface Session {
   readonly sandboxKey: string;
   /** OpenCode's id for the session. */
   readonly id: Effect.Effect<string, OpenCodeError, RuntimeContext>;
+  /** Whether OpenCode has this session. */
+  readonly exists: Effect.Effect<boolean, OpenCodeError, RuntimeContext>;
+  /**
+   * Make the session if OpenCode does not have it, on `model` or the
+   * harness's first, without giving it a prompt. Gives the name its tool
+   * calls carry as `AI.ToolCall`'s `conversationId`.
+   */
+  readonly open: (model?: AnyModel) => Effect.Effect<string, OpenCodeError, RuntimeContext>;
   /** Send a prompt and wait for the answer, through every tool call it takes. */
   readonly prompt: (
     text: string,
@@ -175,6 +193,19 @@ export interface Session {
     text: string,
     options?: PromptOptions,
   ) => Effect.Effect<void, OpenCodeError | NotOnHarness, RuntimeContext>;
+  /** Take back a prompt that is still in the session's inbox. */
+  readonly withdraw: (id: string) => Effect.Effect<void, OpenCodeError, RuntimeContext>;
+  /**
+   * Whether the session is working and what is in its inbox, then every
+   * transcript item after `after`, then what happens next.
+   */
+  readonly events: (options?: {
+    readonly after?: number;
+  }) => Stream.Stream<SessionEvent, OpenCodeError, RuntimeContext>;
+  /** A page of the transcript, numbered as `events` numbers it. */
+  readonly history: (
+    options?: HistoryOptions,
+  ) => Effect.Effect<SessionPage, OpenCodeError, RuntimeContext>;
   /** Return once the session has nothing left to run. */
   readonly wait: Effect.Effect<void, OpenCodeError, RuntimeContext>;
   /** Stop the prompt that is running. */
@@ -194,13 +225,15 @@ export interface Session {
   readonly removeSandbox: Effect.Effect<void, OpenCodeError, RuntimeContext>;
 }
 
-/** A harness: sessions, and the models, tools and skills they may use. */
+/** A harness: sessions, and the models and tools they may use. */
 export interface Harness {
   /**
    * The session with this name. Nothing runs until it is used. `defaults`
    * are what its prompts run with unless they say otherwise.
    */
   readonly session: (name: string, defaults?: PromptOptions) => Session;
+  /** What the model calls a tool here: OpenCode's own name for its tools, `<name>_<tool>` for yours. */
+  readonly toolName: (tool: ToolRef) => string;
   /**
    * Call OpenCode's own client, for what this view doesn't cover. Starts
    * OpenCode in this instance when it is not running.
@@ -423,9 +456,8 @@ interface Resolved {
 export const Harness = <
   const Models extends ReadonlyArray<AnyModel>,
   const Tools extends ReadonlyArray<Listed> = readonly [],
-  const Skills extends ReadonlyArray<AnySkill> = readonly [],
 >(
-  options: HarnessOptions<Models, Tools, Skills>,
+  options: HarnessOptions<Models, Tools>,
 ): Effect.Effect<
   Harness,
   never,
@@ -528,7 +560,6 @@ export const Harness = <
           ({ client }) => ({ server, client }),
         ),
     );
-    const skills = options.skills ?? [];
     const captured = yield* Effect.context<never>();
 
     /** What the model may call a tool of ours. */
@@ -786,7 +817,7 @@ export const Harness = <
     const sessionIds = new Map<string, Promise<string>>();
     const namesById = new Map<string, string>();
 
-    /** Our tools, skills and models, as the plugin OpenCode loads them from. */
+    /** Our tools and models, as the plugin OpenCode loads them from. */
     const pluginOf = (state: Built, client: () => Promise<Host>): Plugin.Plugin => ({
       id: `alchemy.${name}`,
       setup: async (ctx) => {
@@ -856,19 +887,7 @@ export const Harness = <
             }
           }
         });
-        const loaded = await ctx.skill.transform((editor) => {
-          for (const skill of skills) {
-            editor.add({
-              id: skill.skillName,
-              name: skill.skillName,
-              description: skill.skill.description,
-              path: `${directory}/.alchemy/skills/${skill.skillName}/SKILL.md`,
-              content: skill.skill.instructions,
-            } as never);
-          }
-        });
         return async () => {
-          await loaded.dispose();
           await tools.dispose();
         };
       },
@@ -1059,6 +1078,8 @@ export const Harness = <
       }
     }
 
+    /** Sessions this instance created and has not yet given a model. */
+    const fresh = new Set<string>();
     const sessionIdOf = (session: string) =>
       use((client) => {
         let id = sessionIds.get(session);
@@ -1076,6 +1097,7 @@ export const Harness = <
                 title: sessionTitle(session),
                 location: { directory },
               });
+              fresh.add(sessionID);
             }
             namesById.set(sessionID, session);
             return sessionID;
@@ -1169,7 +1191,6 @@ export const Harness = <
           programmed = [...new Set(programs.flatMap((entry) => entry.names))];
           on.add(nameOf(name, CODEMODE_TOOL));
         }
-        if (skills.length > 0) on.add("skill");
         // What the model is told about programs: the tools one may call.
         const section =
           programmed.length === 0 || state.convention === undefined
@@ -1225,6 +1246,175 @@ export const Harness = <
 
     /** One prompt at a time per session: a second waits for the first. */
     const locks = new Map<string, Semaphore.Semaphore>();
+    /** One event of a session's log, as OpenCode stores it. */
+    interface LogEvent {
+      readonly type: string;
+      readonly durable?: { readonly seq: number };
+      readonly data?: { readonly [key: string]: any };
+    }
+    const contentText = (content: unknown): string =>
+      Array.isArray(content)
+        ? content
+            .flatMap((part: { readonly type?: string; readonly text?: string }) =>
+              part.type === "text" && part.text !== undefined ? [part.text] : [],
+            )
+            .join("")
+        : "";
+    /**
+     * Reads a session's log into transcript items. It is given every event
+     * from the first, since a tool's name and a prompt's text are in
+     * earlier events than the one that places them.
+     */
+    const folder = () => {
+      const names = new Map<string, string>();
+      const texts = new Map<string, string>();
+      return (
+        event: LogEvent,
+      ): { readonly entry?: SessionEntry; readonly status?: true } | undefined => {
+        const seq = event.durable?.seq ?? 0;
+        const data = event.data ?? {};
+        switch (event.type) {
+          case "session.inbox.enqueued":
+            if (data.item?.type === "user") texts.set(data.inboxID, data.item.payload?.text ?? "");
+            return { status: true };
+          case "session.inbox.cancelled":
+          case "session.inbox.delivery.changed":
+          case "session.execution.started":
+          case "session.execution.succeeded":
+          case "session.execution.failed":
+          case "session.execution.interrupted":
+            return { status: true };
+          case "session.inbox.delivered": {
+            const text = texts.get(data.inboxID);
+            return text === undefined
+              ? { status: true }
+              : { status: true, entry: { seq, item: { type: "user", text } } };
+          }
+          case "session.tool.input.started":
+            names.set(data.id, data.name);
+            return undefined;
+          case "session.tool.called":
+            return {
+              entry: {
+                seq,
+                item: {
+                  type: "assistant",
+                  text: "",
+                  toolCalls: [{ id: data.id, name: names.get(data.id) ?? "", input: data.input }],
+                },
+              },
+            };
+          case "session.tool.success":
+            return {
+              entry: {
+                seq,
+                item: {
+                  type: "tool",
+                  callId: data.id,
+                  name: names.get(data.id) ?? "",
+                  output: contentText(data.content),
+                  isError: false,
+                },
+              },
+            };
+          case "session.tool.failed":
+            return {
+              entry: {
+                seq,
+                item: {
+                  type: "tool",
+                  callId: data.id,
+                  name: names.get(data.id) ?? "",
+                  output: contentText(data.content) || String(data.error?.message ?? ""),
+                  isError: true,
+                },
+              },
+            };
+          case "session.text.ended":
+            return {
+              entry: { seq, item: { type: "assistant", text: data.text ?? "", toolCalls: [] } },
+            };
+          default:
+            return undefined;
+        }
+      };
+    };
+    /** Whether OpenCode is working on a session, and what is in its inbox. */
+    const statusOf = (sessionID: string) =>
+      use(async (client): Promise<Extract<SessionEvent, { type: "status" }>> => {
+        const [working, inbox] = await Promise.all([
+          client.session.active(),
+          client.session.inbox.list({ sessionID }),
+        ]);
+        return {
+          type: "status",
+          status: sessionID in working ? "working" : "idle",
+          queued: inbox.flatMap((item): ReadonlyArray<QueuedMessage> =>
+            item.type === "user"
+              ? [{ id: item.id, text: item.payload.text, delivery: item.delivery }]
+              : [],
+          ),
+        };
+      }, "status");
+    /** Every transcript item the session has stored. */
+    const stored = (sessionID: string) =>
+      use(async (client) => {
+        const fold = folder();
+        const entries: Array<SessionEntry> = [];
+        for await (const event of client.experimental.session.log({ sessionID })) {
+          const entry = fold(event as LogEvent)?.entry;
+          if (entry !== undefined) entries.push(entry);
+        }
+        return entries;
+      }, "log");
+    const eventsOf = (sessionID: string, after: number) =>
+      Stream.unwrap(
+        Effect.gen(function* () {
+          // The host stays open for as long as the log is read.
+          const client = yield* Effect.acquireRelease(
+            Effect.andThen(
+              Effect.sync(() => host.inFlight++),
+              open,
+            ),
+            () => Effect.sync(() => host.inFlight--),
+          );
+          const fold = folder();
+          let live = false;
+          let last = "";
+          const status = Effect.map(statusOf(sessionID), (next): Array<SessionEvent> => {
+            const key = JSON.stringify(next);
+            if (key === last) return [];
+            last = key;
+            return [next];
+          });
+          return Stream.concat(
+            Stream.fromIterableEffect(status),
+            Stream.fromAsyncIterable(
+              client.experimental.session.log({ sessionID, follow: true }),
+              (cause) => failureOf("log", cause),
+            ).pipe(
+              Stream.mapEffect((event) =>
+                Effect.gen(function* () {
+                  // Everything stored has been read: what follows is live.
+                  if ((event as LogEvent).type === "log.synced") {
+                    live = true;
+                    return yield* status;
+                  }
+                  const folded = fold(event as LogEvent);
+                  const events: Array<SessionEvent> = [];
+                  if (folded?.entry !== undefined && folded.entry.seq > after) {
+                    events.push({ type: "item", ...folded.entry });
+                  }
+                  if (live && folded?.status === true) events.push(...(yield* status));
+                  return events;
+                }),
+              ),
+              Stream.flatMap((events) => Stream.fromIterable(events)),
+            ),
+          );
+        }),
+      );
+
     const lockOf = (session: string) => {
       let lock = locks.get(session);
       if (lock === undefined) {
@@ -1262,11 +1452,15 @@ export const Harness = <
           }
           const { rules, section } = yield* permissions(chosen.tools);
           const sessionID = yield* sessionIdOf(sessionName);
-          // A prompt runs with what the session has: set what this one asks for.
-          const model = { id: (chosen.model ?? models[0]!.model).modelName, providerID: name };
-          yield* apply(sessionID, "model", model, (client) =>
-            client.session.switchModel({ sessionID, model }),
-          );
+          // A prompt runs with what the session has: set what this one asks
+          // for. A session keeps its model until a prompt names another.
+          if (chosen.model !== undefined || fresh.has(sessionID)) {
+            const model = { id: (chosen.model ?? models[0]!.model).modelName, providerID: name };
+            yield* apply(sessionID, "model", model, (client) =>
+              client.session.switchModel({ sessionID, model }),
+            );
+            fresh.delete(sessionID);
+          }
           const agent = chosen.agent ?? "build";
           yield* apply(sessionID, "agent", agent, (client) =>
             client.session.switchAgent({ sessionID, agent }),
@@ -1298,7 +1492,13 @@ export const Harness = <
           yield* armWake(sessionID);
           if (!known) {
             yield* use(
-              (client) => client.session.prompt({ sessionID, id: messageID, text }),
+              (client) =>
+                client.session.prompt({
+                  sessionID,
+                  id: messageID,
+                  text,
+                  ...(chosen.delivery === undefined ? {} : { delivery: chosen.delivery }),
+                }),
               "prompt",
             );
           }
@@ -1327,9 +1527,55 @@ export const Harness = <
         name: sessionName,
         sandboxKey: sandboxKey(instanceId, sessionName),
         id: sessionIdOf(sessionName),
+        exists: use(
+          (client) =>
+            client.session.get({ sessionID: sessionIdFor(sessionName) }).then(
+              () => true,
+              () => false,
+            ),
+          "session",
+        ),
+        open: (model) =>
+          Effect.gen(function* () {
+            const sessionID = yield* sessionIdOf(sessionName);
+            if (fresh.has(sessionID)) {
+              const chosen = { id: (model ?? models[0]!.model).modelName, providerID: name };
+              yield* apply(sessionID, "model", chosen, (client) =>
+                client.session.switchModel({ sessionID, model: chosen }),
+              );
+              fresh.delete(sessionID);
+            }
+            return sessionName;
+          }),
         prompt: (text, promptOptions = {}) => run(text, { ...defaults, ...promptOptions }, true),
         submit: (text, promptOptions = {}) =>
           Effect.asVoid(run(text, { ...defaults, ...promptOptions }, false)),
+        withdraw: (id) =>
+          Effect.flatMap(sessionIdOf(sessionName), (sessionID) =>
+            use((client) => client.session.inbox.cancel({ sessionID, inboxID: id }), "withdraw"),
+          ),
+        events: (eventOptions) =>
+          Stream.unwrap(
+            Effect.map(sessionIdOf(sessionName), (sessionID) =>
+              eventsOf(sessionID, eventOptions?.after ?? 0),
+            ),
+          ),
+        history: (historyOptions = {}) =>
+          Effect.gen(function* () {
+            const entries = yield* stored(yield* sessionIdOf(sessionName));
+            const take = historyOptions.take ?? 50;
+            const after = historyOptions.after;
+            const ordered =
+              historyOptions.order === "desc"
+                ? entries.filter((entry) => after === undefined || entry.seq < after).reverse()
+                : entries.filter((entry) => after === undefined || entry.seq > after);
+            const items = ordered.slice(0, take);
+            const lastItem = items.at(-1);
+            return {
+              items,
+              ...(ordered.length > take && lastItem !== undefined ? { next: lastItem.seq } : {}),
+            };
+          }).pipe(Effect.ensuring(closeSoon)),
         wait: Effect.flatMap(sessionIdOf(sessionName), (sessionID) =>
           use((client) => client.experimental.session.wait({ sessionID }), "wait"),
         ).pipe(Effect.ensuring(closeSoon)),
@@ -1344,7 +1590,12 @@ export const Harness = <
       };
     };
 
-    return { session, use } satisfies Harness;
+    const toolName = (tool: ToolRef): string =>
+      isBuiltin(tool)
+        ? tool.toolName
+        : ((isToolTag(tool) ? nativeOf.get(tool.key) : undefined) ?? nameOf(name, tool.toolName));
+
+    return { session, toolName, use } satisfies Harness;
     // Models, tools and servers are read by tag, so their requirements are stated by the signature.
   }) as unknown as Effect.Effect<
     Harness,

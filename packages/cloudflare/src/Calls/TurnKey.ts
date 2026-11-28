@@ -7,6 +7,7 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { toRedacted } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 
 const TypeId = "Cloudflare.Calls.TurnKey" as const;
@@ -152,7 +153,7 @@ export const TurnKeyProvider = () =>
         // the create-only key. Names are not unique on Cloudflare's side,
         // so there is no AlreadyExists race to tolerate.
         const created = yield* calls.createTurn({ accountId, name });
-        return toAttributes(created, accountId, Redacted.make(created.key ?? ""));
+        return toAttributes(created, accountId, toRedacted(created.secret));
       }
 
       // Sync — the only mutable aspect is `name`; diff observed cloud

@@ -367,6 +367,18 @@ export interface ToolResult {
 export const parametersJsonSchema = (spec: ToolSpec): object =>
   AiTool.getJsonSchemaFromSchema(spec.parameters) as object;
 
+/** `value` without the object fields that are `null`, at any depth. */
+const withoutNulls = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(withoutNulls)
+    : value !== null && typeof value === "object"
+      ? Object.fromEntries(
+          Object.entries(value)
+            .filter(([, field]) => field !== null)
+            .map(([key, field]) => [key, withoutNulls(field)]),
+        )
+      : value;
+
 /**
  * Run one call of a tool the way every harness does: arguments decoded with
  * `parameters`, the result encoded with `success`, a declared failure turned
@@ -381,7 +393,12 @@ export const callTool = (
   args: unknown,
 ): Effect.Effect<ToolResult, never, ToolServices> => {
   const returns = spec.success.ast._tag !== "Void";
-  return Schema.decodeUnknownEffect(spec.parameters as Schema.Codec<unknown, unknown>)(args).pipe(
+  const decode = Schema.decodeUnknownEffect(spec.parameters as Schema.Codec<unknown, unknown>);
+  return decode(args).pipe(
+    // Models often send `null` for a parameter they leave out. Where the
+    // arguments do not decode as sent, they are read again without their nulls.
+    // The failure reported is the one for the arguments as they were sent.
+    Effect.catch((error) => Effect.mapError(decode(withoutNulls(args)), () => error)),
     Effect.orDie,
     Effect.flatMap((parameters) => handler(parameters)),
     Effect.flatMap((value) =>

@@ -1,3 +1,4 @@
 
 # Written by a test while it runs.
 *.generated.aggregate.ts
+modules.generated/

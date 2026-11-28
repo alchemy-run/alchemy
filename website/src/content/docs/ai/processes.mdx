@@ -1,0 +1,177 @@
+---
+title: Processes
+description: "Declare a process with AI.Process: prose that says how to do a piece of work with the tools, models and other processes it mentions. Reach sessions of it by key and talk to them."
+---
+
+A **process** is prose that says how to carry out a piece of work. The prose mentions what the work uses: tools, models, other processes. Mentioning something grants it to the process, and makes running the process require it. A **session** is one running instance: a conversation on a harness, with the process's prose as its instructions.
+
+## Declare a process
+
+A process is a class with a name, a description and its prose:
+
+```typescript title="src/Research.process.ts"
+import * as AI from "@alchemy.run/ai";
+
+export class Research extends AI.Process<Research>()("Research", {
+  description: "Answer a question about the code, with file paths.",
+})`
+  Answer questions about the repository in your working directory.
+  Search with ${AI.Grep} and open what looks relevant with ${AI.Read}.
+  Reply with file paths and line numbers. Never edit files.
+` {}
+```
+
+The model reads the prose with each mention replaced by its name: `grep` and `read` here. A session of `Research` may call those two tools and no others.
+
+## Mention a tool
+
+Any [tool](/ai/tools) can be mentioned: one of yours, a [coding tool](/ai/coding-tools), or an [MCP server](/ai/mcp-servers), which stands for every tool it offers.
+
+```typescript title="src/Release.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Deploy } from "./Deploy.tool.ts";
+
+export class Release extends AI.Process<Release>()("Release", {
+  description: "Build the project and upload a release.",
+})`
+  Build the project with ${AI.Bash}, then upload the archive with ${Deploy}.
+` {}
+```
+
+`Release` now requires `Deploy`'s Layer and a Layer for `AI.Bash`. Leave either out and the program that runs it does not compile.
+
+## Talk to a session
+
+Yielding a process gives a client, and `get` reaches a session by a key you choose. A session's first message makes it. `prompt` sends a message and waits for the answer:
+
+```typescript
+const research = yield* Research;
+
+const reply = yield* research.get("parser").prompt("Where is the parser?");
+// reply.text
+```
+
+`send` stores the message and returns without waiting, and `requestId` makes it exactly-once:
+
+```typescript
+yield* research.get("parser").send("Also check the tests.", { requestId: "comment-812" });
+```
+
+## A process has no inputs
+
+A process is told what to do in the messages it is sent, so the prose is the same for every session and what one session works on is its first message:
+
+```typescript
+yield* research.get("issue-42").send("The question is in issue 42.", { requestId: "start" });
+```
+
+The same `requestId` on every delivery means code that may run twice gives the session its work once.
+
+## Start a session on a model
+
+`start` makes a session before it has a message, on a [model](/ai/models) the process mentions:
+
+```typescript
+yield* research.start("parser", { model: Fast });
+```
+
+Starting a key that already started does nothing. A process that mentions a guarded command of a [Domain model](/ai/domain) has to be started, because `start` is where you say who its session acts as. Until then, `send` and `prompt` fail with `NotStarted`.
+
+## Steer, withdraw and interrupt
+
+`send` queues a message: a session that is working reads it when its turn ends. `steer` gives a working session a message to read at its next step, without ending the turn:
+
+```typescript
+const session = research.get("parser");
+
+yield* session.steer("Only look in src.");
+```
+
+A session with nothing running starts a turn on a steered message, as it does on a sent one.
+
+`interrupt` stops the turn that is running. The session keeps its transcript:
+
+```typescript
+yield* session.interrupt;
+```
+
+`withdraw` takes back a message that is still queued, by the id its status lists it with:
+
+```typescript
+yield* session.withdraw(queued.id);
+```
+
+## Watch a session
+
+`events` is everything a session does, as a stream. Its first event is always the session's status: whether it is working, and what is queued.
+
+```typescript
+yield* session.events().pipe(
+  Stream.runForEach((event) =>
+    event.type === "status"
+      ? Effect.log(event.status, event.queued.length)
+      : Effect.log(event.seq, event.item.type),
+  ),
+);
+```
+
+After the status come the stored items, then each new one as it happens. An item is a user message, an assistant message with the tools it called, or a tool's result. A `status` event is sent again whenever the session starts or stops working, or its queue changes.
+
+Each item has a `seq`. A client that reconnects passes the last one it saw and misses nothing:
+
+```typescript
+session.events({ after: lastSeq });
+```
+
+A [hosted session](/ai/hosting) keeps its events in its own object, where `events` is read. From outside it, ask instead: see [Read a session from outside](/ai/hosting#read-a-session-from-outside). To read it in a browser, see [Connect a front end](/ai/front-end).
+
+## Ask where a session stands
+
+`status` answers once, without a stream: whether the session is working, and what is queued. A session nobody sent anything is idle.
+
+```typescript
+const { status, queued } = yield* session.status;
+```
+
+It works from anywhere the client does, a hosted session's included.
+
+## Read the transcript
+
+`history` returns a page of the same items, without waiting for new ones:
+
+```typescript
+const page = yield* session.history({ take: 50, order: "desc" });
+
+const older = yield* session.history({ take: 50, order: "desc", after: page.next });
+```
+
+`next` is absent on the last page.
+
+## A process has no output
+
+A session is not a function call. It has no end: it keeps its conversation and can be sent more messages at any time. It reports through the tools it is given: a command on a [Domain model](/ai/domain), a comment on an issue, a file in a bucket. What starts it never waits for a return value.
+
+## Separate the name from the prose
+
+A process can be declared by its name alone. `toLayer` then gives it prose, and each Layer is one way to carry the process out.
+
+```typescript title="src/Triage.process.ts"
+import * as AI from "@alchemy.run/ai";
+
+export class Triage extends AI.Process<Triage>()("Triage", {}) {}
+
+export const TriageLive = Triage.toLayer({
+  description: "Say what kind of issue this is.",
+})`
+  Read the issue you are given and the code it is about with ${AI.Grep} and ${AI.Read}.
+  Reply with one word: bug, feature or question.
+`;
+```
+
+Code that yields `Triage` depends on the name alone: it never sees the prose, the tools or the models. `TriageLive` requires what its own prose mentions, and a second Layer with other words and other tools can replace it without touching that code.
+
+The name is also what a [Domain model](/ai/domain)'s policies use. Prose that mentions such a model's commands and views writes each mention as a thunk, `${() => Board.LabelIssue}`, because the model's files import the name: see [Break the cycle with thunks](/ai/domain#break-the-cycle-with-thunks).
+
+## Run it
+
+A process names no harness and no host. One Layer says which coding agent runs its sessions, and a host gives each session an instance of its own. See [Where sessions run](/ai/hosting) and [Choose a harness](/ai/harnesses).

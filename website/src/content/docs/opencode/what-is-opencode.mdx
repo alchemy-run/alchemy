@@ -1,6 +1,6 @@
 ---
 title: What is OpenCode?
-description: The concepts behind OpenCode on Alchemy — OpenCode in a Durable Object, sessions and prompts, model requests, tools, skills, the sandbox tools work in — and how @alchemy.run/opencode models each of them.
+description: The concepts behind OpenCode on Alchemy — OpenCode in a Durable Object, sessions and prompts, model requests, tools, the sandbox tools work in — and how @alchemy.run/opencode models each of them.
 ---
 
 import Tree from "../../../components/diagrams/Tree.astro";
@@ -40,7 +40,7 @@ Take one small app: a `Coder` Durable Object with a session `pr-142`. OpenCode r
 
 ## The harness
 
-The **harness** is OpenCode with what you give it: the models sessions may run on, and the tools and skills they may use. You yield it in a Durable Object's outer Effect, and OpenCode starts in that object when a session is first used.
+The **harness** is OpenCode with what you give it: the models sessions may run on, and the tools they may use. You yield it in a Durable Object's outer Effect, and OpenCode starts in that object when a session is first used.
 
 ```typescript
 const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools, Deploy] });
@@ -76,11 +76,11 @@ Your tools are registered with OpenCode and run in the Durable Object, where the
 
 See [Tools](/opencode/tools).
 
-## Skills
+## Processes
 
-An `AI.Skill` becomes an OpenCode skill, which the model loads with OpenCode's own `skill` tool.
+An [`AI.Process`](/ai/processes) describes work as prose and names no harness. `OpenCode.HarnessLive` runs its sessions as OpenCode sessions.
 
-See [Skills](/opencode/skills).
+See [Processes on OpenCode](/opencode/processes).
 
 ## The sandbox
 
@@ -90,6 +90,6 @@ See [The session's sandbox](/opencode/sandbox).
 
 ## How @alchemy.run/opencode models these concepts
 
-`OpenCode.Harness` is an Effect you yield where its Layers are provided. Models, tools, MCP servers, skills and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `OpenCodeCloudflare.DurableObjectStorage` runs OpenCode on the Durable Object's SQLite and keeps its alarm armed while a prompt runs, so an evicted object wakes up and the prompt resumes. `OpenCode.CodingTools` provides the shared coding tools, each working in the session's sandbox.
+`OpenCode.Harness` is an Effect you yield where its Layers are provided. Models, tools, MCP servers and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `OpenCode.HarnessLive` is the same harness as a Layer, for [processes](/opencode/processes). `OpenCodeCloudflare.DurableObjectStorage` runs OpenCode on the Durable Object's SQLite and keeps its alarm armed while a prompt runs, so an evicted object wakes up and the prompt resumes. `OpenCode.CodingTools` provides the shared coding tools, each working in the session's sandbox.
 
 Next: [Setup](/opencode/setup), then the [tutorial](/opencode/tutorial/part-1).

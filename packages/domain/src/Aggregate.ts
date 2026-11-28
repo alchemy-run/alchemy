@@ -10,11 +10,15 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { Annotations } from "./Annotations.ts";
 import type * as Command from "./Command.ts";
+import type * as Compaction from "./Compaction.ts";
 import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
 import { decidedAt, judge, settle, targetId as internalTargetId } from "./internal.ts";
 import * as RequestContext from "./RequestContext.ts";
+import type * as Rewrite from "./Rewrite.ts";
 import type * as Telemetry from "./Telemetry.ts";
+import { memo, type Thunk } from "./Thunk.ts";
+import type { ConsistencyTimeout } from "./View.ts";
 
 /**
  * The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`.
@@ -476,6 +480,42 @@ export interface Client<Def extends AnyDefinition> {
    * for one that has never committed.
    */
   readonly get: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
+  /**
+   * Run a `Domain.Rewrite` on one instance: change the events it has
+   * recorded, and its state with them. No command commits to the instance
+   * while it runs. Succeeds once the instance's own history is rewritten;
+   * its views and projections follow, and {@link Client.rewritten} waits
+   * for them. Fails with `InvariantBroken`, changing nothing, when the
+   * rewritten state breaks one of the aggregate's invariants. Running it
+   * again with the same `rewriteId` returns the first receipt; inside a saga
+   * step the id is the step's, so a step that runs again rewrites once.
+   */
+  readonly rewrite: (
+    target: Target<Def>,
+    rewrite: { readonly _tag: string },
+    options?: Rewrite.Options,
+  ) => Effect.Effect<Rewrite.Receipt, Rewrite.InvariantBroken>;
+  /**
+   * Wait until everything built from a rewritten instance reflects the
+   * rewrite: every view key its events reach has folded them again, through
+   * any views between, and every projection's `rewrite` handler has
+   * succeeded for the events it was given.
+   */
+  readonly rewritten: (
+    receipt: Rewrite.Receipt,
+    options?: { readonly timeout?: Duration.Input },
+  ) => Effect.Effect<void, ConsistencyTimeout>;
+  /**
+   * Compact one instance with a `Domain.Compaction` of this aggregate now:
+   * commit its roll-up, then hand the events before it to the compaction's
+   * handler and remove them. Commands keep committing while it runs. Fails
+   * with `CompactionLossy`, changing nothing, when folding the roll-up does
+   * not give the instance's state back.
+   */
+  readonly compact: (
+    target: Target<Def>,
+    compaction: Compaction.Any,
+  ) => Effect.Effect<Compaction.Receipt, Compaction.CompactionLossy>;
 }
 
 /** The commands of a definition that never reject, so can be scheduled. */
@@ -508,6 +548,19 @@ export interface ClientImpl {
     options: ImportOptions,
   ) => Effect.Effect<Receipt, UnexpectedVersion | ImportOutOfOrder>;
   readonly get: (target: unknown) => Effect.Effect<unknown>;
+  readonly rewrite: (
+    target: unknown,
+    rewrite: { readonly _tag: string },
+    options?: Rewrite.Options,
+  ) => Effect.Effect<Rewrite.Receipt, Rewrite.InvariantBroken>;
+  readonly rewritten: (
+    receipt: Rewrite.Receipt,
+    options?: { readonly timeout?: Duration.Input },
+  ) => Effect.Effect<void, ConsistencyTimeout>;
+  readonly compact: (
+    target: unknown,
+    compaction: Compaction.Any,
+  ) => Effect.Effect<Compaction.Receipt, Compaction.CompactionLossy>;
 }
 
 /**
@@ -888,37 +941,41 @@ export const make = <
   const X extends ReadonlyArray<Event.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<Id, S, C, X> & Decides<C>,
+  definition: Thunk<Definition<Id, S, C, X> & Decides<C>>,
   annotations: Annotations = {},
 ): AggregateClass<Name, Resolved<Id, S, C, X>> => {
   const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, X>>>()(
     `alchemy/Domain/Aggregate/${name}`,
   );
-  // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
-  const decodeId = Schema.decodeUnknownSync(
-    definition.id as unknown as Schema.Codec<unknown, unknown>,
+  const given = memo(definition);
+  const decodeId = memo(() =>
+    // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
+    Schema.decodeUnknownSync(given().id as unknown as Schema.Codec<unknown, unknown>),
   );
-  const commands: ReadonlyArray<Command.Any> = definition.commands ?? [];
+  const resolved = memo(() => {
+    const read = given();
+    const commands: ReadonlyArray<Command.Any> = read.commands ?? [];
+    return {
+      ...read,
+      commands,
+      keyOf: read.keyOf,
+      decide: read.decide ?? {},
+      // What its commands record, then what decisions record on it.
+      events: [
+        ...new Set([...commands.flatMap((command) => command.events), ...(read.events ?? [])]),
+      ],
+    } as unknown as Resolved<Id, S, C, X>;
+  });
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
     static readonly annotations: Annotations = annotations;
     static readonly aggregateName: Name = name;
-    static readonly definition = {
-      ...definition,
-      commands,
-      keyOf: definition.keyOf,
-      decide: definition.decide ?? {},
-      // What its commands record, then what decisions record on it.
-      events: [
-        ...new Set([
-          ...commands.flatMap((command) => command.events),
-          ...(definition.events ?? []),
-        ]),
-      ],
-    } as unknown as Resolved<Id, S, C, X>;
+    static get definition(): Resolved<Id, S, C, X> {
+      return resolved();
+    }
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
-      return makeRef(this, decodeId(id) as IdOf<Self>);
+      return makeRef(this, decodeId()(id) as IdOf<Self>);
     }
     /** Decide a command locally. See {@link predict}. */
     static predict(

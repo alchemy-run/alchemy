@@ -35,9 +35,9 @@ Alchemy deploys with the credentials in a [profile](/environments/profiles):
 
 <PackageManagers run="alchemy profile edit --add E2B" />
 
-Pick **Browser login** for most setups: you sign in to E2B in your browser, and Alchemy deploys to your account's default team. The login refreshes itself.
+Pick **Browser login** for most setups: you give the team id, sign in to E2B in your browser, and Alchemy deploys to that team. The login refreshes itself. The team id is in the E2B dashboard's team settings.
 
-Pick **Access token or API key** to paste one instead. An access token acts for you, so give the team id too when you deploy to a team other than your default. An API key already belongs to one team.
+Pick **Access token or API key** to paste one instead. An access token acts for you, so give the team id too. An API key already belongs to one team.
 
 ## Give production its own team
 
@@ -76,7 +76,7 @@ Provide `E2B.ReadTeamHttp`.
 
 ## Deploy from CI with a token
 
-When `E2B_ACCESS_TOKEN` is set, Alchemy uses it instead of the profile. Set `E2B_TEAM_ID` to deploy to a team other than your default:
+When `E2B_ACCESS_TOKEN` is set, Alchemy uses it instead of the profile. Set `E2B_TEAM_ID` with it:
 
 <PackageManagers
   script={`E2B_ACCESS_TOKEN=sk_e2b_... E2B_TEAM_ID=... {run} alchemy deploy --stage prod`}

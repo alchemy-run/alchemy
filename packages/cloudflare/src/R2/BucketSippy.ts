@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { revealOptional } from "../internal/SdkSecret.ts";
 import type { Providers } from "../Providers.ts";
 import type { Bucket } from "./Bucket.ts";
 
@@ -395,6 +396,6 @@ const toAttributes = (
     provider: config.destination?.provider ?? undefined,
     account: config.destination?.account ?? undefined,
     bucket: config.destination?.bucket ?? undefined,
-    accessKeyId: config.destination?.accessKeyId ?? undefined,
+    accessKeyId: revealOptional(config.destination?.accessKeyId),
   },
 });

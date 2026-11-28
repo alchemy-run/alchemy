@@ -1,0 +1,257 @@
+---
+title: Where sessions run
+description: Give a process's Layer to a host and each of its sessions runs in an instance of its own, a Durable Object on Cloudflare. Policies, sagas and Workers hold a session by its key, send it work, and read where it stands and its transcript.
+---
+
+A session needs somewhere to keep its conversation and to wake up again after an eviction. You do not write that place. A process's Layer says how the work is done; a host takes that Layer and gives each session an instance of its own.
+
+## Declare the process
+
+Declare the process by name, with its prose in a Layer beside it:
+
+```typescript title="src/Engineer.process.ts"
+import * as AI from "@alchemy.run/ai";
+import { Workshop } from "./Workshop/Workshop.model.ts";
+
+export class Engineer extends AI.Process<Engineer>()("Engineer", {}) {}
+
+export const EngineerLive = Engineer.toLayer({
+  description: "Implement one task, from reading the code to a passing change.",
+})`
+  Implement the task you are given with ${AI.Read} and ${AI.Edit}.
+  When it passes, send ${() => Workshop.CompleteTask}.
+`;
+```
+
+The process belongs to no model. Its prose mentions the [Domain models](/domain) it works with, as many as it needs, and each mention makes `EngineerLive` require that model.
+
+## Say what a session runs on
+
+A session needs a harness to run on and a model to run with:
+
+```typescript title="src/Workshop.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
+import { Smart, SmartLive } from "./Models.ts";
+
+const Agents = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLive)),
+);
+```
+
+## Host the model
+
+The model is hosted as any model is. A policy of it holds `Engineer`, so its Layer still needs one:
+
+```diff lang="typescript" title="src/Workshop.ts"
+import * as AI from "@alchemy.run/ai";
++import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
+import { Smart, SmartLive } from "./Models.ts";
++import { TaskWorkLive } from "./Workshop/TaskWork.policy.ts";
++import { Workshop } from "./Workshop/Workshop.model.ts";
+
+const Agents = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLive)),
+);
++
++const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(
++  Layer.provide(DomainCloudflare.layerDurableObjects()),
++);
+```
+
+## Host the process
+
+`AICloudflare.layerDurableObjects` takes the process's Layer, with what a session runs on and the models its prose mentions:
+
+```diff lang="typescript" title="src/Workshop.ts"
+import * as AI from "@alchemy.run/ai";
++import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
++import { EngineerLive } from "./Engineer.process.ts";
+import { Smart, SmartLive } from "./Models.ts";
+
+const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
++
++const EngineerSessions = AICloudflare.layerDurableObjects(
++  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
++);
+```
+
+It gives back the same service, `Engineer`. The Worker that provides it declares one Durable Object class, `EngineerProcess`, and each session is one object of it, named after the session's key. Each object builds the Layer it was given for itself, so the harness opens there, on that object's storage.
+
+## Give the model its process
+
+The model needed an `Engineer`, and now there is one:
+
+```diff lang="typescript" title="src/Workshop.ts"
+const EngineerSessions = AICloudflare.layerDurableObjects(
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
+);
++
++export const Live = WorkshopLive.pipe(Layer.provideMerge(EngineerSessions));
+```
+
+The model needs the process and the process needs the model. The host closes that loop: the Layer it is given may need the process it provides, and the host supplies it, inside each session's object and outside.
+
+## One object for each session
+
+A session's key is its object's name. Sessions run at the same time and never wait for each other, and each has its own storage, its own alarm and its own sandbox.
+
+A session [started by another session](/ai/process-graphs#start-a-process) gets an object of its own when its process is hosted too: give the host both Layers, `Layer.mergeAll(EngineerLive, ResearchLive)`. One of the same process, or of a process whose prose is on its class, lives in the object of the session that started it.
+
+## Reach a session
+
+Anything the hosted Layer is provided to holds the process's client. `get` takes the session's key, and each call goes to that session's object.
+
+A policy or a saga of a model yields the process:
+
+```typescript title="src/Workshop/TaskWork.policy.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import { Engineer } from "../Engineer.process.ts";
+import { TaskOpened } from "./OpenTask.command.ts";
+import { Task } from "./Task.aggregate.ts";
+
+export class TaskWork extends Domain.Policy("TaskWork", { from: Task, on: [TaskOpened] }) {}
+
+export const TaskWorkLive = TaskWork.toLayer(
+  Effect.gen(function* () {
+    const engineer = yield* Engineer;
+    return Effect.fn(function* ({ source, event }) {
+      yield* engineer
+        .get(source.id)
+        .send(event.description, { requestId: "start" })
+        .pipe(Effect.orDie);
+    });
+  }),
+);
+```
+
+A Worker does the same:
+
+```typescript title="src/Api.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Engineer } from "./Engineer.process.ts";
+import { Live } from "./Workshop.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const engineer = yield* Engineer;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const id = new URL(request.url, "http://api").pathname.slice(1);
+        const reply = yield* engineer.get(id).prompt(yield* request.text);
+        return HttpServerResponse.text(reply.text);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+`send` returns once the message is stored. `prompt` waits for the answer.
+
+## Read a session from outside
+
+The client reads a session too. `status` says whether it is working and what is queued, and `history` pages through its transcript:
+
+```typescript
+const session = engineer.get(taskId);
+
+const { status, queued } = yield* session.status;
+const page = yield* session.history({ after, take: 100 });
+```
+
+`history({ after })` returns the items stored after the one you last saw, so a caller that asks again reads only what is new. A Worker can serve the two on a route of its own for a page to poll: [`examples/cloudflare-ai-issues`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-ai-issues) does.
+
+A session's live `events` stream stays in its object. Read it there, or [serve it from an object you write](/ai/front-end#or-serve-the-session-over-rpc).
+
+## Tell a model what a session did
+
+A Domain model knows nothing of a session. A session tells it by sending a command its prose mentions, as `CompleteTask` above: the command is an event of the model, which its views show and its policies react to. What the model should know of the work is a command you declare, and the session sends it when the prose says to.
+
+## Break the import cycle
+
+`TaskWork` imports `Engineer`, the model imports `TaskWork`, and `Engineer`'s prose imports the model. The prose's mentions and the model's members are thunks, each read when first used. [Break the cycle with thunks](/ai/domain#break-the-cycle-with-thunks) says why.
+
+## Run it in memory
+
+`AI.layerInMemory` hosts the same Layer in one process, and `AI.scripted` plays a process in place of a model, for tests:
+
+```typescript title="test/Workshop.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Engineer } from "../src/Engineer.process.ts";
+import { CompleteTask } from "../src/Workshop/CompleteTask.command.ts";
+import { Task } from "../src/Workshop/Task.aggregate.ts";
+import { TaskWorkLive } from "../src/Workshop/TaskWork.policy.ts";
+import { Workshop } from "../src/Workshop/Workshop.model.ts";
+
+const EngineerPlayed = AI.scripted(
+  Engineer,
+  Effect.gen(function* () {
+    const tasks = yield* Task;
+    return Effect.fn(function* ({ key }: AI.Turn) {
+      yield* tasks.send(new CompleteTask({ taskId: key }));
+      return "Done.";
+    }, Effect.orDie);
+  }),
+);
+
+const WorkshopInMemory = Workshop.layer(TaskWorkLive).pipe(Layer.provide(Domain.InMemory));
+
+const EngineerInMemory = AI.layerInMemory(
+  EngineerPlayed.pipe(Layer.provide(WorkshopInMemory)),
+);
+
+export const Live = WorkshopInMemory.pipe(Layer.provideMerge(EngineerInMemory));
+```
+
+## A session survives its object
+
+A harness arms the object's alarm while a session has work to do. An object that is evicted in the middle of a tool call wakes up, and the session carries on. See [Surviving a crash](/pi/durability) for Pi and [Sessions & prompts](/opencode/sessions) for OpenCode.
+
+## Without a host
+
+A process's Layer runs its sessions wherever it is built. Yield the process in a Durable Object you write, and its sessions live in that object's storage, as many as you give keys:
+
+```typescript title="src/Reviewers.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { Reviewer } from "./Reviewer.process.ts";
+import { Live } from "./Layers.ts";
+
+export default class Reviewers extends Cloudflare.DurableObject<Reviewers>()(
+  "Reviewers",
+  Effect.gen(function* () {
+    const reviewer = yield* Reviewer;
+
+    return Effect.succeed({
+      review: Effect.fn(function* (id: string, diff: string) {
+        const reply = yield* reviewer.get(id).prompt(diff);
+        return reply.text;
+      }, Effect.orDie),
+    });
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+Here `get` is a lookup in this object, not a call to another one, and the session's live `events` can be read where it is yielded. Reach for it when a session belongs to something that is already an object of yours.

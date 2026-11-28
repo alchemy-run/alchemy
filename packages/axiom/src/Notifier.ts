@@ -1,15 +1,15 @@
-import * as Axiom from "@distilled.cloud/axiom";
+import * as AxiomPreview from "@distilled.cloud/axiom/unstable/v2";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "./Providers.ts";
 
-export type NotifierProps = Axiom.CreateNotifierRequest;
+export type NotifierProps = AxiomPreview.CreateNotifierRequest;
 
 export type Notifier = Resource<
   "Axiom.Notifier",
   NotifierProps,
-  Axiom.CreateNotifierResponse & { id: string },
+  AxiomPreview.CreateNotifierResponse & { id: string },
   never,
   Providers,
   NotifierLookup
@@ -94,11 +94,11 @@ export const NotifierProvider = () =>
   Provider.effect(
     Notifier,
     Effect.gen(function* () {
-      const create = yield* Axiom.createNotifier;
-      const update = yield* Axiom.updateNotifier;
-      const get = yield* Axiom.getNotifier;
-      const listNotifiers = yield* Axiom.getNotifiers;
-      const del = yield* Axiom.deleteNotifier;
+      const create = yield* AxiomPreview.createNotifier;
+      const update = yield* AxiomPreview.updateNotifier;
+      const get = yield* AxiomPreview.getNotifier;
+      const listNotifiers = yield* AxiomPreview.getNotifiers;
+      const del = yield* AxiomPreview.deleteNotifier;
 
       return {
         stables: ["id"],

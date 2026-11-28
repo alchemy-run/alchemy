@@ -10,6 +10,7 @@ import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
 import type * as Decision from "./Decision.ts";
 import { ModelHostedTwice } from "./DefinitionError.ts";
 import { DefinitionError } from "./internal.ts";
+import type { KeyStore } from "./KeyStore.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -49,6 +50,12 @@ export const EnvelopeJson = Schema.Struct({
   correlationId: Schema.optionalKey(Schema.String),
   /** The span that committed the event, so its reactions continue or link to it. */
   trace: Schema.optionalKey(TraceJson),
+  /**
+   * Set on a compaction's roll-up: the instance's version before it. A view
+   * key that already holds events of the instance keeps the roll-up without
+   * folding it (see {@link ViewInput.covered}).
+   */
+  rollup: Schema.optionalKey(Schema.Number),
 });
 export type EnvelopeJson = typeof EnvelopeJson.Type;
 
@@ -100,7 +107,106 @@ export interface Delivery {
    * the delivery's own `source` and `seq` are its root.
    */
   readonly root?: Root;
+  /**
+   * Set on a delivery that revises one the key was given before (see
+   * {@link Revision}). Targets handle it apart from their duplicates check;
+   * policies ignore it.
+   */
+  readonly revision?: Revision;
 }
+
+/**
+ * What a rewrite of a source tells a view or projection key about one event
+ * it was given: the delivery that carries it is the event as it is now. The
+ * source sends its revisions in order, then one `done`.
+ */
+export interface Revision {
+  /** The rewrite it stems from: the same through every view between. */
+  readonly root: string;
+  /** Counts the source's revisions, from 1: a key drops one it has already taken. */
+  readonly n: number;
+  /** What the key was given before; absent when it was given nothing for this event. */
+  readonly before?: {
+    readonly tag: string;
+    readonly event: Json;
+    readonly state?: Json;
+    readonly routes?: ReadonlyArray<string>;
+  };
+  /** The key is no longer given the event: the delivery repeats what `before` holds. */
+  readonly gone?: true;
+  /** No change: the source has sent every change of `root` it has for this key. */
+  readonly done?: true;
+  /**
+   * The rewrite itself, for the events a compaction removed from the source:
+   * a view key runs it over the copies it kept (see {@link ViewKit.recall}).
+   * The delivery that carries it holds no event.
+   */
+  readonly recall?: Recall;
+}
+
+/** A rewrite as a view key runs it over the inputs it kept of events its source no longer holds. */
+export interface Recall {
+  /** The rewrite's name, as the model lists it. */
+  readonly name: string;
+  /** The rewrite's encoded input. */
+  readonly input: Json;
+  /** The last `seq` a compaction removed from the source: the key's inputs through it are its own. */
+  readonly through: number;
+}
+
+/** A view key that events a compaction removed had reached. */
+export interface Reached {
+  readonly name: string;
+  readonly key: string;
+}
+
+/** One stored row a rewrite changed: replaced (`after`), removed (no `after`) or new (no `before`). */
+export interface Change<Row> {
+  readonly seq: number;
+  readonly before?: Row;
+  readonly after?: Row;
+}
+
+/** A consumer key a source sent revisions to. */
+export interface Revised {
+  /** The consumer, by `CatchUp.targetId`. */
+  readonly target: string;
+  readonly kind: "view" | "projection";
+  readonly name: string;
+  readonly key: string;
+}
+
+/** One delivery a view key applied, with the `seq` of each entry it emitted for it. */
+export interface ViewInput {
+  readonly delivery: Delivery;
+  readonly seqs: ReadonlyArray<number>;
+  /**
+   * A roll-up of events the key already held when it arrived: kept, so a
+   * rewrite of it finds it, and never folded.
+   */
+  readonly covered?: true;
+}
+
+/** A stored view input: rows written before entries were tracked hold the delivery alone. */
+export type StoredViewInput = ViewInput | Delivery;
+
+/** A stored view input with its entry seqs, when it has them. */
+export const viewInputOf = (
+  row: StoredViewInput,
+): {
+  readonly delivery: Delivery;
+  readonly seqs: ReadonlyArray<number> | undefined;
+  readonly covered?: true;
+} => ("delivery" in row ? row : { delivery: row, seqs: undefined });
+
+/** The revision that carries a rewrite to a view key's own copies, when it holds one from `source`. */
+export const recallOf = (
+  pending: ReadonlyMap<string, Delivery>,
+  source: string,
+): Delivery | undefined => {
+  const held = pending.get(revisionKey(source, 0));
+  return held?.revision?.recall === undefined ? undefined : held;
+};
 
 /**
  * The aggregate event a delivery derives from, through any views: its stream
@@ -210,6 +316,106 @@ export interface ReceiptJson {
 }
 
 /**
+ * An accepted command's receipt as an instance stores it: the number of
+ * events it committed, read back from the log when the command is sent
+ * again. A history rewritten since gives the events as they are now.
+ */
+export interface StoredReceipt {
+  readonly version: number;
+  readonly count: number;
+  readonly reply: Json;
+}
+
+/** What an instance stores under a command id: its rejection, or its receipt. */
+export type StoredResult =
+  | { readonly _tag: "Rejected"; readonly rejection: Json }
+  | { readonly _tag: "Accepted"; readonly stored: StoredReceipt }
+  /** Stored before receipts were counts: it holds a copy of its events. */
+  | { readonly _tag: "Accepted"; readonly receipt: ReceiptJson };
+
+/** The stored form of an accepted command's result. */
+export const storedResult = (version: number, count: number, reply: Json): StoredResult => ({
+  _tag: "Accepted",
+  stored: { version, count, reply },
+});
+
+/**
+ * A stored result as `send` answers it: its events are the rows of `events`
+ * (the instance's log, or the part of it that holds them) in its range.
+ */
+export const sendResultOf = (
+  stream: string,
+  result: StoredResult,
+  events: ReadonlyArray<StoredEvent>,
+): SendResult => {
+  if (result._tag === "Rejected") return result;
+  if ("receipt" in result) return result;
+  const { version, count, reply } = result.stored;
+  return {
+    _tag: "Accepted",
+    receipt: {
+      stream,
+      version,
+      events: events
+        .filter((row) => row.envelope.seq > version - count && row.envelope.seq <= version)
+        .map((row) => row.event),
+      reply,
+    },
+  };
+};
+
+/** What a rewrite is given on an instance. */
+export interface RewriteInput {
+  /** Names the run on the instance: a seen id answers its first result. */
+  readonly rewriteId: string;
+  /** The rewrite's name, as the model lists it. */
+  readonly name: string;
+  /** The rewrite's encoded input. */
+  readonly input: Json;
+}
+
+/** Result of {@link AggregateStore.rewrite}. */
+export type RewriteResult =
+  | { readonly _tag: "Rewritten"; readonly changed: number }
+  | { readonly _tag: "InvariantBroken"; readonly invariant: string };
+
+/** How far a rewrite has got on its instance. */
+export interface RewriteStatus {
+  /** The instance's own events and state are rewritten, and every revision is on its way. */
+  readonly done: boolean;
+  /** The view and projection keys it sent revisions to. */
+  readonly sent: ReadonlyArray<Revised>;
+}
+
+/** Result of {@link AggregateStore.compact}. */
+export type CompactResult =
+  | { readonly _tag: "Compacted"; readonly version: number; readonly compacted: number }
+  | { readonly _tag: "Lossy" };
+
+/** Input to {@link AggregateKit.rewrite}. */
+export interface RewriteRun {
+  readonly id: string;
+  readonly name: string;
+  readonly input: Json;
+  /** The state folded from the rewritten events before this run: `null` at the start. */
+  readonly state: Json;
+  /** A run of the instance's stored events, in order. */
+  readonly events: ReadonlyArray<StoredEvent>;
+}
+
+/** Input to {@link AggregateKit.rollup}. */
+export interface RollupInput {
+  readonly id: string;
+  readonly name: string;
+  readonly state: Json;
+  readonly version: number;
+  readonly now: number;
+}
+
+/** Result of {@link AggregateKit.rollup}: the roll-up's commit, or `undefined` when it would lose state. */
+export type RollupResult = SeedResult | undefined;
+
+/**
  * Result of {@link AggregateStore.send}.
  */
 export type SendResult =
@@ -274,6 +480,68 @@ export interface AggregateKit {
   readonly consumerSingleSource: (target: string) => boolean;
   /** Route stored events to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<StoredEvent>) => Effect.Effect<ReplayResult>;
+  /**
+   * What instance `id`'s stored events route to, for every subscriber, policies
+   * included: each consumer and key its history reaches. Nothing is sent. A
+   * layout change uses it to find every consumer object exactly.
+   */
+  readonly consumersOf: (
+    id: string,
+    rows: ReadonlyArray<StoredEvent>,
+  ) => Effect.Effect<ReadonlyArray<Delivery>>;
+  /**
+   * Rewrite a run of an instance's stored events, purely: what changed, and
+   * the state folded from the run as it now stands. An instance's whole log
+   * goes through in order, each run starting from the state of the last.
+   */
+  readonly rewrite: (run: RewriteRun) => Effect.Effect<{
+    readonly state: Json;
+    readonly changes: ReadonlyArray<Change<StoredEvent>>;
+  }>;
+  /** Whether the rewrite removes the instance: its receipts and scheduled commands go too. */
+  readonly deletes: (name: string) => boolean;
+  /** The first of the aggregate's invariants an encoded state breaks, if any. */
+  readonly broken: (state: Json) => string | undefined;
+  /**
+   * What a rewrite's changes are to each view and projection key the events
+   * reached or now reach: one revision per key and event, in order, without
+   * its `n` (the instance counts them).
+   */
+  readonly revise: (
+    id: string,
+    root: string,
+    changes: ReadonlyArray<Change<StoredEvent>>,
+  ) => Effect.Effect<ReadonlyArray<Delivery>>;
+  /** The view keys a run of an instance's stored events reaches, each once. */
+  readonly reached: (
+    id: string,
+    events: ReadonlyArray<StoredEvent>,
+  ) => Effect.Effect<ReadonlyArray<Reached>>;
+  /**
+   * A rewrite as a revision for each view key that kept events a compaction
+   * removed from the instance, without its `n`. None when the rewrite could
+   * change none of them.
+   */
+  readonly recall: (
+    id: string,
+    root: string,
+    recall: Recall,
+    reached: ReadonlyArray<Reached>,
+  ) => ReadonlyArray<Delivery>;
+  /**
+   * A compaction's roll-up of an instance, committed as history (policies
+   * never react to it); `undefined` when folding it from `initial` does not
+   * give the state back.
+   */
+  readonly rollup: (input: RollupInput) => Effect.Effect<RollupResult>;
+  /** The model's compactions of this aggregate, with what their Layers say. */
+  readonly compactions: ReadonlyArray<{
+    readonly name: string;
+    /** Compact once the instance holds more than this many events since it last did. */
+    readonly afterEvents: number | undefined;
+    /** Hand a run of events to the compaction's handler before they are removed. */
+    readonly archive: (id: string, events: ReadonlyArray<StoredEvent>) => Effect.Effect<void>;
+  }>;
 }
 
 /**
@@ -343,7 +611,56 @@ export interface DecisionReceiptJson {
   readonly commits: ReadonlyArray<{ readonly stream: string; readonly version: number }>;
   readonly events: ReadonlyArray<Json>;
   readonly reply: Json;
+  /** Where each of `events` was committed, by position. Absent on receipts from before it was kept. */
+  readonly at?: ReadonlyArray<{ readonly stream: string; readonly seq: number }>;
 }
+
+/**
+ * A decision's receipt as it is stored: where its events are, without a
+ * copy of them. A history rewritten since gives the events as they are now.
+ */
+export const storedDecisionReceipt = (receipt: DecisionReceiptJson): DecisionReceiptJson =>
+  receipt.at === undefined ? receipt : { ...receipt, events: [] };
+
+/**
+ * A stored decision receipt as `send` answers it: its events read back from
+ * the instances that hold them, in the order they were recorded. `read`
+ * gives the stored events of one stream at the given `seq`s.
+ */
+export const decisionReceiptOf = (
+  stored: DecisionReceiptJson,
+  read: (stream: string, seqs: ReadonlyArray<number>) => Effect.Effect<ReadonlyArray<StoredEvent>>,
+): Effect.Effect<DecisionReceiptJson> => {
+  const at = stored.at;
+  if (at === undefined || at.length === 0 || stored.events.length > 0) {
+    return Effect.succeed(stored);
+  }
+  const streams = [...new Set(at.map((pointer) => pointer.stream))];
+  return Effect.map(
+    Effect.forEach(
+      streams,
+      (stream) =>
+        Effect.map(
+          read(
+            stream,
+            at.filter((pointer) => pointer.stream === stream).map((pointer) => pointer.seq),
+          ),
+          (rows) => [stream, new Map(rows.map((row) => [row.envelope.seq, row.event]))] as const,
+        ),
+      { concurrency: "unbounded" },
+    ),
+    (found) => {
+      const byStream = new Map(found);
+      return {
+        ...stored,
+        events: at.flatMap(({ stream, seq }) => {
+          const event = byStream.get(stream)?.get(seq);
+          return event === undefined ? [] : [event];
+        }),
+      };
+    },
+  );
+};
 
 /** Input to {@link DecisionKit.decide}. */
 export interface DecideInput {
@@ -473,6 +790,27 @@ export interface AggregateStore {
     events: ReadonlyArray<Json>,
     meta: ImportMeta,
   ) => Effect.Effect<ImportResult>;
+  /**
+   * Rewrite an instance's stored events and state, once per
+   * `input.rewriteId`: single writer per id, with no command committing
+   * while it runs. Persist the events, the state and the revisions for its
+   * consumers together, then deliver those in order after every delivery
+   * already staged. Nothing changes when the rewritten state breaks an
+   * invariant. Optional: a client fails with a defect on a platform without it.
+   */
+  readonly rewrite?: (id: string, input: RewriteInput) => Effect.Effect<RewriteResult>;
+  /** How far the rewrite named `rewriteId` has got; `undefined` when the instance has none. */
+  readonly rewriteStatus?: (
+    id: string,
+    rewriteId: string,
+  ) => Effect.Effect<RewriteStatus | undefined>;
+  /**
+   * Commit a compaction's roll-up to an instance, then hand the events
+   * before it to the compaction's handler and remove them, in runs, each
+   * removed only once the handler succeeded. Commands keep committing while
+   * it runs. Nothing changes when the roll-up would lose state.
+   */
+  readonly compact?: (id: string, name: string) => Effect.Effect<CompactResult>;
 }
 
 /** How much history has reached a consumer: see `View.History`. */
@@ -515,6 +853,12 @@ export interface ViewSnapshot {
    * for a source until the key next applies a delivery from it.
    */
   readonly emitted?: Readonly<Record<string, EmittedRange>>;
+  /**
+   * Per source, the roll-up the key last folded, by its `rollup`: every event
+   * of one roll-up is treated alike. Absent for a source whose roll-ups the
+   * key has only kept.
+   */
+  readonly folded?: Readonly<Record<string, number>>;
 }
 
 /**
@@ -530,6 +874,222 @@ export interface EmittedRange {
   /** …through this one (`after` itself when they emitted nothing). */
   readonly through: number;
 }
+
+/** A delivery without its revision: the event as an ordinary input. */
+export const withoutRevision = (delivery: Delivery): Delivery => {
+  const { revision: _revision, ...rest } = delivery;
+  return rest;
+};
+
+/** The delivery that tells a key its source has sent every revision of `root`. */
+export const doneDelivery = (
+  from: { readonly origin: string; readonly id: string },
+  root: string,
+  n: number,
+  target: Delivery["target"],
+  key: string,
+  at: number,
+): Delivery => {
+  const stream = `${from.origin}/${from.id}`;
+  return {
+    target,
+    key,
+    source: stream,
+    seq: 0,
+    origin: from.origin,
+    tag: "",
+    event: null,
+    envelope: { id: from.id, stream, seq: 0, at, commandId: root, correlationId: root },
+    history: true,
+    revision: { root, n, done: true },
+  };
+};
+
+/** The keys a run of revisions was sent to, each once. */
+export const revisedBy = (deliveries: ReadonlyArray<Delivery>): ReadonlyArray<Revised> => {
+  const out = new Map<string, Revised>();
+  for (const { target, key } of deliveries) {
+    if (target.kind === "policy") continue;
+    const id = `${target.kind}:${target.name}${target.generation ? `${target.inPlace ? "@" : "#"}${target.generation}` : ""}`;
+    out.set(`${id}|${key}`, { target: id, kind: target.kind, name: target.name, key });
+  }
+  return [...out.values()];
+};
+
+/** Two lists of revised keys as one, each key once. */
+export const mergeRevised = (
+  a: ReadonlyArray<Revised>,
+  b: ReadonlyArray<Revised>,
+): ReadonlyArray<Revised> => {
+  const out = new Map<string, Revised>();
+  for (const revised of [...a, ...b]) out.set(`${revised.target}|${revised.key}`, revised);
+  return [...out.values()];
+};
+
+/**
+ * A rewrite's revisions as an instance sends them: each numbered after the
+ * last (`from`), then one `done` per key they reach.
+ */
+export const stampRevisions = (
+  from: { readonly origin: string; readonly id: string },
+  root: string,
+  last: number,
+  revisions: ReadonlyArray<Delivery>,
+  at: number,
+): {
+  readonly deliveries: ReadonlyArray<Delivery>;
+  readonly sent: ReadonlyArray<Revised>;
+  readonly last: number;
+} => {
+  let n = last;
+  const stamped = revisions.map((delivery) => ({
+    ...delivery,
+    revision: { ...delivery.revision!, n: ++n },
+  }));
+  const targets = new Map<string, Delivery>();
+  for (const delivery of stamped) {
+    targets.set(`${delivery.target.kind}:${delivery.target.name}|${delivery.key}`, delivery);
+  }
+  const done = [...targets.values()].map((delivery) =>
+    doneDelivery(from, root, ++n, delivery.target, delivery.key, at),
+  );
+  return { deliveries: [...stamped, ...done], sent: revisedBy(stamped), last: n };
+};
+
+/**
+ * Whether a key still holds a revision of the rewrite `root` from `source`
+ * for an event that has yet to arrive: until it does, the key has not taken
+ * all of that rewrite.
+ */
+export const awaitsRevision = (
+  pending: Iterable<Delivery>,
+  root: string,
+  source: string,
+): boolean => {
+  for (const delivery of pending) {
+    // One the key is no longer given may never arrive: its source has removed
+    // it. Held, it is dropped if it does arrive, so the key has taken it already.
+    if (delivery.revision?.gone) continue;
+    // A rewrite for the key's own copies waits for no event: see `keptRecalls`.
+    if (delivery.revision?.recall) continue;
+    if (delivery.source === source && delivery.revision?.root === root) return true;
+  }
+  return false;
+};
+
+/**
+ * The recalls a key still holds once it has applied through `checkpoints`. A
+ * key takes a recall when its source says it has sent it, which can be before
+ * the events it is for arrive (the key is still reading its history). So it
+ * holds each until it has read its source past the events the recall covers,
+ * and runs it over what arrives meanwhile.
+ */
+export const keptRecalls = (
+  recalls: ReadonlyArray<Delivery>,
+  checkpoints: Readonly<Record<string, number>>,
+): ReadonlyArray<Delivery> =>
+  recalls.filter((held) => (checkpoints[held.source] ?? 0) < (held.revision?.recall?.through ?? 0));
+
+/** Where a pending revision is kept, per source event. */
+export const revisionKey = (source: string, seq: number) => `${source}|${seq}`;
+
+/** Whether two stored JSON values are the same. */
+export const sameJson = (a: Json, b: Json): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * A view key's inputs once the revisions it holds are taken: a revised input
+ * is swapped or removed, and one the key is newly given goes in before the
+ * first later input of its source (at the end when there is none). Revisions
+ * for events the key has not been given yet (`left`) stay, to be taken when
+ * the event arrives. `changed` is false when no input was touched.
+ */
+export const reviseInputs = (
+  rows: ReadonlyArray<StoredViewInput>,
+  pending: ReadonlyMap<string, Delivery>,
+  checkpoints: Readonly<Record<string, number>>,
+): {
+  readonly rows: ReadonlyArray<StoredViewInput>;
+  readonly left: ReadonlyMap<string, Delivery>;
+  readonly changed: boolean;
+} => {
+  const used = new Set<string>();
+  const out: Array<StoredViewInput> = [];
+  let changed = false;
+  for (const row of rows) {
+    const { delivery, seqs, covered } = viewInputOf(row);
+    const id = revisionKey(delivery.source, delivery.seq);
+    const revised = pending.get(id);
+    if (revised === undefined) {
+      out.push(row);
+      continue;
+    }
+    used.add(id);
+    changed = true;
+    if (revised.revision?.gone) continue;
+    out.push({
+      delivery: withoutRevision(revised),
+      seqs: seqs ?? [],
+      ...(covered ? { covered } : {}),
+    });
+  }
+  const left = new Map<string, Delivery>();
+  for (const [id, revised] of pending) {
+    if (used.has(id)) continue;
+    // Given to the key, and yet to arrive: taken when it does. An event the
+    // key was never given (no `before`) is not on its way: it goes in now.
+    if (
+      revised.revision?.before !== undefined &&
+      revised.seq > (checkpoints[revised.source] ?? 0)
+    ) {
+      left.set(id, revised);
+      continue;
+    }
+    if (revised.revision?.gone) continue;
+    changed = true;
+    const at = out.findIndex((row) => {
+      const { delivery } = viewInputOf(row);
+      return delivery.source === revised.source && delivery.seq > revised.seq;
+    });
+    const input: ViewInput = { delivery: withoutRevision(revised), seqs: [] };
+    if (at < 0) out.push(input);
+    else out.splice(at, 0, input);
+  }
+  return { rows: out, left, changed };
+};
+
+/** What a refold changed among a key's entries, by `seq`. */
+export const entryChanges = (
+  before: ReadonlyArray<ViewEntry>,
+  after: ReadonlyArray<ViewEntry>,
+): ReadonlyArray<Change<ViewEntry>> => {
+  const was = new Map(before.map((entry) => [entry.seq, entry]));
+  const is = new Map(after.map((entry) => [entry.seq, entry]));
+  const changes: Array<Change<ViewEntry>> = [];
+  for (const seq of [...new Set([...was.keys(), ...is.keys()])].sort((a, b) => a - b)) {
+    const old = was.get(seq);
+    const now = is.get(seq);
+    if (old !== undefined && now !== undefined && sameJson(old, now)) continue;
+    changes.push({ seq, ...(old ? { before: old } : {}), ...(now ? { after: now } : {}) });
+  }
+  return changes;
+};
+
+/** A key's snapshot after a refold: it never reports less than it did before. */
+export const refolded = (before: ViewSnapshot, after: ViewSnapshot, top: number): ViewSnapshot => {
+  const checkpoints: Record<string, number> = { ...after.checkpoints };
+  for (const [source, seq] of Object.entries(before.checkpoints)) {
+    checkpoints[source] = Math.max(checkpoints[source] ?? 0, seq);
+  }
+  return {
+    ...after,
+    checkpoints,
+    // A watcher is sent a state only with a version past the one it has.
+    version: sameJson(before.state, after.state) ? before.version : before.version + 1,
+    seq: Math.max(before.seq, top),
+    // A key left with no inputs is still this generation's.
+    ...(before.generation === undefined ? {} : { generation: before.generation }),
+  };
+};
 
 /** The snapshot of a key that has never received a delivery. */
 export const emptySnapshot: ViewSnapshot = { state: null, version: 0, checkpoints: {}, seq: 0 };
@@ -566,7 +1126,49 @@ export interface ViewKit {
     readonly changed: boolean;
     readonly entries: ReadonlyArray<ViewEntry>;
     readonly downstream: ReadonlyArray<Delivery>;
+    /** The deliveries it applied (not the duplicates), each with the entries it emitted. */
+    readonly inputs: ReadonlyArray<ViewInput>;
   }>;
+  /**
+   * Fold a run of a key's inputs again, after a rewrite changed some of
+   * them: the whole log goes through in order, from the empty snapshot, each
+   * run starting from the last one's `snapshot` and `top`. An input's
+   * entries keep the `seq`s they had; one that now emits more takes new
+   * ones after `top`, the key's highest `seq`.
+   */
+  readonly refold: (
+    key: string,
+    cursor: { readonly snapshot: ViewSnapshot; readonly top: number },
+    rows: ReadonlyArray<StoredViewInput>,
+  ) => Effect.Effect<{
+    readonly snapshot: ViewSnapshot;
+    readonly top: number;
+    readonly inputs: ReadonlyArray<ViewInput>;
+    readonly entries: ReadonlyArray<ViewEntry>;
+  }>;
+  /**
+   * Run a rewrite over the inputs a key kept of events its source no longer
+   * holds (`revised` carries the rewrite, see {@link Revision.recall}): each
+   * is kept, replaced or removed as the rewrite's handlers say, and one the
+   * key is no longer given is removed.
+   */
+  readonly recall: (
+    key: string,
+    revised: Delivery,
+    rows: ReadonlyArray<StoredViewInput>,
+  ) => Effect.Effect<{
+    readonly rows: ReadonlyArray<StoredViewInput>;
+    readonly changed: boolean;
+  }>;
+  /**
+   * What a refold's changes to the key's entries are to each view and
+   * projection key they reached or now reach, as {@link AggregateKit.revise}.
+   */
+  readonly revise: (
+    key: string,
+    root: string,
+    changes: ReadonlyArray<Change<ViewEntry>>,
+  ) => Effect.Effect<ReadonlyArray<Delivery>>;
   /** Route a downstream delivery to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
   /** The views and projections that consume this view, by `CatchUp.targetId`. */
@@ -605,6 +1207,11 @@ export interface ViewKit {
   >;
   /** Route emitted entries to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<ViewEntry>) => Effect.Effect<ReplayResult>;
+  /** What key `id`'s emitted entries route to, for every subscriber: see `AggregateKit.consumersOf`. */
+  readonly consumersOf: (
+    id: string,
+    rows: ReadonlyArray<ViewEntry>,
+  ) => Effect.Effect<ReadonlyArray<Delivery>>;
   /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */
   readonly observe: (
     key: string,
@@ -684,6 +1291,15 @@ export interface ViewStore {
   readonly list: (key: string, range?: ListRange) => Effect.Effect<ReadonlyArray<ViewEntry>>;
   /** Entries with `seq > after`, then live entries. */
   readonly tail: (key: string, after: number) => Stream.Stream<ViewEntry>;
+  /**
+   * The keys a view key sent revisions to once it had taken every revision
+   * of the rewrite `root` from `source` (a stream); `undefined` until then.
+   */
+  readonly revised?: (
+    key: string,
+    root: string,
+    source: string,
+  ) => Effect.Effect<ReadonlyArray<Revised> | undefined>;
   /**
    * Accept a WebSocket upgrade (the current request) for a live read of
    * `key`, then push to it on every commit. Optional: without it, live reads
@@ -771,8 +1387,16 @@ export interface ProjectionStore {
    * accepted, by source and `seq`), then process the log in order, in batches.
    */
   readonly receive: (delivery: Delivery) => Effect.Effect<void>;
-  /** The last processed `seq` per source stream, for one key. */
-  readonly checkpoints: (key: string) => Effect.Effect<Readonly<Record<string, number>>>;
+  /**
+   * The last processed `seq` per source stream, for one key. Given `sources`,
+   * a host may read only theirs: a key can hear from millions of sources.
+   */
+  readonly checkpoints: (
+    key: string,
+    sources?: ReadonlyArray<string>,
+  ) => Effect.Effect<Readonly<Record<string, number>>>;
+  /** Whether a key has handled every revision of the rewrite `root` from `source` (a stream). */
+  readonly revised?: (key: string, root: string, source: string) => Effect.Effect<boolean>;
 }
 
 /**
@@ -782,7 +1406,64 @@ export interface StreamEntry {
   readonly seq: number;
   readonly event: Json;
   readonly envelope: EnvelopeJson;
+  /** The source event its writer was handling when it appended it; absent on entries from before it was kept. */
+  readonly from?: { readonly source: string; readonly seq: number };
 }
+
+/**
+ * What a writer's `rewrite` makes of the entries it appended for one source
+ * event: `events` take their place, in order.
+ */
+export interface StreamRevision {
+  /** The source event whose entries are replaced. */
+  readonly source: string;
+  readonly sourceSeq: number;
+  readonly at: number;
+  readonly commandId: string;
+  readonly events: ReadonlyArray<Json>;
+}
+
+/**
+ * A key's entries once a revision is taken: each entry appended for the
+ * source event takes the next of `events` and keeps its `seq`; an entry with
+ * no event left is removed; an event with no entry left is appended.
+ */
+export const reviseEntries = (
+  name: string,
+  key: string,
+  top: number,
+  matching: ReadonlyArray<StreamEntry>,
+  revision: StreamRevision,
+): {
+  readonly put: ReadonlyArray<StreamEntry>;
+  readonly removed: ReadonlyArray<number>;
+  readonly top: number;
+} => {
+  const put: Array<StreamEntry> = [];
+  const removed: Array<number> = [];
+  matching.forEach((entry, index) => {
+    const event = revision.events[index];
+    if (event === undefined) removed.push(entry.seq);
+    else if (!sameJson(event, entry.event)) put.push({ ...entry, event });
+  });
+  let seq = top;
+  for (const event of revision.events.slice(matching.length)) {
+    seq += 1;
+    put.push({
+      seq,
+      event,
+      envelope: {
+        id: key,
+        stream: `${name}/${key}`,
+        seq,
+        at: revision.at,
+        commandId: revision.commandId,
+      },
+      from: { source: revision.source, seq: revision.sourceSeq },
+    });
+  }
+  return { put, removed, top: seq };
+};
 
 /**
  * The stored progress of one stream key.
@@ -867,6 +1548,11 @@ export interface StreamStore {
   readonly append: (key: string, write: StreamWrite) => Effect.Effect<void>;
   /** Record that the writer handled source events without appending. */
   readonly advance: (key: string, handled: StreamHandled) => Effect.Effect<void>;
+  /**
+   * Replace the entries the writer appended for one source event (see
+   * {@link reviseEntries}). Running it again changes nothing more.
+   */
+  readonly revise?: (key: string, revision: StreamRevision) => Effect.Effect<void>;
   readonly read: (key: string) => Effect.Effect<StreamMeta>;
   /** The current meta, then every new one. */
   readonly changes: (key: string) => Stream.Stream<StreamMeta>;
@@ -948,6 +1634,11 @@ export class Platform extends Context.Service<
   Platform,
   {
     readonly model: (model: HostedModel) => Effect.Effect<ModelHost, never, Scope>;
+    /**
+     * A Vault's keys on this host, one object per subject, apart from every
+     * model's storage. Called while a Layer is built. See `Domain.HostKeyStore`.
+     */
+    readonly keys: Effect.Effect<KeyStore["Service"]>;
   }
 >()("alchemy/Domain/Platform") {}
 

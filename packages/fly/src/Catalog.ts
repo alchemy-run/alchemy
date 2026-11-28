@@ -23,8 +23,8 @@ export const currentOrgSlug = resolveOrgSlug;
  * List Fly platform regions via `getRegions`.
  */
 export const listRegions = Effect.fn(function* () {
-  const { regions } = yield* machines.getRegions({});
-  return regions ?? [];
+  const { Regions } = yield* machines.getRegions({});
+  return Regions ?? [];
 });
 
 /**

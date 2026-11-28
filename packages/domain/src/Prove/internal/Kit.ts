@@ -9,6 +9,8 @@ import * as Value from "./Value.ts";
 /** What the library models need from the interpreter. */
 export interface Host {
   readonly current: { run: Run };
+  /** Take one side of a condition of the inputs: only a side some inputs reach. */
+  readonly branch: (condition: string) => Eval<boolean>;
   readonly call: (fn: V, args: ReadonlyArray<V>, site: Site) => Eval<V>;
   /** What `yield*` on the value gives. */
   readonly settle: (value: V, site: Site) => Eval<V>;
@@ -75,11 +77,12 @@ export const dual =
   (args, site) =>
     args.length >= arity
       ? body(args, site)
-      : Effect.succeed(
-          native(name, ([self], at) =>
-            self ? body([self, ...args], at) : wrongArguments(at, name),
-          ),
-        );
+      : Effect.succeed<V>({
+          _tag: "Native",
+          name,
+          given: args,
+          call: ([self], at) => (self ? body([self, ...args], at) : wrongArguments(at, name)),
+        });
 
 /**
  * A function written both ways, where the number of arguments does not say

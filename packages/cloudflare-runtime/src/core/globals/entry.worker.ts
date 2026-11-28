@@ -443,6 +443,27 @@ export default <ExportedHandler<Env>>{
         url.host = request.headers.get("Host") ?? url.host;
       }
     }
+    // The handler routes below invoke the user worker's queue/scheduled/email
+    // handlers directly. The entry socket binds only 127.0.0.1 in dev, but a
+    // web page the developer visits can still drive these cross-origin from the
+    // browser (CSRF) — e.g. an <img> or fetch to
+    // http://localhost:<port>/cdn-cgi/handler/scheduled. Browsers tag such
+    // requests with `Sec-Fetch-Site: cross-site`/`same-site`; reject those.
+    // Local tooling, curl, and the dev runtime send no `Sec-Fetch-Site` header
+    // (or `same-origin`/`none`) and are unaffected.
+    const isTriggerRoute =
+      url.pathname === "/cdn-cgi/handler/queue" ||
+      url.pathname === PATH_SCHEDULED ||
+      url.pathname === PATH_SCHEDULED_HANDLER ||
+      url.pathname === PATH_SCHEDULED_LEGACY ||
+      url.pathname === PATH_EMAIL ||
+      url.pathname === PATH_EMAIL_HANDLER;
+    if (isTriggerRoute) {
+      const site = request.headers.get("Sec-Fetch-Site");
+      if (site === "cross-site" || site === "same-site") {
+        return new Response("Cross-origin trigger requests are not allowed", { status: 403 });
+      }
+    }
     if (url.pathname === "/cdn-cgi/handler/queue") {
       try {
         const json = await request.json<EntryQueuePayload>();

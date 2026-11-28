@@ -1,5 +1,8 @@
 import * as DO from "@distilled.cloud/digitalocean";
-import type { Checkpoint2 as MicrovmCheckpoint, Microvm } from "@distilled.cloud/digitalocean";
+import type {
+  Checkpoint2Output as MicrovmCheckpoint,
+  MicrovmOutput as Microvm,
+} from "@distilled.cloud/digitalocean";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";

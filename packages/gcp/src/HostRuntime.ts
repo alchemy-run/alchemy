@@ -2,6 +2,7 @@ import type { ResourceBinding } from "alchemy/Resource";
 import { envString } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import {
   defaultComputeServiceAccount,
   deleteHostServiceAccount,
@@ -12,6 +13,7 @@ import {
   syncHostIam,
   type AppliedIamGrant,
   type GcpHostBinding,
+  type GcpIamGrant,
 } from "./Host.ts";
 
 /**
@@ -74,6 +76,11 @@ export const resolveHostIdentity = Effect.fn(function* (options: {
   effectNative: boolean;
   bindings: readonly ResourceBinding<GcpHostBinding>[];
   output: Partial<HostIdentityAttrs> | undefined;
+  /**
+   * Grants the host's own provider needs, such as reading its secret env.
+   * They don't decide whether Alchemy mints the account.
+   */
+  grants?: readonly GcpIamGrant[];
 }) {
   const hasGrants = options.bindings.some((binding) => (binding.data?.iam?.length ?? 0) > 0);
   const userSa =
@@ -108,7 +115,10 @@ export const resolveHostIdentity = Effect.fn(function* (options: {
     project: options.project,
     serviceAccount,
     managed,
-    bindings: options.bindings,
+    bindings:
+      options.grants === undefined || options.grants.length === 0
+        ? options.bindings
+        : [...options.bindings, { sid: "GCP.Run.secretEnv", data: { iam: [...options.grants] } }],
     previous,
   }).pipe(
     Effect.tapError(() =>
@@ -179,7 +189,7 @@ export const alchemyRuntimeEnv = Effect.gen(function* () {
 
 export interface ContainerEnvVar {
   name?: string;
-  value?: string;
+  value?: string | Redacted.Redacted<string>;
   valueSource?: unknown;
 }
 
@@ -188,6 +198,10 @@ export interface ContainerEnvVar {
  * Later sources win by name; an explicit entry already on the container
  * (the user's own `containers[].env`) wins over every injected value, and
  * a name never appears twice (Cloud Run rejects duplicates).
+ *
+ * A `Redacted` value stays `Redacted` (around the string the process
+ * reads), so the host's provider moves it to Secret Manager; see
+ * `sealSecretEnv`.
  */
 export const mergeContainerEnv = <V extends ContainerEnvVar>(
   explicit: readonly V[] | undefined,
@@ -198,7 +212,10 @@ export const mergeContainerEnv = <V extends ContainerEnvVar>(
     for (const [name, value] of Object.entries(source ?? {})) {
       const text = envString(value);
       if (text === undefined) continue;
-      byName.set(name, { name, value: text } as V);
+      byName.set(name, {
+        name,
+        value: Redacted.isRedacted(value) ? Redacted.make(text) : text,
+      } as V);
     }
   }
   for (const entry of explicit ?? []) {
