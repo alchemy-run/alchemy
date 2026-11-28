@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -257,26 +257,8 @@ const stableSourcePath =
     }
     const id = pathe.relative(pathe.resolve(process.cwd()), file);
     const isId = !id.startsWith("../") && /^[a-z][a-z0-9+.-]+:/i.test(id) && !existsSync(file);
-    if (isId) return id;
-    // Rolldown follows symlinks to a source but not to the map's directory.
-    // Below a symlink (macOS's `/var` is one) the path would then climb to
-    // the root and name every directory on the way back down.
-    const real = realDirectory(directory);
-    return real === directory ? source : pathe.relative(real, file);
+    return isId ? id : source;
   };
-
-/** `directory` with its symlinks followed, as far up as it exists. */
-const realDirectory = (directory: string): string => {
-  const missing: Array<string> = [];
-  for (let at = directory; ; at = pathe.dirname(at)) {
-    try {
-      return pathe.join(pathe.normalize(realpathSync(at)), ...missing);
-    } catch {
-      if (at === pathe.dirname(at)) return directory;
-      missing.unshift(pathe.basename(at));
-    }
-  }
-};
 
 /**
  * Default `sourcemapPathTransform` to {@link stableSourcePath} for a one-shot

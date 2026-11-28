@@ -110,6 +110,19 @@ const build = (root: string, checkout: Checkout, output?: rolldown.OutputOptions
     return yield* Bundle.build(input, { sourcemap: "hidden", minify: true, ...output });
   });
 
+/**
+ * A temporary directory, by its real path. macOS keeps them under `/var`, a
+ * symlink to `/private/var`: rolldown follows it to each source but not to the
+ * map's directory, so a map written below the symlink names its sources from
+ * the filesystem root. A deploy's working directory is a real path.
+ */
+const temporaryRoot = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* fs.realPath(
+    yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" }),
+  );
+});
+
 const text = (file: Bundle.BundleFile) =>
   typeof file.content === "string" ? file.content : new TextDecoder().decode(file.content);
 
@@ -138,7 +151,7 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
       () =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
-          const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
+          const root = yield* temporaryRoot;
 
           // Two CI jobs at one commit: another directory, another depth, and
           // a freshly named store.
@@ -168,7 +181,7 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
+        const root = yield* temporaryRoot;
         const dir = (checkout: string) => path.join(root, checkout, "app/.alchemy/bundles/Fixture");
 
         const first = yield* build(
@@ -196,7 +209,7 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
+        const root = yield* temporaryRoot;
 
         const first = yield* build(root, {
           directory: "one/checkout",
@@ -224,7 +237,7 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
+        const root = yield* temporaryRoot;
 
         const first = yield* build(root, {
           directory: "job:1/checkout",
@@ -239,35 +252,6 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
 
         expect(sources(first)).toEqual(stableSources("pnpm", "../"));
         expect(second.hash).toBe(first.hash);
-      }).pipe(Effect.scoped),
-    { tags: ["unit", "local"] },
-  );
-
-  it.effect(
-    "a checkout reached through a symlink names its files as one reached directly does",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
-
-        const direct = yield* build(root, {
-          directory: "direct/checkout",
-          store: "direct/store/aaaaaaaa",
-          manager: "pnpm",
-        });
-        // As a temporary directory is on macOS (`/var` links to `/private/var`),
-        // or a workspace a CI runner mounts under another name.
-        yield* fs.makeDirectory(path.join(root, "disk"));
-        yield* fs.symlink(path.join(root, "disk"), path.join(root, "linked"));
-        const linked = yield* build(root, {
-          directory: "linked/checkout",
-          store: "linked/store/bbbbbbbb",
-          manager: "pnpm",
-        });
-
-        expect(sources(linked)).toEqual(stableSources("pnpm", "../"));
-        expect(linked.hash).toBe(direct.hash);
       }).pipe(Effect.scoped),
     { tags: ["unit", "local"] },
   );
@@ -306,7 +290,7 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
+        const root = yield* temporaryRoot;
 
         const result = yield* build(
           root,
@@ -330,7 +314,7 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
+        const root = yield* temporaryRoot;
         const checkout = yield* makeCheckout(root, {
           directory: "one/checkout",
           store: "one/store/aaaaaaaa",
