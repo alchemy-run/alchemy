@@ -189,7 +189,7 @@ A plan lists each tool with the bindings it binds while it is built:
 
 ```
 [Session]   Tool save_note
-[Session]     Cloudflare.KVNamespace.ReadWrite Cloudflare.KV.Namespace(Notes)
+[Session]     · Cloudflare.KVNamespace.ReadWrite Cloudflare.KV.Namespace(Notes)
 ```
 
 That list is also the limit when the tool runs. A handler that uses a client bound somewhere else, one it was handed or closed over, fails on that call:

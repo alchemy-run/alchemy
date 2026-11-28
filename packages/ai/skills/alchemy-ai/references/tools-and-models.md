@@ -33,7 +33,9 @@ export const PostAnswerLive = PostAnswer.make(
 
 The outer Effect runs where the process is yielded, so bindings it declares are part of the deploy. A tool with nothing to build passes the handler alone: `Add.make(({ a, b }) => ({ sum: a + b }))`.
 
-More: [Declare a tool](https://alchemy.run/ai/tools#declare-a-tool), [Use a binding](https://alchemy.run/ai/tools#use-a-binding).
+Bind in that outer Effect, never outside the tool: a plan lists each tool with what it binds, and a handler that uses a client bound elsewhere (one it closed over or was handed) fails that call with `CapabilityDenied`.
+
+More: [Declare a tool](https://alchemy.run/ai/tools#declare-a-tool), [Use a binding](https://alchemy.run/ai/tools#use-a-binding), [A tool uses only what it binds](https://alchemy.run/ai/tools#a-tool-uses-only-what-it-binds).
 
 ## A tool that fails
 
