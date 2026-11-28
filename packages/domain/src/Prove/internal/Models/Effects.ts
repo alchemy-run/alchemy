@@ -47,11 +47,11 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
     name: string,
     run: (self: Eval<V>, args: ReadonlyArray<V>, site: Site) => Eval<V>,
   ): Model =>
-    dualBy(name, isEffect, ([self, ...rest], site) =>
-      self?._tag === "Effect"
-        ? Effect.succeed(lazy(() => Effect.suspend(() => run(self.run, rest, site))))
-        : wrongArguments(site, name),
-    );
+    // `dualBy` gives the body an effect first.
+    dualBy(name, isEffect, ([self, ...rest], site) => {
+      const effect_ = self as V & { readonly _tag: "Effect" };
+      return Effect.succeed(lazy(() => Effect.suspend(() => run(effect_.run, rest, site))));
+    });
 
   /**
    * A function of two effects, written `f(self, that, ...)` or `f(that, ...)`
@@ -82,9 +82,7 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
 
   /** A function that leaves an effect as it is: a span, an annotation. */
   const transparent = (name: string): Model =>
-    dualBy(name, isEffect, ([self], site) =>
-      self ? Effect.succeed(self) : wrongArguments(site, name),
-    );
+    dualBy(name, isEffect, ([self]) => Effect.succeed(self!));
 
   /** The items a function goes over, in order. */
   const each = (name: string, items: V | undefined, site: Site): Eval<ReadonlyArray<V>> =>
@@ -408,13 +406,11 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
       "Effect.filterOrElse",
       2,
       (self, [predicate, orElse], site) =>
-        predicate && orElse
-          ? Effect.flatMap(self, (value) =>
-              Effect.flatMap(kit.holds(predicate, [value], site), (held) =>
-                held ? Effect.succeed(value) : ran(orElse, [value], site),
-              ),
-            )
-          : wrongArguments(site, "Effect.filterOrElse"),
+        Effect.flatMap(self, (value) =>
+          Effect.flatMap(kit.holds(predicate!, [value], site), (held) =>
+            held ? Effect.succeed(value) : ran(orElse!, [value], site),
+          ),
+        ),
     ),
     // The effect runs when the condition holds, and gives its value in an `Option`.
     "effect/Effect:when": onEffect("Effect.when", 1, (self, [given], site) => {
@@ -523,20 +519,19 @@ export const make = (kit: Kit): { readonly models: Models; readonly values: Reco
         : wrongArguments(site, "Effect.runSync"),
     "effect/Effect:withSpan": transparent("Effect.withSpan"),
     // A span the scope around ends: what the effect does is unchanged, and it needs that scope.
-    "effect/Effect:withSpanScoped": dualBy("Effect.withSpanScoped", isEffect, ([self], site) =>
-      self?._tag === "Effect"
-        ? Effect.succeed<V>({
-            _tag: "Effect",
-            run: Effect.flatMap(Effect.serviceOption(Scope.Scope), (scope) =>
-              Option.isSome(scope)
-                ? self.run
-                : Effect.fail(
-                    Value.notTranslated(site, "calls Effect.withSpanScoped outside Effect.scoped"),
-                  ),
-            ),
-          })
-        : wrongArguments(site, "Effect.withSpanScoped"),
-    ),
+    "effect/Effect:withSpanScoped": dualBy("Effect.withSpanScoped", isEffect, ([self], site) => {
+      const effect_ = self as V & { readonly _tag: "Effect" };
+      return Effect.succeed<V>({
+        _tag: "Effect",
+        run: Effect.flatMap(Effect.serviceOption(Scope.Scope), (scope) =>
+          Option.isSome(scope)
+            ? effect_.run
+            : Effect.fail(
+                Value.notTranslated(site, "calls Effect.withSpanScoped outside Effect.scoped"),
+              ),
+        ),
+      });
+    }),
     "effect/Effect:annotateSpans": transparent("Effect.annotateSpans"),
     "effect/Effect:annotateLogs": transparent("Effect.annotateLogs"),
     "effect/Effect:withLogSpan": transparent("Effect.withLogSpan"),
