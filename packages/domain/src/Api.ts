@@ -706,7 +706,7 @@ const judgedRead = Effect.fn(function* <A>(
   versionOf: (value: A) => number,
   wait: Wait | undefined,
 ) {
-  const started = yield* Clock.currentTimeMillis;
+  const started = yield* Clock.currentTimeNanos;
   const current = yield* read;
   if (wait === undefined) {
     yield* judge(current);
@@ -727,15 +727,18 @@ const judgedRead = Effect.fn(function* <A>(
     return waited;
   }
   const verdict = yield* Effect.exit(judge(waited));
-  const elapsed = (yield* Clock.currentTimeMillis) - started;
+  const elapsed = (yield* Clock.currentTimeNanos) - started;
   if (Exit.isFailure(verdict)) {
-    const left = Duration.toMillis(REFUSED_WAIT) - elapsed;
+    // Rounded up to whole milliseconds: a timer drops the fraction, and the
+    // refusal would come up to 1ms before `REFUSED_WAIT` has passed.
+    const left = Math.ceil(Number(Duration.toNanosUnsafe(REFUSED_WAIT) - elapsed) / 1e6);
     if (left > 0) yield* Effect.sleep(Duration.millis(left));
     return yield* Effect.failCause(verdict.cause);
   }
   if (waitedInTime) return waited;
   // Let in before its write arrived: wait for the rest of it, within the same `WAIT_TIMEOUT`.
-  yield* wait(Duration.millis(Math.max(0, Duration.toMillis(WAIT_TIMEOUT) - elapsed)));
+  const rest = Duration.toNanosUnsafe(WAIT_TIMEOUT) - elapsed;
+  yield* wait(Duration.nanos(rest > 0n ? rest : 0n));
   const caughtUp = yield* read;
   if (versionOf(caughtUp) !== versionOf(waited)) yield* judge(caughtUp);
   return caughtUp;
