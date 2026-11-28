@@ -405,13 +405,21 @@ describe("Domain live reads whose verdict runs out", { tags: ["unit", "local"] }
         Effect.flip,
         Effect.forkChild,
       );
-      expect(yield* Queue.take(seen)).toEqual({ state: { total: 1 }, cursor: 1 });
+      expect(yield* Queue.take(seen)).toEqual({
+        state: { total: 1 },
+        cursor: 1,
+        position: { stream: "Counter/g-1", seq: 1 },
+      });
 
       // Past the verdict, a caller still allowed reconnects from its cursor: nothing twice, nothing missed.
       yield* Effect.sleep("2500 millis");
       expect(yield* Queue.size(seen)).toBe(0);
       yield* api.Increment({ id: "g-1", by: 2 });
-      expect(yield* Queue.take(seen)).toEqual({ state: { total: 3 }, cursor: 2 });
+      expect(yield* Queue.take(seen)).toEqual({
+        state: { total: 3 },
+        cursor: 2,
+        position: { stream: "Counter/g-1", seq: 2 },
+      });
 
       // Revoked, the read ends with the gate's rejection when the verdict runs out, with no commit.
       revoked = true;

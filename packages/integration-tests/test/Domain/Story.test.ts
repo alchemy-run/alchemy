@@ -842,8 +842,8 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
       yield* Effect.sleep("20 millis");
       yield* counters.send(new Increment({ id: c1.id, by: 2 }));
       expect(yield* Fiber.join(totals)).toEqual([
-        { state: { total: 3 }, cursor: 1 },
-        { state: { total: 5 }, cursor: 2 },
+        { state: { total: 3 }, cursor: 1, position: { stream: "Counter/c-1", seq: 1 } },
+        { state: { total: 5 }, cursor: 2, position: { stream: "Counter/c-1", seq: 2 } },
       ]);
 
       const events = yield* client.Totals.events("c-1", sam).pipe(
