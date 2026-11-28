@@ -39,7 +39,7 @@ export const AssistantLive = Assistant.toLayer({
 
 Each mention is a tool: `Bank_DepositMoney_send`, `Bank_WithdrawMoney_send` and `Bank_AccountSummary_get`, with the command's or the view's own schemas. Nothing else in the bank is within the session's reach. A rejection comes back to the model as the tool's failure, so it can read why and try again.
 
-The prose requires the model it mentions: provide `AssistantLive` with the bank's Layer where you [host the process](/ai/hosting#host-the-process). Prose that mentions two models requires both.
+The prose requires the model it mentions: provide `AssistantLive` with the bank's Layer where you [host the process](/ai/cloudflare#host-the-process). Prose that mentions two models requires both.
 
 ## Break the cycle with thunks
 

@@ -5,6 +5,6 @@
  *
  * @module
  */
-export * from "./DurableObjects.ts";
+export * from "./ProcessSessions.ts";
 export * from "./Eval.ts";
 export * from "./Model.ts";

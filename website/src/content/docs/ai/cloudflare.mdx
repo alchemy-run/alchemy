@@ -1,0 +1,137 @@
+---
+title: Cloudflare
+description: Host a process on Cloudflare Durable Objects. Each session is one Durable Object of the Worker that provides the Layer, with its own storage and alarm.
+---
+
+Host a process on Cloudflare, and each of its sessions is a Durable Object of your Worker. The Worker is the entrypoint: nothing else is deployed.
+
+## Say what a session runs on
+
+A session needs a harness to run on and a model to run with:
+
+```typescript title="src/Workshop.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
+import { Smart, SmartLive } from "./Models.ts";
+
+const Harness = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLive)),
+);
+```
+
+## Host the model
+
+The model is hosted as any model is. A policy of it holds `Engineer`, so its Layer still needs one:
+
+```diff lang="typescript" title="src/Workshop.ts"
+import * as AI from "@alchemy.run/ai";
++import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
+import { Smart, SmartLive } from "./Models.ts";
++import { TaskWorkLive } from "./Workshop/TaskWork.policy.ts";
++import { Workshop } from "./Workshop/Workshop.model.ts";
+
+const Harness = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
+  Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLive)),
+);
++
++const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(
++  Layer.provide(DomainCloudflare.layerDurableObjects()),
++);
+```
+
+## Host the process
+
+`AICloudflare.ProcessSessions` takes the process's Layer, with what a session runs on and the models its prose mentions:
+
+```diff lang="typescript" title="src/Workshop.ts"
+import * as AI from "@alchemy.run/ai";
++import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Layer from "effect/Layer";
++import { EngineerLive } from "./Engineer.process.ts";
+import { Smart, SmartLive } from "./Models.ts";
+
+const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
+);
++
++const EngineerSessions = AICloudflare.ProcessSessions(
++  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
++);
+```
+
+It gives back the same service, `Engineer`. The Worker that provides it declares one Durable Object class, `EngineerProcess`, and each session is one object of it, named after the session's key. Each object builds the Layer it was given for itself, so the harness opens there, on that object's storage.
+
+## Give the model its process
+
+The model needed an `Engineer`, and now there is one:
+
+```diff lang="typescript" title="src/Workshop.ts"
+const EngineerSessions = AICloudflare.ProcessSessions(
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
+);
++
++export const Live = WorkshopLive.pipe(Layer.provideMerge(EngineerSessions));
+```
+
+The model needs the process and the process needs the model. The host closes that loop: the Layer it is given may need the process it provides, and the host supplies it, inside each session's object and outside.
+
+## Provide it to the Worker
+
+The Worker that provides `Live` declares the classes and serves the sessions:
+
+```typescript title="src/Api.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Engineer } from "./Engineer.process.ts";
+import { Live } from "./Workshop.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const engineer = yield* Engineer;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const id = new URL(request.url, "http://api").pathname.slice(1);
+        const reply = yield* engineer.get(id).prompt(yield* request.text);
+        return HttpServerResponse.text(reply.text);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Live)),
+) {}
+```
+
+See [Reach a session](/ai/hosting#reach-a-session) for what the client does.
+
+## Keep sessions in a jurisdiction
+
+Pass props first to say where Cloudflare keeps the objects:
+
+```typescript
+const EngineerSessions = AICloudflare.ProcessSessions(
+  { jurisdiction: "eu" },
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
+);
+```
+
+An object in a jurisdiction is a different object from the one with the same name outside it, so choose it before the first deploy. `locationHint` creates each new object near a location instead of near the Worker that first reaches it.
+
+## Without a model
+
+A process that mentions no model needs no `@alchemy.run/domain`. Give the host the process and what its sessions run on:
+
+```typescript
+export const Live = AICloudflare.ProcessSessions(EngineerLive.pipe(Layer.provide(Harness)));
+```

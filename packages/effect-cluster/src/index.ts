@@ -9,3 +9,9 @@ export * from "./Pool.ts";
 export * from "./Workflow.ts";
 export * from "./Singleton.ts";
 export * from "./Cron.ts";
+export {
+  ClusterObjects,
+  layerObjectHost,
+  ObjectClassNotHosted,
+  type ObjectHostOptions,
+} from "./ObjectHost.ts";

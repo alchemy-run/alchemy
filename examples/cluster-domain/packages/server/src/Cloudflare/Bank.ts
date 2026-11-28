@@ -1,5 +1,7 @@
 import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
 import * as ClusterCloudflare from "@alchemy.run/effect-cluster/Cloudflare";
+import * as Layer from "effect/Layer";
 import { hostBank } from "../BankLive.ts";
 
 /**
@@ -15,5 +17,7 @@ export const Pool = ClusterCloudflare.DurableObjectPool("Runners");
  * callers reach it through the pool's gateway.
  */
 export default hostBank(
-  DomainCluster.layerEntities({ name: "Bank", main: import.meta.url, pool: Pool }),
+  DomainCluster.layerEntities().pipe(
+    Layer.provide(Cluster.layerObjectHost("Bank", { main: import.meta.url, pool: Pool })),
+  ),
 );
