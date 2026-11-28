@@ -93,13 +93,11 @@ export class IssueWork extends Domain.Policy("IssueWork", {
 export const IssueWorkLive = IssueWork.toLayer(
   Effect.gen(function* () {
     const triage = yield* Triage;
-    return Effect.fn(function* ({ source, event }) {
-      const session = triage.get(source.id);
-      yield* Match.valueTags(event, {
+    return ({ source, event }) =>
+      Match.valueTags(event, {
         IssueReported: () =>
-          session.send(`The issue is ${source.id}.`, { requestId: "start" }),
+          triage.get(source.id).send(`The issue is ${source.id}.`, { requestId: "start" }),
       }).pipe(Effect.orDie);
-    });
   }),
 );
 ```
@@ -116,9 +114,11 @@ import { Issue } from "./Issue.aggregate.ts";
 -  on: [IssueReported],
 +  on: [IssueReported, IssueCommented],
 
-          session.send(`The issue is ${source.id}.`, { requestId: "start" }),
+          triage.get(source.id).send(`The issue is ${source.id}.`, { requestId: "start" }),
 +        IssueCommented: ({ body, commentId }) =>
-+          session.send(`A reply on the issue: ${body}`, { requestId: commentId }),
++          triage
++            .get(source.id)
++            .send(`A reply on the issue: ${body}`, { requestId: commentId }),
 ```
 
 The reply's id is the message's, so a reply delivered twice is read once.
