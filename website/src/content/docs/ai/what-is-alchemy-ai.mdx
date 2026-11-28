@@ -1,0 +1,357 @@
+---
+title: What is Alchemy AI?
+description: The concepts of Alchemy AI, from the top down. Processes describe agentic work in prose, mention the tools, models and business domain they work on, and deploy with their infrastructure as one type-checked program.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+Alchemy AI models agentic processes in code. A **process** is prose that describes a piece of work, and everything it mentions is a real reference: a tool, an LLM, another process, a part of your business.
+
+Those references connect the whole system. Processes use tools, tools use your infrastructure, and your Domain model holds the rules of the business. It is one declarative program that the compiler checks and Alchemy deploys.
+
+The examples come from an issue board that looks after a GitHub repository, the same one the [tutorial](/ai/tutorial/part-1) builds.
+
+<DAG
+  nodes={[
+    { id: "respond", label: "Respond", kind: "process", col: 0, row: 0 },
+    { id: "review", label: "Review", kind: "process", col: 0, row: 1 },
+    { id: "open", label: "OpenPullRequest", kind: "command", col: 1, row: 0 },
+    { id: "approve", label: "ApprovePullRequest", kind: "command", col: 1, row: 1 },
+    { id: "pr", label: "PullRequest", kind: "aggregate", col: 1, row: 2 },
+    { id: "search", label: "SearchIssues", kind: "tool", col: 0, row: 2 },
+    { id: "binding", label: "GitHub.SearchIssues", kind: "binding", col: 0, row: 3 },
+    { id: "repo", label: "Repo", kind: "resource", type: "GitHub.Repository", col: 0, row: 4 },
+    { id: "store", label: "Board", kind: "resource", type: "Cloudflare.DurableObject", col: 1, row: 4 },
+  ]}
+  groups={[
+    { id: "processes", label: "Processes", nodes: ["respond", "review"] },
+    { id: "domain", label: "Domain model", nodes: ["open", "approve", "pr"] },
+    { id: "tools", label: "Tools", nodes: ["search"] },
+    { id: "resources", label: "Resources", nodes: ["repo", "store"] },
+  ]}
+  edges={[
+    { from: "respond", to: "review", label: "starts" },
+    { from: "respond", to: "open", label: "sends" },
+    { from: "review", to: "approve", label: "sends" },
+    { from: "review", to: "search", label: "calls" },
+    { from: "search", to: "binding", label: "uses" },
+    { from: "binding", to: "repo", label: "on" },
+    { from: "pr", to: "store", label: "stored in" },
+  ]}
+  caption="Respond opens a pull request for an issue and starts Review to check it. The pull request lives in the Domain model, and both processes act on it through commands. A tool reaches GitHub through a binding, and Alchemy deploys all of it."
+/>
+
+## Process: a description of work
+
+A **process** has two parts. The class is its name, which the rest of your program refers to:
+
+```typescript title="src/Triage.process.ts"
+export class Triage extends AI.Process<Triage>()("Triage", {}) {}
+```
+
+A **Layer** gives that name its prose, which the LLM reads as its instructions:
+
+```typescript title="src/Triage.process.ts"
+export const TriageLive = Triage.toLayer({
+  description: "Say what kind of issue this is.",
+})`
+  Read the issue you are given and reply with one word:
+  bug, feature or question.
+`;
+```
+
+Everything in Alchemy AI is split this way. A tool, an LLM, the harness and the sandbox are each a name, and a Layer provides its implementation. Code depends on the name, so one implementation can be swapped for another without changing the code that uses it.
+
+A process is not an agent with an identity. It describes work, and it can run any number of times.
+
+See [Processes](/ai/processes).
+
+## Mentions: what a process uses
+
+Prose refers to a tool, a model or another process with `${}`. That is a **mention**. The LLM sees it by name, and the process may use it.
+
+```typescript title="src/Triage.process.ts"
+export const TriageLive = Triage.toLayer({
+  description: "Say what kind of issue this is.",
+})`
+  Find the code the issue is about with ${AI.Grep} and ${AI.Read}.
+  Reply with one word: bug, feature or question.
+`;
+```
+
+A process can use only what it mentions. This `Triage` can search and read files, and it cannot edit one or run a command.
+
+A mention is also a dependency. `TriageLive` needs a Layer for each tool, and a program that provides it without them does not compile.
+
+## Sessions: a running process
+
+A **session** is a running process: one conversation, with a key you choose.
+
+```typescript
+const triage = yield* Triage;
+
+const reply = yield* triage.get("issue-42").prompt("The app crashes on the settings page.");
+```
+
+A session keeps its conversation indefinitely. Send it another message next week and it remembers everything so far. `send` leaves a message and returns, `steer` puts one into the turn that is running, and `interrupt` stops it.
+
+A session reports what it does as a stream. The first event says whether it is working, and the rest are its messages and tool calls as they happen:
+
+```typescript
+const events = triage.get("issue-42").events();
+```
+
+A process has no inputs and no output. A session is told what to do in its messages, and it acts through what its process mentions.
+
+## Tools: what a process can do
+
+A **tool** is a function the LLM can call. Its class says what it takes, what it returns and how it can fail.
+
+```typescript title="src/PostAnswer.tool.ts"
+export class IssueClosed extends Schema.TaggedError<IssueClosed>()("IssueClosed", {
+  issue: Schema.Number,
+}) {}
+
+export class PostAnswer extends AI.Tool<PostAnswer>()("post_answer", {
+  description: "Post your answer on the issue as a comment.",
+  parameters: Schema.Struct({ issue: Schema.Number, markdown: Schema.String }),
+  success: Schema.Struct({ url: Schema.String }),
+  failure: IssueClosed,
+}) {}
+```
+
+The LLM reads a failure as the tool's result and can try something else.
+
+The class is only the tool's name and shape. A Layer provides its handler, an Effect that runs in your program:
+
+```typescript title="src/PostAnswer.tool.ts"
+export const PostAnswerLive = PostAnswer.make(
+  Effect.gen(function* () {
+    const comment = yield* GitHub.CreateIssueComment(yield* Repo);
+
+    return Effect.fn(function* ({ issue, markdown }) {
+      const posted = yield* comment({ issue_number: issue, body: markdown }).pipe(Effect.orDie);
+      return { url: posted.html_url };
+    });
+  }),
+).pipe(Layer.provide(GitHub.CreateIssueCommentHttp));
+```
+
+The handler reaches the outside world through resources and bindings. `Repo` is a GitHub repository this program declares, and `GitHub.CreateIssueComment` is a binding that lets the handler comment on it. Any resource works the same way. A tool that saves a report binds to an S3 bucket:
+
+```typescript title="src/SaveReport.tool.ts"
+export const Reports = AWS.S3.Bucket("Reports", {});
+
+export const SaveReportLive = SaveReport.make(
+  Effect.gen(function* () {
+    const putObject = yield* AWS.S3.PutObject(yield* Reports);
+
+    return Effect.fn(function* ({ name, markdown }) {
+      yield* putObject({ Key: name, Body: markdown }).pipe(Effect.orDie);
+    });
+  }),
+).pipe(Layer.provide(AWS.S3.PutObjectHttp));
+```
+
+Alchemy deploys the bucket and grants what the binding needs: `s3:PutObject` on that one bucket. A tool can do what its bindings allow.
+
+A few tools are the same everywhere: run a command, read a file, edit one, search. Those are names (`AI.Bash`, `AI.Read`, `AI.Edit`, `AI.Grep`) that each harness implements its own way. An MCP server is mentioned like a tool and stands for every tool it offers.
+
+See [Tools](/ai/tools), [Coding tools](/ai/coding-tools) and [MCP servers](/ai/mcp-servers).
+
+## Models: which LLM runs it
+
+A **model** is a name for an LLM. A process mentions the name, never the LLM behind it.
+
+```typescript title="src/Models.ts"
+export class Smart extends AI.Model<Smart>()("smart") {}
+export class Fast extends AI.Model<Fast>()("fast") {}
+```
+
+Every session runs on the default model unless told otherwise. A process that mentions a model may hand work to it:
+
+```typescript
+`For anything you need to look up, start a ${Research} on ${Fast}.`
+```
+
+See [Models](/ai/models).
+
+## Processes that use processes
+
+A process can mention another. That gives its session two ways to use it: **follow** it, reading that process's prose into its own conversation, or **start** it, as a session of its own.
+
+```typescript title="src/Answering.process.ts"
+export class Answering extends AI.Process<Answering>()("Answering", {}) {}
+
+export const AnsweringLive = Answering.toLayer({
+  description: "How to write an answer on an issue. Follow it before you post one.",
+})`
+  Keep the answer under two hundred words. Name each file you read.
+`;
+```
+
+```typescript title="src/Triage.process.ts"
+export const TriageLive = Triage.toLayer({
+  description: "Answer one issue and say what kind of issue it is.",
+})`
+  Follow ${Answering}, then post your answer with ${PostAnswer}.
+`;
+```
+
+`Triage` mentions the name `Answering`, not its prose, so `AnsweringLive` can change without `Triage` knowing.
+
+A mention does not fix how `Answering` is used. It makes the process available, and the session decides: it can follow it, start it, or do both at different times. The prose can suggest one, as "Follow" does above, and it is still the session's choice.
+
+Other systems have two concepts here: a **skill**, instructions read into the current conversation, and a **subagent**, a separate conversation with its own instructions. Here both are the same process, used in two ways.
+
+Processes that mention each other are how you model a team or an organization.
+
+See [Processes that use processes](/ai/process-graphs).
+
+## Domain model: the business a process works on
+
+A [Domain model](/domain) is your business in code: what can happen, what did happen, and the rules that decide. An issue board has issues that are reported, labeled and replied to.
+
+```typescript title="src/Board/Board.model.ts"
+export class Board extends Domain.Model("Board", () => ({
+  aggregates: [Issue],
+  views: [IssueDetail],
+  policies: [IssueWork],
+})) {}
+```
+
+A process describes a business process over that model. It is a member of no model, and can work with several. Its prose mentions a model's commands and views, and a session reads and acts through them:
+
+```typescript title="src/Triage.process.ts"
+export const TriageLive = Triage.toLayer({
+  description: "Say what kind of issue this is.",
+})`
+  Get the issue with ${() => Board.IssueDetail}. Then send ${() => Board.LabelIssue}:
+  bug when something is broken, feature when something new is asked for,
+  question otherwise.
+`;
+```
+
+The board's policy hands issues to `Triage`, so the prose and the model lead to each other. Both are thunks, read once every file has loaded.
+
+The model's rules hold whoever sends a command. A session cannot label an issue nobody reported, because the board rejects it. A session is started as someone, and every command it sends is sent as them:
+
+```typescript
+yield* assistant.start(customer.id, { as: CurrentActor.context(customer) });
+```
+
+The two work in both directions. A policy of the model decides when there is work for a process, a session reports back by sending the model's commands, and Domain can [prove](/domain/verifying-models) the model's rules hold whatever a session sends.
+
+See [Processes and Domain models](/ai/domain).
+
+## Layers: providing implementations
+
+A **Layer** provides an implementation. It connects a tool, a model or a process to something concrete in the outside world, through resources and bindings. A process's Layer is its prose, and a tool's Layer is its handler.
+
+A model's Layer is the LLM behind its name:
+
+```typescript title="src/Models.ts"
+export const SmartLlama = AICloudflare.Model(Smart, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
+```
+
+A process that will only ever have one prose can skip the Layer and carry it on the class:
+
+```typescript title="src/Answering.process.ts"
+export class Answering extends AI.Process<Answering>()("Answering", {
+  description: "How to write an answer on an issue. Follow it before you post one.",
+})`
+  Keep the answer under two hundred words. Name each file you read.
+` {}
+```
+
+## Harness: what runs a session
+
+Something has to run the loop: send the LLM the conversation and its tools, run the tools it asks for, and ask again until it answers. That program is an **agent harness**. Pi and OpenCode are harnesses, and so are Claude Code and Codex.
+
+A process never names one. The harness is one more Layer, provided with the rest:
+
+```typescript title="src/Layers.ts"
+export const Live = TriageLive.pipe(
+  Layer.provide(
+    Layer.mergeAll(
+      AnsweringLive,
+      PostAnswerLive,
+      SmartLlama,
+      AI.DefaultModel(Smart),
+      Pi.HarnessLive,
+    ),
+  ),
+);
+```
+
+Change `Pi.HarnessLive` for `OpenCode.HarnessLive` and the same processes run on OpenCode.
+
+See [Choose a harness](/ai/harnesses).
+
+## Sandboxes: a machine for files and commands
+
+The harness and a sandbox are two separate things. The harness runs the loop, inside your program. A **sandbox** is a Linux machine somewhere else, on E2B, Daytona, Modal, Boat or Archil. It only holds files and runs shell commands.
+
+A session that never touches a file needs no sandbox. When a tool reads a file or runs a command, the harness sends that one call to the session's sandbox, and each session has its own.
+
+```typescript
+const sandbox = yield* AI.Sandbox;
+const result = yield* sandbox.exec(["npm", "test"]);
+```
+
+See [Sandboxes](/ai/sandboxes).
+
+## Hosts: where a session lives
+
+A session needs two things from where it runs: storage that only it owns, for its conversation, and a way to carry on after a restart. Both are Layers, like everything else, so the host is a choice and not part of a process.
+
+On a long-lived machine, such as a container or a Fly Machine, the storage is a SQLite file:
+
+```typescript
+const StorageLive = Pi.SqliteFile("/data/pi.sqlite");
+```
+
+On Cloudflare it is a Durable Object, and you do not write it. Give the process's Layer to a host, and each session gets an object of its own:
+
+```typescript title="src/Worker.ts"
+const TriageSessions = AICloudflare.ProcessSessions(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
+);
+```
+
+`Harness` is what a session runs on, and `BoardLive` is the model its prose mentions.
+
+A policy, a saga or a Worker then holds a session by its key, and each call goes to that session's object:
+
+```typescript title="src/Board/IssueWork.policy.ts"
+const triage = yield* Triage;
+
+yield* triage.get(issue).send(`The issue is ${issue}.`, { requestId: "start" });
+```
+
+See [Where sessions run](/ai/hosting) and [Pi on other hosts](/pi/other-hosts).
+
+## Front ends: watching a session
+
+A session keeps everything it does: its status, then each message, tool call and result. Its client reads both from outside the session's object:
+
+```typescript title="src/Worker.ts"
+const session = triage.get(issue);
+
+const { status, queued } = yield* session.status;
+const page = yield* session.history({ after, take: 100 });
+```
+
+So a front end sends commands through the model's Api, which a policy passes to the session, and reads the status and the transcript from a route the Worker serves. See [Connect a front end](/ai/front-end).
+
+## One program, down to the infrastructure
+
+Every reference above is typed, so the graph is checked from end to end. `Triage` mentions `PostAnswer`. `PostAnswerLive` uses `GitHub.CreateIssueComment` on `Repo`. The board's policy holds a session of `Triage`, and the Worker that hosts them declares the Durable Objects they run in.
+
+Alchemy deploys that graph. The binding in `PostAnswerLive` is also what gives the Worker its GitHub token and the repository to comment on. A process can do what its tools can do, and a tool can do what its bindings allow.
+
+So the models and the processes describe the work: commands, policies and views, and the prose that works with them. A Worker or a webhook is an entry point that brings the outside world in as commands. Layers connect it all to real implementations: an LLM, a harness, a sandbox, your resources, the Durable Objects it runs in. The same process runs on another harness, another LLM or another sandbox platform by changing a Layer.
+
+Next, build one: the [tutorial](/ai/tutorial/part-1) puts these ideas to work on an issue board, one step at a time. Or read each concept in depth, starting with [Processes](/ai/processes).

@@ -13,6 +13,7 @@ import {
   Vague,
   VagueApi,
 } from "./fixtures/Club.model.ts";
+import { LazyClub, LazyClubApi } from "./fixtures/LazyClub.model.ts";
 
 // A relation is about a few instances. It is proved where every
 // command and every decision that records on its aggregates keeps it, from
@@ -35,6 +36,26 @@ it.effect(
         { name: "Club.ATakenSeatHasItsMember", kind: "relation", is: "proved" },
       ]);
       expect(Verify.render(report)).toContain("✓ Club.AMemberIsInTheirSeat");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  120_000,
+);
+
+it.effect(
+  "a model whose declarations are thunks is proved as if given its props directly",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Verify.model(LazyClub, {
+        apis: [LazyClubApi],
+        story: Story.make(LazyClub, {}),
+        walks: { count: 20 },
+        require: {
+          proved: ["LazyClub.AMemberIsInTheirSeat", "LazyClub.ATakenSeatHasItsMember"],
+        },
+      });
+      expect(report.rules.map((rule) => ({ name: rule.name, is: rule.standing }))).toEqual([
+        { name: "LazyClub.AMemberIsInTheirSeat", is: "proved" },
+        { name: "LazyClub.ATakenSeatHasItsMember", is: "proved" },
+      ]);
     }).pipe(Effect.provide(NodeServices.layer)),
   120_000,
 );

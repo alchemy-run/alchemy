@@ -73,6 +73,10 @@
     // Foldkit mode overlays are copied over a clone of the SSR fixture;
     // their imports resolve only inside that clone.
     "test/Website/fixtures/foldkit-modes",
+    // Copied over a clone of the Effect UI fixture; its imports resolve only
+    // inside that clone.
+    "test/Cloudflare/Website/effect-ui-env",
+    "test/Cloudflare/Website/effect-ui-worker",
     // Written against a released alchemy, which the roll-forward test
     // installs into its own project; this workspace no longer has its API.
     "test/Cloudflare/Domain/fixtures/scheduled-upgrade/released"
@@ -123,6 +127,7 @@
     { "path": "../prisma/tsconfig.json" },
     { "path": "../hetzner/tsconfig.json" },
     { "path": "../digitalocean/tsconfig.json" },
+    { "path": "../infisical/tsconfig.json" },
     { "path": "../railway/tsconfig.json" },
     { "path": "../fly/tsconfig.json" },
     { "path": "../github/tsconfig.json" },

@@ -17,44 +17,26 @@ class Add extends AI.Tool<Add>()("add", {
   success: Schema.Number,
 }) {}
 class Docs extends AI.McpServer<Docs>()("docs") {}
-class Releasing extends AI.Skill<Releasing>()("releasing", {
-  description: "Cut a release.",
-  instructions: "Run the tests, then deploy.",
-}) {}
 
-// OpenCode runs in a sandbox, so every harness needs one, and an instance to key it on.
+// OpenCode runs where the harness is yielded: a harness needs storage, and no sandbox.
 const bare = OpenCode.Harness({ models: [Fast] });
-type _AlwaysNeedsSandboxes = Assert<
-  Equals<Effect.Services<typeof bare>, OpenCode.Instance | AI.Sandboxes | Fast>
->;
+type _NeedsStorageOnly = Assert<Equals<Effect.Services<typeof bare>, OpenCode.Storage | Fast>>;
 
 // A tool, a tool tag and an MCP server require their Layers; a tool only OpenCode has adds nothing.
 const full = OpenCode.Harness({
   models: [Fast],
   tools: [AI.Bash, AI.Read, OpenCode.WebFetch, Add, Docs],
-  skills: [Releasing],
 });
 type _ListedToolsNeedTheirLayers = Assert<
-  Equals<
-    Effect.Services<typeof full>,
-    OpenCode.Instance | AI.Sandboxes | Fast | Add | Docs | AI.Bash | AI.Read
-  >
+  Equals<Effect.Services<typeof full>, OpenCode.Storage | Fast | Add | Docs | AI.Bash | AI.Read>
 >;
 
-// The coding tools as a group require each tool's Layer, which OpenCode's own satisfy.
+// The coding tools as a group require each tool's Layer, which OpenCode's satisfy from a sandbox.
 const coding = OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
 type _CodingToolsNeedTheirLayers = Assert<
   Equals<
     Effect.Services<typeof coding>,
-    | OpenCode.Instance
-    | AI.Sandboxes
-    | Fast
-    | AI.Bash
-    | AI.Read
-    | AI.Edit
-    | AI.Write
-    | AI.Grep
-    | AI.Glob
+    OpenCode.Storage | Fast | AI.Bash | AI.Read | AI.Edit | AI.Write | AI.Grep | AI.Glob
   >
 >;
 type _OpenCodeProvidesThem = Assert<
@@ -63,7 +45,9 @@ type _OpenCodeProvidesThem = Assert<
     AI.Bash | AI.Read | AI.Edit | AI.Write | AI.Grep | AI.Glob
   >
 >;
-type _OpenCodeToolsNeedNothing = Assert<Equals<Layer.Services<typeof OpenCode.CodingTools>, never>>;
+type _OpenCodeToolsNeedSandboxes = Assert<
+  Equals<Layer.Services<typeof OpenCode.CodingTools>, AI.Sandboxes>
+>;
 
 // An inline tool closes over what is in scope and requires nothing more.
 const Echo = AI.Tool(
@@ -79,8 +63,8 @@ const Echo = AI.Tool(
 );
 const inline = OpenCode.Harness({ models: [Fast], tools: [Echo] });
 type _InlineToolNeedsNothing = Assert<
-  Equals<Effect.Services<typeof inline>, OpenCode.Instance | AI.Sandboxes | Fast>
+  Equals<Effect.Services<typeof inline>, OpenCode.Storage | Fast>
 >;
 
-export type { _CodingToolsNeedTheirLayers, _OpenCodeProvidesThem, _OpenCodeToolsNeedNothing };
-export type { _AlwaysNeedsSandboxes, _InlineToolNeedsNothing, _ListedToolsNeedTheirLayers };
+export type { _CodingToolsNeedTheirLayers, _OpenCodeProvidesThem, _OpenCodeToolsNeedSandboxes };
+export type { _NeedsStorageOnly, _InlineToolNeedsNothing, _ListedToolsNeedTheirLayers };

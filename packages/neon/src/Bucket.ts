@@ -1,5 +1,5 @@
 import type { CORSRule } from "@distilled.cloud/aws/s3";
-import * as Neon from "@distilled.cloud/neon";
+import * as Neon from "@distilled.cloud/neon/unstable/neon";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { PropsInput } from "alchemy/Input";

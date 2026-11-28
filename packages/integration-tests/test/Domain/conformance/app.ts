@@ -12,18 +12,27 @@
  * - `/totals/:id?order=&take=&after=` lists a page of the view's entries
  * - `/hidden/:id?version=n` waits, server-side, until the view no client may read has folded `n` commits
  * - `/record/:id?by=n` sends `Increment`, waits for `TotalWriter.caughtUp`, then lists what it recorded
+ * - `/drained/:run` lists the counters of a backlog run its key has handled
  * - `/tally/:id?by=n` sends `Increment` to a counter of the rebuild case, waits for the tallies
  *   to catch up, then lists its run's; `/generation` answers `TallyWriter`'s generation
  * - `/replay/:id` reads `CounterReplay`, the view the model's next version adds; 404 before it
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
+ * - `/relay/:chain?hops=n` sends the first hop of a relay; `/hop/:id` reads a hop
  * - `/import/:id?n=&id=commandId&expected=&at=ms&step=&on=echo` imports `n` events adding 1
  *   into the counter (or the echo), the i-th committed at `ms + i * step` when `at` is given;
  *   `{ version }`, `{ rejected: tag, version }` or `{ rejected: tag, index }`
  * - `/times/:id` reads when the counter's first and latest events were committed
+ * - `/write/:id?text=t` sends `Write` to a memo; `{ version }`
+ * - `/redact/:id?word=w&id=rewriteId` runs the `Redact` rewrite on a memo and waits for what is
+ *   built from it; `{ changed, lines, text }`: its state's lines and its view's text
+ * - `/squash/:id` compacts a memo; `{ version, compacted, events, lines, text }`
+ * - `/vault/:prefix` runs the Vault cases (`../vault/cases.ts`) under subjects that start
+ *   with `prefix`, with keys kept on the model's host; what each case found
  * - `/api` serves {@link ConformanceApi}: calls over HTTP, live reads over WebSockets
  * - `/bench/:id?shape=&n=&consistency=&fresh=&lag=` times `n` commands sent one after
  *   another through {@link LatencyApi}, from inside the front: see `latency.ts`
  */
+import * as Domain from "@alchemy.run/domain";
 import type { ImportOutOfOrder, UnexpectedVersion } from "@alchemy.run/domain";
 import * as Model from "@alchemy.run/domain/Model";
 import * as DateTime from "effect/DateTime";
@@ -31,6 +40,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
+import { runCases } from "../vault/cases.ts";
 import { One, OneView } from "./latency-model.ts";
 import {
   ConformanceApi,
@@ -43,17 +53,25 @@ import {
   Giving,
   HiddenTotal,
   Hold,
+  Hop,
   Incremented,
   Increment,
   LatencyApi,
+  Memo,
+  MemoForward,
+  MemoText,
   Mirrored,
+  Pass,
   PlaceHold,
   Recorded,
+  Redact,
   ReleaseHold,
+  Drained,
   Tallies,
   tallyKey,
   TicketLive,
   TotalWriter,
+  Write,
 } from "./model.ts";
 
 /** The front's `fetch`, built once the model's services are provided. */
@@ -63,14 +81,19 @@ export const app = Effect.gen(function* () {
   const totals = yield* CounterTotal;
   const times = yield* CounterTimes;
   const holds = yield* Hold;
+  const memos = yield* Memo;
+  const memoTexts = yield* MemoText;
+  const hops = yield* Hop;
   const giving = yield* Giving;
   const hidden = yield* HiddenTotal;
   const api = yield* ConformanceApi.pipe(Effect.provide(TicketLive));
   const recorded = yield* Recorded;
   const tallies = yield* Tallies;
+  const drained = yield* Drained;
   const progress = yield* TotalWriter.Progress;
   const internals = yield* Model.Internals;
   const ones = yield* OneView;
+  const vault = yield* Domain.Vault;
   // Only the model's next version has it.
   const replays = yield* Effect.serviceOption(CounterReplay);
   return Effect.gen(function* () {
@@ -261,6 +284,10 @@ export const app = Effect.gen(function* () {
         const { entries } = yield* tallies.list(tallyKey(id) ?? id);
         return yield* HttpServerResponse.json(entries.map((entry) => entry.event.by));
       }
+      case "drained": {
+        const { entries } = yield* drained.list(id, { take: 1_000 });
+        return yield* HttpServerResponse.json(entries.map((entry) => entry.event.counter));
+      }
       case "generation":
         return yield* HttpServerResponse.json(
           internals.kernel.generationOf("projection", "TallyWriter"),
@@ -280,6 +307,52 @@ export const app = Effect.gen(function* () {
         return yield* HttpServerResponse.json(yield* holds.get(id));
       case "hold":
         return yield* HttpServerResponse.json(yield* holds.get(id));
+      case "vault":
+        return yield* HttpServerResponse.json(
+          yield* runCases(id).pipe(Effect.provideService(Domain.Vault, vault)),
+        );
+      case "write": {
+        const receipt = yield* memos.send(
+          new Write({ id, text: url.searchParams.get("text") ?? "" }),
+        );
+        return yield* HttpServerResponse.json({ version: receipt.version });
+      }
+      case "redact": {
+        const rewriteId = url.searchParams.get("id");
+        const receipt = yield* memos
+          .rewrite(
+            id,
+            new Redact({ word: url.searchParams.get("word") ?? "" }),
+            rewriteId === null ? {} : { rewriteId },
+          )
+          .pipe(Effect.orDie);
+        yield* memos.rewritten(receipt, { timeout: "30 seconds" }).pipe(Effect.orDie);
+        const text = yield* memoTexts.get(Memo.ref(id)).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({
+          changed: receipt.changed,
+          lines: (yield* memos.get(id)).lines,
+          text: Option.getOrNull(text)?.text ?? null,
+        });
+      }
+      case "squash": {
+        const receipt = yield* memos.compact(id, MemoForward).pipe(Effect.orDie);
+        const events = yield* internals.aggregates.get("Memo")!.events!(id);
+        const text = yield* memoTexts.get(Memo.ref(id)).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json({
+          version: receipt.version,
+          compacted: receipt.compacted,
+          events: events.map((row) => (row.event as { readonly _tag: string })._tag),
+          lines: (yield* memos.get(id)).lines,
+          text: Option.getOrNull(text)?.text ?? null,
+        });
+      }
+      case "relay": {
+        const left = Number(url.searchParams.get("hops") ?? "1");
+        yield* hops.send(new Pass({ id: `${id}-${left}`, chain: id, left }));
+        return yield* HttpServerResponse.json(yield* hops.get(`${id}-${left}`));
+      }
+      case "hop":
+        return yield* HttpServerResponse.json(yield* hops.get(id));
       default:
         return HttpServerResponse.text("Not Found", { status: 404 });
     }

@@ -113,7 +113,7 @@ test("creating by name and submitting by request id are idempotent", async () =>
   expect(await chat<Record<string, number>>("twice", "list")).toMatchObject({ twice: id });
 }, 180_000);
 
-test("an inline tool writes through its Durable Object's binding, and a hook can block it", async () => {
+test("a tool implemented on its class writes through its own binding, and a hook can block it", async () => {
   await create("notes", ["save_note"]);
   const saved = await prompt("notes", "Remember this: save the text 'teal' under the key 'color'.");
   expect(toolResults(saved, "save_note")).toMatchObject([{ isError: false }]);
@@ -142,16 +142,6 @@ test("tools are disabled and enabled on a running conversation", async () => {
   await chat("toggle", "enable-tool", { tool: "add" });
   expect((await chat<string[]>("toggle", "tools")).toSorted()).toEqual(["add", "save_note"]);
 }, 120_000);
-
-test("a skill added to a conversation is loaded when the task calls for it", async () => {
-  await create("skill", []);
-  await chat("skill", "add-skill", {});
-  expect(await chat<string[]>("skill", "tools")).toEqual(["load_skill"]);
-
-  const messages = await prompt("skill", "Greet me.");
-  expect(toolResults(messages, "load_skill")).toMatchObject([{ isError: false }]);
-  expect(answer(messages)).toContain("HELLO-FROM-SKILL");
-}, 180_000);
 
 test("code mode runs a program that calls the conversation's tools", async () => {
   await create("code", ["add"]);

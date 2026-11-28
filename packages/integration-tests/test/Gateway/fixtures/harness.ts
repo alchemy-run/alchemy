@@ -102,7 +102,7 @@ const HarnessLive = Layer.mergeAll(
   FastLive,
   PushLive,
   OpenCode.CodingTools,
-  OpenCodeCloudflare.DurableObjectInstance,
+  OpenCodeCloudflare.DurableObjectStorage,
 ).pipe(
   Layer.provideMerge(AIBoat.Sandboxes(Base)),
   Layer.provideMerge(GitHub.PushRepositoryHttp),
@@ -123,17 +123,21 @@ export class HarnessSession extends Cloudflare.DurableObject<HarnessSession>()(
       toolsUsed: Effect.fn(function* (name: string) {
         const messages = yield* harness.session(name).messages;
         return messages.flatMap((message) =>
-          message.parts.flatMap((part) =>
-            part.type === "tool"
-              ? [
-                  {
-                    tool: part.tool,
-                    status: part.state?.status,
-                    output: part.state?.output ?? part.state?.error ?? "",
-                  },
-                ]
-              : [],
-          ),
+          message.type === "assistant"
+            ? (message as OpenCode.AssistantMessage).content.flatMap((content) =>
+                content.type === "tool"
+                  ? [
+                      {
+                        tool: content.name,
+                        status: content.state?.status,
+                        output:
+                          content.state?.error?.message ??
+                          (content.state?.content ?? []).map((item) => item.text ?? "").join(""),
+                      },
+                    ]
+                  : [],
+              )
+            : [],
         );
       }),
       kill: (name: string) => harness.session(name).removeSandbox,

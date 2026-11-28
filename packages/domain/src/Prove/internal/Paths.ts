@@ -68,18 +68,18 @@ const formula = (truth: boolean | string): string =>
   typeof truth === "boolean" ? String(truth) : truth;
 
 /** The property of the definition with this name, e.g. `decide`. */
-const property = (definition: Definition, name: string): Node | undefined =>
+export const property = (definition: { readonly node: Node }, name: string): Node | undefined =>
   (definition.node.properties as ReadonlyArray<Node>).find(
     (p) => p.type === "Property" && !p.computed && (p.key.name ?? p.key.value) === name,
   )?.value;
 
-const siteOf = (definition: Definition): Site => ({
+export const siteOf = (definition: { readonly module: Module; readonly node: Node }): Site => ({
   module: definition.module,
   node: definition.node,
 });
 
 /** Outside `decide`, a failure is not a rejection: nothing the prover reads does that. */
-const strict = <A>(eval_: Eval<A>, site: Site, what: string): Eval<A> =>
+export const strict = <A>(eval_: Eval<A>, site: Site, what: string): Eval<A> =>
   eval_.pipe(
     Effect.catchTag("Rejected", () => Effect.fail(Value.notTranslated(site, `${what} fails`))),
   );
@@ -94,6 +94,16 @@ export const handlers = (
   return node
     ? interpreter.evaluate(node, interpreter.moduleEnv(definition.module))
     : Effect.succeed(Value.obj({}));
+};
+
+/** The aggregate's `initial` state, as its file writes it. */
+export const initial = (interpreter: Interpreter, definition: Definition): Eval<V> => {
+  const node = property(definition, "initial");
+  return node
+    ? interpreter.evaluate(node, interpreter.moduleEnv(definition.module))
+    : Effect.fail(
+        Value.notTranslated(siteOf(definition), `${definition.name} has no initial state`),
+      );
 };
 
 /** An id as the solver's text: `undefined` for a value that is not one. */
@@ -150,7 +160,7 @@ export const step = (
     run.label = label;
     const commandValue = on?.given ?? commandOf(command, label, run);
     // The command's input names its instance: the aggregate's `keyOf` reads it.
-    const key = yield* keyOf(interpreter, definition, commandValue);
+    const key = interpreter.id(yield* keyOf(interpreter, definition, commandValue));
     const id: V = on?.id ?? key;
     const idText = addressOf(id);
     const keyText = addressOf(key);
@@ -179,6 +189,7 @@ export const step = (
       .pipe(
         Effect.flatMap((made) => (made._tag === "Effect" ? made.run : Effect.succeed(made))),
         Effect.catchTag("Rejected", (rejected) => Effect.succeed(rejected)),
+        decidedAt(interpreter, now),
       );
     if (decision._tag === "Rejected")
       return { inputs, applied: { _tag: "Rejected", rejection: decision.rejection } } as const;
@@ -187,13 +198,20 @@ export const step = (
     const events = decision._tag === "Arr" ? decision.items : [decision];
     if (events.length === 0) return { inputs, applied: { _tag: "Unchanged" } } as const;
 
-    const next = yield* folded(interpreter, definition, command.tag, state, events, {
-      id,
-      stream,
-      version,
-      now,
-      commandId,
-    });
+    const next = yield* folded(
+      interpreter,
+      definition,
+      `decide for ${command.tag}`,
+      state,
+      events,
+      {
+        id,
+        stream,
+        version,
+        now,
+        commandId,
+      },
+    );
     return { inputs, applied: { _tag: "Changed", events, state: next } } as const;
   });
 
@@ -202,13 +220,36 @@ const commandOf = (command: CommandClass, label: string, run: Value.Run): V => {
   const fields: Record<string, V> = { _tag: Value.str(command.tag) };
   for (const [key, schema] of Object.entries(command.fields)) {
     const ast = Symbolic.typeOf(schema);
-    if (key !== "_tag" && ast) fields[key] = Symbolic.symbolic(ast, `${label}command.${key}`, run);
+    if (key !== "_tag" && ast)
+      fields[key] = Symbolic.field(ast, `${label}command.${key}`, key, run);
   }
   return Value.obj(fields, { kind: "Command", cls: command });
 };
 
+/**
+ * Runs `decide` at a time: what the clock reads while it runs. The runtime
+ * sets the clock to the command's time the same way.
+ */
+const decidedAt =
+  (interpreter: Interpreter, now: V) =>
+  <A, E>(decide: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+    Effect.suspend(() => {
+      const before = interpreter.hooks.now;
+      interpreter.hooks.now = now;
+      return decide.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            interpreter.hooks.now = before;
+          }),
+        ),
+      );
+    });
+
 /** The id a command is sent with and the time it is handled at, as inputs. */
-const stamp = (label: string, run: Value.Run): { readonly commandId: V; readonly now: V } => {
+export const stamp = (
+  label: string,
+  run: Value.Run,
+): { readonly commandId: V; readonly now: V } => {
   const commandId: V = { _tag: "Term", term: run.constant(`${label}commandId`, "String") };
   const nowTerm = run.constant(`${label}now`, "Int");
   run.assume(`(>= ${nowTerm.text} 0)`);
@@ -216,8 +257,8 @@ const stamp = (label: string, run: Value.Run): { readonly commandId: V; readonly
   return { commandId, now: { _tag: "Time", millis: nowTerm } };
 };
 
-/** A state after events, each folded with the aggregate's `evolve`. */
-const folded = (
+/** A state after events, each folded with the aggregate's `evolve`. `command` is what gave them. */
+export const folded = (
   interpreter: Interpreter,
   definition: Definition,
   command: string,
@@ -239,10 +280,7 @@ const folded = (
       const tag =
         event._tag === "Obj" && event.brand?.kind === "Event" ? event.fields._tag : undefined;
       if (tag?._tag !== "Str")
-        return yield* Value.notTranslated(
-          site,
-          `decide for ${command} returns something that is not an event`,
-        );
+        return yield* Value.notTranslated(site, `${command} gives something that is not an event`);
       const fold = yield* interpreter.member(evolve, tag.value, site);
       if (fold._tag === "Undef")
         return yield* Value.notTranslated(site, `evolve has no handler for ${tag.value}`);
@@ -359,7 +397,9 @@ export const decided = (
     const reads = new Map<number, V>();
     const names: Record<string, number | ReadonlyArray<number>> = {};
     const seen: Record<string, V> = {};
-    const one = Effect.fnUntraced(function* (name: string, id: V) {
+    const one = Effect.fnUntraced(function* (name: string, given: V) {
+      // An id an opaque function gave is the text it returns.
+      const id = interpreter.id(given);
       const text = addressOf(id);
       if (text === undefined)
         return yield* Value.notTranslated(
@@ -428,6 +468,7 @@ export const decided = (
       .pipe(
         Effect.flatMap((made) => (made._tag === "Effect" ? made.run : Effect.succeed(made))),
         Effect.catchTag("Rejected", (rejected) => Effect.succeed(rejected)),
+        decidedAt(interpreter, now),
       );
     if (decision_._tag === "Rejected")
       return done({ _tag: "Rejected", rejection: decision_.rejection });
@@ -696,26 +737,26 @@ export const decisionIn = Effect.fn(function* (
 ) {
   for (const module of modules) {
     if (!Object.values(module.exports).includes(decision)) continue;
-    const calls: Array<Node> = [];
+    const calls: Array<{ readonly call: Node; readonly props: Node }> = [];
     const visit = (node: unknown): void => {
       if (Array.isArray(node)) return node.forEach(visit);
       if (typeof node !== "object" || node === null) return;
       const n = node as Node;
+      const props = n.type === "CallExpression" ? propsOf(n.arguments?.[1] as Node) : undefined;
       if (
-        n.type === "CallExpression" &&
-        n.arguments?.[1]?.type === "ObjectExpression" &&
+        props !== undefined &&
         ["reads", "keyOf", "decide"].every((key) =>
-          (n.arguments[1].properties as ReadonlyArray<Node>).some(
+          (props.properties as ReadonlyArray<Node>).some(
             (p) => p.type === "Property" && !p.computed && (p.key.name ?? p.key.value) === key,
           ),
         )
       )
-        calls.push(n);
+        calls.push({ call: n, props });
       for (const [key, value] of Object.entries(n))
         if (key !== "type" && typeof value === "object") visit(value);
     };
     visit(module.program);
-    for (const call of calls) {
+    for (const { call, props } of calls) {
       const command = yield* interpreter
         .evaluate(call.arguments[0] as Node, interpreter.moduleEnv(module))
         .pipe(Effect.result);
@@ -726,7 +767,7 @@ export const decisionIn = Effect.fn(function* (
       ) {
         const found: DecisionDefinition = {
           module,
-          node: call.arguments[1] as Node,
+          node: props,
           name: decision.decisionName,
         };
         return found;
@@ -902,6 +943,7 @@ export const same = (a: V | undefined, b: V | undefined): boolean => {
     case "Time":
       return a.millis.text === (b as typeof a).millis.text;
     case "List":
+    case "Pending":
       return a.name === (b as typeof a).name;
     case "Obj": {
       const other = (b as typeof a).fields;
@@ -1003,16 +1045,28 @@ export const unread = (
 };
 
 /**
+ * The props a declaration was given: the object itself, or the one a thunk
+ * returns (`() => ({ ... })`).
+ */
+const propsOf = (node: Node | undefined): Node | undefined => {
+  if (node?.type === "ParenthesizedExpression") return propsOf(node.expression as Node);
+  if (node?.type === "ObjectExpression") return node;
+  if (node?.type === "ArrowFunctionExpression" && (node.params as ReadonlyArray<Node>).length === 0)
+    return propsOf(node.body as Node);
+  return undefined;
+};
+
+/**
  * The object passed to `Domain.Aggregate(name, { ... })`,
- * `Domain.Model(name, { ... })` or `Domain.View(name, { ... })` in a file: the
- * one with the property `key`, which an event or a command of the same name
- * does not have.
+ * `Domain.Model(name, { ... })` or `Domain.View(name, { ... })` in a file,
+ * directly or returned by a thunk: the one with the property `key`, which
+ * an event or a command of the same name does not have.
  */
 export const find = (
   program: Node,
   name: string,
   /** `evolve` for an aggregate: one that only takes part in decisions has no `decide`. */
-  key: "evolve" | "aggregates" | "from",
+  key: "evolve" | "aggregates" | "from" | "rollup" | "of",
 ): Node | undefined => {
   const visit = (node: unknown): Node | undefined => {
     if (Array.isArray(node)) {
@@ -1024,16 +1078,19 @@ export const find = (
     }
     if (typeof node !== "object" || node === null) return undefined;
     const n = node as Node;
-    if (
+    const props =
       n.type === "CallExpression" &&
       n.arguments?.[0]?.type === "Literal" &&
-      n.arguments[0].value === name &&
-      n.arguments[1]?.type === "ObjectExpression" &&
-      (n.arguments[1].properties as ReadonlyArray<Node>).some(
+      n.arguments[0].value === name
+        ? propsOf(n.arguments[1] as Node | undefined)
+        : undefined;
+    if (
+      props !== undefined &&
+      (props.properties as ReadonlyArray<Node>).some(
         (p) => p.type === "Property" && !p.computed && (p.key.name ?? p.key.value) === key,
       )
     )
-      return n.arguments[1] as Node;
+      return props;
     for (const [key, value] of Object.entries(n)) {
       if (key === "type" || typeof value !== "object") continue;
       const found = visit(value);
@@ -1048,6 +1105,7 @@ export const find = (
 export const load = (
   aggregate: Aggregate.Any,
   source: URL | string,
+  reading?: Source.Reading,
 ): Effect.Effect<
   { readonly loader: Source.Loader; readonly definition: Definition },
   Source.LoadError,
@@ -1065,7 +1123,7 @@ export const load = (
                 (error) => new Source.LoadError({ file: String(source), message: error.message }),
               ),
             );
-    const loader = yield* Source.loader;
+    const loader = yield* Source.loader(reading);
     loader.adopt(aggregate);
     const module = yield* loader.load(file);
     const node = find(module.program, aggregate.aggregateName, "evolve");

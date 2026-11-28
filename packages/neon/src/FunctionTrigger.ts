@@ -1,4 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
+import * as NeonUnstable from "@distilled.cloud/neon/unstable/neon";
 import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
@@ -103,14 +104,14 @@ const observe = Effect.fn(function* (
   scope: { project_id: string; branch_id: string },
   identity: { id?: string; name?: string },
 ) {
-  const { triggers } = yield* Neon.listProjectBranchTriggers(scope);
+  const { triggers } = yield* NeonUnstable.listProjectBranchTriggers(scope);
   return triggers.find((trigger) =>
     identity.id ? trigger.trigger_id === identity.id : trigger.name === identity.name,
   );
 });
 const attrs = (
   fn: { projectId: string; branchId: string },
-  trigger: Neon.Trigger,
+  trigger: NeonUnstable.Trigger,
 ): FunctionTriggerAttributes => ({
   projectId: fn.projectId,
   branchId: fn.branchId,
@@ -165,7 +166,7 @@ export const FunctionTriggerProvider = () =>
         for (const branch of yield* Neon.listProjectBranches
           .items({ project_id: project.id })
           .pipe(Stream.runCollect)) {
-          const { triggers } = yield* Neon.listProjectBranchTriggers({
+          const { triggers } = yield* NeonUnstable.listProjectBranchTriggers({
             project_id: project.id,
             branch_id: branch.id,
           });
@@ -206,7 +207,7 @@ export const FunctionTriggerProvider = () =>
       let current = yield* observe(scope, { id: output?.triggerId, name });
       const desired = yield* desiredConfig(news, name, current?.inherited ?? false);
       if (!current)
-        current = yield* Neon.createProjectBranchTrigger({
+        current = yield* NeonUnstable.createProjectBranchTrigger({
           ...scope,
           body: desired,
         }).pipe(
@@ -230,7 +231,7 @@ export const FunctionTriggerProvider = () =>
             }),
       };
       if (JSON.stringify(observed) !== JSON.stringify(desired))
-        current = (yield* Neon.updateProjectBranchTrigger({
+        current = (yield* NeonUnstable.updateProjectBranchTrigger({
           ...scope,
           trigger_id: current.trigger_id,
           body: desired,
@@ -240,7 +241,7 @@ export const FunctionTriggerProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const scope = scopeOf(output);
       if (!(yield* observe(scope, { id: output.triggerId }))) return;
-      yield* Neon.deleteProjectBranchTrigger({
+      yield* NeonUnstable.deleteProjectBranchTrigger({
         ...scope,
         trigger_id: output.triggerId,
       }).pipe(Effect.catchTag("NotFound", () => Effect.void));

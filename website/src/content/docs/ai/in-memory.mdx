@@ -1,0 +1,44 @@
+---
+title: In memory
+description: Host a process in one program's memory with AI.layerInMemory, and play it with AI.scripted in place of a model, for tests and single-process apps.
+---
+
+Host a process in memory to test it, or to run it in a single process. Its sessions live in the program that builds the Layer.
+
+## Host the process in memory
+
+`AI.layerInMemory` hosts the process's Layer in this program. `AI.scripted` plays the process in place of a model: it stores each message, runs your function as the turn, and stores its answer.
+
+```typescript title="test/Workshop.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Engineer } from "../src/Engineer.process.ts";
+import { CompleteTask } from "../src/Workshop/CompleteTask.command.ts";
+import { Task } from "../src/Workshop/Task.aggregate.ts";
+import { TaskWorkLive } from "../src/Workshop/TaskWork.policy.ts";
+import { Workshop } from "../src/Workshop/Workshop.model.ts";
+
+const EngineerPlayed = AI.scripted(
+  Engineer,
+  Effect.gen(function* () {
+    const tasks = yield* Task;
+    return Effect.fn(function* ({ key }: AI.Turn) {
+      yield* tasks.send(new CompleteTask({ taskId: key }));
+      return "Done.";
+    }, Effect.orDie);
+  }),
+);
+
+const WorkshopInMemory = Workshop.layer(TaskWorkLive).pipe(Layer.provide(Domain.InMemory));
+
+const EngineerInMemory = AI.layerInMemory(
+  EngineerPlayed.pipe(Layer.provide(WorkshopInMemory)),
+);
+
+export const Live = WorkshopInMemory.pipe(Layer.provideMerge(EngineerInMemory));
+```
+
+
+`Domain.InMemory` hosts the model the same way, so the whole app runs in one test. Provide `Live` where you would provide the deployed one.

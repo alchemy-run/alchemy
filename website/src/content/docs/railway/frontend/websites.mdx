@@ -1,6 +1,6 @@
 ---
 title: Websites
-description: Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Vocs, or any static build to Railway with first-class Website resources.
+description: Deploy Vite, Astro, Next.js, vinext, Nuxt, React Router, SolidStart, SvelteKit, TanStack Start, Waku, Octane, Foldkit, Effect UI, Vocs, or any static build to Railway with first-class Website resources.
 sidebar:
   label: Overview
   order: 1
@@ -57,6 +57,7 @@ or `https://{domain}` when you pass `domain` (a
 - [`Octane`](/railway/frontend/octane) — OctaneJS SSR. Alchemy wraps
   native Node output; no hosting adapter is needed in `octane.config.ts`.
 - [`Foldkit`](/railway/frontend/foldkit) — Foldkit SPA, SSR, and prerendered apps
+- [`EffectUI`](/railway/frontend/effect-ui) — Effect UI SPA, SSR, and prerendered apps
   SPA; deep links fall back to `index.html`.
 - [`Vocs`](/railway/frontend/vocs) — prerendered Vocs docs;
   extensionless pages (`/about` → `about/index.html`).
@@ -87,6 +88,7 @@ unchanged project skips the build.
 | Waku | `Waku` | [Waku](/railway/frontend/waku) |
 | OctaneJS | `Octane` | [Octane](/railway/frontend/octane) |
 | Foldkit | `Foldkit` | [Foldkit](/railway/frontend/foldkit) |
+| Effect UI | `EffectUI` | [Effect UI](/railway/frontend/effect-ui) |
 | Vocs | `Vocs` | [Vocs](/railway/frontend/vocs) |
 | Zola, Hugo, or any static generator | `StaticSite` | [Static sites](/railway/frontend/static-site) |
 
@@ -98,7 +100,7 @@ for a Vite SPA in a shared Project.
 
 Use the resource named after your framework. `Astro`, `Nextjs`,
 `Nuxt`, `ReactRouter`, `SolidStart`, `SvelteKit`,
-`TanStackStart`, `Waku`, `Octane`, `Foldkit`, and `Vocs` each
+`TanStackStart`, `Waku`, `Octane`, `Foldkit`, `EffectUI`, and `Vocs` each
 drive that framework's programmatic build and know its output
 layout, config surface, and dev server.
 
@@ -168,6 +170,7 @@ const site = yield* Railway.Website.Astro("Web", {
   [Waku](/railway/frontend/waku),
   [Octane](/railway/frontend/octane),
   [Foldkit](/railway/frontend/foldkit),
+  [Effect UI](/railway/frontend/effect-ui),
   [Vocs](/railway/frontend/vocs).
 - [Services](/railway/compute/services) — the container these
   resources deploy.

@@ -33,20 +33,42 @@ export class AccountCards extends Domain.Projection("AccountCards", {
 export const AccountCardsLive = AccountCards.toLayer(
   Effect.gen(function* () {
     const cards = yield* AccountCard;
-    return Effect.fn(function* (batch) {
-      for (const input of batch) {
-        const summary = input.state;
-        if (!summary?.customerId || !summary.owner) continue;
-        yield* cards.append(
-          input,
-          new CardChanged({
-            customerId: summary.customerId,
-            owner: summary.owner,
-            balance: summary.balance,
-            frozen: summary.frozen,
-          }),
-        );
-      }
-    });
+    return {
+      write: Effect.fn(function* (batch) {
+        for (const input of batch) {
+          const summary = input.state;
+          if (!summary?.customerId || !summary.owner) continue;
+          yield* cards.append(
+            input,
+            new CardChanged({
+              customerId: summary.customerId,
+              owner: summary.owner,
+              balance: summary.balance,
+              frozen: summary.frozen,
+            }),
+          );
+        }
+      }),
+      // A rewrite changed what the summary read when a card was appended: the
+      // card is appended again as the summary now reads, or removed.
+      rewrite: Effect.fn(function* (batch) {
+        for (const input of batch) {
+          const summary = input.state;
+          if (input.after === undefined || !summary?.customerId || !summary.owner) {
+            yield* cards.rewrite(input);
+            continue;
+          }
+          yield* cards.rewrite(
+            input,
+            new CardChanged({
+              customerId: summary.customerId,
+              owner: summary.owner,
+              balance: summary.balance,
+              frozen: summary.frozen,
+            }),
+          );
+        }
+      }),
+    };
   }),
 );

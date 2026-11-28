@@ -6,7 +6,7 @@ import * as Docker from "@alchemy.run/docker";
 import * as Rivet from "@alchemy.run/rivet";
 import * as Effect from "effect/Effect";
 import { app } from "../../Workflows/conformance/app.ts";
-import { WORKFLOW_FRONT_PORT, WorkflowControlPlane } from "./workflow-cluster.ts";
+import { WorkflowControlPlane } from "./workflow-cluster.ts";
 import { WorkflowsRivetLive } from "./workflow-live.ts";
 
 export default class WorkflowFront extends Docker.Service<WorkflowFront>()(
@@ -16,7 +16,8 @@ export default class WorkflowFront extends Docker.Service<WorkflowFront>()(
     return {
       main: import.meta.url,
       port: 3000,
-      ports: [{ external: WORKFLOW_FRONT_PORT, internal: 3000 }],
+      // On a free port: the suite reads it from `ports` after the deploy.
+      ports: [{ internal: 3000 }],
       networks: cluster.network?.kind === "docker" ? [{ name: cluster.network.name }] : [],
       // Only the nodes load RivetKit; the front reaches actors over HTTP.
       build: { input: { external: ["rivetkit", /^rivetkit\//, /^@rivetkit\//] } },

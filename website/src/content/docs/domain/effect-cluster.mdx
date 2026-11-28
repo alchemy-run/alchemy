@@ -8,12 +8,13 @@ Host your model on [Effect Cluster](/cluster), and every aggregate instance, vie
 
 ## Host the model
 
-Provide `DomainCluster.layerEntities` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the entity that holds the model, point `main` at the file whose default export the runners load, and give it a pool.
+Provide `DomainCluster.layerEntities()` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Then provide `Cluster.layerObjectHost` to the Layer the file exports as its default: it names the entity that holds the model, points `main` at this file, and takes a pool.
 
 ```typescript
 // packages/server/src/BankLive.ts
-import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import * as Layer from "effect/Layer";
 import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
@@ -22,16 +23,8 @@ export const Database = ClusterDocker.Database("Cluster");
 const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(Layer.provide(Database));
 
 export default Bank.layer(BankHandlers).pipe(
-  Layer.provide(
-    Layer.mergeAll(
-      DomainCluster.layerEntities({
-        name: "Bank",
-        main: import.meta.url,
-        pool: Default,
-      }),
-      SiftFraudCheck,
-    ),
-  ),
+  Layer.provide(Layer.mergeAll(DomainCluster.layerEntities(), SiftFraudCheck)),
+  Layer.provide(Cluster.layerObjectHost("Bank", { main: import.meta.url, pool: Default })),
 );
 ```
 
@@ -126,10 +119,6 @@ Some rows exist only to drop repeats: the receipt of each accepted command and c
 
 ```typescript
 DomainCluster.layerEntities({
-  name: "Bank",
-  main: import.meta.url,
-  handler: "BankLive",
-  pool: Default,
   retention: {
     receipts: "30 days", // a command or decision sent again after this is decided again
     deliveries: "7 days", // a delivery that arrives again after this runs again
@@ -142,7 +131,7 @@ DomainCluster.layerEntities({
 
 These are the defaults. `"forever"` keeps a kind of row. Events, state and the views' entries are never deleted.
 
-Retention applies to pools with a cluster database. On `ClusterCloudflare.DurableObjectPool`, each instance keeps its rows in its own Durable Object, and the host keeps them.
+On `ClusterCloudflare.DurableObjectPool`, each instance keeps its rows in its own Durable Object and deletes a few past their window every time it commits, as on [Cloudflare](/domain/cloudflare#keep-dedupe-rows-for-a-while). `messages` and `interval` apply only to pools with a cluster database.
 
 ## Watch without polling
 

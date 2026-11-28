@@ -1,6 +1,6 @@
 ---
 title: Tools
-description: Give a Pi harness your own tools, inline tools that close over a Durable Object's bindings, and Pi's coding tools, and choose which ones each conversation may use.
+description: Give a Pi harness your own tools and Pi's coding tools, and choose which ones each conversation may use.
 ---
 
 A Pi harness runs every tool call in its Durable Object. A tool is an [`AI.Tool`](/ai/tools), declared once and listed on the harness. Pi adds its own coding tools, and lets each conversation choose which tools it uses.
@@ -16,7 +16,7 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Fast, FastLive } from "./models.ts";
-import { Add, AddLive } from "./tools.ts";
+import { Add, AddLive } from "./Add.tool.ts";
 
 const HarnessLive = Layer.mergeAll(FastLive, AddLive, PiCloudflare.DurableObjectStorage);
 
@@ -53,24 +53,25 @@ yield* harness.configure("review", { tools: { remove: [AI.Bash] } });
 
 A tool that is not on the harness fails with `NotOnHarness`.
 
-## Close over the object's bindings
+## List a tool that has its implementation
 
-An inline tool is declared in the Durable Object's outer Effect, where its bindings are in scope, and has no Layer:
+A tool [implemented on its class](/ai/tools#implement-a-tool-on-its-class) has no Layer. Its Effect runs in the Durable Object's outer Effect, where the harness is yielded, and binds what the tool uses. [A tool uses only what it binds](/ai/tools#a-tool-uses-only-what-it-binds):
 
 ```typescript
-const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
-
-const SaveNote = AI.Tool(
+export class SaveNote extends AI.Tool<SaveNote>()(
   "save_note",
   {
     description: "Save a note the user can read later.",
     parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
     success: Schema.Void,
   },
-  Effect.fn(function* ({ key, text }) {
-    yield* notes.put(key, text).pipe(Effect.orDie);
+  Effect.gen(function* () {
+    const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+    return Effect.fn(function* ({ key, text }) {
+      yield* notes.put(key, text).pipe(Effect.orDie);
+    });
   }),
-);
+) {}
 
 const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 ```

@@ -6,10 +6,18 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { Guard, Greeting } from "./extensions.ts";
-import { Gateway, Notes } from "./infra.ts";
+import { Guard } from "./extensions.ts";
+import { Gateway } from "./infra.ts";
 import { Fast } from "./models.ts";
-import { Add, AddLive, GlobLive, Withdraw, WithdrawLive } from "./tools.ts";
+import {
+  Add,
+  AddLive,
+  codemodeSection,
+  GlobLive,
+  SaveNote,
+  Withdraw,
+  WithdrawLive,
+} from "./tools.ts";
 
 const ModelsLive = AICloudflare.Model(Fast, {
   gateway: Gateway,
@@ -22,34 +30,33 @@ const HarnessLive = Layer.mergeAll(
   AddLive,
   WithdrawLive,
   GlobLive,
-  Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline())),
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalQuickJS())),
   PiCloudflare.DurableObjectStorage,
   Cloudflare.KV.ReadWriteNamespaceBinding,
 );
 
+/** The tools a program may call. */
+const Programs = AI.CodeMode(Add, Withdraw);
+
 export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
   "PiSession",
   Effect.gen(function* () {
-    const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
-
-    // An inline tool, closing over a binding resolved in this scope.
-    const SaveNote = AI.Tool(
-      "save_note",
+    // A tool whose handler dies: a bug, or a binding the tool may not use.
+    const Explode = AI.Tool(
+      "explode",
       {
-        description:
-          "Save a note under a key. Use it whenever the user asks you to remember something.",
-        parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
+        description: "Set off the charge. Call it when asked to.",
+        parameters: Schema.Struct({}),
         success: Schema.Void,
       },
-      Effect.fn(function* ({ key, text }) {
-        yield* notes.put(key, text).pipe(Effect.orDie);
-      }),
+      () => Effect.die(new Error("the charge was wet")),
     );
 
     const harness = yield* Pi.Harness({
       models: [Fast],
-      tools: [Add, SaveNote, Withdraw, AI.Glob],
-      extensions: [Guard, Greeting, Pi.CodeMode],
+      // `add` and `withdraw` are offered both ways: as direct calls, and from programs.
+      tools: [Add, SaveNote, Withdraw, AI.Glob, Explode, Programs],
+      extensions: [Guard],
     });
 
     return Effect.gen(function* () {
@@ -79,7 +86,7 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
         }),
         create: Effect.fn(function* (
           name: string,
-          tools: ReadonlyArray<"add" | "save_note" | "withdraw" | "glob">,
+          tools: ReadonlyArray<"add" | "save_note" | "withdraw" | "glob" | "explode">,
         ) {
           const conversation = yield* harness.createConversation({
             name,
@@ -90,7 +97,9 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
                   ? Withdraw
                   : tool === "glob"
                     ? AI.Glob
-                    : SaveNote,
+                    : tool === "explode"
+                      ? Explode
+                      : SaveNote,
             ),
             instructions: "You are terse. Use your tools whenever they apply.",
           });
@@ -116,11 +125,17 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
         }),
         addCodeMode: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
-          yield* conversation.configure({ extensions: { add: [Pi.CodeMode] } });
+          yield* conversation.configure({ tools: { add: [Programs] } });
         }),
-        addSkill: Effect.fn(function* (name: string) {
+        /** The tools the model is offered, by name. */
+        offered: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
-          yield* conversation.configure({ extensions: { add: [Greeting] } });
+          return (yield* conversation.agent).tools.map((tool) => tool.name).sort();
+        }),
+        /** The code mode section of the system prompt the conversation was last sent. */
+        section: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          return codemodeSection((yield* conversation.context).messages) ?? null;
         }),
         toolResults: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);

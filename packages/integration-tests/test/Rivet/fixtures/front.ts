@@ -19,11 +19,11 @@ import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts
 import AbandonedAlarm from "./abandoned-alarm.ts";
 import Callbacks from "./callbacks.ts";
 import { BinaryLog, ChatLog } from "./chat-log.ts";
-import { Cluster, FRONT_PORT, Services } from "./cluster.ts";
+import { Cluster, Services } from "./cluster.ts";
 import Counter from "./counter.ts";
 import GatedTally from "./gated-tally.ts";
 import Greeter from "./greeter.ts";
-import Lifecycle from "./lifecycle.ts";
+import Lifecycle, { QuickLifecycle } from "./lifecycle.ts";
 import { Reentrant } from "./reentrant-declaration.ts";
 import Room from "./room.ts";
 import SocketRoom from "./socket-room.ts";
@@ -36,7 +36,8 @@ export default class Front extends Docker.Service<Front>()(
     return {
       main: import.meta.url,
       port: 3000,
-      ports: [{ external: FRONT_PORT, internal: 3000 }],
+      // On a free port: the suite reads it from `ports` after the deploy.
+      ports: [{ internal: 3000 }],
       networks: cluster.network?.kind === "docker" ? [{ name: cluster.network.name }] : [],
       // Only the nodes load RivetKit; the front reaches actors over HTTP.
       build: { input: { external: ["rivetkit", /^rivetkit\//, /^@rivetkit\//] } },
@@ -46,6 +47,7 @@ export default class Front extends Docker.Service<Front>()(
     const counters = yield* Counter;
     const greeters = yield* Greeter;
     const lifecycles = yield* Lifecycle;
+    const quickLifecycles = yield* QuickLifecycle;
     const abandonedAlarms = yield* AbandonedAlarm;
     const callbacks = yield* Callbacks;
     const parallelTallies = yield* Tally;
@@ -168,10 +170,13 @@ export default class Front extends Docker.Service<Front>()(
         }
         // `/lifecycle/<name>/<step>`: `put` stores a value, `sleep` puts the
         // instance to sleep, `destroy` destroys it, `value` reads it back, and
-        // `hooks` counts the hooks that ran without waking it.
+        // `hooks` counts the hooks that ran without waking it. `?class=quick`
+        // calls a `QuickLifecycle` instead.
         if (group === "lifecycle" && name !== undefined) {
           const step = url.pathname.split("/").filter((segment) => segment.length > 0)[2];
-          const instance = lifecycles.getByName(name);
+          const instance = (
+            url.searchParams.get("class") === "quick" ? quickLifecycles : lifecycles
+          ).getByName(name);
           if (step === "put") {
             yield* instance.put(Number(url.searchParams.get("value") ?? "1"));
             return yield* HttpServerResponse.json({ ok: true });

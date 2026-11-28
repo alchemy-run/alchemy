@@ -1,9 +1,10 @@
+import * as crypto from "node:crypto";
 import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as DeployRetry from "alchemy/DeployRetry";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
-import { sha256, sha256Object } from "alchemy/Util";
+import { sha256Object } from "alchemy/Util";
 import { listFileSystemDirectory, parseIgnoreRules, walkIgnoring } from "alchemy/Util/Ignore";
 import { initialCwd } from "alchemy/Util/Node";
 import * as Data from "effect/Data";
@@ -14,6 +15,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
@@ -319,7 +321,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
   );
   const manifest = new Map<string, { hash: string; size: number }>();
   let count = 0;
-  yield* Effect.forEach(
+  const entries = yield* Effect.forEach(
     files,
     Effect.fn(function* (name) {
       const file = path.join(resolvedDirectory, name);
@@ -340,19 +342,12 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
       // different extensions must not collapse into a single entry — the
       // second file would serve with the first file's content type.
       const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
-      const hash = yield* fs.readFile(file).pipe(
-        Effect.flatMap((content) =>
-          Effect.sync(() => {
-            const extBytes = new TextEncoder().encode(extension);
-            const hashed = new Uint8Array(content.length + extBytes.length);
-            hashed.set(content);
-            hashed.set(extBytes, content.length);
-            return hashed;
-          }),
-        ),
-        Effect.flatMap(sha256),
-        Effect.map((hash) => hash.slice(0, 32)),
-      );
+      // Stream the file into the hash so memory per file stays one chunk.
+      const hasher = yield* Effect.sync(() => crypto.createHash("sha256"));
+      yield* fs
+        .stream(file)
+        .pipe(Stream.runForEach((chunk) => Effect.sync(() => hasher.update(chunk))));
+      const hash = yield* Effect.sync(() => hasher.update(extension).digest("hex").slice(0, 32));
       count++;
       if (count > MAX_ASSET_COUNT) {
         return yield* new TooManyAssetsError({
@@ -361,15 +356,20 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
           count,
         });
       }
-      manifest.set(
+      return [
         `${pathPrefix}${(name.startsWith("/") ? name : `/${name}`).replaceAll("\\", "/")}`,
-        {
-          hash,
-          size,
-        },
-      );
+        { hash, size },
+      ] as const;
     }),
+    // Stat, read and hash independent files concurrently.
+    { concurrency: 16 },
   );
+  // Insert in listing order, not completion order, so names that normalize
+  // to one key (`a\b.txt` and `a/b.txt`) or collate equal (NFC vs NFD) resolve
+  // as they did serially.
+  for (const entry of entries) {
+    if (entry) manifest.set(entry[0], entry[1]);
+  }
   // Cloudflare's SPA fallback is hard-coded to `/index.html` at the
   // manifest root, so prefixing every key would 404 every client-side
   // route under the base. Alias the shell back to the root — one extra

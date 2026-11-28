@@ -6,6 +6,7 @@
 import { expect } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -14,7 +15,8 @@ import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import { ConformanceApi, SECRET } from "./model.ts";
+import { caseNames } from "../vault/cases.ts";
+import { ConformanceApi, RECEIPT_RETENTION, SECRET } from "./model.ts";
 
 type TestFn = (
   name: string,
@@ -88,6 +90,9 @@ export const liveFrame = (
     Effect.provide(Socket.layerWebSocketConstructorGlobal),
   );
 
+/** Inputs in the backlog case, each a second's work for one projection key. */
+const BACKLOG_INPUTS = 150;
+
 /** How long a refused read may take: well under a read's wait for `atLeast`. */
 const AT_ONCE = "5 seconds";
 
@@ -103,6 +108,81 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
         times: Math.ceil(within / 500),
       }),
     );
+
+  test(
+    "a Vault keeps each subject's key on the host: values open, and stop opening once shredded",
+    Effect.gen(function* () {
+      expect(yield* call(`/vault/${fresh("vault")}`)).toEqual(
+        Object.fromEntries(caseNames.map((name) => [name, true])),
+      );
+    }),
+    options,
+  );
+
+  test(
+    "a rewrite changes an instance's events, its state and its view, once per id",
+    Effect.gen(function* () {
+      const id = fresh("rewrite");
+      yield* call(`/write/${id}?text=${encodeURIComponent("sam was here")}`);
+      expect(yield* call(`/write/${id}?text=hello`)).toEqual({ version: 2 });
+      expect(yield* call(`/redact/${id}?word=sam&id=r-1`)).toEqual({
+        changed: 1,
+        lines: ["", "hello"],
+        // The view folded its inputs again: a blank first line joins as none.
+        text: "hello",
+      });
+      // The same run again answers as it did, and a new one finds nothing left to change.
+      expect(yield* call(`/redact/${id}?word=sam&id=r-1`)).toMatchObject({ changed: 1 });
+      expect(yield* call(`/redact/${id}?word=sam&id=r-2`)).toMatchObject({ changed: 0 });
+      // The instance takes commands again, at the version it had.
+      expect(yield* call(`/write/${id}?text=again`)).toEqual({ version: 3 });
+    }),
+    options,
+  );
+
+  test(
+    "a compaction leaves the roll-up, the same state, and an instance that goes on",
+    Effect.gen(function* () {
+      const id = fresh("compact");
+      yield* call(`/write/${id}?text=a`);
+      yield* call(`/write/${id}?text=b`);
+      expect(yield* call(`/squash/${id}`)).toMatchObject({
+        version: 3,
+        compacted: 2,
+        events: ["MemoBroughtForward"],
+        lines: ["a", "b"],
+      });
+      expect(yield* call(`/write/${id}?text=c`)).toEqual({ version: 4 });
+      // The view kept what it built, without folding the roll-up, and follows what comes after.
+      yield* eventually<{ readonly text: string | null }>(
+        `/redact/${id}?word=nothing-has-this`,
+        ({ text }) => text === "a|b|c",
+      );
+    }),
+    options,
+  );
+
+  test(
+    "a rewrite after a compaction reaches the events the view kept",
+    Effect.gen(function* () {
+      const id = fresh("compact-rewrite");
+      yield* call(`/write/${id}?text=${encodeURIComponent("sam was here")}`);
+      yield* call(`/write/${id}?text=hello`);
+      yield* call(`/squash/${id}`);
+      // The instance holds the roll-up alone; the view holds its copy of both lines.
+      expect(yield* call(`/redact/${id}?word=sam`)).toEqual({
+        changed: 1,
+        lines: ["", "hello"],
+        text: "hello",
+      });
+      expect(yield* call(`/write/${id}?text=again`)).toEqual({ version: 4 });
+      yield* eventually<{ readonly text: string | null }>(
+        `/redact/${id}?word=nothing-has-this`,
+        ({ text }) => text === "hello|again",
+      );
+    }),
+    options,
+  );
 
   test(
     "a command commits and replies with the new state",
@@ -264,6 +344,22 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       const id = fresh("reject");
       expect(yield* call(`/increment/${id}?by=11`)).toEqual({ rejected: "TooBig" });
       expect(yield* call(`/counter/${id}`)).toEqual({ total: 0 });
+    }),
+    options,
+  );
+
+  test(
+    "a command sent again once its receipt is past retention is decided again",
+    Effect.gen(function* () {
+      const id = fresh("retained");
+      expect(yield* call(`/increment/${id}?command=first`)).toEqual({ accepted: 1, version: 1 });
+      expect(yield* call(`/increment/${id}?command=first`)).toEqual({ accepted: 1, version: 1 });
+      yield* Effect.sleep(
+        Duration.sum(Duration.fromInputUnsafe(RECEIPT_RETENTION), Duration.seconds(5)),
+      );
+      // The commit deletes receipts past their window (a runner's sweep may have already).
+      expect(yield* call(`/increment/${id}`)).toEqual({ accepted: 2, version: 2 });
+      expect(yield* call(`/increment/${id}?command=first`)).toEqual({ accepted: 3, version: 3 });
     }),
     options,
   );
@@ -443,6 +539,32 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     options,
   );
 
+  // A backlog of BACKLOG_INPUTS seconds: longer than a host keeps background
+  // work alive with nothing else arriving. Minutes long, so not with --fast.
+  if (!process.env.FAST) {
+    test(
+      "a projection's backlog drains to the end with nothing else arriving",
+      Effect.gen(function* () {
+        const run = fresh("backlog");
+        const counters = Array.from({ length: BACKLOG_INPUTS }, (_, n) => `${run}.${n}`);
+        yield* Effect.forEach(counters, (counter) => call(`/increment/${counter}`), {
+          concurrency: 10,
+          discard: true,
+        });
+        // Nothing else is sent: the key must finish on its own.
+        const handled = yield* call<ReadonlyArray<string>>(`/drained/${run}`).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (handled) => new Set(handled).size === BACKLOG_INPUTS,
+            times: 48,
+          }),
+        );
+        expect(new Set(handled).size).toBe(BACKLOG_INPUTS);
+      }),
+      { ...options, timeout: 360_000 },
+    );
+  }
+
   test(
     "a policy starts a saga, and its step commits once when it runs again",
     Effect.gen(function* () {
@@ -534,6 +656,20 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       // Past the hold's window, and the policy's delivery.
       yield* Effect.sleep("10 seconds");
       expect(yield* call(`/hold/${id}`)).toEqual({ status: "released" });
+    }),
+    options,
+  );
+
+  test(
+    "a policy relays a command through 20 aggregate instances",
+    Effect.gen(function* () {
+      // Each hop's event makes a policy send a command to the next instance.
+      // A platform that runs each hop inside the call that delivered the last
+      // one nests deeper every hop, until the host refuses the call (#3627).
+      const chain = fresh("relay");
+      expect(yield* call(`/relay/${chain}?hops=20`)).toEqual({ passed: true });
+      const last = yield* eventually<{ passed: boolean }>(`/hop/${chain}-0`, (hop) => hop.passed);
+      expect(last).toEqual({ passed: true });
     }),
     options,
   );

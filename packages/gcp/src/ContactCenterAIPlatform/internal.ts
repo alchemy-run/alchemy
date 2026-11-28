@@ -1,5 +1,5 @@
-import * as ccaip from "@distilled.cloud/gcp/contactcenteraiplatform_v1alpha1";
 import { Retry as GcpRetry } from "@distilled.cloud/gcp/Retry";
+import * as ccaip from "@distilled.cloud/gcp/unstable/contactcenteraiplatform_v1alpha1";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";

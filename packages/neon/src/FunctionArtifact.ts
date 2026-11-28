@@ -1,4 +1,5 @@
 import { inflateRawSync } from "node:zlib";
+import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import * as TempRoot from "alchemy/Bundle/TempRoot";
 import { moduleExtension } from "alchemy/Util/Node";
@@ -123,17 +124,23 @@ export const buildFunctionArtifact = Effect.fn(function* (props: FunctionProps) 
   }
   if (props.artifact?.directory !== undefined) {
     const root = yield* fs.realPath(props.artifact.directory);
+    // A moved ALCHEMY_DIR is as private as `.alchemy`, which `safePath` rejects by name.
+    const dotAlchemy = path.resolve(yield* dotAlchemyDirectory);
+    const runtimeDirs = [
+      dotAlchemy,
+      ...((yield* fs.exists(dotAlchemy)) ? [yield* fs.realPath(dotAlchemy)] : []),
+    ];
     const walk: (
       relative: string,
     ) => Effect.Effect<void, FunctionArtifactError | import("effect/PlatformError").PlatformError> =
       Effect.fn(function* (relative) {
         for (const entry of (yield* fs.readDirectory(path.join(root, relative))).sort()) {
           const name = relative ? `${relative}/${entry}` : entry;
-          if (!safePath(name))
+          const absolute = path.join(root, name);
+          if (!safePath(name) || runtimeDirs.includes(absolute))
             return yield* new FunctionArtifactError({
               message: `Unsafe Function artifact entry: ${name}`,
             });
-          const absolute = path.join(root, name);
           if ((yield* fs.realPath(absolute)) !== absolute)
             return yield* new FunctionArtifactError({
               message: "Function artifacts must not contain symlinks",

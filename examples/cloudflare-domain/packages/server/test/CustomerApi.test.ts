@@ -2,6 +2,8 @@ import * as Domain from "@alchemy.run/domain";
 import { mainAccountId } from "@bank/domain/Account/Account.id";
 import { agent, customer } from "@bank/domain/Actor";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import { Address } from "@bank/domain/Customer/Address";
+import { ContactDetails } from "@bank/domain/Customer/ContactDetails.aggregate";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { CustomerDashboard } from "@bank/domain/Customer/CustomerDashboard.view";
 import { Username } from "@bank/domain/Customer/Username";
@@ -24,8 +26,13 @@ import { SessionKeyTest, signedInAs } from "./session.ts";
 
 // The whole bank in one process: the same Layers the Worker uses, on the in-memory platform.
 const Ports = Layer.mergeAll(SiftFraudCheck, StripePayments, MemoryLedgerStore);
+// The Vault the Worker uses, with its keys in memory.
+const Sealing = Domain.VaultLive.pipe(
+  Layer.provide(Layer.merge(Domain.MemoryKeyStore, Domain.NoKeyWrap)),
+);
 const BankInMemory = Bank.layer(BankHandlers).pipe(
   Layer.provide(Layer.mergeAll(Ports, Domain.InMemory)),
+  Layer.provideMerge(Sealing),
 );
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(BankInMemory),
@@ -158,6 +165,37 @@ it.live("a customer follows their account's events through its summary; others a
       expect(events.map((e) => e.event._tag)).toEqual(["AccountOpened", "MoneyDeposited"]);
       expect((yield* sam.AccountSummary.get(accountId))?.balance).toBe(70);
       expect((yield* alex.AccountSummary.get(accountId).pipe(Effect.flip))._tag).toBe("NotOwner");
+    }),
+  ),
+);
+
+it.live("a customer's address is stored sealed, and opened only for them", () =>
+  inBank(
+    Effect.gen(function* () {
+      const sam = yield* asCustomer("c-1");
+      const alex = yield* asCustomer("c-2");
+      const customerId = CustomerId.make("c-1");
+      yield* sam.SetAddress({ customerId, address: Address.plain(customerId, "1 Main St") });
+
+      // What the model stored is ciphertext under the customer's key.
+      const stored = yield* (yield* ContactDetails).get(customerId);
+      expect(stored.address?.subject).toBe("c-1");
+      expect(stored.address?.box).not.toContain("1 Main St");
+      expect(yield* sam.CustomerAddress({ customerId })).toEqual({ address: "1 Main St" });
+      expect((yield* alex.CustomerAddress({ customerId }).pipe(Effect.flip))._tag).toBe(
+        "Forbidden",
+      );
+
+      // An address sealed under someone else's key is refused.
+      const error = yield* sam
+        .SetAddress({ customerId, address: Address.plain("c-2", "2 Side St") })
+        .pipe(Effect.flip);
+      expect(error._tag).toBe("NotYourAddress");
+
+      // Shredding the key leaves the event where it is, unreadable.
+      yield* (yield* Domain.Vault).shred(customerId);
+      expect(yield* sam.CustomerAddress({ customerId })).toEqual({ address: null });
+      expect((yield* (yield* ContactDetails).get(customerId)).address).toEqual(stored.address);
     }),
   ),
 );

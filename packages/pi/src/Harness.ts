@@ -1,3 +1,5 @@
+import { CodeModeConvention, isCodeMode, type CodeModeGroup } from "@alchemy.run/ai/CodeMode";
+import type { JsonSchema } from "@alchemy.run/ai/Declarations";
 import {
   isMcpServer,
   type AnyMcpServer,
@@ -6,8 +8,7 @@ import {
 } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { Sandboxes } from "@alchemy.run/ai/Sandbox";
-import type { AnySkill } from "@alchemy.run/ai/Skill";
-import type { ToolTagService } from "@alchemy.run/ai/Tool";
+import type { ToolSpec, ToolTagService } from "@alchemy.run/ai/Tool";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
 import {
@@ -53,14 +54,13 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { CODEMODE_TOOL, CodeModeConvention, isCodeMode } from "./CodeMode.ts";
+import { CODEMODE_TOOL, makeExtension as makeCodeMode, type Programmed } from "./CodeMode.ts";
 import { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 import type { AnyExtension, ExtensionImpl, ExtensionRequirements } from "./Extension.ts";
-import { mcpExtensionName, mcpRegistrations } from "./internal/mcp.ts";
+import { mcpExtensionName, mcpRegistrations, mcpToolName } from "./internal/mcp.ts";
 import { fromPi, messageOf } from "./internal/promise.ts";
 import { makeProvider } from "./internal/provider.ts";
 import { makeEnvFor, sandboxKey } from "./Sandbox.ts";
-import { isSkill, toExtension, type SkillExtension } from "./Skill.ts";
 import { Storage } from "./Storage.ts";
 import {
   ENGINE,
@@ -83,11 +83,14 @@ const ConversationNames = defineDoc<{ names: Record<string, number> }>({
   checkpointWhen: () => false,
 });
 
+/** What a harness lists as a tool: a tool, an MCP server, or a code mode group of them. */
+export type Listed = AnyTool | AnyMcpServer | CodeModeGroup<ReadonlyArray<AnyTool | AnyMcpServer>>;
+
 /** Options of {@link Harness}. */
 export interface HarnessOptions<
   Models extends ReadonlyArray<AnyModel>,
-  Tools extends ReadonlyArray<AnyTool | AnyMcpServer>,
-  Extensions extends ReadonlyArray<AnyExtension | AnySkill> = readonly [],
+  Tools extends ReadonlyArray<Listed>,
+  Extensions extends ReadonlyArray<AnyExtension> = readonly [],
 > {
   /**
    * Distinguishes several harnesses in one Durable Object: each keeps its
@@ -100,16 +103,22 @@ export interface HarnessOptions<
   /**
    * Every tool a conversation may be given. An MCP server gives every tool
    * it lists when an instance opens, named `mcp__<server>__<tool>`.
+   *
+   * Tools inside `AI.CodeMode(...)` are reached from programs the model
+   * writes; the others are direct calls. A tool listed both ways is offered
+   * both ways.
    */
   readonly tools?: Tools;
   /**
-   * Every extension and skill a conversation may select. Extensions are
-   * selected by default; skills only where a conversation adds them.
+   * Every extension a conversation may select. Each is selected by default.
    */
   readonly extensions?: Extensions;
   /** Pi's run policy: retries, compaction, tool execution, queue modes. */
   readonly settings?: Omit<HarnessSettings, "extensions">;
 }
+
+/** What a conversation enables: a tool, an MCP server, or a code mode group of them. */
+export type Enabled = ToolRef | AnyMcpServer | CodeModeGroup<ReadonlyArray<AnyTool | AnyMcpServer>>;
 
 /** What a conversation runs with. Unset fields keep their current value; `null` restores the harness default. */
 export interface AgentOptions {
@@ -118,33 +127,42 @@ export interface AgentOptions {
   /**
    * The tools the conversation may use: exactly these, or `add`/`remove`
    * relative to what it has now. An MCP server stands for all of its tools.
+   * An `AI.CodeMode(...)` group stands for its tools and the tool that
+   * runs programs: an exact list without one turns code mode off.
    */
   readonly tools?:
-    | ReadonlyArray<ToolRef | AnyMcpServer>
+    | ReadonlyArray<Enabled>
     | {
-        readonly add?: ReadonlyArray<ToolRef | AnyMcpServer>;
-        readonly remove?: ReadonlyArray<ToolRef | AnyMcpServer>;
+        readonly add?: ReadonlyArray<Enabled>;
+        readonly remove?: ReadonlyArray<Enabled>;
       }
     | null;
   /**
-   * The extensions and skills the conversation selects: exactly these, or
+   * The extensions the conversation selects: exactly these, or
    * `add`/`remove` relative to the harness default. Adding one enables the
    * tools it brings.
    */
   readonly extensions?:
-    | ReadonlyArray<AnyExtension | AnySkill>
+    | ReadonlyArray<AnyExtension>
     | {
-        readonly add?: ReadonlyArray<AnyExtension | AnySkill>;
-        readonly remove?: ReadonlyArray<AnyExtension | AnySkill>;
+        readonly add?: ReadonlyArray<AnyExtension>;
+        readonly remove?: ReadonlyArray<AnyExtension>;
       }
     | null;
   /** Rendered after every other system prompt section. */
   readonly instructions?: string | null;
   /** The working directory tools start in. */
   readonly cwd?: string | null;
-  /** Tool rounds one run may take before it ends unanswered. */
+  /**
+   * Tool rounds one run may take before it ends unanswered. `null` is no
+   * limit: a model that keeps calling a tool that keeps failing never stops.
+   * @default 100
+   */
   readonly maxTurns?: number | null;
 }
+
+/** The tool rounds a run may take when nothing says otherwise. */
+const DEFAULT_MAX_TURNS = 100;
 
 /** A submission: an input, a passive write, or a continue. */
 export type SubmissionDraft =
@@ -188,6 +206,8 @@ export interface Conversation {
   /** Start a new context; older entries stay in storage. A handoff note becomes its first message. */
   readonly reset: (handoff?: string) => Effect.Effect<void, PiError, RuntimeContext>;
   readonly compact: (instructions?: string) => Effect.Effect<void, PiError, RuntimeContext>;
+  /** Withdraw one queued submission of this conversation. Does nothing once it was placed. */
+  readonly withdraw: (id: SubmissionId) => Effect.Effect<void, PiError, RuntimeContext>;
   /** Stop: withdraw queued inputs, abort running work, wait until idle. */
   readonly abort: (options?: {
     readonly background?: boolean;
@@ -203,6 +223,10 @@ export interface Conversation {
   readonly entries: (options?: {
     readonly limit?: number;
     readonly order?: "ascending" | "descending";
+    /** Only entries with an id above this one. */
+    readonly after?: EntryId;
+    /** Only entries with an id below this one. */
+    readonly before?: EntryId;
   }) => Effect.Effect<ReadonlyArray<EntryRecord>, PiError, RuntimeContext>;
   /** The conversation's live view: the newest entries, the running generation, the inbox. */
   readonly watch: (
@@ -292,52 +316,15 @@ type ModelServices<Models extends ReadonlyArray<AnyModel>> = Models[number] exte
   : never;
 
 /** What listing `T` in a harness's `tools` requires to be provided. */
-type ListedRequirements<T> = T extends McpServerClass<infer Self, any> ? Self : ToolRequirements<T>;
+type ListedRequirements<T> =
+  T extends CodeModeGroup<infer Inner>
+    ? CodeModeConvention | ListedRequirements<Inner[number]>
+    : T extends McpServerClass<infer Self, any>
+      ? Self
+      : ToolRequirements<T>;
 
 /** The extension the harness's own tools are installed in; always selected. */
 const BASE_EXTENSION = "alchemy";
-
-/**
- * `load_skill`: gives the model a selected skill's instructions and writes
- * its files into the conversation's environment.
- */
-const LOAD_SKILL = "load_skill";
-
-const loadSkill = (skills: ReadonlyMap<string, SkillExtension>): ToolRegistration =>
-  ({
-    name: LOAD_SKILL,
-    description:
-      "Load a skill listed in <skill> sections: returns its instructions and writes its files under .skills/<name>/.",
-    parameters: {
-      type: "object",
-      properties: { name: { type: "string", description: "The skill's name." } },
-      required: ["name"],
-    },
-    replay: "safe",
-    execute: async (args: { name: string }, api, context) => {
-      const skill = skills.get(args.name);
-      const agent = await api.agent(context);
-      if (
-        skill === undefined ||
-        !agent.extensions.some((extension) => extension.name === skill.extensionName)
-      ) {
-        return {
-          isError: true,
-          output: [{ type: "text", text: `No skill "${args.name}" is available here.` }],
-        };
-      }
-      const written: string[] = [];
-      for (const [file, content] of Object.entries(skill.skill.files ?? {})) {
-        if (api.env === undefined) break;
-        const path = `.skills/${skill.skillName}/${file}`;
-        const result = await api.env.writeFile(path, content, context);
-        if (result.ok) written.push(path);
-      }
-      const files =
-        written.length > 0 ? `\n\nFiles:\n${written.map((path) => `- ${path}`).join("\n")}` : "";
-      return { output: [{ type: "text", text: `${skill.skill.instructions}${files}` }] };
-    },
-  }) as ToolRegistration;
 
 /** How long one alarm keeps working before it hands off to the next. */
 const ALARM_SLICE = "10 minutes";
@@ -370,8 +357,8 @@ const ALARM_SLICE = "10 minutes";
  */
 export const Harness = <
   const Models extends ReadonlyArray<AnyModel>,
-  const Tools extends ReadonlyArray<AnyTool | AnyMcpServer> = readonly [],
-  const Extensions extends ReadonlyArray<AnyExtension | AnySkill> = readonly [],
+  const Tools extends ReadonlyArray<Listed> = readonly [],
+  const Extensions extends ReadonlyArray<AnyExtension> = readonly [],
 >(
   options: HarnessOptions<Models, Tools, Extensions>,
 ): Effect.Effect<
@@ -440,10 +427,54 @@ export const Harness = <
           }
         }
       });
-    const listed: ReadonlyArray<AnyTool | AnyMcpServer> = options.tools ?? [];
-    const tools = yield* resolveTools(listed.filter((tool): tool is AnyTool => !isMcpServer(tool)));
+    // A tool is reached directly, from a program, or both, by where it is listed.
+    const every: ReadonlyArray<Listed> = options.tools ?? [];
+    const groups = every.filter(
+      (tool): tool is CodeModeGroup<ReadonlyArray<AnyTool | AnyMcpServer>> => isCodeMode(tool),
+    );
+    const directly = every.filter((tool): tool is AnyTool | AnyMcpServer => !isCodeMode(tool));
+    const inPrograms = groups.flatMap((group) => group.tools) as ReadonlyArray<
+      AnyTool | AnyMcpServer
+    >;
+    const namesIn = (list: ReadonlyArray<AnyTool | AnyMcpServer>) => ({
+      tools: new Set(
+        flattenTools(list.filter((tool): tool is AnyTool => !isMcpServer(tool))).map(
+          (tool) => tool.toolName,
+        ),
+      ),
+      servers: new Set(list.filter(isMcpServer).map((server) => server.serverName)),
+    });
+    const direct = namesIn(directly);
+    const programs = namesIn(inPrograms);
+    /** Who may call a tool: Pi offers it to both unless told otherwise. */
+    const callersOf = (
+      where: "tools" | "servers",
+      name: string,
+    ): { readonly callers?: ReadonlyArray<"model" | "tools"> } =>
+      groups.length === 0 || (direct[where].has(name) && programs[where].has(name))
+        ? {}
+        : { callers: programs[where].has(name) ? ["tools"] : ["model"] };
+    const codemode = groups.length === 0 ? undefined : yield* CodeModeConvention;
+    if (codemode?.kind === "native") {
+      return yield* Effect.die(
+        new PiError({
+          message: `Pi was given ${codemode.engine}'s code mode, which only runs on that harness. Provide AI.CodeModeAsync or AI.CodeModeEffect over an AI.Eval.`,
+        }),
+      );
+    }
+    const unique = <T>(list: ReadonlyArray<T>, key: (item: T) => string) => [
+      ...new Map(list.map((item) => [key(item), item] as const)).values(),
+    ];
+    const listed: ReadonlyArray<AnyTool | AnyMcpServer> = [...directly, ...inPrograms];
+    const tools = unique(
+      yield* resolveTools(listed.filter((tool): tool is AnyTool => !isMcpServer(tool))),
+      ({ tool }) => tool.toolName,
+    );
     const servers = yield* Effect.forEach(
-      listed.filter((tool): tool is AnyMcpServer => isMcpServer(tool)),
+      unique(
+        listed.filter((tool): tool is AnyMcpServer => isMcpServer(tool)),
+        (server) => server.serverName,
+      ),
       (server) =>
         Effect.map(
           Effect.service(server as Context.Key<unknown, McpServerService>),
@@ -452,33 +483,21 @@ export const Harness = <
     );
     /** Each server's tools, by name: known once an instance has opened and asked it. */
     const serverTools = new Map<string, ReadonlyArray<string>>();
-    const extensions = yield* Effect.forEach(
-      (options.extensions ?? []).map(toExtension),
-      (extension) =>
-        Effect.gen(function* () {
-          const impl: ExtensionImpl | undefined = extension.impl
-            ? yield* extension.impl
-            : isSkill(extension) || isCodeMode(extension)
-              ? undefined
-              : Option.getOrUndefined(
-                  yield* Effect.serviceOption(
-                    extension as unknown as Context.Key<unknown, ExtensionImpl>,
-                  ),
-                );
-          // Code mode's extension is built by its convention when an instance opens.
-          const codemode = isCodeMode(extension) ? yield* CodeModeConvention : undefined;
-          return {
-            extension,
-            impl,
-            codemode,
-            tools: yield* resolveTools(extension.spec.tools ?? []),
-          };
-        }),
-    );
-    const skills = new Map(
-      extensions.flatMap(({ extension }) =>
-        isSkill(extension) ? [[extension.skillName, extension] as const] : [],
-      ),
+    const extensions = yield* Effect.forEach(options.extensions ?? [], (extension) =>
+      Effect.gen(function* () {
+        const impl: ExtensionImpl | undefined = extension.impl
+          ? yield* extension.impl
+          : Option.getOrUndefined(
+              yield* Effect.serviceOption(
+                extension as unknown as Context.Key<unknown, ExtensionImpl>,
+              ),
+            );
+        return {
+          extension,
+          impl,
+          tools: yield* resolveTools(extension.spec.tools ?? []),
+        };
+      }),
     );
     const sandboxes = sandbox;
     const envFor = sandboxes === undefined ? undefined : makeEnvFor(sandboxes);
@@ -506,21 +525,14 @@ export const Harness = <
       ...[...tools, ...extensions.flatMap((extension) => extension.tools)].map(
         ({ tool }) => [tool.toolName, tool] as const,
       ),
-      ...(extensions.some(({ codemode }) => codemode !== undefined)
+      ...(codemode !== undefined
         ? [[CODEMODE_TOOL, { toolName: CODEMODE_TOOL } as ToolRef] as const]
         : []),
-      ...(skills.size > 0 ? [[LOAD_SKILL, { toolName: LOAD_SKILL } as ToolRef] as const] : []),
     ]);
 
     /** The tools selecting these extensions enables: their own, and the one that drives them. */
-    const broughtBy = (selected: ReadonlyArray<AnyExtension | AnySkill>): ReadonlyArray<ToolRef> =>
-      selected
-        .map(toExtension)
-        .flatMap((extension) => [
-          ...flattenTools(extension.spec.tools ?? []),
-          ...(isCodeMode(extension) ? [{ toolName: CODEMODE_TOOL } as ToolRef] : []),
-          ...(isSkill(extension) ? [{ toolName: LOAD_SKILL } as ToolRef] : []),
-        ]);
+    const broughtBy = (selected: ReadonlyArray<AnyExtension>): ReadonlyArray<ToolRef> =>
+      selected.flatMap((extension) => flattenTools(extension.spec.tools ?? []));
     const modelName = (model: AnyModel) => model.modelName;
 
     const open = Effect.gen(function* () {
@@ -572,54 +584,54 @@ export const Harness = <
 
         const baseExtension: PiExtension = {
           name: BASE_EXTENSION,
-          tools: [...tools.map(compile), ...(skills.size > 0 ? [loadSkill(skills)] : [])],
+          tools: tools.map((entry) => ({
+            ...compile(entry),
+            ...callersOf("tools", entry.tool.toolName),
+          })),
         };
-        const piExtensions: PiExtension[] = extensions.map(
-          ({ extension, impl, tools, codemode }) => {
-            if (codemode !== undefined) return { name: extension.extensionName };
-            const sections: PromptSection[] = [
-              ...Object.entries(extension.spec.sections ?? {}).map(([key, text]) =>
-                section(key, () => text),
-              ),
-              ...Object.entries(impl?.sections ?? {}).map(([key, render]) =>
-                section(key, (input) => runHook(render({ conversationId: input.conversationId }))),
-              ),
-            ];
-            const hooks: HookRegistration[] = [];
-            const toolHooks = impl?.hooks;
-            if (toolHooks?.beforeTool || toolHooks?.afterTool) {
-              hooks.push(
-                hook(ToolTask, {
-                  ...(toolHooks.beforeTool
-                    ? { beforeTool: (call) => runHook(toolHooks.beforeTool!(call)) }
-                    : {}),
-                  ...(toolHooks.afterTool
-                    ? { afterTool: (call, result) => runHook(toolHooks.afterTool!(call, result)) }
-                    : {}),
-                }),
-              );
-            }
-            if (toolHooks?.beforeRequest || toolHooks?.afterResponse || toolHooks?.onYield) {
-              hooks.push(
-                hook(GenerationTask, {
-                  ...(toolHooks.beforeRequest
-                    ? {
-                        beforeRequest: (request) =>
-                          runHook(toolHooks.beforeRequest!(request)) as never,
-                      }
-                    : {}),
-                  ...(toolHooks.afterResponse
-                    ? { afterResponse: (message) => runHook(toolHooks.afterResponse!(message)) }
-                    : {}),
-                  ...(toolHooks.onYield
-                    ? { onYield: (answer) => runHook(toolHooks.onYield!(answer)) }
-                    : {}),
-                }),
-              );
-            }
-            return { name: extension.extensionName, tools: tools.map(compile), sections, hooks };
-          },
-        );
+        const piExtensions: PiExtension[] = extensions.map(({ extension, impl, tools }) => {
+          const sections: PromptSection[] = [
+            ...Object.entries(extension.spec.sections ?? {}).map(([key, text]) =>
+              section(key, () => text),
+            ),
+            ...Object.entries(impl?.sections ?? {}).map(([key, render]) =>
+              section(key, (input) => runHook(render({ conversationId: input.conversationId }))),
+            ),
+          ];
+          const hooks: HookRegistration[] = [];
+          const toolHooks = impl?.hooks;
+          if (toolHooks?.beforeTool || toolHooks?.afterTool) {
+            hooks.push(
+              hook(ToolTask, {
+                ...(toolHooks.beforeTool
+                  ? { beforeTool: (call) => runHook(toolHooks.beforeTool!(call)) }
+                  : {}),
+                ...(toolHooks.afterTool
+                  ? { afterTool: (call, result) => runHook(toolHooks.afterTool!(call, result)) }
+                  : {}),
+              }),
+            );
+          }
+          if (toolHooks?.beforeRequest || toolHooks?.afterResponse || toolHooks?.onYield) {
+            hooks.push(
+              hook(GenerationTask, {
+                ...(toolHooks.beforeRequest
+                  ? {
+                      beforeRequest: (request) =>
+                        runHook(toolHooks.beforeRequest!(request)) as never,
+                    }
+                  : {}),
+                ...(toolHooks.afterResponse
+                  ? { afterResponse: (message) => runHook(toolHooks.afterResponse!(message)) }
+                  : {}),
+                ...(toolHooks.onYield
+                  ? { onYield: (answer) => runHook(toolHooks.onYield!(answer)) }
+                  : {}),
+              }),
+            );
+          }
+          return { name: extension.extensionName, tools: tools.map(compile), sections, hooks };
+        });
         // Each server is asked for its tools once per instance. Like a
         // model's, its client's scope is never closed.
         const buildServers = Effect.gen(function* () {
@@ -634,7 +646,10 @@ export const Harness = <
               );
               return {
                 name: mcpExtensionName(server.serverName),
-                tools: registrations,
+                tools: registrations.map((registration) => ({
+                  ...registration,
+                  ...callersOf("servers", server.serverName),
+                })) as ToolRegistration[],
               } satisfies PiExtension;
             }).pipe(
               Effect.mapError(
@@ -649,24 +664,81 @@ export const Harness = <
         }).pipe(Effect.provideContext(base));
         const registry = createRegistry();
         registry.install(baseExtension);
-        for (const extension of piExtensions) {
-          if (extension.name !== "codemode") registry.install(extension);
-        }
-        const buildCodemode = Effect.forEach(
-          extensions.flatMap(({ codemode }) => (codemode ? [codemode] : [])),
-          (convention) => convention.extension,
-        ).pipe(Effect.provideContext(base));
-        // Selected by default: the base and every extension; skills only where added.
-        const defaultExtensions = [
-          baseExtension,
-          ...piExtensions.filter((_, index) => !isSkill(extensions[index]!.extension)),
-        ];
+        for (const extension of piExtensions) registry.install(extension);
+        /** Code mode over the tools programs reach, once each server has listed its own. */
+        const buildCodemode = (mcp: ReadonlyArray<PiExtension>) =>
+          codemode === undefined
+            ? Effect.succeed([])
+            : Effect.gen(function* () {
+                const programmed = new Map<string, Programmed>();
+                for (const entry of tools) {
+                  const name = entry.tool.toolName;
+                  if (!programs.tools.has(name)) continue;
+                  const spec = (entry.tool as { spec?: ToolSpec }).spec;
+                  const registration = compile(entry);
+                  programmed.set(name, {
+                    tool:
+                      entry.handler === undefined || spec === undefined
+                        ? {
+                            name,
+                            description: registration.description,
+                            parameters: registration.parameters as JsonSchema,
+                            ...(registration.structuredOutputSchema === undefined
+                              ? {}
+                              : { success: registration.structuredOutputSchema as JsonSchema }),
+                          }
+                        : {
+                            name,
+                            description: spec.description,
+                            parameters: spec.parameters,
+                            success: spec.success,
+                            ...(spec.failure === undefined ? {} : { failure: spec.failure }),
+                          },
+                  });
+                }
+                for (const [index, extension] of mcp.entries()) {
+                  const server = servers[index]!.server.serverName;
+                  if (!programs.servers.has(server)) continue;
+                  for (const registration of extension.tools ?? []) {
+                    programmed.set(registration.name, {
+                      namespace: server,
+                      tool: {
+                        name: registration.name.slice(mcpToolName(server, "").length),
+                        callAs: registration.name,
+                        description: registration.description,
+                        parameters: registration.parameters as JsonSchema,
+                        ...(registration.structuredOutputSchema === undefined
+                          ? {}
+                          : { success: registration.structuredOutputSchema as JsonSchema }),
+                      },
+                    });
+                  }
+                }
+                const convention = yield* codemode.convention.pipe(
+                  Effect.mapError(
+                    (cause) => new PiError({ message: `Code mode: ${cause.message}`, cause }),
+                  ),
+                );
+                return [
+                  yield* makeCodeMode(
+                    codemode.evaluator,
+                    convention,
+                    programmed,
+                    base as Context.Context<RuntimeContext>,
+                  ),
+                ];
+              }).pipe(Effect.provideContext(base));
+        // Selected by default: the base and every extension.
+        const defaultExtensions = [baseExtension, ...piExtensions];
 
         opened = Effect.runPromiseWith(base)(
-          Effect.all([buildModels, storage.open(prefix), buildCodemode, buildServers]).pipe(
-            Effect.tap(([, , codemode, mcp]) =>
+          Effect.all([buildModels, storage.open(prefix), buildServers]).pipe(
+            Effect.flatMap(([piModels, piStorage, mcp]) =>
+              Effect.map(buildCodemode(mcp), (built) => [piModels, piStorage, built, mcp] as const),
+            ),
+            Effect.tap(([, , built, mcp]) =>
               Effect.sync(() => {
-                for (const extension of codemode) registry.install(extension);
+                for (const extension of built) registry.install(extension);
                 for (const [index, extension] of mcp.entries()) {
                   registry.install(extension);
                   const names = extension.tools.map((tool) => tool.name);
@@ -677,7 +749,7 @@ export const Harness = <
                 }
               }),
             ),
-            Effect.flatMap(([piModels, piStorage, , mcp]) =>
+            Effect.flatMap(([piModels, piStorage, built, mcp]) =>
               fromPi((context) =>
                 PiHarness.open(
                   piStorage,
@@ -686,7 +758,7 @@ export const Harness = <
                     registry,
                     settings: {
                       ...options.settings,
-                      extensions: [...defaultExtensions, ...mcp],
+                      extensions: [...defaultExtensions, ...built, ...mcp],
                     },
                     ...(envFor === undefined
                       ? {}
@@ -770,8 +842,20 @@ export const Harness = <
             : Effect.succeed({ name: ref.toolName } as ToolRegistration);
         };
         /** The tool names a list stands for: an MCP server is every tool it listed. */
-        const namesOf = (refs: ReadonlyArray<ToolRef | AnyMcpServer>) =>
+        const namesOf = (
+          refs: ReadonlyArray<Enabled>,
+        ): Effect.Effect<ReadonlyArray<string>, NotOnHarness> =>
           Effect.forEach(refs, (ref) => {
+            if (isCodeMode(ref)) {
+              return Effect.map(
+                namesOf(
+                  ref.tools.flatMap((tool): ReadonlyArray<Enabled> =>
+                    isMcpServer(tool) ? [tool] : flattenTools([tool]),
+                  ),
+                ),
+                (names) => [...names, CODEMODE_TOOL],
+              );
+            }
             if (!isMcpServer(ref)) return Effect.succeed([ref.toolName]);
             const names = serverTools.get(ref.serverName);
             return names === undefined
@@ -807,8 +891,8 @@ export const Harness = <
           ]);
         } else {
           const edit = agent.tools as {
-            add?: ReadonlyArray<ToolRef | AnyMcpServer>;
-            remove?: ReadonlyArray<ToolRef | AnyMcpServer>;
+            add?: ReadonlyArray<Enabled>;
+            remove?: ReadonlyArray<Enabled>;
           };
           const remove = new Set(yield* namesOf(edit.remove ?? []));
           const add = [
@@ -820,8 +904,8 @@ export const Harness = <
           const enabled = current ?? [...toolByName.keys()];
           tools = yield* exactly([...enabled, ...add].filter((name) => !remove.has(name)));
         }
-        const named = (extension: AnyExtension | AnySkill) =>
-          ({ name: toExtension(extension).extensionName }) as PiExtension;
+        const named = (extension: AnyExtension) =>
+          ({ name: extension.extensionName }) as PiExtension;
         let selected: AgentChange["extensions"];
         if (agent.extensions === null) selected = null;
         else if (agent.extensions === undefined) selected = undefined;
@@ -829,8 +913,8 @@ export const Harness = <
           selected = [{ name: BASE_EXTENSION } as PiExtension, ...agent.extensions.map(named)];
         else {
           const edit = agent.extensions as {
-            add?: ReadonlyArray<AnyExtension | AnySkill>;
-            remove?: ReadonlyArray<AnyExtension | AnySkill>;
+            add?: ReadonlyArray<AnyExtension>;
+            remove?: ReadonlyArray<AnyExtension>;
           };
           selected = {
             ...(edit.add ? { add: edit.add.map(named) } : {}),
@@ -859,10 +943,12 @@ export const Harness = <
       });
 
     const defaultModel = models[0]?.model;
-    const withDefaults = (agent: AgentOptions): AgentOptions =>
-      agent.model === undefined && defaultModel !== undefined
-        ? { ...agent, model: defaultModel }
-        : agent;
+    const withDefaults = (agent: AgentOptions): AgentOptions => ({
+      ...agent,
+      ...(agent.model === undefined && defaultModel !== undefined ? { model: defaultModel } : {}),
+      // Pi's own default is no limit, and a run that never ends is resumed forever.
+      ...(agent.maxTurns === undefined ? { maxTurns: DEFAULT_MAX_TURNS } : {}),
+    });
 
     /** The tools a conversation has enabled now, by name. */
     const enabledTools = (conversation: PiConversation) =>
@@ -943,6 +1029,10 @@ export const Harness = <
           on((conversation) =>
             Effect.asVoid(fromPi((context) => conversation.compact(instructions, context))),
           ),
+        withdraw: (submissionId) =>
+          on((_, harness) =>
+            Effect.asVoid(fromPi((context) => harness.abortSubmission(submissionId, context, id))),
+          ),
         abort: (abortOptions) =>
           on((conversation) => fromPi((context) => conversation.abort(context, abortOptions))),
         waitForIdle: on((conversation) => fromPi((context) => conversation.waitForIdle(context))),
@@ -970,7 +1060,15 @@ export const Harness = <
           on((conversation) =>
             fromPi((context) =>
               conversation.entries(
-                { order: query.order ?? "ascending" },
+                {
+                  order: query.order ?? "ascending",
+                  ...(query.after === undefined
+                    ? {}
+                    : { minEntryId: (query.after + 1) as EntryId }),
+                  ...(query.before === undefined
+                    ? {}
+                    : { maxEntryId: (query.before - 1) as EntryId }),
+                },
                 query.limit ?? 100,
                 undefined,
                 context,
@@ -984,7 +1082,9 @@ export const Harness = <
                 Effect.acquireRelease(
                   fromPi((context) => conversation.watch(context, window)).pipe(
                     Effect.tap((handle) =>
-                      Effect.sync(() =>
+                      Effect.sync(() => {
+                        // The handle holds the view as it is now; the listener gets each change.
+                        Queue.offerUnsafe(queue, handle.value);
                         handle.start(async (call) => {
                           if (call.kind === "value") Queue.offerUnsafe(queue, call.value);
                           else
@@ -992,8 +1092,8 @@ export const Harness = <
                               queue,
                               Cause.fail(new PiError({ message: messageOf(call.error) })),
                             );
-                        }),
-                      ),
+                        });
+                      }),
                     ),
                   ),
                   (handle) => Effect.promise(() => handle.stop()),

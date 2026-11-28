@@ -1,3 +1,4 @@
+import { framed } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -8,6 +9,7 @@ import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type * as Key from "./Key.ts";
 import type * as DomainStream from "./Stream.ts";
+import { memo, type Thunk } from "./Thunk.ts";
 import type * as View from "./View.ts";
 
 /**
@@ -39,6 +41,51 @@ export interface Input<Key extends Key.Any, S, E> {
 export type Handler<I> = (batch: ReadonlyArray<I>) => Effect.Effect<void, never, RuntimeContext>;
 
 /**
+ * One event a projection was given earlier, whose history has since been
+ * rewritten: what it was, and what it is now.
+ */
+export interface Rewritten<Key extends Key.Any, S, E> {
+  /** The key the event was routed to. */
+  readonly key: Key.RefOf<Key>;
+  /** The route named in `keyOf` it took, if any. */
+  readonly route: string | undefined;
+  /** The aggregate or view instance the event came from. */
+  readonly source: Key.RefOf<View.SourceKey<S>>;
+  readonly envelope: Aggregate.Envelope;
+  /**
+   * The event as the projection was given it. `undefined` when the key was
+   * not given it on this route before: the rewrite moved it here.
+   */
+  readonly before: E | undefined;
+  /** The event as it is now, or `undefined` when the key is no longer given it. */
+  readonly after: E | undefined;
+  /** For a view source: the view's state after the event as it is now. */
+  readonly state: View.SourceState<S> | undefined;
+  /** The input's place in its key's input log, from 1. */
+  readonly position: number;
+}
+
+/**
+ * A projection's `rewrite` handler: a run of events the key was given
+ * earlier and that a rewrite has since changed or removed, in order with the
+ * key's other inputs. What that means for your store is yours to say:
+ * overwrite a row, remove it, adjust a total, or keep it. Like `write`, it
+ * runs at least once per input.
+ */
+export type RewriteHandler<I> = (
+  batch: ReadonlyArray<I>,
+) => Effect.Effect<void, never, RuntimeContext>;
+
+/**
+ * What a projection's Layer builds: its handler alone, or the same handler
+ * as `write` beside a `rewrite` handler. A projection given events a rewrite
+ * in the model changes needs `rewrite`: the model fails to build without it.
+ */
+export type Handlers<I, W> =
+  | Handler<I>
+  | { readonly write: Handler<I>; readonly rewrite?: RewriteHandler<W> };
+
+/**
  * How a projection's Layer tunes it. These are variants: they change how it
  * runs, never what it means.
  */
@@ -59,8 +106,9 @@ export interface Options {
 }
 
 /** A projection's implementation, as its Layer provides it. @internal */
-export interface Implementation<I> {
+export interface Implementation<I, W = never> {
   readonly handle: Handler<I>;
+  readonly rewrite: RewriteHandler<W> | undefined;
   readonly options: Options;
 }
 
@@ -214,6 +262,32 @@ export interface Definition<
  * );
  * ```
  *
+ * ### Following a rewrite
+ * A `Domain.Rewrite` changes events a projection may already have written.
+ * Return `write` and `rewrite` from the Layer: `write` is the handler, and
+ * `rewrite` is given each such event as it was and as it is now, in order
+ * with the key's other inputs.
+ *
+ * **Example:** Overwrite or remove the row
+ * ```typescript
+ * export const DirectoryLive = Directory.toLayer(
+ *   Effect.gen(function* () {
+ *     const store = yield* DirectoryStore;
+ *     return {
+ *       write: Effect.fn(function* (batch) {
+ *         yield* store.put(batch.map(({ key, event }) => ({ id: key.id, name: event.name })));
+ *       }),
+ *       rewrite: Effect.fn(function* (batch) {
+ *         for (const { key, after } of batch) {
+ *           if (after === undefined) yield* store.remove(key.id);
+ *           else yield* store.put([{ id: key.id, name: after.name }]);
+ *         }
+ *       }),
+ *     };
+ *   }),
+ * );
+ * ```
+ *
  * ### Reading your own write
  * **Example:** Wait for the projection before querying the store
  * ```typescript
@@ -248,11 +322,13 @@ export const make = <
   const Writes extends ReadonlyArray<DomainStream.Any> = readonly [],
 >(
   name: Name,
-  definition: Definition<From, Key, On, Writes>,
+  definition: Thunk<Definition<From, Key, On, Writes>>,
   annotations: Annotations = {},
 ): ProjectionClass<Name, From, Key, On, Writes> => {
+  const given = memo(definition);
   type I = Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>;
-  const Tag = Context.Service<ProjectionKey<Name>, Implementation<I>>()(
+  type W = Rewritten<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>;
+  const Tag = Context.Service<ProjectionKey<Name>, Implementation<I, W>>()(
     `alchemy/Domain/Projection/${name}`,
   );
   const Progress = Context.Service<ProgressKey<Name>, Progress>()(
@@ -262,7 +338,9 @@ export const make = <
     static readonly kind = "Projection" as const;
     static readonly annotations: Annotations = annotations;
     static readonly projectionName: Name = name;
-    static readonly definition = definition;
+    static get definition() {
+      return given();
+    }
     static readonly Progress = Progress;
     static caughtUp(
       receipt: Parameters<Progress["caughtUp"]>[0],
@@ -273,10 +351,17 @@ export const make = <
         return yield* progress.caughtUp(receipt, options);
       });
     }
-    static toLayer<E, R>(build: Effect.Effect<Handler<I>, E, R>, options: Options = {}) {
+    static toLayer<E, R>(build: Effect.Effect<Handlers<I, W>, E, R>, options: Options = {}) {
       return Layer.effect(
         Tag,
-        Effect.map(build, (handle): Implementation<I> => ({ handle, options })),
+        // Built as a term of its own: a plan lists what the projection binds.
+        Effect.map(
+          framed("Projection", name, { hosted: false })(build),
+          (built): Implementation<I, W> =>
+            typeof built === "function"
+              ? { handle: built, rewrite: undefined, options }
+              : { handle: built.write, rewrite: built.rewrite, options },
+        ),
       );
     }
   } as unknown as ProjectionClass<Name, From, Key, On, Writes>;
@@ -294,7 +379,10 @@ export interface ProjectionClass<
 > extends Context.ServiceClass<
   ProjectionKey<Name>,
   string,
-  Implementation<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>
+  Implementation<
+    Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>,
+    Rewritten<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>
+  >
 > {
   readonly kind: "Projection";
   readonly annotations: Annotations;
@@ -316,7 +404,10 @@ export interface ProjectionClass<
    */
   toLayer<E, R>(
     build: Effect.Effect<
-      Handler<Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>>,
+      Handlers<
+        Input<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>,
+        Rewritten<Key, Sources<From>, Aggregate.InstanceOf<On[number]>>
+      >,
       E,
       R
     >,

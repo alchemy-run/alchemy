@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import PiEffectSession from "./EffectSession.ts";
 import { Notes } from "./infra.ts";
 import PiMcpSession from "./McpSession.ts";
 import PiSandboxSession from "./SandboxSession.ts";
@@ -16,6 +17,7 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
     const sessions = yield* PiSession;
     const sandboxSessions = yield* PiSandboxSession;
     const mcpSessions = yield* PiMcpSession;
+    const effectSessions = yield* PiEffectSession;
     const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
 
     return {
@@ -32,8 +34,10 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
           switch (action) {
             case "create":
               return yield* HttpServerResponse.json({
-                id: yield* session.create(name!, body.withServer),
+                id: yield* session.create(name!, body.withServer, body.programs === true),
               });
+            case "section":
+              return yield* HttpServerResponse.json({ section: yield* session.section(name!) });
             case "tools":
               return yield* HttpServerResponse.json(yield* session.tools(name!));
             case "add-server":
@@ -48,6 +52,23 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
               });
             case "results":
               return yield* HttpServerResponse.json(yield* session.results(name!));
+          }
+        }
+        if (user === "effect") {
+          const session = effectSessions.getByName(name!);
+          switch (action) {
+            case "create":
+              return yield* HttpServerResponse.json({ id: yield* session.create(name!) });
+            case "prompt":
+              return yield* HttpServerResponse.json(
+                yield* session.prompt(name!, body.text, body.requestId),
+              );
+            case "results":
+              return yield* HttpServerResponse.json(yield* session.toolResults(name!));
+            case "offered":
+              return yield* HttpServerResponse.json(yield* session.offered(name!));
+            case "section":
+              return yield* HttpServerResponse.json({ section: yield* session.section(name!) });
           }
         }
         if (user === "sandbox") {
@@ -94,9 +115,10 @@ export default class PiApi extends Cloudflare.Worker<PiApi>()(
           case "codemode":
             yield* session.addCodeMode(name!);
             return yield* HttpServerResponse.json({ ok: true });
-          case "skill":
-            yield* session.addSkill(name!);
-            return yield* HttpServerResponse.json({ ok: true });
+          case "offered":
+            return yield* HttpServerResponse.json(yield* session.offered(name!));
+          case "section":
+            return yield* HttpServerResponse.json({ section: yield* session.section(name!) });
           case "results":
             return yield* HttpServerResponse.json(yield* session.toolResults(name!));
           case "disable":

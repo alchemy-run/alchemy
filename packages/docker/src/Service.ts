@@ -1,5 +1,5 @@
 import { Unowned } from "alchemy/AdoptPolicy";
-import { deepEqual, isResolved } from "alchemy/Diff";
+import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
@@ -18,6 +18,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import type { ContainerRuntime } from "./ContainerRuntime.ts";
 import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
 import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import type { Providers } from "./Providers.ts";
@@ -109,7 +110,7 @@ export interface ImageServiceProps extends ServicePropsBase {
 /**
  * Bundle an inline Effect program (`main`) into a generated image built
  * against the service's Docker context. The optional `image` is the
- * environment base (`FROM`) and must be able to run the bun runtime.
+ * environment base (`FROM`) and must support the selected container runtime.
  */
 export interface BundledServiceProps extends ServicePropsBase {
   /**
@@ -120,11 +121,17 @@ export interface BundledServiceProps extends ServicePropsBase {
   main: string;
   /**
    * Environment image used as the generated Dockerfile's `FROM`. Must be
-   * able to run the bun runtime.
+   * able to run the {@link runtime}.
    *
-   * @default "oven/bun:1"
+   * @default the {@link runtime}'s base image (`node:26-slim`)
    */
   image?: string;
+  /**
+   * Runtime the program runs on: `node` or `bun`, optionally with the
+   * version the base image is tagged with (`"node24"`, `"bun1.3.13"`).
+   * @default "node" (`node:26-slim`)
+   */
+  runtime?: ContainerRuntime;
   /**
    * Container port the bundled HTTP server listens on. Baked into the image
    * as `ENV PORT` + `EXPOSE`; publish it to the swarm ingress with `ports`.
@@ -585,6 +592,15 @@ type ServiceInspect = {
       }>;
     };
   };
+  /** What Swarm applied, including the published ports it assigned. */
+  Endpoint?: {
+    Ports?: Array<{
+      PublishedPort?: number;
+      TargetPort?: number;
+      Protocol?: "tcp" | "udp";
+      PublishMode?: "ingress" | "host";
+    }>;
+  };
 };
 
 export const ServiceProvider = () =>
@@ -650,7 +666,16 @@ export const ServiceProvider = () =>
           const owned = yield* hasAlchemyTags(id, live.Spec.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
+        diff: Effect.fn(function* ({ id, instanceId, news: desired, olds, output }) {
+          // A bundled program's runtime exports stay unevaluated while
+          // planning. The content hash below stands for them, so they must
+          // not stop a code change from reaching it.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? (Object.assign({}, desired, {
+                  exports: stripEffects(desired.exports),
+                }) as typeof desired)
+              : desired;
           if (!isResolved(news)) return undefined;
 
           const oldDesired = yield* normalizeDesired(id, olds, instanceId);
@@ -1146,7 +1171,11 @@ const toServiceAttributes = (
   networks: (service.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
     n.Target ? [n.Target] : [],
   ),
-  ports: (service.Spec.EndpointSpec?.Ports ?? []).flatMap((port) => {
+  // The spec omits a port Swarm assigns; `Endpoint` has it once applied.
+  ports: (service.Endpoint?.Ports?.length
+    ? service.Endpoint.Ports
+    : (service.Spec.EndpointSpec?.Ports ?? [])
+  ).flatMap((port) => {
     if (port.PublishedPort === undefined || port.TargetPort === undefined) {
       return [];
     }

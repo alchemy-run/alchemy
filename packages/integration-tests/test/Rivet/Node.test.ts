@@ -16,23 +16,27 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import NodeEcho from "./fixtures/node-echo.ts";
+import NodeSleepy, { slept } from "./fixtures/node-sleepy.ts";
 
-const CONTROL_PLANE_PORT = 16470;
 const POOL = "node-test";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "RivetNode", import.meta.url);
 
-const Cluster = RivetDocker.SwarmControlPlane("RivetNode", { port: CONTROL_PLANE_PORT });
+// On a free port, so the suite runs beside itself in other worktrees.
+const Cluster = RivetDocker.SwarmControlPlane("RivetNode", { port: 0 });
 
 let connection: Required<RivetNode.NodeConnection>;
 
-/** Host `NodeEcho` in this process until the test's scope closes. */
-const serving = (options: RivetNode.ServeOptions) =>
+/** Host `classes` in this process until the test's scope closes. */
+const serving = (
+  options: RivetNode.ServeOptions,
+  classes: Parameters<typeof RivetNode.serve>[0] = [NodeEcho],
+) =>
   Effect.gen(function* () {
     const connected = yield* Deferred.make<void>();
-    const node = yield* RivetNode.serve([NodeEcho], {
+    const node = yield* RivetNode.serve(classes, {
       ...options,
       connected: Deferred.succeed(connected, undefined).pipe(Effect.asVoid),
     }).pipe(Effect.forkScoped);
@@ -66,11 +70,15 @@ describe.skipIf(!!process.env.FAST)(
         const out = (yield* sharedStack.deploy(
           Effect.gen(function* () {
             const cluster = yield* Rivet.Cluster;
-            return { token: cluster.token, namespace: cluster.namespace };
+            return {
+              endpoint: cluster.endpoint,
+              token: cluster.token,
+              namespace: cluster.namespace,
+            };
           }).pipe(Effect.provide(Cluster)),
-        )) as { token: Redacted.Redacted<string>; namespace: string };
+        )) as { endpoint: string; token: Redacted.Redacted<string>; namespace: string };
         connection = {
-          endpoint: `http://localhost:${CONTROL_PLANE_PORT}`,
+          endpoint: out.endpoint,
           token: out.token,
           namespace: out.namespace,
           pool: POOL,
@@ -129,6 +137,37 @@ describe.skipIf(!!process.env.FAST)(
           expect(
             yield* read(new Request("http://node/", { headers: { "x-trace": "from-caller" } })),
           ).toEqual({ name: "traced", trace: "from-caller" });
+        }),
+      ),
+      { timeout: 120_000, exclusive: true },
+    );
+
+    test(
+      "a class runs with the sleepTimeout it sets, and serve's options win over it",
+      Effect.scoped(
+        Effect.gen(function* () {
+          const asleep = (name: string) =>
+            Effect.suspend(() =>
+              slept.includes(name) ? Effect.void : Effect.fail("still awake"),
+            ).pipe(Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 20 }));
+          // The class sets a sleepTimeout of 1 second, so it sleeps long
+          // before RivetKit's default of 30 seconds.
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              yield* serving(connection, [NodeSleepy]);
+              const sleepy = (yield* RivetNode.connect(NodeSleepy, connection)).getByName("idle");
+              expect(yield* settled(sleepy.ping())).toBe("pong");
+              yield* asleep("idle");
+            }),
+          );
+          // serve's options for the class win over the 1 second it sets.
+          yield* serving({ ...connection, options: { NodeSleepy: { sleepTimeout: 60_000 } } }, [
+            NodeSleepy,
+          ]);
+          const awake = (yield* RivetNode.connect(NodeSleepy, connection)).getByName("awake");
+          expect(yield* settled(awake.ping())).toBe("pong");
+          yield* Effect.sleep("5 seconds");
+          expect(slept).not.toContain("awake");
         }),
       ),
       { timeout: 120_000, exclusive: true },

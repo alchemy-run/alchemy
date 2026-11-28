@@ -3,6 +3,7 @@ import * as Neon from "@alchemy.run/neon";
 import * as SQL from "@alchemy.run/sql/Postgres";
 import * as Test from "@alchemy.run/test/Bun";
 import * as SDK from "@distilled.cloud/neon";
+import * as SDKUnstable from "@distilled.cloud/neon/unstable/neon";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -37,14 +38,14 @@ test.provider(
         project_id: project.projectId,
         branch_id: branch.branchId,
       };
-      const observed = yield* SDK.listProjectBranchBuckets(scope);
+      const observed = yield* SDKUnstable.listProjectBranchBuckets(scope);
       expect(
         observed.buckets.find((bucket) => bucket.name === uploads.bucketName)?.access_level,
       ).toBe("private");
       expect(
         observed.buckets.find((bucket) => bucket.name === publicAssets.bucketName)?.access_level,
       ).toBe("public_read");
-      const triggers = yield* SDK.listProjectBranchTriggers(scope);
+      const triggers = yield* SDKUnstable.listProjectBranchTriggers(scope);
       expect(
         triggers.triggers.some(
           (trigger) =>

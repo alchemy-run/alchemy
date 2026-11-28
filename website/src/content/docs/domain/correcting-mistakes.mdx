@@ -1,0 +1,192 @@
+---
+title: Correcting mistakes
+description: Put right events that should never have been recorded by recording the facts that reverse them, so every view, projection, policy and saga follows, and know when a rewrite or a storage restore is the wrong tool.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+A deploy with a bug credits some deposits twice. The second `MoneyDeposited` is now in each account's history, in its balance, in every view and projection built from it, and in the receipt a policy emailed the customer.
+
+Events are facts the rest of the model has already acted on. So a mistake is put right the way a bank puts right a wrong entry: by recording another fact that reverses it.
+
+## Record the fact that reverses it
+
+The correction is a command and an event of its own. It names what it reverses, and carries the outcome, as every event does.
+
+```typescript title="packages/domain/src/Account/ReverseDeposit.command.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Amount, Cents } from "../Money.ts";
+import { AccountId } from "./Account.id.ts";
+
+export class DepositReversed extends Domain.Event("DepositReversed", {
+  /** The sequence number of the deposit it reverses. */
+  depositSeq: Schema.Number,
+  amount: Cents,
+  balanceAfter: Cents,
+  reason: Schema.String,
+}) {}
+
+/** Reverses a deposit recorded by mistake. Reports a correction, so it never rejects. */
+export class ReverseDeposit extends Domain.Command("ReverseDeposit", {
+  input: {
+    accountId: AccountId,
+    depositSeq: Schema.Number,
+    amount: Amount,
+    reason: Schema.String,
+  },
+  events: [DepositReversed],
+}) {}
+```
+
+The account decides it and folds it like any other command. A correction must go through in every state, or the mistake would stay, so it never rejects. See [Never refuse a compensation](/domain/aggregate#never-refuse-a-compensation).
+
+The history now shows the mistake and its correction, one after the other. That is the audit trail a bank needs: what was recorded, and what put it right.
+
+## Everything downstream hears it
+
+`DepositReversed` is an ordinary event, so it travels every path the mistake did. Views fold it, projections write it, and policies and sagas react to it.
+
+<DAG
+  nodes={[
+    { id: "account", label: "Account", type: "DepositReversed", kind: "aggregate", layer: 0 },
+    { id: "summary", label: "AccountSummary", type: "balance folds", kind: "view", layer: 1 },
+    { id: "cards", label: "AccountCards", type: "writes a card", kind: "projection", layer: 1 },
+    { id: "notices", label: "DepositNotices", type: "sends a correction", kind: "policy", layer: 1 },
+  ]}
+  edges={[
+    { from: "account", to: "summary" },
+    { from: "account", to: "cards" },
+    { from: "account", to: "notices" },
+  ]}
+  caption="A correction reaches everything the mistake reached, by the same paths."
+/>
+
+Nothing here is new. A view and a projection already handle every event they consume, so the balance and the account's cards follow without a change.
+
+## Let each reaction put right what it did
+
+A policy that acted on the mistake has done something outside the account: it sent the customer a receipt. Only that policy knows what undoing it means, so it hears the correction too.
+
+```typescript title="packages/domain/src/Account/DepositNotices.policy.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import { Notifications } from "../Notifications.external.ts";
+import { Account } from "./Account.aggregate.ts";
+import { MoneyDeposited } from "./DepositMoney.command.ts";
+import { DepositReversed } from "./ReverseDeposit.command.ts";
+
+/** Tells the customer about every deposit, and about every deposit taken back. */
+export class DepositNotices extends Domain.Policy("DepositNotices", {
+  from: Account,
+  on: [MoneyDeposited, DepositReversed],
+}) {}
+
+export const DepositNoticesLive = DepositNotices.toLayer(
+  Effect.gen(function* () {
+    const notifications = yield* Notifications;
+    return Effect.fn(function* ({ source, event }) {
+      yield* event._tag === "MoneyDeposited"
+        ? notifications.send({ accountId: source.id, text: `Received ${event.amount}` })
+        : notifications.send({ accountId: source.id, text: `Reversed ${event.amount}: ${event.reason}` });
+    });
+  }),
+);
+```
+
+This is where your behaviour plugs in. An aggregate decides what the correction records. Each reaction decides what it does about it: send a correction, refund a payment, or start a [saga](/domain/saga) whose compensations undo several steps.
+
+## Correct every affected instance
+
+A bug rarely touches one account. Find the duplicates in a store a projection writes, then send one correction for each.
+
+```typescript title="packages/server/src/reverseDuplicates.ts"
+import { Account } from "@bank/domain/Account/Account.aggregate";
+import type { AccountId } from "@bank/domain/Account/Account.id";
+import { ReverseDeposit } from "@bank/domain/Account/ReverseDeposit.command";
+import * as Effect from "effect/Effect";
+
+interface Duplicate {
+  readonly accountId: AccountId;
+  readonly depositSeq: number;
+  readonly amount: number;
+}
+
+/** Reverse each deposit the bug recorded twice. Running it again changes nothing. */
+export const reverseDuplicates = Effect.fn(function* (duplicates: ReadonlyArray<Duplicate>) {
+  const accounts = yield* Account;
+  yield* Effect.forEach(
+    duplicates,
+    ({ accountId, depositSeq, amount }) =>
+      accounts.send(
+        new ReverseDeposit({ accountId, depositSeq, amount, reason: "credited twice" }),
+        { commandId: `reverse-${accountId}-${depositSeq}` },
+      ),
+    { concurrency: 10, discard: true },
+  );
+});
+```
+
+Each correction's command id comes from what it corrects. A run that stops halfway can be run again: a command sent again under its id is answered from its receipt, not decided twice, for as long as receipts are kept (30 days by default). For a run that must survive restarts on its own, make it a saga, as [Erasing personal data](/domain/erasing-personal-data#run-it-as-one-process) does.
+
+## When the record itself must change
+
+A [rewrite](/domain/rewrite) changes events already recorded, and is the tool when the record can't keep what it holds: a person asks to be forgotten, or a secret was stored that never should have been.
+
+It is not an undo. It reaches what is built from events: the aggregate's state, every view, and each projection's `rewrite` handler. It doesn't reach what was done because of them. A policy or saga that reacted to a rewritten event isn't told, and the message or payment it sent stays sent. When a rewrite removes events that something reacted to, put right those effects as above.
+
+## Restoring storage is not a correction
+
+A Durable Object's point-in-time recovery restores its storage to an earlier moment. For an aggregate that breaks the model. The restored instance commits its next events under sequence numbers its views and projections have already seen, and they drop them as duplicates. From then on the aggregate and everything built from it disagree, and nothing reports it.
+
+Correct with events instead. They keep every sequence number, and every consumer hears them.
+
+## Test it
+
+A [story](/domain/story) records the mistake as history, sends the correction, and checks the balance a view reads.
+
+```typescript title="packages/domain/test/ReverseDeposit.test.ts"
+import { Story } from "@alchemy.run/domain/Story";
+import { it } from "@effect/vitest";
+import * as Layer from "effect/Layer";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { AccountSummary } from "../src/Account/AccountSummary.view.ts";
+import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
+import { DepositReversed, ReverseDeposit } from "../src/Account/ReverseDeposit.command.ts";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
+import { Notifications } from "../src/Notifications.external.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
+
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  stub: [FraudCheck, Payments, Notifications],
+});
+const main = Account.ref("c-1-main");
+
+it.effect("a deposit recorded twice is reversed, and the balance follows", () =>
+  story(
+    Story.given(
+      main,
+      new AccountOpened({ customerId: "c-1", owner: "sam" }),
+      new MoneyDeposited({ amount: 500, balanceAfter: 500 }),
+      new MoneyDeposited({ amount: 500, balanceAfter: 1000 }),
+    ),
+    Story.when(
+      new ReverseDeposit({
+        accountId: main.id,
+        depositSeq: 3,
+        amount: 500,
+        reason: "credited twice",
+      }),
+    ),
+    Story.then(
+      main,
+      new DepositReversed({ depositSeq: 3, amount: 500, balanceAfter: 500, reason: "credited twice" }),
+    ),
+    Story.view(AccountSummary, main, { balance: 500 }),
+  ),
+);
+```

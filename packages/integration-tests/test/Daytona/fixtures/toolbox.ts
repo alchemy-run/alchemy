@@ -8,6 +8,10 @@ import * as Stream from "effect/Stream";
 /** Every toolbox call works the same on either handle. */
 type Box = DaytonaSandbox | ConnectedSandbox;
 
+/** Download a file and collect its streamed body. */
+const download = (box: Box, path: string) =>
+  box.fs.downloadFile({ path }).pipe(Effect.flatMap((r) => Stream.mkUint8Array(r.body)));
+
 /** Files: folders, uploads, search, replace, download, move, permissions, delete. */
 export const files = Effect.fn(function* (box: Box, prefix: string) {
   const dir = `/tmp/alchemy-fs-${prefix}`;
@@ -19,8 +23,8 @@ export const files = Effect.fn(function* (box: Box, prefix: string) {
   const found = yield* box.fs.findInFiles({ path: dir, pattern: "hello" });
   const searched = yield* box.fs.searchFiles({ path: dir, pattern: "*.txt" });
   yield* box.fs.replaceInFiles({ files: [`${dir}/a.txt`], pattern: "world", newValue: "daytona" });
-  const text = new TextDecoder().decode(yield* box.fs.downloadFile({ path: `${dir}/a.txt` }));
-  const bytes = Array.from(yield* box.fs.downloadFile({ path: `${dir}/b.bin` }));
+  const text = new TextDecoder().decode(yield* download(box, `${dir}/a.txt`));
+  const bytes = Array.from(yield* download(box, `${dir}/b.bin`));
   yield* box.fs.moveFile({ source: `${dir}/a.txt`, destination: `${dir}/c.txt` });
   yield* box.fs.setFilePermissions({ path: `${dir}/c.txt`, mode: "600" });
   const moved = yield* box.fs.getFileInfo({ path: `${dir}/c.txt` });
@@ -311,9 +315,7 @@ export const gitRemote = Effect.fn(function* (box: Box, prefix: string) {
   // (reset takes a commit, not a relative ref like HEAD~1).
   yield* box.fs.uploadFile({ path: `${path}/one.txt`, body: "edited\n" });
   yield* box.git.restoreFiles({ path, files: ["one.txt"], worktree: true });
-  const restored = new TextDecoder().decode(
-    yield* box.fs.downloadFile({ path: `${path}/one.txt` }),
-  );
+  const restored = new TextDecoder().decode(yield* download(box, `${path}/one.txt`));
   // Creating a branch also checks it out, and the daemon will delete the
   // branch HEAD is on, so switch back before deleting it.
   yield* box.git.createBranch({ path, name: "scratch" });
@@ -456,7 +458,9 @@ export const desktop = Effect.fn(function* (box: DaytonaSandbox) {
   const stopped = yield* cu.stopRecording({ id: recording.id });
   const recordings = yield* cu.listRecordings();
   const fetched = yield* cu.getRecording({ id: recording.id });
-  const video = yield* cu.downloadRecording({ id: recording.id });
+  const video = yield* cu
+    .downloadRecording({ id: recording.id })
+    .pipe(Effect.flatMap((r) => Stream.mkUint8Array(r.body)));
   yield* cu.deleteRecording({ id: recording.id });
   const afterDelete = yield* cu.listRecordings();
 

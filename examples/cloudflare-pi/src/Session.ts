@@ -1,20 +1,20 @@
 import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import { Greeting, Guard } from "./extensions.ts";
+import { Add, AddLive } from "./Add.tool.ts";
+import { Guard } from "./extensions.ts";
 import { Fast, FastLive } from "./models.ts";
-import { Notes } from "./Notes.ts";
-import { Add, AddLive } from "./tools.ts";
+import { SaveNote } from "./SaveNote.tool.ts";
 
 /** Everything the harness needs: its model, its tools, where scripts run, and its storage. */
 const HarnessLive = Layer.mergeAll(
   FastLive,
   AddLive,
-  Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline())),
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalQuickJS())),
   PiCloudflare.DurableObjectStorage,
   Cloudflare.KV.ReadWriteNamespaceBinding,
 );
@@ -25,26 +25,11 @@ type ToolName = "add" | "save_note";
 export default class Session extends Cloudflare.DurableObject<Session>()(
   "Session",
   Effect.gen(function* () {
-    const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
-
-    // An inline tool, closing over a binding resolved in this scope.
-    const SaveNote = AI.Tool(
-      "save_note",
-      {
-        description:
-          "Save a note under a key. Use it whenever the user asks you to remember something.",
-        parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
-        success: Schema.Void,
-      },
-      Effect.fn(function* ({ key, text }) {
-        yield* notes.put(key, text).pipe(Effect.orDie);
-      }),
-    );
-
     const harness = yield* Pi.Harness({
       models: [Fast],
-      tools: [Add, SaveNote],
-      extensions: [Guard, Greeting, Pi.CodeMode],
+      // `add` is offered both ways: as a direct call, and from programs.
+      tools: [Add, SaveNote, AI.CodeMode(Add)],
+      extensions: [Guard],
     });
 
     const toolOf = (name: ToolName) => (name === "add" ? Add : SaveNote);
@@ -96,12 +81,7 @@ export default class Session extends Cloudflare.DurableObject<Session>()(
         /** Let the conversation write programs that call its tools. */
         enableCodeMode: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
-          yield* conversation.configure({ extensions: { add: [Pi.CodeMode] } });
-        }),
-        /** Offer the conversation the greeting skill. */
-        addSkill: Effect.fn(function* (name: string) {
-          const conversation = yield* harness.conversationByName(name);
-          yield* conversation.configure({ extensions: { add: [Greeting] } });
+          yield* conversation.configure({ tools: { add: [AI.CodeMode(Add)] } });
         }),
         /** The names of the tools the conversation may call now. */
         tools: Effect.fn(function* (name: string) {

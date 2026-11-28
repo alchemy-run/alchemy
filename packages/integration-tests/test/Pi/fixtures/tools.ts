@@ -1,6 +1,8 @@
 import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { Notes } from "./infra.ts";
 
 /** A tagged tool: the contract here, the implementation as a Layer. */
 export class Add extends AI.Tool<Add>()("add", {
@@ -53,3 +55,34 @@ export const GlobLive = AI.Glob.make(
   },
   ({ pattern }) => ({ matches: [`OWN-GLOB-4711/${pattern}`] }),
 );
+
+/** The `codemode` section of the system prompt a conversation was last sent, if it has one. */
+export const codemodeSection = (messages: unknown): string | undefined => {
+  const found: string[] = [];
+  const visit = (value: unknown): void => {
+    if (typeof value === "string") {
+      const match = /<codemode>\n([\s\S]*?)\n<\/codemode>/.exec(value);
+      if (match) found.push(match[1]!);
+    } else if (Array.isArray(value)) value.forEach(visit);
+    else if (value !== null && typeof value === "object") Object.values(value).forEach(visit);
+  };
+  visit(messages);
+  return found.at(-1);
+};
+
+/** A tool declared with its implementation: its Effect binds what the tool uses. */
+export class SaveNote extends AI.Tool<SaveNote>()(
+  "save_note",
+  {
+    description:
+      "Save a note under a key. Use it whenever the user asks you to remember something.",
+    parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
+    success: Schema.Void,
+  },
+  Effect.gen(function* () {
+    const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+    return Effect.fn(function* ({ key, text }) {
+      yield* notes.put(key, text).pipe(Effect.orDie);
+    });
+  }),
+) {}

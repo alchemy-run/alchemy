@@ -492,7 +492,7 @@ const syncRules = (
           compute.patchRuleOrganizationSecurityPolicies({
             ...toRuleBody(rule),
             securityPolicy: securityPolicyId,
-            priority,
+            rulePriority: priority,
           }),
         );
       }

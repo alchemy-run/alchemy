@@ -5,13 +5,8 @@
  * at a time.
  */
 import * as Docker from "@alchemy.run/docker";
-import {
-  CLUSTER_TABLE_PREFIX,
-  objectStorage,
-  migrate,
-  sweep,
-  TABLE,
-} from "@alchemy.run/domain/EffectCluster/internal";
+import { CLUSTER_TABLE_PREFIX, sweep } from "@alchemy.run/domain/EffectCluster/internal";
+import { migrate, objectStorage, TABLE } from "@alchemy.run/effect-cluster/ObjectHost";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";

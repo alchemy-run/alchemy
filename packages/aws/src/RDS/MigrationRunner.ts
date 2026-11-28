@@ -85,6 +85,11 @@ export const MigrationRunner = (id: string, props: MigrationRunnerProps) =>
       .href,
     handler: "handler",
     runtime: "nodejs24.x",
+    // The engine invokes the runner through the Lambda Invoke API, never over
+    // HTTP, so it must not inherit the default public (authType: NONE) function
+    // URL — that would expose a VPC-attached database migration runner to the
+    // internet, gated only by the expected event shape.
+    functionUrl: false,
     vpc: {
       subnetIds: props.subnetIds,
       securityGroupIds: props.securityGroupIds,

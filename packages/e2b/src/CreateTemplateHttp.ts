@@ -1,6 +1,6 @@
 import * as tags from "@distilled.cloud/e2b/tags";
 import * as templates from "@distilled.cloud/e2b/templates";
-import * as unstable from "@distilled.cloud/e2b/unstable";
+import * as unstable from "@distilled.cloud/e2b/unstable/unstable";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";

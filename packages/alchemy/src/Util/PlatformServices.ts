@@ -93,19 +93,38 @@ export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
 });
 
 /**
+ * End a process stream and wait for it to finish, close, or fail. This only
+ * waits for output to drain: Bun reports neither EPIPE nor ENOSPC on process
+ * streams, so a lost reader can't change the exit code consistently.
+ */
+const finishOutput = (stream: NodeJS.WriteStream): Promise<void> =>
+  new Promise((resolve) => {
+    if (stream.writableFinished || stream.destroyed) return resolve();
+    // Whichever fires first settles; the rest are harmless no-ops.
+    const done = () => resolve();
+    stream.once("finish", done);
+    stream.once("close", done);
+    stream.once("error", done);
+    if (!stream.writableEnded) stream.end();
+  });
+
+/**
  * ALWAYS exit once the main effect completes. The platform `runMain` default
  * only force-exits on failure or signal interruption — a *successful*
  * `alchemy deploy`/`destroy` otherwise lingers for ~100 seconds after "Done"
  * while keep-alive sockets (Cloudflare API agents, provider sidecar handles)
  * pin the event loop until the remote side closes them. All Effect finalizers
- * have already run by the time teardown is invoked; the macrotask hop lets
- * any buffered stdout drain before the process exits.
+ * have already run by the time teardown is invoked; draining both output
+ * streams first keeps piped output from being truncated (a slow reader delays
+ * exit rather than losing output).
  */
 const exitingTeardown: Teardown = (exit, onExit) => {
   defaultTeardown(exit, (code) => {
     const finalCode = code !== 0 ? code : Number(process.exitCode ?? 0) || 0;
-    setTimeout(() => process.exit(finalCode), 0);
-    onExit(finalCode);
+    void Promise.all([finishOutput(process.stdout), finishOutput(process.stderr)]).then(() => {
+      onExit(finalCode);
+      process.exit(finalCode);
+    });
   });
 };
 

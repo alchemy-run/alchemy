@@ -400,6 +400,12 @@ const newSessionId = (prefix: string) =>
  * runtime for a sandbox declared at deploy); `run` supplies the binding's
  * credentials, and toolbox calls are additionally scoped to the sandbox.
  */
+/** Download a file and collect its streamed body. */
+const downloadBytes = (path: string) =>
+  fileSystem
+    .downloadFile({ path })
+    .pipe(Effect.flatMap((response) => Stream.mkUint8Array(response.body)));
+
 export const makeSandboxMethods = (
   identity: Effect.Effect<SandboxIdentity, never, RuntimeContext>,
   organizationId: Effect.Effect<string, never, RuntimeContext>,
@@ -494,11 +500,9 @@ export const makeSandboxMethods = (
   });
 
   const files: SandboxFiles = {
-    read: (path) => toolbox(fileSystem.downloadFile({ path })),
+    read: (path) => toolbox(downloadBytes(path)),
     readText: (path) =>
-      toolbox(fileSystem.downloadFile({ path })).pipe(
-        Effect.map((bytes) => new TextDecoder().decode(bytes)),
-      ),
+      toolbox(downloadBytes(path)).pipe(Effect.map((bytes) => new TextDecoder().decode(bytes))),
     write: (path, content) =>
       toolbox(fileSystem.uploadFile({ path, body: content })).pipe(Effect.asVoid),
     list: (path) => toolbox(fileSystem.listFiles({ path })),
@@ -542,10 +546,14 @@ export const makeSandboxMethods = (
           const preview = yield* sandboxes.getPortPreviewUrl({ sandboxIdOrName, port });
           const client = yield* HttpClient.HttpClient;
           const base = preview.url.replace(/\/$/, "");
+          const token =
+            typeof preview.token === "string"
+              ? preview.token
+              : Redacted.value<string>(preview.token);
           return {
             port,
             url: preview.url,
-            token: Redacted.make(preview.token),
+            token: Redacted.make(token),
             fetch: Sandbox.portFetch<DaytonaError>((request) =>
               Effect.suspend(() => {
                 // Only the path and query reach the port: a proxied server
@@ -554,7 +562,7 @@ export const makeSandboxMethods = (
                 return client.execute(
                   request.pipe(
                     HttpClientRequest.setUrl(`${base}${target.pathname}${target.search}`),
-                    HttpClientRequest.setHeader("X-Daytona-Preview-Token", preview.token),
+                    HttpClientRequest.setHeader("X-Daytona-Preview-Token", token),
                   ),
                 );
               }),

@@ -50,3 +50,4 @@ export * from "./WorkerBridge.ts";
 export * from "./WorkerEntrypoint.ts";
 export * from "./WorkerLoader.ts";
 export * from "./WorkerProvider.ts";
+export { layerObjectHost, type ObjectHostOptions, type ObjectPlacement } from "./ObjectHost.ts";

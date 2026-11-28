@@ -58,6 +58,31 @@ const recursive = Flag.Boolean("recursive").pipe(
   Flag.withDescription("Operate recursively on directories"),
   Flag.withDefault(false),
 );
+const reveal = Flag.Boolean("reveal").pipe(
+  Flag.withDescription("Print decrypted secret values instead of masking them"),
+  Flag.withDefault(false),
+);
+
+/**
+ * Replace every sealed-secret value (`{ [REDACTED_MARKER]: "<plaintext>" }`,
+ * opened by the state codec) with a masked placeholder, recursively. `state
+ * read` would otherwise dump every credential in a resource's attributes to the
+ * terminal (and scrollback); masking by default keeps `--reveal` an explicit,
+ * auditable choice.
+ */
+const maskRedacted = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(maskRedacted);
+  if (value !== null && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    if (Object.hasOwn(object, State.REDACTED_MARKER)) {
+      return { [State.REDACTED_MARKER]: "<redacted>" };
+    }
+    return Object.fromEntries(
+      Object.entries(object).map(([key, inner]) => [key, maskRedacted(inner)]),
+    );
+  }
+  return value;
+};
 
 type StateArgs = {
   readonly main: string;
@@ -155,17 +180,18 @@ const listCommand = Command.make(
 
 const readCommand = Command.make(
   "read",
-  { path: pathArgument, recursive, main: config, envFile, profile, backend },
+  { path: pathArgument, recursive, reveal, main: config, envFile, profile, backend },
   instrumentCommand("state.read")(
-    Effect.fn(function* ({ path, recursive, ...args }) {
+    Effect.fn(function* ({ path, recursive, reveal, ...args }) {
       const store = yield* source(args).pipe(Effect.flatMap(Alchemist.State.store));
       const requested = yield* path.pipe(Option.getOrUndefined, normalizedPath);
       const entries = yield* usingStore(store)(State.readState({ path: requested, recursive }));
+      const show = (value: unknown) => (reveal ? value : maskRedacted(value));
       yield* Console.log(
         JSON.stringify(
           entries.length === 1
-            ? entries[0]!.value
-            : Object.fromEntries(entries.map((entry) => [entry.path, entry.value])),
+            ? show(entries[0]!.value)
+            : Object.fromEntries(entries.map((entry) => [entry.path, show(entry.value)])),
           null,
           2,
         ),

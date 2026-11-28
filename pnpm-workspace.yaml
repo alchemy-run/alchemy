@@ -50,7 +50,7 @@ packages:
 
 catalog:
   "@1password/sdk": "0.5.0"
-  "@alchemy.run/sigil": "0.1.0-alpha.4"
+  "@alchemy.run/sigil": "0.1.0-alpha.5"
   "@astrojs/check": "0.9.10"
   "@astrojs/internal-helpers": "0.13.0"
   "@astrojs/mdx": "8.0.3"
@@ -75,6 +75,8 @@ catalog:
   "@effect/sql-pg": "^4.1.4"
   "@effect/sql-sqlite-do": "^4.1.4"
   "@effect/tsgo": "^0.73.2"
+  # Not on npm yet: a pkg.pr.new snapshot of Effect-TS/ui main, pinned by commit.
+  "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab"
   "@effect/vitest": "^4.1.4"
   "@foldkit/ui": "^0.170.0"
   "@foldkit/vite-plugin": "^0.29.0"
@@ -304,6 +306,8 @@ overrides:
   "@effect/sql-sqlite-do": 4.1.4
   drizzle-kit: 1.0.0-rc.5
   drizzle-orm: 1.0.0-rc.5
+  # OpenCode is built against a drizzle-orm snapshot with exports rc.5 lacks.
+  "@opencode/core>drizzle-orm": 1.0.0-rc.5-169397b
   # Keep drizzle-orm's optional peer graph identical across workspace
   # packages so TypeScript sees one drizzle-orm identity.
   mysql2: 3.24.5
@@ -320,7 +324,7 @@ patchedDependencies:
 
 minimumReleaseAgeExclude:
   - typescript@7.1.0-dev.20260923.1 || 7.1.0-dev.20261105.1
-  - "@alchemy.run/sigil@0.1.0-alpha.4"
+  - "@alchemy.run/sigil@0.1.0-alpha.5"
   - "@foldkit/vite-plugin@0.29.0"
   - foldkit@0.170.0
   - "@solidjs/start@2.0.6"

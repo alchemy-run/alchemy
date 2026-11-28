@@ -1,4 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
+import * as NeonUnstable from "@distilled.cloud/neon/unstable/neon";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -38,7 +39,7 @@ export const observeFunction = Effect.fn(function* (scope: ResolvedBranchScope, 
   let cursor: string | undefined;
   const seen = new Set<string>();
   do {
-    const page = yield* Neon.listProjectBranchFunctions({
+    const page = yield* NeonUnstable.listProjectBranchFunctions({
       project_id: scope.projectId,
       branch_id: scope.branchId,
       cursor,
@@ -60,7 +61,7 @@ export const observeFunction = Effect.fn(function* (scope: ResolvedBranchScope, 
 
 const attributes = (
   scope: ResolvedBranchScope,
-  fn: Neon.NeonFunction,
+  fn: NeonUnstable.NeonFunction,
   codeHash?: string,
   environmentHash?: string,
 ): FunctionAttributes => ({
@@ -83,7 +84,7 @@ export const waitForFunctionDeployment = (
   deploymentId: number,
 ) =>
   Effect.gen(function* () {
-    const { function: fn } = yield* Neon.getProjectBranchFunction({
+    const { function: fn } = yield* NeonUnstable.getProjectBranchFunction({
       project_id: scope.projectId,
       branch_id: scope.branchId,
       slug,
@@ -141,11 +142,11 @@ export const FunctionLogs = Effect.fn(function* (
     limit: Math.min(limit, 1000),
     sort_order: "desc" as const,
   }));
-  const records: Neon.ProjectBranchLogRecord[] = [];
+  const records: NeonUnstable.ProjectBranchLogRecord[] = [];
   const cursors = new Set<string>();
   let cursor: string | undefined;
   for (let page = 0; page < 8; page++) {
-    const response = yield* Neon.queryProjectBranchLogs({ ...query, cursor });
+    const response = yield* NeonUnstable.queryProjectBranchLogs({ ...query, cursor });
     records.push(
       ...response.logs.filter(
         (line) => line.source === "function" && line.service_name === service,
@@ -185,7 +186,7 @@ export const FunctionProviderLive = () =>
           .items({ project_id: project.id })
           .pipe(Stream.runCollect)) {
           const scope = { projectId: project.id, branchId: branch.id };
-          for (const fn of yield* Neon.listProjectBranchFunctions
+          for (const fn of yield* NeonUnstable.listProjectBranchFunctions
             .items({ project_id: project.id, branch_id: branch.id })
             .pipe(Stream.runCollect))
             result.push(attributes(scope, fn));
@@ -277,7 +278,7 @@ export const FunctionProviderLive = () =>
                   type: "application/zip",
                 }),
             );
-        const deployment = yield* Neon.createProjectBranchFunctionDeployment({
+        const deployment = yield* NeonUnstable.createProjectBranchFunctionDeployment({
           project_id: scope.projectId,
           branch_id: scope.branchId,
           slug,
@@ -288,7 +289,7 @@ export const FunctionProviderLive = () =>
         current = yield* waitForFunctionDeployment(scope, slug, deployment.deployment.id);
       }
       if (current.name !== (news.name ?? slug)) {
-        const updated = yield* Neon.updateProjectBranchFunction({
+        const updated = yield* NeonUnstable.updateProjectBranchFunction({
           project_id: scope.projectId,
           branch_id: scope.branchId,
           slug,
@@ -300,7 +301,7 @@ export const FunctionProviderLive = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       if (!(yield* observeFunction(output, output.slug))) return;
-      yield* Neon.deleteProjectBranchFunction({
+      yield* NeonUnstable.deleteProjectBranchFunction({
         project_id: output.projectId,
         branch_id: output.branchId,
         slug: output.slug,

@@ -1,4 +1,5 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
+import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -48,14 +49,14 @@ export interface NotificationWebhookProps {
    * The POST endpoint Cloudflare calls when dispatching a notification.
    * Cloudflare sends a test request on create/update; the endpoint must
    * respond with a 2xx or the operation fails with `WebhookTestFailed`.
-   * Mutable — updated in place.
+   * Immutable — changing it replaces the destination.
    */
   url: string;
   /**
    * Optional secret sent in the `cf-webhook-auth` header on every
    * notification dispatch (for generic webhooks). Write-only: Cloudflare
-   * never returns it, so drift cannot be observed — the secret is re-sent
-   * whenever the prop value changes.
+   * never returns it, so drift cannot be observed. Immutable — changing it
+   * replaces the destination.
    */
   secret?: Redacted.Redacted<string>;
 }
@@ -189,9 +190,21 @@ export const NotificationWebhookProvider = () =>
       );
     }),
 
-    diff: Effect.fn(function* ({ output }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Cloudflare's update only accepts `name`; `url` and `secret` are
+      // immutable, so a change to either needs a new destination.
+      if (!isResolved(news)) return undefined;
+      const oldUrl = output?.url ?? olds?.url;
+      if (oldUrl !== undefined && oldUrl !== news.url) {
+        return { action: "replace" } as const;
+      }
+      const oldSecret = olds?.secret === undefined ? undefined : Redacted.value(olds.secret);
+      const newSecret = news.secret === undefined ? undefined : Redacted.value(news.secret);
+      if (olds !== undefined && oldSecret !== newSecret) {
         return { action: "replace" } as const;
       }
     }),
@@ -222,7 +235,7 @@ export const NotificationWebhookProvider = () =>
       return undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output, olds }) {
+    reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createWebhookName(id, news.name);
       // Inputs are resolved to concrete values by the engine before
@@ -274,12 +287,9 @@ export const NotificationWebhookProvider = () =>
         return toWebhookAttributes(fresh ?? { id: created.id }, accountId);
       }
 
-      // 3. Sync — PUT the full desired body when any observable field
-      //    drifts, or when the (write-only, unobservable) secret prop
-      //    changed between olds and news.
-      const oldSecret = olds?.secret === undefined ? undefined : Redacted.value(olds.secret);
-      const secretChanged = secret !== oldSecret;
-      if (observed.name !== name || observed.url !== url || secretChanged) {
+      // 3. Sync — only `name` is mutable; `diff` replaces the destination
+      //    when `url` or `secret` change.
+      if (observed.name !== name) {
         // The update PUT fires the same test POST as create — ride out edge
         // propagation of a just-deployed destination URL the same way.
         yield* alerting
@@ -287,8 +297,6 @@ export const NotificationWebhookProvider = () =>
             accountId,
             webhookId: observed.id,
             name,
-            url,
-            secret,
           })
           .pipe(
             Effect.retry({

@@ -42,6 +42,7 @@ import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace
 import type { WorkflowBinding, WorkflowLike } from "../Workflows/Workflow.ts";
 import type { Reference as ZoneReference } from "../Zone/lookup.ts";
 import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
+import type { RetiringClass } from "./DurableObjectRetirement.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
@@ -1036,8 +1037,11 @@ export interface WorkerProps<
    * When Alchemy bundles {@link main}, rules add to the built-in ones
    * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
    * imported file that matches is uploaded as a module instead of bundled.
-   * JavaScript, TypeScript and JSON are always bundled, and imports inside
-   * nested `?worker` modules don't use rules. For files outside the entry's
+   * JavaScript and TypeScript are always bundled, and imports inside
+   * nested `?worker` modules don't use rules. JSON is bundled unless a rule
+   * matches it: `{ type: "Text", globs: ["**\/openapi.json"] }` uploads a
+   * large document as a string module instead of an object literal the
+   * Worker builds at startup. For files outside the entry's
    * directory, globs may start with `../` or be absolute. `!` globs exclude
    * across your rules; an excluded `.txt` or `.wasm` still matches the
    * built-in rules.
@@ -1264,6 +1268,22 @@ export interface ViteOptions {
    * Defaults to the current working directory (`process.cwd()`).
    */
   rootDir?: string;
+  /**
+   * Vite [mode](https://vite.dev/guide/env-and-mode#modes), as passed to
+   * `vite build --mode`. It selects which `.env.[mode]` files load and
+   * sets `import.meta.env.MODE`. Changing it rebuilds the Worker, or
+   * restarts the dev server in `alchemy dev`.
+   *
+   * Edits to a gitignored `.env.[mode]` file don't trigger a rebuild on
+   * their own. Add the file to `memo.include` if they should.
+   *
+   * @default "production" on deploy, "development" in `alchemy dev`
+   * @example
+   * ```typescript
+   * vite: { mode: "staging" }
+   * ```
+   */
+  mode?: string;
   /**
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file in `cwd` is hashed, plus the nearest
@@ -1520,6 +1540,8 @@ export type Worker<Bindings = any> = Resource<
       hash: string | undefined;
     }[];
     crons?: string[];
+    /** Durable Object classes kept only while their objects move out: see `DurableObjectRetirement`. */
+    retiringClasses?: RetiringClass[];
     hyperdrives?: Record<string, Required<DevOrigin>>;
     /**
      * Dev-only channel (like `hyperdrives`): binding name → opt-out of local
@@ -2868,6 +2890,11 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * namespace handle. Call `getByName` or `getById` to get a typed RPC
  * stub, then call its methods from your runtime handlers.
  *
+ * `RemovalPolicy.protect()` on the Worker also refuses deletion of inline
+ * Durable Object classes during a normal in-place update. To delete a class
+ * on purpose, drop `protect()` in the same deploy. `renamedFrom` preserves
+ * existing data when renaming a class and remains allowed while protected.
+ *
  * **Example:** Using a Durable Object
  * ```typescript
  * // Construction
@@ -2971,10 +2998,14 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  */
 export const Worker: ResourceClassLike<Worker> & {
   /**
-   * Reference a deployed Worker — in the current stack/stage by default, or
-   * in another via `options`. Pass the Worker's declaration instead of its
-   * logical id to keep its type, including its RPC methods, for service
-   * bindings from another stack.
+   * Reference a Worker by its logical id, in the current stack/stage by
+   * default or in another via `options`. Another Worker this program
+   * declares in the same stack and stage is bound to that declaration (no
+   * earlier deploy needed), so a ref breaks a cycle between two Workers that
+   * bind each other; any other ref, including one to the Worker itself,
+   * reads the deployed Worker from state. Pass
+   * the Worker's declaration instead of its logical id to keep its type,
+   * including its RPC methods, for service bindings from another stack.
    */
   ref: WorkerRef;
   /**

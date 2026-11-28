@@ -23,17 +23,13 @@ import type * as runtime from "@cloudflare/workers-types";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";
-import { makeR2ObjectWrappers, type makeHelpers } from "./BucketBinding.ts";
+import { fromRuntimeError, makeR2ObjectWrappers, type makeHelpers } from "./BucketBinding.ts";
 import { R2Error } from "./BucketTypes.ts";
 
 const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, R2Error> =>
   Effect.tryPromise({
     try: fn,
-    catch: (error: any) =>
-      new R2Error({
-        message: error?.message ?? "Unknown error",
-        cause: error,
-      }),
+    catch: fromRuntimeError,
   });
 
 /**

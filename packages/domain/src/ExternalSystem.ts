@@ -1,3 +1,5 @@
+import { framed } from "alchemy/CapabilityGraph";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -232,7 +234,9 @@ type ErrorOf<S extends OpSpec> =
 export type Shape<Ops extends Record<string, OpSpec>> = {
   readonly [K in keyof Ops]: (
     args: ArgsOf<Ops[K]>,
-  ) => Effect.Effect<SuccessOf<Ops[K]>, ErrorOf<Ops[K]>>;
+    // An operation reaches outside the model, so it runs only inside a
+    // runtime: a binding or another Durable Object needs its context.
+  ) => Effect.Effect<SuccessOf<Ops[K]>, ErrorOf<Ops[K]>, RuntimeContext>;
 };
 
 /**
@@ -347,20 +351,24 @@ export const make = <const Name extends string, const Ops extends Record<string,
     ): Layer.Layer<ExternalSystemKey<Name>, E, R> {
       return Layer.effect(
         Tag,
-        Effect.gen(function* () {
-          const clash = Object.keys(ops).find((op) => reserved.has(op));
-          if (clash !== undefined) {
-            return yield* Effect.die(
-              new DefinitionError({
-                reason: new ReservedOperation({ system: name, operation: clash }),
-              }),
-            );
-          }
-          const checks = options?.validate === false ? undefined : yield* compileChecks(name, ops);
-          const impl = (yield* build) as Record<string, OpImpl>;
-          const checked = checks === undefined ? impl : validateOps(checks, impl);
-          return observeOps(name, recordOps(name, checked)) as never;
-        }),
+        // Built as a term of its own: a plan lists what the system binds.
+        framed("External", name, { hosted: false })(
+          Effect.gen(function* () {
+            const clash = Object.keys(ops).find((op) => reserved.has(op));
+            if (clash !== undefined) {
+              return yield* Effect.die(
+                new DefinitionError({
+                  reason: new ReservedOperation({ system: name, operation: clash }),
+                }),
+              );
+            }
+            const checks =
+              options?.validate === false ? undefined : yield* compileChecks(name, ops);
+            const impl = (yield* build) as Record<string, OpImpl>;
+            const checked = checks === undefined ? impl : validateOps(checks, impl);
+            return observeOps(name, recordOps(name, checked)) as never;
+          }),
+        ),
       );
     }
   };

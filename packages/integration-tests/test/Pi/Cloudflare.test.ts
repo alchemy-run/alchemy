@@ -32,6 +32,69 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 const tags = ["provider:cloudflare", "provider:pi", "live"];
 
+/** What the async convention adds to the system prompt for the fixture's `add` and `withdraw`. */
+const ASYNC_SECTION = `Tools scripts can call (\`await tools.<name>(args)\`):
+
+\`\`\`ts
+declare namespace tools {
+  class InsufficientFunds extends Error {
+    readonly _tag: "InsufficientFunds";
+    readonly balance: number;
+  }
+
+  class AccountFrozen extends Error {
+    readonly _tag: "AccountFrozen";
+    readonly account: string;
+  }
+
+  /** Add two integers. Always use this tool to add numbers; never add them yourself. */
+  function add(args: { a: number; b: number }): Promise<{ sum: number }>;
+
+  /**
+   * Withdraw money from an account. Always use this tool to withdraw.
+   * @throws {InsufficientFunds}
+   * @throws {AccountFrozen}
+   */
+  function withdraw(args: { account: string; amount: number }): Promise<{ balance: number }>;
+}
+\`\`\``;
+
+/** The same tools, as the Effect convention declares them. */
+const EFFECT_SECTION = `Tools scripts can call (\`yield* tools.<name>(args)\`):
+
+\`\`\`ts
+declare namespace tools {
+  class InsufficientFunds extends Data.TaggedError("InsufficientFunds")<{
+    readonly balance: number;
+  }> {}
+
+  class AccountFrozen extends Data.TaggedError("AccountFrozen")<{
+    readonly account: string;
+  }> {}
+
+  /** Add two integers. Always use this tool to add numbers; never add them yourself. */
+  function add(args: { a: number; b: number }): Effect<{ sum: number }>;
+
+  /** Withdraw money from an account. Always use this tool to withdraw. */
+  function withdraw(args: { account: string; amount: number }): Effect<{ balance: number }, InsufficientFunds | AccountFrozen>;
+}
+\`\`\``;
+
+/** An MCP server's tools, declared under its name. */
+const MCP_SECTION = `Tools scripts can call (\`await tools.<name>(args)\`):
+
+\`\`\`ts
+declare namespace tools {
+  namespace codes {
+    /** Look up the secret code for a word. The code cannot be guessed. */
+    function lookup_code(args: { word: string }): Promise<{ code: string }>;
+
+    /** A tool that always reports an error. */
+    function always_fails(): Promise<string>;
+  }
+}
+\`\`\``;
+
 /** Call the fixture's API; retries ride through a fresh workers.dev URL's first seconds. */
 const call = (path: string, body?: unknown) =>
   Effect.gen(function* () {
@@ -104,7 +167,7 @@ test(
 );
 
 test(
-  "an inline tool closes over the Durable Object's KV binding",
+  "a tool implemented on its class uses the KV binding it bound",
   Effect.gen(function* () {
     const user = `user-${Date.now()}`;
     yield* call(`/${user}/notes/create`, { tools: ["save_note"] });
@@ -117,6 +180,33 @@ test(
     expect(String(note.text).toLowerCase()).toContain("teal");
   }),
   { tags, timeout: 180_000 },
+);
+
+test(
+  "a run whose tool always dies ends at the round limit",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    yield* call(`/${user}/blast/create`, { tools: ["explode"] });
+    // The model is told to keep at it, and every call dies.
+    const result = yield* call(`/${user}/blast/prompt`, {
+      text: "Set off the charge: it must go off, so use explode.",
+      requestId: "blast-1",
+    });
+    expect(result.status).toBe("unanswered");
+    const results = (yield* call(`/${user}/blast/results`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+      text: string;
+    }>;
+    // Each death is the model's error result, and the rounds stop at the limit.
+    expect(results[0]).toEqual({
+      tool: "explode",
+      isError: true,
+      text: "<harness>\n[error] the charge was wet\n</harness>",
+    });
+    expect(results.length).toBeLessThanOrEqual(100);
+  }),
+  { tags, timeout: 300_000 },
 );
 
 test(
@@ -323,48 +413,105 @@ test(
   { tags, timeout: 180_000 },
 );
 
-test(
-  "a skill added at runtime is loaded on demand",
-  Effect.gen(function* () {
-    const user = `user-${Date.now()}`;
-    yield* call(`/${user}/skilled/create`, { tools: [] });
-    yield* call(`/${user}/skilled/skill`, {});
-    yield* call(`/${user}/skilled/prompt`, {
-      text: "Please greet me. Load the greeting skill first.",
-      requestId: "skill-1",
-    });
-    const results = (yield* call(`/${user}/skilled/results`)) as ReadonlyArray<{
-      tool: string;
-      isError: boolean;
-      text: string;
-    }>;
-    const loaded = results.find((result) => result.tool === "load_skill");
-    expect(loaded?.isError).toBe(false);
-    expect(loaded?.text).toContain("HELLO-FROM-SKILL");
-  }),
-  { tags, timeout: 180_000 },
-);
+type Results = ReadonlyArray<{ tool: string; isError: boolean; text: string }>;
+
+/** What the conversation's code mode scripts printed. */
+const printedBy = (results: Results) =>
+  results
+    .filter((result) => result.tool === "codemode")
+    .map((result) => result.text)
+    .join("\n---\n");
 
 test(
-  "code mode runs a script that calls tools, in QuickJS on the Durable Object",
+  "async code mode declares each tool with the failures it throws, and runs a script on the Durable Object",
   Effect.gen(function* () {
     const user = `user-${Date.now()}`;
-    yield* call(`/${user}/script/create`, { tools: ["add"] });
+    yield* call(`/${user}/script/create`, { tools: ["add", "withdraw"] });
+    // An exact list without the group has no code mode.
+    expect(yield* call(`/${user}/script/offered`)).toEqual(["add", "withdraw"]);
     yield* call(`/${user}/script/codemode`, {});
+    // Listed both ways, the tools are offered directly and from programs.
+    expect(yield* call(`/${user}/script/offered`)).toEqual(["add", "codemode", "withdraw"]);
+
     yield* call(`/${user}/script/prompt`, {
       // The script is given whole: left to write it, the model sometimes prints nothing.
       text: "Run exactly this script with the codemode tool, unchanged:\n\nconsole.log(JSON.stringify([await tools.add({ a: 2, b: 3 }), await tools.add({ a: 10, b: 20 })]));",
       requestId: "script-1",
     });
-    const results = (yield* call(`/${user}/script/results`)) as ReadonlyArray<{
-      tool: string;
-      isError: boolean;
-      text: string;
-    }>;
-    const scripts = results.filter((result) => result.tool === "codemode" && !result.isError);
-    const printed = scripts.map((script) => script.text).join("\n---\n");
+    const printed = printedBy((yield* call(`/${user}/script/results`)) as Results);
     expect(printed).toContain("1005");
     expect(printed).toContain("1030");
+
+    expect(((yield* call(`/${user}/script/section`)) as { section: string }).section).toBe(
+      ASYNC_SECTION,
+    );
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "an async script catches a tool's declared failure as an instance of its class",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    yield* call(`/${user}/script/create`, { tools: ["withdraw"] });
+    yield* call(`/${user}/script/codemode`, {});
+    yield* call(`/${user}/script/prompt`, {
+      text: 'Run exactly this script with the codemode tool, unchanged:\n\nconst outcome = await tools.withdraw({ account: "frozen", amount: 5 }).then(() => "resolved", (error) => (error instanceof tools.AccountFrozen) + ":" + (error instanceof Error) + ":" + error._tag + ":" + error.account);\nconsole.log("OUTCOME " + outcome);',
+      requestId: "script-failure-1",
+    });
+    expect(printedBy((yield* call(`/${user}/script/results`)) as Results)).toContain(
+      "OUTCOME true:true:AccountFrozen:frozen",
+    );
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "Effect code mode offers only programs, declares failures in each tool's Effect, and runs in a loaded isolate",
+  Effect.gen(function* () {
+    const name = `effect-${Date.now()}`;
+    yield* call(`/effect/${name}/create`, {});
+    // Listed only inside the group, the tools are not offered as direct calls.
+    expect(yield* call(`/effect/${name}/offered`)).toEqual(["codemode"]);
+
+    yield* call(`/effect/${name}/prompt`, {
+      text: 'Run exactly this script with the codemode tool, unchanged:\n\nconst added = yield* tools.add({ a: 2, b: 3 });\nconst balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(Effect.map(() => -1), Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)));\nconst frozen = yield* tools.withdraw({ account: "frozen", amount: 5 }).pipe(Effect.flip, Effect.map((error) => error instanceof tools.AccountFrozen));\nconsole.log("EFFECT " + added.sum + " " + balance + " " + frozen);',
+      requestId: "effect-1",
+    });
+    expect(printedBy((yield* call(`/effect/${name}/results`)) as Results)).toContain(
+      "EFFECT 1005 137 true",
+    );
+
+    expect(((yield* call(`/effect/${name}/section`)) as { section: string }).section).toBe(
+      EFFECT_SECTION,
+    );
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "a program calls an MCP server's tools under the server's name",
+  Effect.gen(function* () {
+    const name = `mcp-programs-${Date.now()}`;
+    yield* call(`/mcp/${name}/create`, { withServer: true, programs: true });
+    // The server is also listed directly, so its tools are offered both ways.
+    expect(yield* call(`/mcp/${name}/tools`)).toEqual([
+      "codemode",
+      "mcp__codes__always_fails",
+      "mcp__codes__lookup_code",
+    ]);
+
+    yield* call(`/mcp/${name}/prompt`, {
+      text: 'Run exactly this script with the codemode tool, unchanged:\n\nconst found = await tools.codes.lookup_code({ word: "teal" });\nconst refused = await tools.codes.always_fails({}).then(() => "resolved", (error) => "rejected");\nconsole.log("FOUND " + found.code + " " + refused);',
+      requestId: "mcp-programs-1",
+    });
+    expect(printedBy((yield* call(`/mcp/${name}/results`)) as Results)).toContain(
+      "FOUND CODE-TEAL-7391 rejected",
+    );
+
+    expect(((yield* call(`/mcp/${name}/section`)) as { section: string }).section).toBe(
+      MCP_SECTION,
+    );
   }),
   { tags, timeout: 180_000 },
 );

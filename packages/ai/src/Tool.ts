@@ -1,3 +1,4 @@
+import { calling, framed } from "alchemy/CapabilityGraph";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { Tool as AiTool } from "effect/ai";
 import * as Cause from "effect/Cause";
@@ -132,7 +133,7 @@ export interface ToolClass<
   ): Layer.Layer<Self, never, Exclude<R, Scope.Scope> | Sandboxes>;
 }
 
-/** A tool declared inline, closing over whatever is in scope. */
+/** A tool declared inline: a value, with no Layer to provide. */
 export interface InlineTool<
   Name extends string,
   Spec extends ToolSpec,
@@ -294,19 +295,37 @@ export interface ToolConstructor {
  * );
  * ```
  *
- * **Example:** Inline, closing over the Durable Object's bindings
+ * **Example:** A class with its implementation, and no Layer to provide
  * ```typescript
- * const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
- * const SaveNote = AI.Tool(
+ * // The Effect binds what the tool uses and returns its handler. A plan
+ * // lists the namespace under `save_note`, and at runtime the tool can use
+ * // no binding the plan does not list under it.
+ * export class SaveNote extends AI.Tool<SaveNote>()(
  *   "save_note",
  *   {
  *     description: "Save a note the user can read later.",
  *     parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
  *     success: Schema.Void,
  *   },
- *   Effect.fn(function* ({ key, text }) {
- *     yield* notes.put(key, text).pipe(Effect.orDie);
+ *   Effect.gen(function* () {
+ *     const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+ *     return Effect.fn(function* ({ key, text }) {
+ *       yield* notes.put(key, text).pipe(Effect.orDie);
+ *     });
  *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** A value, for a tool that uses nothing
+ * ```typescript
+ * const Add = AI.Tool(
+ *   "add",
+ *   {
+ *     description: "Add two numbers.",
+ *     parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+ *     success: Schema.Struct({ sum: Schema.Number }),
+ *   },
+ *   ({ a, b }) => Effect.succeed({ sum: a + b }),
  * );
  * ```
  */
@@ -323,31 +342,56 @@ const lift =
         : Effect.succeed(result);
     });
 
+/**
+ * A handler that runs as the tool `name`: a binding it uses must be one the
+ * plan lists under that tool (alchemy's CapabilityGraph).
+ */
+const called =
+  (name: string, handler: ToolHandler<ToolSpec>): ToolHandler<ToolSpec> =>
+  (parameters) =>
+    calling("Tool", name)(handler(parameters));
+
 /** What `make` was given, as the Effect that builds the handler. */
 const implOf = (
+  name: string,
   impl: Effect.Effect<AnyHandler, never, unknown> | AnyHandler,
 ): Effect.Effect<ToolHandler<ToolSpec>, never, unknown> =>
-  Effect.isEffect(impl) ? Effect.map(impl, lift) : Effect.succeed(lift(impl));
+  Effect.isEffect(impl)
+    ? Effect.map(impl, (handler) => called(name, lift(handler)))
+    : Effect.succeed(called(name, lift(impl)));
+
+/**
+ * An inline tool of the framework's own (a process's `start_` and `follow_`
+ * tools). It does not run as a named tool, so what it uses is not held to
+ * the plan's list: it has no Layer where a binding could be listed.
+ *
+ * @internal
+ */
+export const ownTool = ((name: string, spec: ToolSpec, handler: AnyHandler): unknown => ({
+  [ToolTypeId]: "inline",
+  toolName: name,
+  spec,
+  handler: lift(handler),
+})) as ToolConstructor;
 
 export const Tool = ((...args: ReadonlyArray<unknown>): unknown => {
   if (args.length === 3 && typeof args[0] === "string" && typeof args[2] === "function") {
     const [name, spec, handler] = args as [string, ToolSpec, AnyHandler];
-    return { [ToolTypeId]: "inline", toolName: name, spec, handler: lift(handler) };
+    return { [ToolTypeId]: "inline", toolName: name, spec, handler: called(name, lift(handler)) };
   }
-  return (
-    name: string,
-    spec?: ToolSpec,
-    impl?: Effect.Effect<ToolHandler<ToolSpec>, never, unknown>,
-  ) => {
+  return (name: string, spec?: ToolSpec, impl?: Effect.Effect<AnyHandler, never, unknown>) => {
     if (spec === undefined) return toolTag(name);
     const Tag = Context.Service<unknown, ToolHandler<ToolSpec>>()(`AI.Tool/${name}`);
     return class extends Tag {
       static readonly [ToolTypeId] = "class";
       static readonly toolName = name;
       static readonly spec = spec;
-      static readonly impl = impl;
+      // Built under the tool's own frame, like its Layer would be.
+      static readonly impl =
+        impl === undefined ? undefined : framed("Tool", name)(implOf(name, impl));
       static make(implementation: Effect.Effect<AnyHandler, never, unknown> | AnyHandler) {
-        return Layer.effect(this as never, implOf(implementation));
+        // Built under the tool's own frame: what it binds is what the tool can reach.
+        return Layer.effect(this as never, framed("Tool", name)(implOf(name, implementation)));
       }
     };
   };
@@ -367,6 +411,18 @@ export interface ToolResult {
 export const parametersJsonSchema = (spec: ToolSpec): object =>
   AiTool.getJsonSchemaFromSchema(spec.parameters) as object;
 
+/** `value` without the object fields that are `null`, at any depth. */
+const withoutNulls = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(withoutNulls)
+    : value !== null && typeof value === "object"
+      ? Object.fromEntries(
+          Object.entries(value)
+            .filter(([, field]) => field !== null)
+            .map(([key, field]) => [key, withoutNulls(field)]),
+        )
+      : value;
+
 /**
  * Run one call of a tool the way every harness does: arguments decoded with
  * `parameters`, the result encoded with `success`, a declared failure turned
@@ -381,7 +437,12 @@ export const callTool = (
   args: unknown,
 ): Effect.Effect<ToolResult, never, ToolServices> => {
   const returns = spec.success.ast._tag !== "Void";
-  return Schema.decodeUnknownEffect(spec.parameters as Schema.Codec<unknown, unknown>)(args).pipe(
+  const decode = Schema.decodeUnknownEffect(spec.parameters as Schema.Codec<unknown, unknown>);
+  return decode(args).pipe(
+    // Models often send `null` for a parameter they leave out. Where the
+    // arguments do not decode as sent, they are read again without their nulls.
+    // The failure reported is the one for the arguments as they were sent.
+    Effect.catch((error) => Effect.mapError(decode(withoutNulls(args)), () => error)),
     Effect.orDie,
     Effect.flatMap((parameters) => handler(parameters)),
     Effect.flatMap((value) =>
@@ -495,7 +556,16 @@ const toolTag = (name: string) => {
     static make(spec: ToolSpec, impl: Effect.Effect<AnyHandler, never, unknown> | AnyHandler) {
       return Layer.effect(
         this as never,
-        Effect.map(implOf(impl), (handler): ToolTagService => ({ kind: "tool", spec, handler })),
+        framed(
+          "Tool",
+          name,
+        )(
+          Effect.map(implOf(name, impl), (handler): ToolTagService => ({
+            kind: "tool",
+            spec,
+            handler,
+          })),
+        ),
       );
     }
     static native(engine: string, tool: unknown) {

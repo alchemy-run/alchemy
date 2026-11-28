@@ -8,9 +8,9 @@ import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { app } from "../../../Domain/conformance/app.ts";
-import { DOMAIN_FRONT_PORT, DomainDatabase } from "./cluster.ts";
-import { ConformanceClusterLiveV1 } from "./live.ts";
-import { TickersClusterLive, withTickRoute } from "./tickers.ts";
+import { DomainDatabase } from "./cluster.ts";
+import ConformanceClusterLiveV1 from "./live-v1.ts";
+import TickersClusterLive, { withTickRoute } from "./tickers.ts";
 
 export default class DomainFrontV1 extends Docker.Service<DomainFrontV1>()(
   "ClusterDomainFront",
@@ -19,7 +19,7 @@ export default class DomainFrontV1 extends Docker.Service<DomainFrontV1>()(
     return {
       main: import.meta.url,
       port: 3000,
-      ports: [{ external: DOMAIN_FRONT_PORT, internal: 3000 }],
+      ports: [{ internal: 3000 }],
       networks: database.network?.kind === "docker" ? [{ name: database.network.name }] : [],
     };
   }).pipe(Effect.provide(DomainDatabase)),

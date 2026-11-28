@@ -1678,6 +1678,68 @@ export default { fetch() { return new Response("adopted"); } };
       { tags: ["live"] },
     );
 
+    // #3720: `read` must reproduce the preview URLs a deploy recorded in
+    // `urls`, or the Worker reports drift on every check.
+    test.provider(
+      "previews-only Worker does not drift",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const worker = yield* stack.deploy(
+            Cloudflare.Worker("PreviewDriftWorker", {
+              main,
+              workersDev: { enabled: false, previewsEnabled: true },
+              compatibility: { date: "2024-01-01" },
+            }),
+          );
+          expect(worker.urls).toHaveLength(1);
+
+          const detected = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+          expect(detected.resources.PreviewDriftWorker?.action).toBe("unchanged");
+          expect(detected.resources.PreviewDriftWorker?.attr.urls).toEqual(worker.urls);
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"] },
+    );
+
+    test.provider(
+      "gradual rollout with an aliased preview URL does not drift",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const program = (marker: string, version?: { traffic: number; alias: string }) =>
+            Cloudflare.Worker("RolloutPreviewWorker", {
+              script: `export default { fetch() { return new Response(${JSON.stringify(marker)}); } };`,
+              workersDev: { enabled: true, previewsEnabled: true },
+              version,
+            });
+
+          // A greenfield gradual rollout takes 100% of traffic, so deploy a
+          // stable version first.
+          yield* stack.deploy(program("stable"));
+          const worker = yield* stack.deploy(program("canary", { traffic: 50, alias: "canary" }));
+          expect(worker.urls).toContainEqual(
+            expect.stringMatching(new RegExp(`^https://canary-${worker.workerName}\\.`)),
+          );
+
+          const detected = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+          expect(detected.resources.RolloutPreviewWorker?.action).toBe("unchanged");
+          expect(detected.resources.RolloutPreviewWorker?.attr.urls).toEqual(worker.urls);
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+
     // Dev mode: no workers.dev or custom-domain URLs exist, so the local dev
     // server's localhost URL leads `allUrls` and is the `url`.
     devTest.provider(

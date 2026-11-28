@@ -24,7 +24,7 @@ const bank = toCli(CustomerApi, {
   // Only these calls get a subcommand.
   expose: ["DepositMoney", "WithdrawMoney", "AccountLedger", "AccountSummary.get", "Statement.list"],
   // The session middleware runs on the server; the CLI sends its token.
-  headers: Config.redacted("BANK_TOKEN").pipe(
+  headers: Config.Redacted("BANK_TOKEN").pipe(
     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
   ),
 });

@@ -96,6 +96,34 @@ Story.then(account, new AccountFrozen({ reason: "fraud risk 0.95", by: system("F
 
 The call to the fraud service waits until the story answers it. `call` checks what the policy asked, and `succeed` gives the answer. Answer `0.1` instead, with no freeze after it, and you have the story for a withdrawal that isn't risky. Every answer the outside world could give is one line away. See [External System](/domain/external-system#test-external-system-calls).
 
+## Rewrite, compact and start a saga
+
+A [rewrite](/domain/rewrite) and a [compaction](/domain/compaction) are steps too. `rewrite` waits until every view, projection and stream reflects it, and the `then` after a `compact` sees the roll-up.
+
+```typescript title="packages/domain/test/forgetOwner.test.ts"
+Story.given(account, new AccountOpened({ customerId: sam, owner: "sam" })),
+Story.rewrite(account, new ForgetOwner({ customerId: sam })),
+Story.view(AccountSummary, account, { owner: "" }),
+```
+
+A saga that no event of the model starts is started by a step, as your own code would start it.
+
+```typescript title="packages/domain/test/erasure.test.ts"
+Story.start(EraseCustomer, sam, {}),
+Story.saga(EraseCustomer, sam, { _tag: "Completed", result: undefined }),
+```
+
+## Expect a sealed value, and shred a key
+
+A story seals with a test Vault that encrypts nothing, so a [sealed field](/domain/crypto-shredding) always holds the same box for the same value. `Domain.sealedInTest` builds the value to expect, and `Story.shred` shreds a subject's key.
+
+```typescript title="packages/domain/test/Address.test.ts"
+Story.when(new SetAddress({ customerId: sam, address: Address.plain(sam, "1 Main St") })),
+Story.then(contact, new AddressSet({ address: Domain.sealedInTest(Address, sam, "1 Main St") })),
+Story.shred(sam),
+Story.query(CustomerAddress, { customerId: sam }, { address: null }),
+```
+
 ## Run every order of concurrent work
 
 Two reactions to one command can write the same stream at once: a policy and a saga's next step, say. Neither waits for the other, so on a real platform their events commit in either order.

@@ -295,11 +295,9 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
         const created = yield* integrations
           .createProjectsLocationsProductsSfdcInstancesSfdcChannels({
             parent: sfdcInstance,
-            body: {
-              displayName,
-              description,
-              channelTopic: news.channelTopic,
-            },
+            displayName,
+            description,
+            channelTopic: news.channelTopic,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(sfdcInstance, id)));
         current = created ?? (yield* findOwned(sfdcInstance, id));
@@ -324,12 +322,9 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
             descriptionChanged ? "description" : undefined,
             topicChanged ? "channel_topic" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            description,
-            channelTopic: news.channelTopic,
-          },
+          displayName,
+          description,
+          channelTopic: news.channelTopic,
         });
       }
 

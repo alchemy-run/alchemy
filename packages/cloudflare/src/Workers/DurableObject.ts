@@ -1,4 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
+import { framed, HOST } from "alchemy/CapabilityGraph";
 import type { Dependencies } from "alchemy/Dependencies";
 import type { HttpEffect } from "alchemy/Http";
 import type { Input } from "alchemy/Input";
@@ -421,7 +422,9 @@ export interface DurableObjectClass extends Effect.Effect<DurableObject, never, 
     ): Effect.Effect<
       DurableObject<Self>,
       never,
-      Worker | Extract<Req, Container.Application<any>>
+      // Only the Containers the object uses: what a Durable Object has
+      // anyway (its Worker among them) is left out before looking for them.
+      Worker | Extract<Exclude<Req, DurableObjectServices>, Container.Application<any>>
     > & {
       new (_: never): Shape;
     };
@@ -1536,7 +1539,11 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // and also return it so a `Layer.effect(tag, make(impl))` Layer
       // resolves the tag to a concrete namespace value.
       const self = yield* binding(undefined, classProps?.transferredFrom, classProps?.errors);
-      const constructor = impl.pipe(Effect.provideService(DurableObjectScope, self as any));
+      // Built as a host, so a plan lists what it runs (its processes) under it.
+      const constructor = framed(
+        HOST,
+        namespace,
+      )(impl).pipe(Effect.provideService(DurableObjectScope, self as any));
       // Exports are keyed by physical class name: the generated entry emits
       // `export class <key>` and the bridge resolves its export by that key.
       yield* exportDurableObjectClass(

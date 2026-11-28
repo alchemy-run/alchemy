@@ -1,10 +1,15 @@
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import * as Exit from "effect/Exit";
 import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
 import type { Pipeable } from "effect/Pipeable";
 import type * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
+import { ArtifactStore } from "./Artifacts.ts";
 import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
 import { RuntimeContext, sanitizeKey, secretInSandbox } from "./RuntimeContext.ts";
@@ -342,6 +347,51 @@ export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<B, Req
     return `${this.expr[inspect]()}.mapEffect(${this.f.toString()})`;
   }
 }
+
+/**
+ * The runs of each `mapEffect` in one deploy, by the store the deploy owns:
+ * a later deploy has a store of its own, so it runs every effect again.
+ */
+const effectRuns = new WeakMap<
+  object,
+  WeakMap<object, { input: unknown; result: Effect.Effect<any> }[]>
+>();
+
+/**
+ * Run a `mapEffect`'s effect on `input`, once per deploy for each input.
+ * Every Output derived from it (two props of one resource, or two
+ * resources) resolves it on its own, in the plan and again in apply, and
+ * the plan resolves props at the same time: they all share one run. A
+ * changed input (an upstream updated by apply) runs it again. A failed run
+ * is not kept, so a later read retries it.
+ */
+export const runEffectExpr = <A, B, Req, Req2>(
+  expr: EffectExpr<A, B, Req, Req2>,
+  input: A,
+): Effect.Effect<B, never, Req2> =>
+  Effect.serviceOption(ArtifactStore).pipe(
+    Effect.flatMap((store) => {
+      if (Option.isNone(store)) return expr.f(input);
+      let byExpr = effectRuns.get(store.value);
+      if (byExpr === undefined) effectRuns.set(store.value, (byExpr = new WeakMap()));
+      let runs = byExpr.get(expr);
+      if (runs === undefined) byExpr.set(expr, (runs = []));
+      const known = runs.find((run) => Equal.equals(run.input, input));
+      if (known !== undefined) return known.result as Effect.Effect<B>;
+      const deferred = Deferred.makeUnsafe<B>();
+      const run = { input, result: Deferred.await(deferred) };
+      runs.push(run);
+      return expr.f(input).pipe(
+        Effect.onExit((exit) =>
+          Effect.suspend(() => {
+            if (Exit.isSuccess(exit)) run.result = Effect.succeed(exit.value);
+            else runs.splice(runs.indexOf(run), 1);
+            return Deferred.done(deferred, exit);
+          }),
+        ),
+      );
+    }),
+  );
 
 export const isLookupExpr = <A = any>(node: any): node is LookupExpr<A> =>
   exprKind(node) === "EffectExpr" && (node?.[ExprSymbol] ?? node)?.lookupType !== undefined;
@@ -759,8 +809,7 @@ export const evaluate: <A, Req = never>(
       } else if (isApplyExpr(expr)) {
         return expr.f(yield* evaluate(expr.expr, upstream));
       } else if (isEffectExpr(expr)) {
-        // TODO(sam): the same effect shoudl be memoized so that it's not run multiple times
-        return yield* expr.f(yield* evaluate(expr.expr, upstream));
+        return yield* runEffectExpr(expr, yield* evaluate(expr.expr, upstream));
       } else if (isFlatMapExpr(expr)) {
         // Resolve the source, hand it to `f` to produce a new Output, then
         // recursively evaluate that Output (flattening one level).

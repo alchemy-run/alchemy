@@ -88,7 +88,6 @@ export * as EntityResolution from "./EntityResolution/index.ts";
 export * as EventBridge from "./EventBridge/index.ts";
 export * as FIS from "./FIS/index.ts";
 export * as FMS from "./FMS/index.ts";
-export * as FinSpace from "./FinSpace/index.ts";
 export * as Firehose from "./Firehose/index.ts";
 export * as FSx from "./FSx/index.ts";
 export * as Forecast from "./Forecast/index.ts";

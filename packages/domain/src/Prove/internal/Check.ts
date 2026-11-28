@@ -1,8 +1,15 @@
+import * as BigDecimal from "effect/BigDecimal";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HashMap from "effect/HashMap";
+import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
+import * as Rational from "effect/Rational";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "../../Aggregate.ts";
 import type * as Decision from "../../Decision.ts";
@@ -18,7 +25,8 @@ export interface Counterexample {
   readonly command: unknown;
   /** What each request context the command read held. */
   readonly context: ReadonlyArray<{ readonly name: string; readonly value: unknown }>;
-  readonly now: DateTime.Utc;
+  /** Absent where no command ran: a roll-up is made at no time. */
+  readonly now?: DateTime.Utc;
   readonly events: ReadonlyArray<unknown>;
   readonly after: unknown;
 }
@@ -55,6 +63,49 @@ const functionOf = (application: { readonly term: string; readonly argument: str
   application.term.slice(1, application.term.length - application.argument.length - 2);
 
 /**
+ * Whether some inputs take this path and make `condition` true. The prover
+ * asks before it takes a side of a test: a side no inputs reach is not a
+ * path. A question the solver cannot answer counts as one they reach, so a
+ * path is only ever left out when it cannot occur.
+ */
+export const feasible = (solver: Smt.Solver) => {
+  // A path is run again for each path that starts as it does: each question is asked once.
+  // Paths share how they start, so a question is known by a number for the one before it and its last line.
+  const lines = new Map<string, number>();
+  const questions = new Map<string, number>();
+  const numbered = (known: Map<string, number>, text: string): number => {
+    const found = known.get(text);
+    if (found !== undefined) return found;
+    known.set(text, known.size + 1);
+    return known.size;
+  };
+  const answers = new Map<number, boolean>();
+  return (run: Run, condition: string): Effect.Effect<boolean> => {
+    const declarations = [...run.declarations.values()];
+    const assertions = [...run.conditions, condition, ...safe(run, declarations)];
+    const question = [...declarations, "", ...assertions].reduce(
+      (before, line) => numbered(questions, `${before} ${numbered(lines, line)}`),
+      0,
+    );
+    const known = answers.get(question);
+    if (known !== undefined) return Effect.succeed(known);
+    return solver.check({ declarations, assertions, values: [] }).pipe(
+      Effect.map((answer) => answer._tag !== "Unsat"),
+      // The checks of the path say what went wrong with the solver.
+      Effect.orElseSucceed(() => true),
+      Effect.tap((answer) => Effect.sync(() => answers.set(question, answer))),
+    );
+  };
+};
+
+/** A number in JavaScript is exact only this far: what holds of each whole number an input holds. */
+const safe = (run: Run, declarations: ReadonlyArray<string>): ReadonlyArray<string> =>
+  declarations.flatMap((declaration) => {
+    const match = /^\(declare-const (.+) Int\)$/.exec(declaration);
+    return match && !run.bigs.has(match[1]!) ? [`(<= (- ${SAFE}) ${match[1]} ${SAFE})`] : [];
+  });
+
+/**
  * Ask the solver for inputs on this path that make `condition` false: with an
  * invariant, inputs that break it; with `"false"`, any inputs that take the path. A function
  * the prover knows only by its implementation starts free; each answer that
@@ -68,16 +119,29 @@ export const solve = Effect.fn(function* (
   reads: ReadonlyArray<Smt.Term> = [],
 ) {
   const applications = [...run.applications.values()];
-  const named = reads.map((term, index) => ({ term, name: Smt.symbol(`$out.${index}`) }));
+  // What each tested result of an opaque function was called on: the real function is run on it.
+  const tests = [...run.tests.values()].map((test) => {
+    const terms = new Map<string, Smt.Term>();
+    computed(test.applied, terms, run.lists);
+    return { ...test, terms: [...terms.values()] };
+  });
+  const wanted = new Map<string, Smt.Term>(reads.map((term) => [term.text, term]));
+  for (const test of tests)
+    for (const term of test.terms)
+      if (!run.declarations.has(term.text)) wanted.set(term.text, term);
+  // What an opaque function is applied to may be a formula: it is read back by a name, as an output is.
+  for (const application of applications)
+    if (!run.declarations.has(application.argument))
+      wanted.set(application.argument, { sort: application.sort, text: application.argument });
+  const named = [...wanted.values()].map((term, index) => ({
+    term,
+    name: Smt.symbol(`$out.${index}`),
+  }));
   const declarations = [...run.declarations.values()];
   const base = [
     ...run.conditions,
     Smt.not(condition),
-    // A number in JavaScript is exact only this far.
-    ...declarations.flatMap((declaration) => {
-      const match = /^\(declare-const (.+) Int\)$/.exec(declaration);
-      return match && !run.bigs.has(match[1]!) ? [`(<= (- ${SAFE}) ${match[1]} ${SAFE})`] : [];
-    }),
+    ...safe(run, declarations),
     ...named.map((read) => `(= ${read.name} ${read.term.text})`),
   ];
   // Equal results of a function that never repeats one mean equal arguments.
@@ -87,7 +151,9 @@ export const solve = Effect.fn(function* (
         base.push(`(=> (= ${a.term} ${b.term}) (= ${a.argument} ${b.argument}))`);
   const values = [
     ...run.constants,
-    ...applications.flatMap((a) => [a.term, a.argument]),
+    ...applications.flatMap((a) =>
+      run.declarations.has(a.argument) ? [a.term, a.argument] : [a.term],
+    ),
     ...named.map((read) => read.name),
   ];
   const facts: Array<string> = [];
@@ -103,30 +169,76 @@ export const solve = Effect.fn(function* (
     });
     if (answer._tag !== "Sat") return answer;
     const model = new Map<string, number | bigint | string | boolean>();
+    const fractions = new Map<string, Smt.Fraction>();
     values.forEach((text, index) => {
       const value = answer.values[index];
       if (value !== undefined) model.set(text, value);
+      const fraction = answer.fractions[index];
+      if (fraction) fractions.set(text, fraction);
     });
+    Smt.exact.set(model, fractions);
     // A term read back is known by its own text, as an input is.
     for (const read of named) {
       const value = model.get(read.name);
       if (value !== undefined) model.set(read.term.text, value);
+      const fraction = fractions.get(read.name);
+      if (fraction) fractions.set(read.term.text, fraction);
     }
     return { _tag: "Sat", model } as const;
   });
 
-  /** What the real functions say at the arguments the model chose. */
-  const real = (model: Model) =>
-    applications.flatMap((application) => {
+  /**
+   * What the real functions say at the arguments the model chose. `pin` holds
+   * the model to those arguments and the real result, and `fact` is what the
+   * real function showed, true of every model.
+   */
+  const real = (
+    model: Model,
+  ): ReadonlyArray<{
+    readonly agrees: boolean;
+    readonly pin: ReadonlyArray<string>;
+    readonly fact: string;
+  }> => [
+    ...applications.flatMap((application) => {
       const argument = model.get(application.argument);
       if (typeof argument !== "number") return [];
       const value = application.real(argument);
       const at = application.sort === "Real" ? Smt.real(argument) : Smt.int(argument);
       const point = `(= (${functionOf(application)} ${at.text}) ${Smt.string(value).text})`;
       return [
-        { application, argument, value, point, agrees: model.get(application.term) === value },
+        {
+          agrees: model.get(application.term) === value,
+          pin: [`(= ${application.argument} ${at.text})`, point],
+          fact: point,
+        },
       ];
-    });
+    }),
+    // Whether an opaque function's result is truthy: the real function says, on these arguments.
+    ...tests.flatMap((test) => {
+      const built = Symbolic.concretize(test.applied, model, run.lists);
+      if (!("value" in built)) return [];
+      const observed = test.read(built.value);
+      // The result is not of the kind the code took it for: the real code is what says so.
+      if (observed === undefined) return [];
+      const truthy = literalOf(test.term.sort, observed);
+      const at = test.terms.flatMap((term) => {
+        const value = model.get(term.text);
+        return value === undefined ? [] : [`(= ${term.text} ${literalOf(term.sort, value)})`];
+      });
+      if (at.length < test.terms.length) return [];
+      const result = `(= ${test.term.text} ${truthy})`;
+      return [
+        {
+          agrees: model.get(test.term.text) === observed,
+          pin: [...at, result],
+          fact:
+            at.length === 0
+              ? result
+              : `(=> ${at.length === 1 ? at[0]! : `(and ${at.join(" ")})`} ${result})`,
+        },
+      ];
+    }),
+  ];
 
   for (let round = 0; round < 8; round++) {
     const answer = yield* ask([]);
@@ -134,18 +246,18 @@ export const solve = Effect.fn(function* (
     const points = real(answer.model);
     if (points.every((p) => p.agrees)) return answer;
     // Same arguments, with the functions' real values: often still a counterexample.
-    const pinned = yield* ask(
-      points.flatMap((p) => [
-        `(= ${p.application.argument} ${(p.application.sort === "Real" ? Smt.real(p.argument) : Smt.int(p.argument)).text})`,
-        p.point,
-      ]),
-    );
+    const pinned = yield* ask(points.flatMap((p) => p.pin));
     if (pinned._tag === "Sat" && real(pinned.model).every((p) => p.agrees)) return pinned;
-    facts.push(...points.map((p) => p.point));
+    facts.push(...points.map((p) => p.fact));
   }
   return {
     _tag: "Unknown",
-    reason: `every counterexample the solver found needs ${[...new Set(applications.map(functionOf))].join(", ")} to return something it does not`,
+    reason: `every counterexample the solver found needs ${[
+      ...new Set([
+        ...applications.map(functionOf),
+        ...tests.map((test) => (test.applied._tag === "Applied" ? test.applied.name : "")),
+      ]),
+    ].join(", ")} to return something it does not`,
   } as const;
 });
 
@@ -290,12 +402,16 @@ const replay = Effect.fn(function* (
     read.push({ name: key.slice(key.lastIndexOf("/") + 1), value });
   }
   const now = (yield* build("now", inputs.now)) as DateTime.Utc;
-  const prediction = Aggregate.predict(aggregate, state, command, {
-    now,
-    version: (yield* build("version", inputs.version)) as number,
-    commandId: (yield* build("commandId", inputs.commandId)) as string,
-    context: context as Context.Context<never>,
-  });
+  const version = (yield* build("version", inputs.version)) as number;
+  const commandId = (yield* build("commandId", inputs.commandId)) as string;
+  const prediction = yield* attempt(`${tag} threw`, () =>
+    Aggregate.predict(aggregate, state, command, {
+      now,
+      version,
+      commandId,
+      context: context as Context.Context<never>,
+    }),
+  );
   if (prediction._tag === "Rejected")
     return unconfirmed(
       `the solver found ${Symbolic.show(command)} on ${Symbolic.show(state)}, but the real code rejects it with ${Symbolic.show(prediction.rejection)}`,
@@ -332,12 +448,26 @@ const replay = Effect.fn(function* (
 });
 
 /** A value as text two values share only when they are the same data. */
-const canon = (value: unknown): string => {
+export const canon = (value: unknown): string => {
   if (typeof value === "bigint") return `${value}n`;
   if (typeof value === "string") return JSON.stringify(value);
   if (value === null || typeof value !== "object") return String(value);
   if (DateTime.isDateTime(value)) return `@${DateTime.toEpochMillis(value)}`;
+  if (Duration.isDuration(value)) return `~${Duration.toMillis(value)}`;
   if (Option.isOption(value)) return Option.isSome(value) ? `some(${canon(value.value)})` : "none";
+  if (Result.isResult(value))
+    return Result.isSuccess(value) ? `ok(${canon(value.success)})` : `err(${canon(value.failure)})`;
+  if (BigDecimal.isBigDecimal(value))
+    return `#${value.pipe(BigDecimal.normalize, BigDecimal.format)}`;
+  if (Rational.isRational(value)) return `%${Rational.format(value)}`;
+  if (Redacted.isRedacted(value)) return `hidden(${value.pipe(Redacted.value, canon)})`;
+  // A hash set and a hash map are what they hold, in whatever order.
+  if (HashSet.isHashSet(value)) return `set(${[...value].map(canon).sort().join(",")})`;
+  if (HashMap.isHashMap(value))
+    return `map(${[...value]
+      .map(([key, held]) => `${canon(key)}=>${canon(held)}`)
+      .sort()
+      .join(",")})`;
   if (Array.isArray(value)) return `[${value.map(canon).join(",")}]`;
   return `{${Object.entries(value)
     .filter(([, field]) => field !== undefined)
@@ -358,8 +488,23 @@ const carries = (real: unknown, read: unknown): boolean =>
   );
 
 /** Every term a value is made of that is not an input: what the solver has to work out. */
-const computed = (value: V, into: Map<string, Smt.Term>): void => {
+const computed = (
+  value: V,
+  into: Map<string, Smt.Term>,
+  /** What the path chose for each field the code read. */
+  lists?: ReadonlyMap<string, V>,
+): void => {
   switch (value._tag) {
+    case "Pending": {
+      const chosen = lists?.get(`?${value.name}`);
+      if (chosen) computed(chosen, into, lists);
+      const held = chosen ? undefined : Symbolic.keptOf(value, lists);
+      if (held) {
+        into.set(held.present.text, held.present);
+        computed(held.value, into, lists);
+      }
+      return;
+    }
     case "Term":
       into.set(value.term.text, value.term);
       return;
@@ -367,24 +512,41 @@ const computed = (value: V, into: Map<string, Smt.Term>): void => {
       into.set(value.millis.text, value.millis);
       return;
     case "Obj":
-      for (const field of Object.values(value.fields)) computed(field, into);
+      for (const field of Object.values(value.fields)) computed(field, into, lists);
       return;
     case "Arr":
-      for (const item of value.items) computed(item, into);
+      for (const item of value.items) computed(item, into, lists);
+      return;
+    case "Applied":
+      for (const argument of value.args) computed(argument, into, lists);
       return;
     default:
       return;
   }
 };
 
+/** A value the solver found, as the solver writes it. */
+const literalOf = (sort: Smt.Sort, value: number | bigint | string | boolean): string =>
+  typeof value === "string"
+    ? Smt.string(value).text
+    : typeof value === "boolean"
+      ? Smt.bool(value).text
+      : typeof value === "bigint"
+        ? Smt.big(value).text
+        : sort === "Real"
+          ? Smt.real(value).text
+          : Smt.int(value).text;
+
 /** What comparing a path with the real code gave. */
 export type Agreement =
   | { readonly _tag: "Agreed" }
   /**
    * Nothing was compared. No inputs take the path, or with `taken`, the ones
-   * the solver found cannot be built as real values or run.
+   * the solver found cannot be built as real values or run. With `order`,
+   * the path takes the items of a hash set or a hash map in an order the real
+   * one does not give for the items the solver found.
    */
-  | { readonly _tag: "Skipped"; readonly taken: boolean }
+  | { readonly _tag: "Skipped"; readonly taken: boolean; readonly order?: boolean }
   | { readonly _tag: "Differs"; readonly reason: string };
 
 /** What the prover read a command to do on one path. */
@@ -408,10 +570,10 @@ export const agree = Effect.fn(function* (
 ) {
   const skipped: Agreement = { _tag: "Skipped", taken: true };
   const outputs = new Map<string, Smt.Term>();
-  if (read._tag === "Rejected") computed(read.rejection, outputs);
+  if (read._tag === "Rejected") computed(read.rejection, outputs, run.lists);
   if (read._tag === "Changed") {
-    computed(read.after, outputs);
-    for (const event of read.events) computed(event, outputs);
+    computed(read.after, outputs, run.lists);
+    for (const event of read.events) computed(event, outputs, run.lists);
   }
   const answer = yield* solve(
     solver,
@@ -425,6 +587,24 @@ export const agree = Effect.fn(function* (
     const built = Symbolic.concretize(value, model, run.lists);
     return "value" in built ? Effect.succeed(built.value) : Effect.fail(skipped);
   };
+  /**
+   * Whether the real hash sets and hash maps give their items in the order
+   * this path read them in. Where one does not, the real code took another
+   * path, which the prover read too.
+   */
+  const ordered = Effect.gen(function* () {
+    for (const order of run.orders) {
+      const read: Array<unknown> = [];
+      for (const item of order.items) read.push(yield* build(item));
+      const real =
+        order.kind === "HashSet"
+          ? [...HashSet.fromIterable(read)]
+          : [...HashMap.fromIterable(read as ReadonlyArray<readonly [unknown, unknown]>)];
+      if (real.length !== read.length || real.some((item, i) => canon(item) !== canon(read[i])))
+        return false;
+    }
+    return true;
+  });
   const tried = Effect.gen(function* () {
     const definition = aggregate.definition;
     const state = yield* build(inputs.state);
@@ -449,11 +629,22 @@ export const agree = Effect.fn(function* (
         entry.tag as Context.Key<unknown, unknown>,
         yield* build(entry.value),
       );
-    const prediction = Aggregate.predict(aggregate, state, command, {
-      now: (yield* build(inputs.now)) as DateTime.Utc,
-      version: (yield* build(inputs.version)) as number,
-      commandId: (yield* build(inputs.commandId)) as string,
-      context: context as Context.Context<never>,
+    const now = (yield* build(inputs.now)) as DateTime.Utc;
+    const version = (yield* build(inputs.version)) as number;
+    const commandId = (yield* build(inputs.commandId)) as string;
+    // Real code that throws where the prover read none of that is a difference, not a crash.
+    const prediction = yield* Effect.try({
+      try: () =>
+        Aggregate.predict(aggregate, state, command, {
+          now,
+          version,
+          commandId,
+          context: context as Context.Context<never>,
+        }),
+      catch: (cause): Agreement => ({
+        _tag: "Differs",
+        reason: `the prover read ${Symbolic.show(command)} on ${Symbolic.show(state)}, and the real code threw: ${String(cause)}`,
+      }),
     });
     // A command that fails is one whose fields a schema the prover does not read refuses.
     if (prediction._tag === "Unpredictable") return skipped;
@@ -490,7 +681,11 @@ export const agree = Effect.fn(function* (
           `recording ${events.map(Symbolic.show).join(", ")} and leaving ${Symbolic.show(after)}`,
         );
   });
-  return yield* tried.pipe(Effect.catch((agreement) => Effect.succeed(agreement)));
+  const agreement = yield* tried.pipe(Effect.catch((agreement) => Effect.succeed(agreement)));
+  if (agreement._tag !== "Differs") return agreement;
+  return (yield* ordered.pipe(Effect.orElseSucceed(() => true)))
+    ? agreement
+    : ({ _tag: "Skipped", taken: true, order: true } as const);
 });
 
 /**

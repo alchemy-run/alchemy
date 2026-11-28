@@ -15,6 +15,14 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
+import {
+  CapabilityGraph,
+  makeCapabilityGraph,
+  observeLayerBuilds,
+  observeLookups,
+  POLICY_KEY,
+  policyOf,
+} from "./CapabilityGraph.ts";
 import type { Dependencies } from "./Dependencies.ts";
 import { toFqn } from "./FQN.ts";
 import type { HttpEffect } from "./Http.ts";
@@ -24,6 +32,7 @@ import { CurrentNamespace } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
+import { omitRenamePolicy } from "./Rename.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
 import { ServerHost, type ProcessContext } from "./Runtime/Process.ts";
@@ -34,7 +43,7 @@ import {
   type BaseRuntimeContext,
 } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
-import type { Stack, StackServices } from "./Stack.ts";
+import { Stack, type StackServices } from "./Stack.ts";
 import { StackContext } from "./StackContext.ts";
 import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
@@ -271,6 +280,20 @@ export interface Platform<
     PlatformIdentity<Id>;
 }
 
+/** A graph, and how a runtime's build is observed into it. */
+const makeRecorder = () => {
+  const graph = makeCapabilityGraph();
+  const memoMap = observeLayerBuilds(Layer.makeMemoMapUnsafe(), graph);
+  return {
+    graph,
+    observe: <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+      observeLookups(graph)(effect).pipe(
+        Effect.provideService(CapabilityGraph, graph),
+        Effect.provideService(Layer.CurrentMemoMap, memoMap),
+      ),
+  };
+};
+
 export const Platform = <
   R extends ResourceLike<
     string,
@@ -439,7 +462,9 @@ export const Platform = <
                     // the plain props object — the second call site (in
                     // `cls.make`) already does this.
                     Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
-                    (resolved) => hooks.onCreate!(resource as R, resolved),
+                    // Resources the hook declares are not the renamed
+                    // resource (#2219).
+                    (resolved) => omitRenamePolicy(hooks.onCreate!(resource as R, resolved)),
                   )
                 : Effect.void,
             ),
@@ -490,6 +515,14 @@ export const Platform = <
       static readonly Platform = Context.Service<Platform, Platform>(`Platform<${type}<${id}>>`);
       static of = (shape: any) => shape;
       static make = (props: Props, impl: Impl) => {
+        // What this runtime's processes and tools reach, recorded while its
+        // Layers build (CapabilityGraph.ts). Every Layer built through this
+        // memo map, `Effect.provide` inside the program included, gets a
+        // frame; every service the program looks up and every binding it
+        // binds lands on the frame current at that moment.
+        // A deployed runtime records nothing: the bundler folds the flag, and
+        // the recorder is left out of the bundle.
+        const recorder = globalThis.__ALCHEMY_RUNTIME__ ? undefined : makeRecorder();
         // build the Layer once for the root Self
         const SelfLayer = Layer.effect(
           Self,
@@ -518,18 +551,28 @@ export const Platform = <
               // SIGTERM window). Request-coupled cleanup belongs in
               // handlers, where the bridge provides a per-event scope.
               const buildScope = yield* Effect.scope;
+              // Only a plan records: at runtime the same build runs unobserved.
+              const recording =
+                recorder !== undefined && (yield* ALCHEMY_PHASE) === "plan" ? recorder : undefined;
+              const recorded = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+                recording === undefined ? effect : recording.observe(effect);
               const instance = Object.assign(
                 yield* resource(id, props as any).pipe(
                   Effect.flatMap(
                     (resource) =>
-                      hooks.onCreate?.(resource, props).pipe(Effect.map(() => resource)) ??
-                      Effect.succeed(resource),
+                      hooks.onCreate?.(resource, props).pipe(
+                        omitRenamePolicy,
+                        Effect.map(() => resource),
+                      ) ?? Effect.succeed(resource),
                   ),
                 ),
                 runtimeContext,
               );
 
+              // Resources init declares are not the renamed resource (#2219).
               yield* impl.pipe(
+                recorded,
+                omitRenamePolicy,
                 Effect.flatMap((impl) => {
                   // An `alwaysServe` runtime serves routes of its own, so it
                   // boots even when the program returns nothing.
@@ -650,6 +693,20 @@ export const Platform = <
                   ),
                 ),
               );
+
+              if (recording !== undefined) {
+                const reached = recording.graph.describe();
+                if (reached.length > 0) {
+                  const stack = yield* Stack;
+                  (stack.capabilities ??= {})[instance.FQN] = reached;
+                  // The same list is the limit at runtime: a tool that uses
+                  // a binding not listed under it dies (CapabilityGraph.ts).
+                  yield* runtimeContext.set(
+                    POLICY_KEY,
+                    Output.literal(JSON.stringify(policyOf(reached))),
+                  );
+                }
+              }
 
               instance.Props = {
                 ...props,
