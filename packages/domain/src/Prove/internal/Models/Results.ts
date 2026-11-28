@@ -237,7 +237,8 @@ export const make = (kit: Kit) => {
       value && value._tag !== "Null" && value._tag !== "Undef"
         ? Effect.succeed(Brands.success(value))
         : onNullish
-          ? Effect.map(host.call(onNullish, [value ?? Value.undef], site), Brands.failure)
+          ? // `dual` gives the value first: it is there.
+            Effect.map(host.call(onNullish, [value!], site), Brands.failure)
           : wrongArguments(site, "Result.fromNullishOr"),
     ),
     "effect/Result:filterOrFail": onResult(
