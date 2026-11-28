@@ -45,6 +45,30 @@ Provide `Live` to the Worker, and register `DomainCloudflare.providers()` in the
 
 More: [Host the process](https://alchemy.run/ai/hosting#host-the-process), [One object for each session](https://alchemy.run/ai/hosting#one-object-for-each-session).
 
+## Host it on Rivet or Effect Cluster
+
+The process's Layer does not change. Swap the host, with the options the model's platform Layer takes there:
+
+```typescript
+// Rivet: @alchemy.run/ai/Rivet, beside DomainRivet.layerDurableObjects
+const TriageSessions = AIRivet.layerDurableObjects(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+  { name: "Sessions", main: import.meta.url, handler: "Live", pool: Default },
+);
+
+// Effect Cluster: @alchemy.run/ai/EffectCluster, beside DomainCluster.layerEntities
+const TriageSessions = AICluster.layerEntities(
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+  { name: "Sessions", main: import.meta.url, handler: "Live", pool: Default },
+);
+```
+
+`handler` is the export of `main` that holds the host, which the pool's nodes load. Give the model and the sessions different `name`s. Pi and OpenCode have a storage Layer for a Cloudflare Durable Object only: on Rivet and Effect Cluster, provide a harness of your own.
+
+All three hosts are the platform a Domain model runs on, so `@alchemy.run/domain` is installed, and on Cloudflare the Stack registers `DomainCloudflare.providers()`.
+
+More: [Host it on Rivet or Effect Cluster](https://alchemy.run/ai/hosting#host-it-on-rivet-or-effect-cluster).
+
 ## Reach a session
 
 Anything given the hosted process holds the client: a policy, a saga, a Worker. Each call goes to the session's object.

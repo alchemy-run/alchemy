@@ -9239,12 +9239,21 @@ importers:
       '@alchemy.run/daytona':
         specifier: workspace:*
         version: link:../daytona
+      '@alchemy.run/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@alchemy.run/e2b':
         specifier: workspace:*
         version: link:../e2b
+      '@alchemy.run/effect-cluster':
+        specifier: workspace:*
+        version: link:../effect-cluster
       '@alchemy.run/modal':
         specifier: workspace:*
         version: link:../modal
+      '@alchemy.run/rivet':
+        specifier: workspace:*
+        version: link:../rivet
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

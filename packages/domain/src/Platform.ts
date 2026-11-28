@@ -9,6 +9,7 @@ import type { Plan } from "./Backfill.ts";
 import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
 import type * as Decision from "./Decision.ts";
 import { ModelHostedTwice } from "./DefinitionError.ts";
+import type { Namespace, ObjectImpl } from "./DurableObjects.ts";
 import { DefinitionError } from "./internal.ts";
 import type { KeyStore } from "./KeyStore.ts";
 import type * as Policy from "./Policy.ts";
@@ -1633,6 +1634,17 @@ export class Platform extends Context.Service<
      * model's storage. Called while a Layer is built. See `Domain.HostKeyStore`.
      */
     readonly keys: Effect.Effect<KeyStore["Service"]>;
+    /**
+     * Declare a class of the host's objects that belongs to no model: one
+     * instance per name, each built from `impl`, with storage, an alarm and
+     * a place to run of its own. `owner` keeps its classes apart from every
+     * model's (`AI.TriageProcess`). Called while a Layer is built.
+     *
+     * This is what hosts something beside a model on the same platform, as
+     * `@alchemy.run/ai` hosts each session of a process. A platform that
+     * keeps everything in one process has none.
+     */
+    readonly objects?: (owner: string, name: string, impl: ObjectImpl) => Effect.Effect<Namespace>;
   }
 >()("alchemy/Domain/Platform") {}
 

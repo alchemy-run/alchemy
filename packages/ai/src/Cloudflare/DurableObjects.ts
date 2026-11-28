@@ -3,53 +3,11 @@
  *
  * @module
  */
-import { DurableObjectCallbacks } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
-import {
-  DurableObject,
-  type InlineDurableObjectProps,
-} from "@alchemy.run/cloudflare/Workers/DurableObject";
-import type { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import type { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import type * as Scope from "effect/Scope";
-import * as Host from "../Host.ts";
-
-/** What one session's Durable Object answers. */
-interface SessionObject {
-  readonly call: (
-    key: string,
-    method: string,
-    args: ReadonlyArray<unknown>,
-  ) => Effect.Effect<unknown, unknown, RuntimeContext>;
-}
-
-/**
- * Declare a Durable Object class on the host Worker from inside a Layer.
- * The inline form of `Cloudflare.DurableObject` is typed for single-stage
- * implementations, so it is re-typed here for the two-stage form it runs.
- */
-const declare = DurableObject as unknown as (
-  name: string,
-  props: InlineDurableObjectProps,
-  impl: Effect.Effect<
-    Effect.Effect<SessionObject, never, DurableObjectState | RuntimeContext | Scope.Scope>,
-    never,
-    DurableObjectState
-  >,
-) => Effect.Effect<{ readonly getByName: (name: string) => SessionObject }, never, Worker>;
-
-/**
- * How long to keep retrying a call that failed in transit: an object being
- * reset reports an opaque error, and for a while after a deploy some
- * objects still run the previous code. About a minute in total.
- */
-const TRANSIT_RETRY = {
-  schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
-  times: 35,
-} as const;
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Layer from "effect/Layer";
+import { layerObjects } from "../internal/hosted.ts";
 
 /**
  * Host a process on Cloudflare Durable Objects: each session in an object
@@ -60,9 +18,15 @@ const TRANSIT_RETRY = {
  * to it.
  *
  * The Worker that provides it declares one Durable Object class per
- * process, `<Name>Process`. Each object builds the Layer for itself, so a
+ * process, `AI.<Name>Process`. Each object builds the Layer for itself, so a
  * harness opens on that object's storage and alarm, and a session carries
  * on after its object is evicted.
+ *
+ * The objects are hosted by `DomainCloudflare.layerDurableObjects()`, the
+ * platform a Domain model runs on, so the Stack registers
+ * `DomainCloudflare.providers()` beside `Cloudflare.providers()`. To move
+ * the sessions, use `AIRivet.layerDurableObjects` or
+ * `AICluster.layerEntities` with the same Layer.
  *
  * The Layer may need the process it provides, as a Domain model whose
  * policy holds it does: this provides it, inside each object and out.
@@ -124,27 +88,9 @@ const TRANSIT_RETRY = {
  */
 export const layerDurableObjects = <A, E, R>(
   layer: Layer.Layer<A, E, R>,
-): Layer.Layer<A, E, Exclude<R, A> | Worker> =>
-  Host.make(layer, (name, instance) =>
-    Effect.map(
-      declare(
-        `${name}Process`.replace(/[^A-Za-z0-9_]/g, "_"),
-        {},
-        Effect.succeed(
-          // A harness schedules its wake-ups on the object's alarm.
-          instance({ apart: true }).pipe(Effect.provide(DurableObjectCallbacks)),
-        ),
-      ),
-      (namespace): Host.Instances => ({
-        call: (key, method, args) =>
-          namespace
-            .getByName(key)
-            .call(key, method, args)
-            .pipe(
-              Effect.catchDefect((defect) => Effect.fail(defect)),
-              Effect.retry(TRANSIT_RETRY),
-              Effect.orDie,
-            ),
-      }),
-    ),
+  options?: DomainCloudflare.DurableObjectsOptions,
+): Layer.Layer<A, E, Exclude<R, A> | Worker | DomainCloudflare.Providers> =>
+  layerObjects(layer).pipe(
+    Layer.provide(DomainCloudflare.layerDurableObjects(options)),
+    Layer.provide(SecureRandom.layerWebCrypto),
   );

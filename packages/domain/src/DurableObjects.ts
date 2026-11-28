@@ -3605,6 +3605,17 @@ const bindState = (impl: ObjectImpl): ObjectImpl =>
     return bound;
   });
 
+const owners = new Map<string, HostedModel>();
+
+/** Where a host keeps the objects of `owner`, which is no model: its classes are `<owner>.<Name>`. */
+const ownerOf = (owner: string): HostedModel => {
+  let hosted = owners.get(owner);
+  if (hosted === undefined) {
+    owners.set(owner, (hosted = { modelName: owner, id: {}, sagas: [], legacyData: false }));
+  }
+  return hosted;
+};
+
 /** Where a host keeps a Vault's keys: the class `Domain.VaultKeys`, one object per subject. */
 const VAULT: HostedModel = { modelName: "Domain", id: {}, sagas: [], legacyData: false };
 
@@ -4374,6 +4385,7 @@ export const makePlatform = <R>(
             delete: (subject) => unwrapDefects<void>(namespace.getByName(subject).keyDelete()),
           }),
         ),
+        objects: (owner, name, impl) => inInit(host.declare(ownerOf(owner), name, bindState(impl))),
         model: Effect.fn(function* (model) {
           yield* claim(model.modelName, model.id);
           if (host.hosted !== undefined) yield* inInit(host.hosted(model));
