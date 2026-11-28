@@ -1,6 +1,13 @@
 /**
- * The hero's provider reel: one model, declared and proved once, served from
- * seven providers. The bank is the model the rest of the page uses.
+ * The hero's provider reel: one program, declared and proved once, served
+ * from seven providers. It holds all three parts: the infrastructure, an AI
+ * process, and the model's rules. The bank is the model the rest of the
+ * page uses.
+ *
+ * The terminal sits over the card's right side from the line after the
+ * process's opening, and hangs below the card. So the card is kept to 22
+ * lines, and every line under that opening to 43 columns: the process's
+ * declaration and the aggregate's handler are folded to their names.
  *
  * Props are plain objects: a prop accepts the resource's Effect directly
  * (`cluster: Cluster`), so nothing has to be yielded first.
@@ -17,18 +24,19 @@ export const HOST_TEMPLATE = `export default ⟨0⟩(
   }).pipe(Effect.provide(⟨2⟩)),
 );
 
-export class Account extends Domain.Aggregate("Account", {
-  decide: {
-    WithdrawMoney: (account, { amount }) =>
-      amount > account.balance
-        ? new InsufficientFunds()
-        : [new MoneyWithdrawn({ amount })],
-  },
-  invariants: {
-    NeverOverdrawn: ({ balance }) =>
-      balance >= 0,
-  },
-}) {}`;
+export class FraudReview extends AI.Process("FraudReview")\`
+  Read \${Bank.AccountSummary}. If it looks
+  stolen, send \${Bank.FreezeAccount}.
+\` {}
+
+export class Account extends
+  Domain.Aggregate("Account", {
+    decide: { WithdrawMoney },
+    invariants: {
+      NeverOverdrawn: ({ balance }) =>
+        balance >= 0,
+    },
+  }) {}`;
 
 export interface HostResource {
   id: string;
@@ -115,9 +123,9 @@ export const hostSource = (values: readonly string[]) =>
   HOST_TEMPLATE.replace(/⟨(\d)⟩/g, (_, i: string) => values[+i]!);
 
 /**
- * The same program for narrow screens: the props sit one per line and the
- * aggregate's handlers are folded to their names, so no line passes ~42
- * columns. Slot ⟨1⟩ holds the host's extra props on a line of their own.
+ * The same program for narrow screens: the props sit one per line, and the
+ * process's declaration and the aggregate's handlers are folded to their
+ * names, so no line passes ~42 columns and the card stays short. Slot ⟨1⟩ holds the host's extra props on a line of their own.
  */
 export const HOST_TEMPLATE_COMPACT = `export default ⟨0⟩(
   "Api",
@@ -130,6 +138,12 @@ export const HOST_TEMPLATE_COMPACT = `export default ⟨0⟩(
     return { fetch: bank.fetch };
   }).pipe(Effect.provide(⟨2⟩)),
 );
+
+export class FraudReview extends
+  AI.Process("FraudReview")\`
+  Read \${Bank.AccountSummary}. If it looks
+  stolen, send \${Bank.FreezeAccount}.
+\` {}
 
 export class Account extends
   Domain.Aggregate("Account", {

@@ -54,6 +54,7 @@ const RAIL = [
   { label: "Declare", steps: [{ id: "loop-model", title: "the model" }] },
   { label: "Specify", steps: [{ id: "loop-stories", title: "stories" }] },
   { label: "Prove", steps: [{ id: "loop-prove", title: "invariants" }] },
+  { label: "Delegate", steps: [{ id: "loop-delegate", title: "AI processes" }] },
   { label: "Ground", steps: [{ id: "loop-ground", title: "Layers" }] },
   { label: "Run", steps: [{ id: "loop-local", title: "on your machine" }] },
   { label: "Test", steps: [{ id: "loop-live", title: "live cloud" }] },
@@ -166,6 +167,42 @@ twice, every answer FraudCheck can give[/d]
 12 commands picked at random (seed 1)[/d]
   [g]✓[/g] none breaks a rule`;
 
+const PROCESS_SRC = `export class Dispute extends AI.Process<Dispute>()("Dispute", {}) {}
+
+export const DisputeLive = Dispute.toLayer({
+  description: "Look into one disputed withdrawal and settle it.",
+})\`
+  You look into one disputed withdrawal. Your first
+  message says which.
+
+  Read the account with \${() => Bank.AccountSummary}, and
+  what the customer wrote with \${ReadMessages}.
+
+  If the withdrawal was not theirs, send
+  \${() => Bank.RefundWithdrawal} and \${() => Bank.FreezeAccount}.
+  Otherwise send \${() => Bank.RejectDispute}.
+\`;`;
+
+const HANDOFF_SRC = `export class DisputeWork extends Domain.Policy("DisputeWork", {
+  from: Account,
+  on: [WithdrawalDisputed],
+}) {}
+
+export const DisputeWorkLive = DisputeWork.toLayer(
+  Effect.gen(function* () {
+    const dispute = yield* Dispute;
+    return Effect.fn(function* ({ source, event }) {
+      // one session per disputed withdrawal
+      yield* dispute
+        .get(event.withdrawalId)
+        .send(\`Account \${source.id}, withdrawal \${event.withdrawalId}.\`, {
+          requestId: "start",
+        })
+        .pipe(Effect.orDie);
+    });
+  }),
+);`;
+
 // What a Layer can ground a program in, by the contract it answers.
 const LAYERS = [
   {
@@ -210,7 +247,13 @@ const LAYERS = [
       { label: "Prisma", href: "/prisma" },
     ],
   },
-  { label: "Agents", items: [{ label: "harnesses, coming soon" }] },
+  {
+    label: "Agents",
+    items: [
+      { label: "Pi", href: "/pi" },
+      { label: "OpenCode", href: "/opencode" },
+    ],
+  },
 ];
 
 const WIRING_SRC = `const BankLive = Bank.layer(BankHandlers).pipe(
@@ -303,7 +346,7 @@ const PROVIDERS = [
 
 <Marketing
   title="Alchemy · generate and deploy verified, production-ready software"
-  description="Model your business with domain-driven design and your infrastructure as code, in one typed program. Stories and proofs verify the business logic, the type checker verifies the infrastructure, and Layers ground it in any platform."
+  description="Model your business as a verifiable domain model, the work as AI processes, and your infrastructure as code, in one typed program. Stories and proofs verify the rules, whether a person or an agent sends the command. The type checker verifies the infrastructure, and Layers ground it in any platform."
 >
   <!-- Hero + marquee fill the first screen so the marquee lands just above the fold. -->
   <div class="v2-fold">
@@ -331,7 +374,7 @@ const PROVIDERS = [
             id="hero-sub"
             style="font-size:clamp(17px,2.2vw,22px);max-width:560px;"
           >
-            Model your business with domain-driven design and your infrastructure as code, in one typed program. Stories and proofs verify the business logic, the type checker verifies the infrastructure, and Layers ground it in any platform.
+            Model your business as a verifiable domain model, the work as AI processes, and your infrastructure as code, in one typed program. Stories and proofs verify the rules, whether a person or an agent sends the command. The type checker verifies the infrastructure, and Layers ground it in any platform.
           </p>
           <div class="alc-hero__cta">
             <Button variant="primary" icon="arrow" href="/getting-started">
@@ -437,9 +480,9 @@ const PROVIDERS = [
   <AlchemicalDivider variant="dot" class="v2-divider" />
   <section class="v2-section v2-pat-1 v2-overview">
     <div class="v2-container">
-      <h2 class="v2-h2" data-copy>One program, from the business rule to the cloud resource</h2>
+      <h2 class="v2-h2" data-copy>One program, from the business rule to the agent to the cloud resource</h2>
       <p class="v2-lede" data-copy>
-        You or your agent declare the software against contracts: the business as a model, its behavior as stories and rules, and everything it needs from outside. Layers ground each contract in a real platform. Every step then proves the program works before the next one starts: types, stories and proofs answer in milliseconds, emulated tests in seconds, and the real cloud in about 20 seconds. CI deploys a preview, tests it, and ships it on merge.
+        You or your agent declare the software against contracts: the business as a model, its behavior as stories and rules, and the work an agent does as processes. What the program needs from outside, a database, a payment provider or an LLM, is a contract too, and a Layer answers each one with a real platform. Every step then proves the program works before the next one starts: types, stories and proofs answer in milliseconds, emulated tests in seconds, and the real cloud in about 20 seconds. CI deploys a preview, tests it, and ships it on merge.
       </p>
       <p class="v2-overview__source">
         <a
@@ -547,7 +590,7 @@ const PROVIDERS = [
       <p class="v2-lede" data-copy>
         A <a href="/domain/story">story</a> is a test written in the model's own terms: given this history, when this command, then these events. It reads like the requirement it came from, so the person who asked for the behavior can check it. It runs the real model in memory in milliseconds, policies and sagas included, and fails if anything happens that it doesn't account for. Write the story first, and let your agent change the model until it passes.
       </p>
-      <div class="v2-split">
+      <div class="v2-split v2-split--first-on-phones">
         <CodeBlock filename="test/Account.test.ts" code={STORY_RULE_SRC} compact />
         <CodeBlock filename="test/Fraud.test.ts" code={STORY_CHAIN_SRC} compact />
       </div>
@@ -570,6 +613,22 @@ const PROVIDERS = [
     </div>
   </section>
 
+  <!-- ───────────────── DELEGATE ───────────────── -->
+  <AlchemicalDivider variant="dot" class="v2-divider" />
+  <section class="v2-section v2-pat-1 v2-feature" id="loop-delegate" data-rail-section>
+    <div class="v2-container">
+      <p class="v2-kicker">{railKicker("loop-delegate")}</p>
+      <h2 class="v2-h2" data-copy>Hand work to an agent that can't break the rules</h2>
+      <p class="v2-lede" data-copy>
+        An <a href="/ai">AI process</a> is prose that says how a piece of work is done. Mentioning a command, a view or a tool is what lets a session use it, so an agent can do what its prose names and nothing else. A policy hands a session work when an event happens, and the session reports back by sending commands. Those commands are decided like anyone's, so every rule you proved holds whatever the agent does.
+      </p>
+      <div class="v2-split">
+        <CodeBlock filename="src/Dispute.process.ts" code={PROCESS_SRC} compact />
+        <CodeBlock filename="src/Bank/DisputeWork.policy.ts" code={HANDOFF_SRC} compact />
+      </div>
+    </div>
+  </section>
+
   <!-- ───────────────── GROUND ───────────────── -->
   <AlchemicalDivider variant="pentagon" class="v2-divider" />
   <section class="v2-section v2-pat-5 v2-feature" id="loop-ground" data-rail-section>
@@ -577,7 +636,7 @@ const PROVIDERS = [
       <p class="v2-kicker">{railKicker("loop-ground")}</p>
       <h2 class="v2-h2" data-copy>A Layer grounds it in a real platform</h2>
       <p class="v2-lede" data-copy>
-        A specified and proved model still knows nothing about the cloud. A Layer answers each contract with a real platform, and owns the resources and the access that takes: Durable Objects for the aggregates, a database for the ledger, a vendor for payments. Swap a Layer and the same program runs in memory, on your machine, or on another platform.
+        A specified and proved model still knows nothing about the cloud. A Layer answers each contract with a real platform, and owns the resources and the access that takes: Durable Objects for the aggregates, a database for the ledger, a vendor for payments, a harness and an LLM for the agents. Swap a Layer and the same program runs in memory, on your machine, or on another platform.
       </p>
       <dl class="v2-layers">
         {LAYERS.map((family) => (
@@ -713,6 +772,9 @@ const PROVIDERS = [
         </Button>
         <Button variant="secondary" icon="arrow" href="/domain">
           <span data-copy>Model your domain</span>
+        </Button>
+        <Button variant="secondary" icon="arrow" href="/ai">
+          <span data-copy>Describe a process</span>
         </Button>
         <Button
           variant="ghost"
@@ -1283,6 +1345,10 @@ const PROVIDERS = [
   @media (max-width: 900px) {
     .v2-split {
       grid-template-columns: 1fr;
+    }
+    /* Stacked, a second snippet of the same kind is a long scroll for little: keep the first. */
+    .v2-split--first-on-phones > :global(:nth-child(n + 2)) {
+      display: none;
     }
   }
 
