@@ -8,7 +8,11 @@ import {
   type InlineDurableObjectProps,
 } from "@alchemy.run/cloudflare/Workers/DurableObject";
 import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
-import { makeRpcStub } from "@alchemy.run/cloudflare/Workers/Rpc";
+import {
+  namespaceFromBinding,
+  type ObjectPlacement,
+  placeObjects,
+} from "@alchemy.run/cloudflare/Workers/ObjectHost";
 import { Worker as CloudflareWorker, type Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import {
   deferredExecutionContext,
@@ -79,34 +83,8 @@ export { D1KeyStore, type D1KeyStoreOptions } from "./D1KeyStore.ts";
 export { providers, Providers, type ProviderRequirements } from "./Providers.ts";
 export { SecretKeyWrap } from "./SecretKeyWrap.ts";
 
-/** Where the platform keeps the model's Durable Objects. */
-interface Placement {
-  readonly jurisdiction: DurableObjectJurisdiction | undefined;
-  readonly locationHint: DurableObjectLocationHint | undefined;
-}
-
-/**
- * A namespace whose objects live in the platform's jurisdiction and are
- * created near its location hint. Every namespace Domain reaches goes
- * through here, so no kind of object is left outside either.
- */
-const placed = (namespace: CloudflareNamespace, placement: Placement): CloudflareNamespace => {
-  const inside =
-    placement.jurisdiction === undefined
-      ? namespace
-      : namespace.jurisdiction(placement.jurisdiction);
-  return placement.locationHint === undefined ? inside : hinted(inside, placement.locationHint);
-};
-
-/** A namespace that creates each new object near `locationHint`. */
-const hinted = (
-  namespace: CloudflareNamespace,
-  locationHint: DurableObjectLocationHint,
-): CloudflareNamespace => ({
-  ...namespace,
-  getByName: (name, options) => namespace.getByName(name, { locationHint, ...options }),
-  jurisdiction: (inside) => hinted(namespace.jurisdiction(inside), locationHint),
-});
+type Placement = ObjectPlacement;
+const placed = placeObjects;
 
 /**
  * Hand `effect` to the current invocation's `waitUntil`: the Durable Object's
@@ -351,14 +329,8 @@ const cloudflareHost = (
 ): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.unwrap(
     Effect.gen(function* () {
-      /** A Durable Object namespace from the Worker's bindings, placed as the platform says. */
-      const fromBinding = (native: any): CloudflareNamespace => {
-        const wrap = (namespace: any): CloudflareNamespace => ({
-          getByName: (name, options) => makeRpcStub(namespace.getByName(name, options)) as never,
-          jurisdiction: (inside) => wrap(namespace.jurisdiction(inside)),
-        });
-        return placed(wrap(native), placement);
-      };
+      const fromBinding = (native: any): CloudflareNamespace =>
+        namespaceFromBinding(native, placement);
       // The Worker's bindings, at runtime: see `lookup`.
       const env = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment));
       /** A model's class name on the Worker: `Bank.AccountAggregate` (or the bare name before versions). */

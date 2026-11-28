@@ -1,32 +1,18 @@
 import {
-  DurableObjectCallbacks,
-  outsideAlarmPass,
-} from "@alchemy.run/cloudflare/Workers/AlarmCallback";
-import {
-  DurableObject as CloudflareDurableObject,
-  type DurableObjectGetDurableObjectOptions,
-  type DurableObjectJurisdiction,
-  type InlineDurableObjectProps,
-} from "@alchemy.run/cloudflare/Workers/DurableObject";
-import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
-import { upgrade } from "@alchemy.run/cloudflare/Workers/WebSocket";
-import { type Worker, Worker as CloudflareWorker } from "@alchemy.run/cloudflare/Workers/Worker";
+  declareHostClass,
+  type DurableObjectHostImpl,
+  type DurableObjectHostNamespace,
+  hostObjectState,
+  onDurableObject,
+} from "@alchemy.run/cloudflare/Workers/ObjectHost";
+import { Worker as CloudflareWorker } from "@alchemy.run/cloudflare/Workers/Worker";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Workflow, type WorkflowImpl } from "@alchemy.run/cloudflare/Workflows/Workflow";
-import { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
-import type { HttpServerRequest } from "effect/http/HttpServerRequest";
-import type * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
-import type * as Scope from "effect/Scope";
 import type * as Backfill from "../Backfill.ts";
-import {
-  type ObjectImpl as DomainObjectImpl,
-  ObjectState,
-  type ObjectStateShape,
-  type Stub as DomainStub,
-} from "../DurableObjects.ts";
+import { type Stub as DomainStub } from "../DurableObjects.ts";
 import type { Delivery } from "../Platform.ts";
 import { MIGRATION_ROUTE, migration, migrationObject } from "./Migration.ts";
 import { legacyObject, router } from "./Router.ts";
@@ -50,81 +36,11 @@ export const domainClassName = (modelName: string) =>
   `${modelName}.Domain`.replace(/[^A-Za-z0-9_.]/g, "_");
 
 export type Stub = DomainStub;
-
-/** A Cloudflare Durable Object namespace: Domain's, plus fetch and jurisdictions. */
-export interface Namespace {
-  readonly getByName: (
-    name: string,
-    options?: DurableObjectGetDurableObjectOptions,
-  ) => Stub & {
-    readonly fetch: (
-      request: HttpServerRequest,
-    ) => Effect.Effect<HttpServerResponse.HttpServerResponse, unknown>;
-  };
-  readonly jurisdiction: (jurisdiction: DurableObjectJurisdiction) => Namespace;
-}
-
-/** What a Cloudflare instance's methods and constructor run with. */
-type InstanceServices = DurableObjectState | RuntimeContext | Scope.Scope;
-
-/** The usual outer (construction) / inner (instance) pair. */
-export type ObjectImpl = Effect.Effect<
-  Effect.Effect<Record<string, unknown>, never, InstanceServices>,
-  never,
-  DurableObjectState
->;
-
-/**
- * Declare a Durable Object class on the host Worker from inside a factory.
- * The inline form of `Cloudflare.DurableObject` is typed for single-stage
- * implementations, so it is re-typed here for the two-stage form it runs.
- */
-export const declare = CloudflareDurableObject as unknown as (
-  name: string,
-  props: InlineDurableObjectProps,
-  impl: ObjectImpl,
-) => Effect.Effect<Namespace, never, Worker>;
-
-/** Domain's view of a Cloudflare Durable Object's state. */
-export const objectState = (
-  state: DurableObjectState["Service"],
-  runtime: RuntimeContext["Service"],
-): ObjectStateShape => ({
-  storage: state.storage as unknown as ObjectStateShape["storage"],
-  // Durable Objects run each event in its own I/O context, so in-memory
-  // coordination across events is unsafe; the platform's gate is not.
-  exclusive: (effect) =>
-    Effect.flatMap(
-      state.blockConcurrencyWhile(() => Effect.exit(effect)),
-      (exit) => exit,
-    ).pipe(Effect.provideService(RuntimeContext, runtime)),
-  // Background work outside the alarm pass, so a callback's alarm isn't held open by it.
-  waitUntil: (effect) =>
-    state.waitUntil(outsideAlarmPass(effect)).pipe(Effect.provideService(RuntimeContext, runtime)),
-  sockets: {
-    accept: () =>
-      Effect.provideService(upgrade(), DurableObjectState, state) as unknown as ReturnType<
-        NonNullable<ObjectStateShape["sockets"]>["accept"]
-      >,
-    all: () =>
-      state.getWebSockets() as unknown as ReturnType<
-        NonNullable<ObjectStateShape["sockets"]>["all"]
-      >,
-  },
-});
-
-/** Run a Domain object on a Cloudflare Durable Object class. */
-export const onCloudflare = (impl: DomainObjectImpl): ObjectImpl =>
-  Effect.succeed(
-    Effect.gen(function* () {
-      const state = yield* DurableObjectState;
-      const runtime = yield* RuntimeContext;
-      return yield* impl.pipe(
-        Effect.provideService(ObjectState, objectState(state, runtime)),
-        Effect.provide(DurableObjectCallbacks),
-      );
-    }),
-  );
+export type Namespace = DurableObjectHostNamespace;
+export type ObjectImpl = DurableObjectHostImpl;
+export const declare = declareHostClass;
+export const objectState = hostObjectState;
+export const onCloudflare = onDurableObject;
 
 /**
  * A class a route's objects may still be on: its Domain version 0 class

@@ -17,7 +17,7 @@ An app with agents has three rings. Program in the middle one.
 
 1. **Entry points**: a Worker's `fetch`, a webhook (`GitHub.consumeRepositoryEvents`), a page. Each turns what happened outside into a command, or reads a view. None of them starts a session or knows a process exists.
 2. **The models and the processes**: a Domain model's commands, events and views are the rules, and they hold whoever sends a command, a person or an agent. A **process** is a member of no model, and neither package knows the other. A process works with models from beside them, as many as it needs: its prose mentions their commands and views, which become its tools, and a policy or a saga hands a session work with `yield* Triage`. A session tells a model what it did by sending one of those commands. Use the **`alchemy-domain` skill** for the rest of this ring (`packages/domain/skills/alchemy-domain`, or https://alchemy.run/domain). Everything about aggregates, views, policies, stories and hosting the model is there, not here.
-3. **Layers**: where it runs. `DomainCloudflare.layerDurableObjects()` makes every member of a model a Durable Object class, and `AICloudflare.layerDurableObjects(layer)` gives each session of a process an object of its own. A harness Layer, a model Layer and a sandbox Layer say what a session runs on. Swap one and nothing else changes; `Domain.InMemory`, `AI.layerInMemory` and `AI.scripted` run all of it in a test.
+3. **Layers**: where it runs. `DomainCloudflare.layerDurableObjects()` makes every member of a model a Durable Object class, and `AICloudflare.ProcessSessions(layer)` gives each session of a process an object of its own. A harness Layer, a model Layer and a sandbox Layer say what a session runs on. Swap one and nothing else changes; `Domain.InMemory`, `AI.layerInMemory` and `AI.scripted` run all of it in a test.
 
 A front end is an entry point. A page sends commands and watches views through an Api over the model, and reads a session's status and transcript from a route the Worker serves from the session.
 
@@ -66,7 +66,7 @@ More: [What is Alchemy AI?](https://alchemy.run/ai/what-is-alchemy-ai).
 - **Break an import cycle with thunks, and only then.** When the prose mentions a model whose policy holds the process, each mention is `${() => Board.LabelIssue}`, and the model takes its members as `() => ({ ... })`.
 - **Models share `Models.ts`.** `.model.ts` means a Domain model.
 - **The Worker and the sandbox Layer keep plain names** (`Worker.ts`, `Sandbox.ts`). The Layers that say where and on what the model runs are composed in one place, beside the Worker.
-- **Never write a Durable Object to hold a session**: give the process's Layer to `AICloudflare.layerDurableObjects`.
+- **Never write a Durable Object to hold a session**: give the process's Layer to `AICloudflare.ProcessSessions`.
 - **A Domain model never imports a tool.** Its policies import a process by its name, and nothing else of the model knows a process exists: a view never lists one in `from`. Its own files follow the `alchemy-domain` skill's conventions (`<Noun>.<kind>.ts`).
 - **The page lives in `web/`** and imports only the model's Api, ids and value Schemas, never a process or a tool.
 

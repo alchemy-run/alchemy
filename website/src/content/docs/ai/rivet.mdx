@@ -1,0 +1,97 @@
+---
+title: Rivet
+description: Host a process on Rivet Durable Objects. Each session is an actor with its own SQLite, on nodes in the pool you give it.
+---
+
+Host a process on [Rivet](/rivet), and each of its sessions is a Rivet actor with its own SQLite and alarm. The nodes run in the pool you give it, and whatever serves your app reaches them through the control plane.
+
+## Host the process
+
+`AIRivet.ProcessSessions` takes the name of the Durable Object class that holds the sessions, this file as `main`, the pool that runs it, and the process's Layer with what a session runs on. Export it as the file's default.
+
+```typescript title="src/Sessions.ts"
+import * as AIRivet from "@alchemy.run/ai/Rivet";
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+import { Harness } from "./Harness.ts";
+import { EngineerLive } from "./Engineer.process.ts";
+
+const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
+const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
+
+export default AIRivet.ProcessSessions(
+  "Workshop",
+  { main: import.meta.url, pool: Default },
+  EngineerLive.pipe(Layer.provide(Harness)),
+);
+```
+
+The pool's nodes load this file's default export and run the sessions. Each session is one actor of that class, named after the session's key.
+
+## Host a model beside it
+
+A [Domain model](/domain/rivet) goes on the same host as the sessions. `AIRivet.ProcessSessions` is `AI.layerObjects` on `Rivet.layerObjectHost`: write those two out, so the model and the sessions are given one host. The model's policy holds `Engineer`, so its Layer still needs one, and the hosted process is what it gets:
+
+```typescript title="src/Live.ts"
+import * as AI from "@alchemy.run/ai";
+import * as DomainRivet from "@alchemy.run/domain/Rivet";
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+import { Harness } from "./Harness.ts";
+import { EngineerLive } from "./Engineer.process.ts";
+import { TaskWorkLive } from "./Workshop/TaskWork.policy.ts";
+import { Workshop } from "./Workshop/Workshop.model.ts";
+
+const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
+const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
+
+const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainRivet.layerDurableObjects()));
+
+const EngineerSessions = AI.layerObjects(
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
+);
+
+export default WorkshopLive.pipe(
+  Layer.provideMerge(EngineerSessions),
+  Layer.provide(Rivet.layerObjectHost("Workshop", { main: import.meta.url, pool: Default })),
+);
+```
+
+The model's objects and the sessions are actors of the one class. The host is written once, and neither Layer above it names a file or a pool.
+
+## Serve it from anywhere
+
+Whatever serves the app imports the default export and provides it:
+
+```typescript title="src/Api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Engineer } from "./Engineer.process.ts";
+import Sessions from "./Sessions.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const engineer = yield* Engineer;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const id = new URL(request.url, "http://api").pathname.slice(1);
+        const reply = yield* engineer.get(id).prompt(yield* request.text);
+        return HttpServerResponse.text(reply.text);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Sessions)),
+) {}
+```
+
+There the Layer deploys the Durable Object class and reaches it through the control plane's gateway. See [Reach a session](/ai/hosting#reach-a-session) for what the client does.
+
+## Bring a harness
+
+A session needs a harness that keeps its conversation where the session runs. `PiCloudflare.DurableObjectStorage` and OpenCode's storage are for a Cloudflare Durable Object, and neither harness has a storage Layer for a Rivet actor yet. On Rivet, `Harness` provides a harness of your own, or the process is played by [`AI.scripted`](/ai/in-memory).

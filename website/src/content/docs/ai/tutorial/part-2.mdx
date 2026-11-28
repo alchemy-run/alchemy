@@ -180,7 +180,7 @@ import * as Layer from "effect/Layer";
 import { Smart, SmartLlama } from "./Models.ts";
 import { TriageLive } from "./Triage.process.ts";
 
-const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
+const Harness = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
   Layer.provide(SmartLlama),
 );
 +
@@ -200,9 +200,9 @@ export const BoardLive = Board.layer(Layer.empty).pipe(
   Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
-export const TriageSessions = AICloudflare.layerDurableObjects(
--  TriageLive.pipe(Layer.provide(Agents)),
-+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+export const TriageSessions = AICloudflare.ProcessSessions(
+-  TriageLive.pipe(Layer.provide(Harness)),
++  TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 ```
 
