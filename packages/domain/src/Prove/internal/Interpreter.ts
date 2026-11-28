@@ -441,8 +441,11 @@ const kindOf = (v: V): string | undefined => {
     // What the library made is what it is.
     case "Host":
       return typeof v.value;
-    case "Lib":
-      return v.host === undefined ? undefined : typeof v.host;
+    case "Lib": {
+      // A function of a pure module is the one the runtime loads.
+      const host: unknown = v.host ?? Known.hostOf(v.module, v.path);
+      return host === undefined ? undefined : typeof host;
+    }
     default:
       return undefined;
   }

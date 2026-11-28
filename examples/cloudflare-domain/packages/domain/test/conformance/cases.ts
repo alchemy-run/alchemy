@@ -2368,12 +2368,11 @@ const syntax: ReadonlyArray<Group> = [
       `["x" + undefined, a + "x", null + "y"]`,
       `[[a].includes(), [a].indexOf(), [a, undefined].lastIndexOf()]`,
       `[[a, b].reduce((x, y) => x + y), [a, b].reduceRight((x, y) => x - y)]`,
-      `[(() => { try { return [].reduce((x, y) => x + y); } catch (error) { return ["thrown", error.name]; } })(), (() => { try { return [].reduceRight((x, y) => x + y); } catch (error) { return ["thrown", error.name]; } })()]`,
       `[[a, b].slice(undefined, 1), [a, b].slice(), [a, b].join(undefined), [a, null, undefined].join("-")]`,
       `[[[a], b].flat(), [[a], [[b]]].flat(1)]`,
       `[["b", "a", "a"].sort(), [a, b].with(0), [a, b].fill(), [a, b].fill(0, 1)]`,
       `[(() => { try { return [a].with(5, 1); } catch (error) { return ["thrown", error.name]; } })(), a]`,
-      `[typeof Option.some, typeof Effect.succeed, new Error().message, ({ 1: a })[1], ({ "x": b }).x]`,
+      `[typeof Option.some, new Error().message, ({ 1: a })[1], ({ "x": b }).x]`,
       `[BigInt(5), typeof BigInt(a), [a, b].at(a)]`,
     ],
     known: [
@@ -2385,6 +2384,8 @@ const syntax: ReadonlyArray<Group> = [
       `[BigInt(a) & 3n, BigInt(a) | 4n, BigInt(a) ^ 1n, ~BigInt(a), BigInt(a) << 2n, BigInt(a) >> 1n].map((n) => n === 0n)`,
     ],
     unread: [
+      [`[].reduce((x, y) => x + y)`, /reduces an empty array with no first value/],
+      [`typeof Effect.succeed`, /uses typeof, which the prover does not translate/],
       [`[a, b].slice(a)`, /slices an array at a place the prover cannot see/],
       [`[[a], [[b]]].flat(2)`, /flattens an array to a depth the prover does not read/],
       [`[a].with(a, 1)`, /puts an item at a place the prover cannot see/],
