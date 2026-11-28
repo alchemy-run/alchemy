@@ -244,6 +244,35 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
   );
 
   it.effect(
+    "a checkout reached through a symlink names its files as one reached directly does",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
+
+        const direct = yield* build(root, {
+          directory: "direct/checkout",
+          store: "direct/store/aaaaaaaa",
+          manager: "pnpm",
+        });
+        // As a temporary directory is on macOS (`/var` links to `/private/var`),
+        // or a workspace a CI runner mounts under another name.
+        yield* fs.makeDirectory(path.join(root, "disk"));
+        yield* fs.symlink(path.join(root, "disk"), path.join(root, "linked"));
+        const linked = yield* build(root, {
+          directory: "linked/checkout",
+          store: "linked/store/bbbbbbbb",
+          manager: "pnpm",
+        });
+
+        expect(sources(linked)).toEqual(stableSources("pnpm", "../"));
+        expect(linked.hash).toBe(direct.hash);
+      }).pipe(Effect.scoped),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
     "a colon in the name of a directory right below the process directory is not taken for a module id",
     () =>
       Effect.gen(function* () {
