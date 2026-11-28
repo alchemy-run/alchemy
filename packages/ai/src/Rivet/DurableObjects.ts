@@ -16,8 +16,8 @@ import { layerObjects } from "../Host.ts";
  * a handle on that session's object, and each call goes to it through the
  * control plane's gateway.
  *
- * The options are `Rivet.layerObjectHost`'s: `name` is the Durable Object
- * class that holds the sessions, and the pool's nodes load the hosted Layer
+ * `name` is the Durable Object class that holds the sessions. The options
+ * are `Rivet.layerObjectHost`'s: the pool's nodes load the hosted Layer
  * from `main`.
  *
  * The Layer may need the process it provides, as a Domain model whose
@@ -36,9 +36,9 @@ import { layerObjects } from "../Host.ts";
  * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
  *
  * export const EngineerSessions = AIRivet.layerDurableObjects(
+ *   "Sessions",
  *   EngineerLive.pipe(Layer.provide(Agents)),
  *   {
- *     name: "Sessions",
  *     main: import.meta.url,
  *     handler: "EngineerSessions",
  *     pool: Default,
@@ -54,8 +54,7 @@ import { layerObjects } from "../Host.ts";
  * const Sessions = EngineerLive.pipe(Layer.provide(Agents));
  *
  * const OnCloudflare = AICloudflare.layerDurableObjects(Sessions);
- * const OnRivet = AIRivet.layerDurableObjects(Sessions, {
- *   name: "Sessions",
+ * const OnRivet = AIRivet.layerDurableObjects("Sessions", Sessions, {
  *   main: import.meta.url,
  *   handler: "OnRivet",
  *   pool: Default,
@@ -65,7 +64,9 @@ import { layerObjects } from "../Host.ts";
  * @layer
  */
 export const layerDurableObjects = <A, E, R, PoolReq>(
+  /** The Rivet Durable Object class that holds the sessions. */
+  name: string,
   layer: Layer.Layer<A, E, R>,
   options: ObjectHostOptions<PoolReq>,
 ): Layer.Layer<A, E, Exclude<R, A> | PoolReq | Providers> =>
-  layerObjects(layer).pipe(Layer.provide(layerObjectHost(options)));
+  layerObjects(layer).pipe(Layer.provide(layerObjectHost(name, options)));

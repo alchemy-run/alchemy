@@ -249,8 +249,9 @@ const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(
 );
 
 const EngineerSessions = AIRivet.layerDurableObjects(
+  "Sessions",
   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
-  { name: "Sessions", main: import.meta.url, handler: "Live", pool: Default },
+  { main: import.meta.url, handler: "Live", pool: Default },
 );
 
 export const Live = WorkshopLive.pipe(Layer.provideMerge(EngineerSessions));

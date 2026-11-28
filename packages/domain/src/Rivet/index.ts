@@ -102,6 +102,8 @@ const connectTo = (namespace: Namespace, key: string, subscription: Subscription
 
 /** Options for {@link layerDurableObjects}. */
 export interface DurableObjectsOptions<PoolReq> extends ObjectHostOptions<PoolReq> {
+  /** The Rivet Durable Object class that hosts the model: its actors' name. */
+  readonly name: string;
   /**
    * How long each actor keeps the rows that only dedupe needs: command and
    * decision receipts, policy delivery marks, and cancelled scheduled
@@ -240,7 +242,7 @@ export const layerDurableObjects = <PoolReq>(
         Layer.provideMerge(SecureRandom.layerWebCrypto),
       );
     }),
-  ).pipe(Layer.provide(layerObjectHost(options))) as Layer.Layer<
+  ).pipe(Layer.provide(layerObjectHost(options.name, options))) as Layer.Layer<
     Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
     never,
     PoolReq | Providers

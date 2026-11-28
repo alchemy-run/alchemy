@@ -52,18 +52,20 @@ The process's Layer does not change. Swap the host, and give it the class that h
 ```typescript
 // Rivet: @alchemy.run/ai/Rivet
 const TriageSessions = AIRivet.layerDurableObjects(
+  "Sessions",
   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
-  { name: "Sessions", main: import.meta.url, handler: "Live", pool: Default },
+  { main: import.meta.url, handler: "Live", pool: Default },
 );
 
 // Effect Cluster: @alchemy.run/ai/EffectCluster
 const TriageSessions = AICluster.layerEntities(
+  "Sessions",
   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
-  { name: "Sessions", main: import.meta.url, handler: "Live", pool: Default },
+  { main: import.meta.url, handler: "Live", pool: Default },
 );
 ```
 
-`handler` is the export of `main` that holds the host, which the pool's nodes load. Give the model and the sessions different `name`s. Pi and OpenCode have a storage Layer for a Cloudflare Durable Object only: on Rivet and Effect Cluster, provide a harness of your own.
+`handler` is the export of `main` that holds the host, which the pool's nodes load. Give the model and the sessions different names. Pi and OpenCode have a storage Layer for a Cloudflare Durable Object only: on Rivet and Effect Cluster, provide a harness of your own.
 
 Each host is built on its platform package's object host (`Cloudflare.layerObjectHost`, `Rivet.layerObjectHost`, `@alchemy.run/effect-cluster/ObjectHost`), which `@alchemy.run/domain`'s platform Layers are built on too. A process with no model does not need `@alchemy.run/domain`.
 

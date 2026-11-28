@@ -553,7 +553,9 @@ export const layerEntities = <PoolReq>(
       ).pipe(Layer.provideMerge(SecureRandom.layerWebCrypto));
     }),
   ).pipe(
-    Layer.provide(layerObjectHost({ ...options, attachmentHeader: SUBSCRIPTION_HEADER })),
+    Layer.provide(
+      layerObjectHost(options.name, { ...options, attachmentHeader: SUBSCRIPTION_HEADER }),
+    ),
   ) as Layer.Layer<
     Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom,
     never,

@@ -243,8 +243,7 @@ export const layerInMemory = <A, E, R>(
  *
  * export const EngineerSessions = AI.layerObjects(EngineerLive.pipe(Layer.provide(Agents))).pipe(
  *   Layer.provide(
- *     Rivet.layerObjectHost({
- *       name: "Sessions",
+ *     Rivet.layerObjectHost("Sessions", {
  *       main: import.meta.url,
  *       handler: "EngineerSessions",
  *       pool: Default,

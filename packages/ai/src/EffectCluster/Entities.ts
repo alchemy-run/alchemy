@@ -15,9 +15,9 @@ import { layerObjects } from "../Host.ts";
  * Domain models its prose mentions). It gives back the same process:
  * `get(key)` is a handle on that session's entity.
  *
- * The options are the Effect Cluster object host's: `name` is the entity
- * that holds the sessions, and the pool's runners load the hosted Layer
- * from `main`.
+ * `name` is the entity that holds the sessions. The options are the Effect
+ * Cluster object host's: the pool's runners load the hosted Layer from
+ * `main`.
  *
  * The Layer may need the process it provides, as a Domain model whose
  * policy holds it does: this provides it, inside each entity and out.
@@ -35,9 +35,9 @@ import { layerObjects } from "../Host.ts";
  * const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
  *
  * export const EngineerSessions = AICluster.layerEntities(
+ *   "Sessions",
  *   EngineerLive.pipe(Layer.provide(Agents)),
  *   {
- *     name: "Sessions",
  *     main: import.meta.url,
  *     handler: "EngineerSessions",
  *     pool: Default,
@@ -48,7 +48,9 @@ import { layerObjects } from "../Host.ts";
  * @layer
  */
 export const layerEntities = <A, E, R, PoolReq>(
+  /** The entity that holds the sessions: its type in the cluster. */
+  name: string,
   layer: Layer.Layer<A, E, R>,
   options: ObjectHostOptions<PoolReq>,
 ): Layer.Layer<A, E, Exclude<R, A> | PoolReq | Providers> =>
-  layerObjects(layer).pipe(Layer.provide(layerObjectHost(options)));
+  layerObjects(layer).pipe(Layer.provide(layerObjectHost(name, options)));

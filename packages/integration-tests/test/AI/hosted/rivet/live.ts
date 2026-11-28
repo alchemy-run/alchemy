@@ -18,11 +18,14 @@ const DeskLive = Desk.layer(HandoverLive).pipe(
 );
 
 /** Each Helper session in a Durable Object of its own, with the desk it closes tickets on. */
-const HelperSessions = AIRivet.layerDurableObjects(HelperPlayed.pipe(Layer.provide(DeskLive)), {
-  name: "HelperSessions",
-  main: import.meta.url,
-  handler: "HostedRivetLive",
-  pool: HostedPool,
-});
+const HelperSessions = AIRivet.layerDurableObjects(
+  "HelperSessions",
+  HelperPlayed.pipe(Layer.provide(DeskLive)),
+  {
+    main: import.meta.url,
+    handler: "HostedRivetLive",
+    pool: HostedPool,
+  },
+);
 
 export const HostedRivetLive = DeskLive.pipe(Layer.provideMerge(HelperSessions));

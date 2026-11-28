@@ -138,8 +138,6 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, ObjectImpl>) 
 
 /** Options for {@link layerObjectHost}. */
 export interface ObjectHostOptions<PoolReq> {
-  /** The Rivet Durable Object class that holds every object: its actors' name. */
-  readonly name: string;
   /**
    * The module that exports the Layer built on this host, usually
    * `import.meta.url`. The pool's nodes load it to run the objects.
@@ -172,8 +170,7 @@ export interface ObjectHostOptions<PoolReq> {
  * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
  * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
  *
- * const Objects = Rivet.layerObjectHost({
- *   name: "App",
+ * const Objects = Rivet.layerObjectHost("App", {
  *   main: import.meta.url,
  *   handler: "Live",
  *   pool: Default,
@@ -184,6 +181,8 @@ export interface ObjectHostOptions<PoolReq> {
  * @provides ObjectHost
  */
 export const layerObjectHost = <PoolReq>(
+  /** The Rivet Durable Object class that holds every object: its actors' name. */
+  name: string,
   options: ObjectHostOptions<PoolReq>,
 ): Layer.Layer<ObjectHost, never, PoolReq | Providers> =>
   // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the class is declared dynamically; its requirements are the pool's and the providers'
@@ -192,9 +191,9 @@ export const layerObjectHost = <PoolReq>(
     Effect.gen(function* () {
       const classes = new Map<string, ObjectImpl>();
       const Objects = (DurableObject as any)()(
-        options.name,
+        name,
         { main: options.main, handler: options.handler ?? "default" },
-        hostClassPhase(options.name, classes).pipe(Effect.provide(options.pool)),
+        hostClassPhase(name, classes).pipe(Effect.provide(options.pool)),
       );
       const remote = (namespace: DurableObjectNamespace<any>, cls: string): Namespace => ({
         getByName: (key: string) => namespace.getByName(objectName(cls, key)) as unknown as Stub,
@@ -211,7 +210,7 @@ export const layerObjectHost = <PoolReq>(
         // Calls between objects go through the control plane, as any
         // caller's do: the object they reach may run on another node.
         const self = makeNamespace(
-          options.name,
+          name,
           yield* Config.all({
             endpoint: Config.String("RIVET_ENDPOINT").pipe(Config.withDefault("")),
             token: Config.String("RIVET_TOKEN").pipe(Config.withDefault("")),

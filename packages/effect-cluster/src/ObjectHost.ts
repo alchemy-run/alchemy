@@ -385,8 +385,6 @@ const remote =
 
 /** Options for {@link layerObjectHost}. */
 export interface ObjectHostOptions<PoolReq> {
-  /** The entity that holds every object: its type in the cluster. */
-  readonly name: string;
   /**
    * The module that exports the Layer built on this host, usually
    * `import.meta.url`. The pool's runners load it to run the objects.
@@ -468,8 +466,7 @@ export class ClusterObjects extends Context.Service<
  * const Database = ClusterDocker.Database("Cluster");
  * const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
  *
- * const Objects = layerObjectHost({
- *   name: "App",
+ * const Objects = layerObjectHost("App", {
  *   main: import.meta.url,
  *   handler: "Live",
  *   pool: Default,
@@ -480,12 +477,13 @@ export class ClusterObjects extends Context.Service<
  * @provides ObjectHost
  */
 export const layerObjectHost = <PoolReq>(
+  /** The entity that holds every object: its type in the cluster. */
+  name: string,
   options: ObjectHostOptions<PoolReq>,
 ): Layer.Layer<ObjectHost | ClusterObjects, never, PoolReq | Providers> =>
   // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the entity is declared dynamically; its requirements are the pool's and the providers'
   Layer.effectContext(
     Effect.gen(function* () {
-      const name = options.name;
       const attachmentHeader = options.attachmentHeader ?? "x-object-attachment";
       // In this pool's shard group, as the runner registers its entities.
       const shardGroup = () =>
