@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Net from "effect/net";
 import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
@@ -242,6 +243,17 @@ export interface NetworkLookup {
  * determines which settings take effect. Some drivers may accept options
  * without applying them; inspect the resulting network for advanced settings.
  *
+ * ### Swarm overlay allocation
+ * Docker Swarm can return an overlay network ID before its driver and IPAM
+ * are available. Alchemy waits for both before recording the network. If
+ * allocation does not finish within the inspection limit, deploy fails
+ * instead of saving incomplete attributes. Retry once the network is ready.
+ *
+ * If a previous deploy saved incomplete attributes, the next deploy refreshes
+ * them in place when the live Docker ID and settings match. The network's
+ * name stays stable for attached services. Changing immutable network
+ * settings still requires replacement.
+ *
  * @resource
  * @product Network
  */
@@ -269,14 +281,18 @@ export const NetworkProvider = () =>
             .inspect(name, context)
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
           if (!info) return undefined;
-          const attrs = toNetworkAttributes(info);
           // A different network may have taken over the same name after the
           // managed network was removed out of band. Never silently adopt it.
-          if (output) return output.id === attrs.id ? attrs : Unowned(attrs);
-          // Without prior state, only adopt a network that carries our branding;
-          // anything else is foreign and gated behind `--adopt`.
-          const owned = yield* hasAlchemyTags(id, info.Labels ?? undefined);
-          return owned ? attrs : Unowned(attrs);
+          // Without prior state, only adopt a network that carries our branding.
+          const owned = output
+            ? output.id === info.Id
+            : yield* hasAlchemyTags(id, info.Labels ?? undefined);
+          if (!owned) return Unowned(toNetworkAttributes(info));
+          return toNetworkAttributes(
+            olds?.driver === "overlay" || info.Driver === "overlay"
+              ? yield* waitForOverlayAllocation(docker, info, context)
+              : info,
+          );
         }),
         diff: Effect.fn(function* ({ id, output, instanceId, news, olds }) {
           if (!isResolved(news) || !output) return undefined;
@@ -284,68 +300,102 @@ export const NetworkProvider = () =>
           if (dockerEngineContextName(olds?.context) !== dockerEngineContextName(news?.context)) {
             return { action: "replace", deleteFirst: true };
           }
+          const inspectCurrent = Effect.gen(function* () {
+            const current = yield* docker.network
+              .inspect(output.name, dockerEngineContextName(olds?.context))
+              .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+            if (current && current.Id !== output.id) {
+              return yield* new OwnedBySomeoneElse({
+                message:
+                  `Network '${output.name}' was replaced outside Alchemy: ` +
+                  `expected Docker ID ${output.id}, found ${current.Id}. ` +
+                  "Choose a different name or explicitly resolve the ownership conflict.",
+                resourceType: "Docker.Network",
+                logicalId: id,
+                physicalName: output.name,
+              });
+            }
+            return current;
+          });
+
+          // Older deploys could persist Swarm's pre-allocation inspect result.
+          // Compare the same live network instead of replacing it for blank attributes.
+          const incompleteOverlay = hasIncompleteOverlayState(olds, output);
+          let observed = output;
+          if (incompleteOverlay) {
+            const current = yield* inspectCurrent;
+            if (!current) return { action: "update" };
+            observed = toNetworkAttributes(
+              yield* waitForOverlayAllocation(
+                docker,
+                current,
+                dockerEngineContextName(olds?.context),
+              ),
+            );
+          }
+
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id differently
           // today. Only an explicit user-provided name can force a replace.
-          const desiredName = news?.name ?? output.name;
+          const desiredName = news?.name ?? observed.name;
           if (
-            output.name !== desiredName ||
-            output.driver !== args.driver ||
-            (output.internal ?? false) !== (args.internal ?? false) ||
-            (output.attachable ?? false) !== (args.attachable ?? false) ||
-            (output.enableIPv4 ?? true) !== (args.ipv4 ?? true) ||
-            output.enableIPv6 !== args.ipv6 ||
-            !matchesOptions(output.driverOpts ?? {}, args.opt ?? {}) ||
+            observed.name !== desiredName ||
+            observed.driver !== args.driver ||
+            (observed.internal ?? false) !== (args.internal ?? false) ||
+            (observed.attachable ?? false) !== (args.attachable ?? false) ||
+            (observed.enableIPv4 ?? true) !== (args.ipv4 ?? true) ||
+            observed.enableIPv6 !== args.ipv6 ||
+            !matchesOptions(observed.driverOpts ?? {}, args.opt ?? {}) ||
             hasRemovedOptions(olds?.driverOpts, news?.driverOpts) ||
             !matchesIpam(
-              output.ipam ?? { driver: "default", options: {}, config: [] },
+              observed.ipam ?? { driver: "default", options: {}, config: [] },
               news?.ipam,
               olds?.ipam,
             ) ||
             // Compare only user labels; internal `alchemy::*` branding lives on
             // the observed network but must not drive replacement.
-            !Equal.equals(stripInternalTags(output.labels), args.label ?? {})
+            !Equal.equals(stripInternalTags(observed.labels), args.label ?? {})
           ) {
             return { action: "replace", deleteFirst: true };
           }
-          // The persisted attributes do not prove that the same physical
-          // network still exists. Another actor can delete it and reuse the
-          // name, so check the Docker ID even when props have not changed.
-          const current = yield* docker.network
-            .inspect(output.name, dockerEngineContextName(olds?.context))
-            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
-          if (current && current.Id !== output.id) {
-            return yield* new OwnedBySomeoneElse({
-              message:
-                `Network '${output.name}' was replaced outside Alchemy: ` +
-                `expected Docker ID ${output.id}, found ${current.Id}. ` +
-                "Choose a different name or explicitly resolve the ownership conflict.",
-              resourceType: "Docker.Network",
-              logicalId: id,
-              physicalName: output.name,
-            });
-          }
-          // Reconcile can recreate a missing network. An update avoids
-          // deleting a generation that has already disappeared.
-          if (!current) return { action: "update" };
+          // Repair only the stored attributes, not consumers of the network's name.
+          if (incompleteOverlay) return { action: "update", stables: ["name"] };
+          // Recreate a missing network without trying to delete its former generation.
+          if (!(yield* inspectCurrent)) return { action: "update" };
         }),
-        reconcile: Effect.fn(function* ({ output, id, instanceId, news }) {
+        reconcile: Effect.fn(function* ({ output, id, instanceId, news, olds }) {
           const context = dockerEngineContextName(news?.context);
           const args = yield* makeNetworkArgs(id, news, instanceId);
           if (output) {
-            const refreshed = yield* docker.network.inspect(output.id, context).pipe(
-              Effect.map(toNetworkAttributes),
-              Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
-            );
-            if (refreshed) return refreshed;
+            const refreshed = yield* docker.network
+              .inspect(output.id, context)
+              .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+            if (refreshed) {
+              return toNetworkAttributes(
+                args.driver === "overlay"
+                  ? yield* waitForOverlayAllocation(docker, refreshed, context)
+                  : refreshed,
+              );
+            }
           }
           const internalTags = yield* createInternalTags(id);
           const { stdout: createdId } = yield* docker.network.create({
             ...args,
+            // A repaired overlay can disappear between plan and apply. Recreate it
+            // under the same name when no explicit rename was requested.
+            name:
+              output && hasIncompleteOverlayState(olds, output)
+                ? (news?.name ?? output.name)
+                : args.name,
             label: { ...args.label, ...internalTags },
             context,
           });
-          return toNetworkAttributes(yield* docker.network.inspect(createdId, context));
+          const created = yield* docker.network.inspect(createdId, context);
+          return toNetworkAttributes(
+            args.driver === "overlay"
+              ? yield* waitForOverlayAllocation(docker, created, context)
+              : created,
+          );
         }),
         delete: Effect.fn(({ olds, output }) =>
           docker.network
@@ -355,6 +405,40 @@ export const NetworkProvider = () =>
       });
     }),
   );
+
+/** Swarm may return a network ID before its driver and IPAM have been allocated. */
+class OverlayNetworkNotReady extends Data.TaggedError("OverlayNetworkNotReady")<{
+  readonly message: string;
+}> {}
+
+const hasIncompleteOverlayState = (
+  props: NetworkProps | undefined,
+  output: Network["Attributes"],
+) => props?.driver === "overlay" && (output.driver === "" || output.ipam?.driver === "");
+
+const overlayAllocationPending = (info: Docker.Network) =>
+  info.Driver === "" || (info.Driver === "overlay" && !info.IPAM?.Driver);
+
+const waitForOverlayAllocation = Effect.fn(function* (
+  docker: Docker["Service"],
+  initial: Docker.Network,
+  context?: string,
+) {
+  if (!overlayAllocationPending(initial)) return initial;
+  const info = yield* docker.network.inspect(initial.Id, context).pipe(
+    Effect.repeat({
+      until: (info) => !overlayAllocationPending(info),
+      schedule: Schedule.spaced("250 millis"),
+      times: 7,
+    }),
+  );
+  if (overlayAllocationPending(info)) {
+    return yield* new OverlayNetworkNotReady({
+      message: `Swarm did not allocate overlay network '${info.Name}' (${info.Id}) before the inspection limit. Retry once the network is ready.`,
+    });
+  }
+  return info;
+});
 
 /**
  * Swarm (overlay) network names are capped at 63 characters, like service

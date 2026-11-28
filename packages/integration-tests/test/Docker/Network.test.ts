@@ -3,9 +3,12 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
-import { inMemoryState } from "alchemy/State";
+import { noopSession } from "alchemy/Report";
+import { inMemoryState, isResourceState, State } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { ExitCode } from "effect/process/ChildProcessSpawner";
 import { expectFound } from "./lookup.ts";
 import { ensureDockerSwarm } from "./Runtime.ts";
 
@@ -285,6 +288,133 @@ describe(
             "noop",
           );
         }),
+    );
+
+    const readyOverlay: Docker.Docker.Network = {
+      Name: "allocated-overlay",
+      Id: "created-id",
+      Created: "2026-01-01T00:00:00Z",
+      Scope: "swarm",
+      Driver: "overlay",
+      EnableIPv6: false,
+      IPAM: { Driver: "default" },
+      Labels: null,
+    };
+    const pendingOverlay = { ...readyOverlay, Driver: "", IPAM: { Driver: "" } };
+
+    const reconcileOverlay = (inspect: Docker.Docker["Service"]["network"]["inspect"]) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const provider = Docker.NetworkProvider().pipe(
+          Layer.provide(
+            Layer.succeed(Docker.Docker, {
+              ...docker,
+              network: {
+                ...docker.network,
+                create: () =>
+                  Effect.succeed({ stdout: readyOverlay.Id, stderr: "", exitCode: ExitCode(0) }),
+                inspect,
+              },
+            }),
+          ),
+        );
+        return yield* Effect.gen(function* () {
+          const network = yield* Docker.Network.Provider;
+          return yield* network.reconcile({
+            id: "allocated-overlay",
+            fqn: "allocated-overlay",
+            instanceId: "instance",
+            news: { driver: "overlay", context: "swarm-lab" },
+            olds: undefined,
+            output: undefined,
+            session: noopSession,
+            bindings: [],
+          });
+        }).pipe(Effect.provide(provider));
+      });
+
+    test.provider("waits for an overlay driver and IPAM before recording attributes", () =>
+      Effect.gen(function* () {
+        const responses = [pendingOverlay, { ...readyOverlay, IPAM: { Driver: "" } }, readyOverlay];
+        const network = yield* reconcileOverlay((id, context) =>
+          Effect.sync(() => {
+            expect(id).toBe(readyOverlay.Id);
+            expect(context).toBe("swarm-lab");
+            const response = responses.shift();
+            if (!response) throw new Error("Unexpected extra network inspection");
+            return response;
+          }),
+        );
+        expect(network.driver).toBe("overlay");
+        expect(network.ipam.driver).toBe("default");
+      }),
+    );
+
+    test.provider("fails rather than recording an overlay that never allocates", () =>
+      Effect.gen(function* () {
+        const error = yield* reconcileOverlay(() => Effect.succeed(pendingOverlay)).pipe(
+          Effect.flip,
+        );
+        expect(error).toMatchObject({ _tag: "OverlayNetworkNotReady" });
+        expect(error.message).toContain(readyOverlay.Id);
+      }),
+    );
+
+    test.provider("repairs incomplete overlay state without replacing the network", (stack) =>
+      Effect.gen(function* () {
+        yield* ensureDockerSwarm;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const docker = yield* Docker.Docker;
+        const fqn = "recover-overlay";
+        const network = (attachable: boolean) =>
+          Effect.gen(function* () {
+            const overlay = yield* Docker.Network(fqn, { driver: "overlay", attachable });
+            const service = yield* Docker.Service("overlay-consumer", {
+              image: "nginx:alpine",
+              networks: [{ name: overlay.name, aliases: ["app"] }],
+              replicas: 0,
+            });
+            return { overlay, service };
+          });
+        const resource = network(true);
+        const { overlay: original, service } = yield* stack.deploy(resource);
+        const serviceInspect = (format: string) =>
+          docker
+            .run(["service", "inspect", service.id, "--format", format])
+            .pipe(Effect.map((output) => output.stdout));
+        expect(
+          yield* serviceInspect("{{range .Spec.TaskTemplate.Networks}}{{println .Target}}{{end}}"),
+        ).toBe(original.id);
+        const serviceVersion = yield* serviceInspect("{{.Version.Index}}");
+        const state = yield* yield* State;
+        const key = { stack: stack.name, stage: stack.stage, fqn };
+        const row = yield* state.get(key);
+        if (!isResourceState(row) || row.status !== "created") {
+          return yield* Effect.die(new Error("Expected a deployed Docker.Network row"));
+        }
+        yield* state.set({
+          ...key,
+          value: {
+            ...row,
+            attr: { ...original, driver: "", ipam: { driver: "", options: {}, config: [] } },
+          },
+        });
+
+        expect((yield* stack.plan(network(false))).resources[fqn]?.action).toBe("replace");
+        const plan = yield* stack.plan(resource);
+        expect(plan.resources[fqn]?.action).toBe("update");
+        expect(plan.resources["overlay-consumer"]?.action).toBe("noop");
+        const { overlay: refreshed, service: unchanged } = yield* stack.deploy(resource);
+        expect(refreshed.id).toBe(original.id);
+        expect(refreshed.driver).toBe("overlay");
+        expect(refreshed.ipam.driver).toBe("default");
+        expect(unchanged.id).toBe(service.id);
+        expect(yield* serviceInspect("{{.Version.Index}}")).toBe(serviceVersion);
+        const settled = yield* stack.plan(resource);
+        expect(settled.resources[fqn]?.action).toBe("noop");
+        expect(settled.resources["overlay-consumer"]?.action).toBe("noop");
+      }),
     );
 
     test.provider(
