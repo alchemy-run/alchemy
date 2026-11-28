@@ -5,7 +5,11 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
-import { equivalentPolicyJson } from "./fixtures.ts";
+import {
+  decodeIamPolicyDocument,
+  equivalentPolicyDocument,
+  equivalentPolicyJson,
+} from "./fixtures.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -85,17 +89,17 @@ test.provider(
       const subject = { GroupName: group.groupName };
       const input = { ...subject, PolicyName: "Inline" };
       const readDocument = IAM.getGroupPolicy(input).pipe(
-        Effect.map(({ PolicyDocument }) => JSON.parse(decodeURIComponent(PolicyDocument))),
+        Effect.map(({ PolicyDocument }) => decodeIamPolicyDocument(PolicyDocument)),
       );
       // Verify IAM distinguishes the two stored shapes, so an unwanted
       // rewrite cannot pass the readback assertion.
       const declared = yield* readDocument;
       expect(declared.Statement[0].Action).toEqual(["s3:ListBucket"]);
       yield* IAM.putGroupPolicy({ ...input, PolicyDocument: equivalentPolicyJson });
-      expect(yield* readDocument).toEqual(JSON.parse(equivalentPolicyJson));
+      expect(yield* readDocument).toEqual(equivalentPolicyDocument);
 
       yield* deploy("s3:ListBucket", true);
-      expect(yield* readDocument).toEqual(JSON.parse(equivalentPolicyJson));
+      expect(yield* readDocument).toEqual(equivalentPolicyDocument);
       const { AttachedPolicies } = yield* IAM.listAttachedGroupPolicies(subject);
       expect(AttachedPolicies?.map((policy) => policy.PolicyArn)).toEqual([attachmentArn]);
 

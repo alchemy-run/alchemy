@@ -6,6 +6,11 @@ import {
   type ServiceControlPolicyDocument,
 } from "@alchemy.run/aws/IAM/Policy";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Schema from "effect/Schema";
+
+const decodeJson = Schema.decodeSync(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+);
 
 const document: PolicyDocument = {
   Version: "2012-10-17",
@@ -24,8 +29,8 @@ describe(
   "stringifyPolicyDocument",
   { tags: ["unit", "provider:aws", "provider:aws:iam", "local"] },
   () => {
-    it("round-trips through JSON.parse", () => {
-      expect(JSON.parse(stringifyPolicyDocument(document))).toEqual(document);
+    it("round-trips through the JSON schema", () => {
+      expect(decodeJson(stringifyPolicyDocument(document))).toEqual(document);
     });
   },
 );
@@ -60,14 +65,26 @@ describe(
       expect(normalizePolicyDocument(encoded)).toBe(normalizePolicyDocument(document));
     });
 
+    it("preserves literal percent escapes in plain and URL-encoded documents", () => {
+      const escaped = {
+        ...document,
+        Statement: [{ Effect: "Allow", Resource: "arn:aws:s3:::my-bucket/a%20b" }],
+      };
+      const raw = JSON.stringify(escaped);
+      const expected = normalizePolicyDocument(escaped);
+      expect(normalizePolicyDocument(raw)).toBe(expected);
+      expect(normalizePolicyDocument(encodeURIComponent(raw))).toBe(expected);
+    });
+
     it("is deterministic for the same document", () => {
       expect(normalizePolicyDocument(document)).toBe(
-        normalizePolicyDocument(JSON.parse(stringifyPolicyDocument(document))),
+        normalizePolicyDocument(decodeJson(stringifyPolicyDocument(document))),
       );
     });
 
     it("returns unparseable strings unchanged so drift diffs still fire", () => {
       expect(normalizePolicyDocument("not-json{")).toBe("not-json{");
+      expect(normalizePolicyDocument("%ZZ")).toBe("%ZZ");
     });
 
     it("treats singleton arrays and scalars as equivalent (AWS collapses them)", () => {
@@ -165,7 +182,7 @@ describe(
       };
       expect(illegal).toBeDefined();
       expect(normalizePolicyDocument(scp)).toBe(
-        normalizePolicyDocument(JSON.parse(JSON.stringify(scp))),
+        normalizePolicyDocument(decodeJson(JSON.stringify(scp))),
       );
     });
   },

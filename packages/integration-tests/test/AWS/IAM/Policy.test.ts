@@ -5,7 +5,11 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
-import { equivalentPolicyJson } from "./fixtures.ts";
+import {
+  decodeIamPolicyDocument,
+  equivalentPolicyDocument,
+  equivalentPolicyJson,
+} from "./fixtures.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -100,9 +104,7 @@ test.provider(
         PolicyArn: policy!.policyArn,
         VersionId: defaultVersion!.VersionId!,
       });
-      const decoded = JSON.parse(decodeURIComponent(document.PolicyVersion?.Document ?? "")) as {
-        Statement: [{ Action: string[] }];
-      };
+      const decoded = decodeIamPolicyDocument(document.PolicyVersion?.Document ?? "");
       expect(decoded.Statement[0].Action).toEqual(["s3:GetBucketLocation"]);
 
       yield* stack.destroy();
@@ -172,8 +174,8 @@ test.provider(
         ...input,
         VersionId: seededId!,
       });
-      expect(JSON.parse(decodeURIComponent(observedSeed?.Document ?? ""))).toEqual(
-        JSON.parse(equivalentPolicyJson),
+      expect(decodeIamPolicyDocument(observedSeed?.Document ?? "")).toEqual(
+        equivalentPolicyDocument,
       );
 
       const getVersions = IAM.listPolicyVersions(input).pipe(
@@ -201,7 +203,7 @@ test.provider(
       expect(changedId).toBeDefined();
       expect(changedId).not.toBe(seededId);
       const { PolicyVersion } = yield* IAM.getPolicyVersion({ ...input, VersionId: changedId! });
-      const changed = JSON.parse(decodeURIComponent(PolicyVersion?.Document ?? ""));
+      const changed = decodeIamPolicyDocument(PolicyVersion?.Document ?? "");
       expect(["s3:GetObject", ["s3:GetObject"]]).toContainEqual(changed.Statement[0].Action);
 
       yield* stack.destroy();

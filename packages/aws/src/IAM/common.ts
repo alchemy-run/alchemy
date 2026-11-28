@@ -1,6 +1,8 @@
 import type * as iam from "@distilled.cloud/aws/iam";
 import { toWireDays, toWireSeconds } from "alchemy/Util/Duration";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import type { Partition } from "../Partition.ts";
 import type { PolicyDocument } from "./Policy.ts";
 
@@ -42,13 +44,18 @@ const decodePolicyString = (value: string) => {
   }
 };
 
+const decodeJson = Schema.decodeResult(Schema.fromJsonString(Schema.Unknown));
+
+// Try plain JSON first so literal percent escapes in a policy are not altered.
+export const decodePolicyJson = (value: string) =>
+  decodeJson(value).pipe(Result.orElse(() => decodeJson(decodePolicyString(value))));
+
 export const parsePolicyDocument = (value: string | undefined): PolicyDocument | undefined => {
   if (!value) {
     return undefined;
   }
 
-  const decoded = decodePolicyString(value);
-  return JSON.parse(decoded) as PolicyDocument;
+  return Result.getOrThrowWith(decodePolicyJson(value), (error) => error) as PolicyDocument;
 };
 
 export const stringifyPolicyDocument = (value: PolicyDocument) => JSON.stringify(value);

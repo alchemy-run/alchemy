@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -13,6 +14,7 @@ import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { IamAction } from "./actions.generated.ts";
 import {
+  decodePolicyJson,
   oldestNondefaultPolicyVersion,
   parsePolicyDocument,
   policyArnFromParts,
@@ -109,15 +111,8 @@ export const normalizePolicyDocument = (json: string | object): string => {
           )
         : value;
   if (typeof json === "string") {
-    try {
-      return JSON.stringify(stable(JSON.parse(json)));
-    } catch {
-      try {
-        return JSON.stringify(stable(JSON.parse(decodeURIComponent(json))));
-      } catch {
-        return json;
-      }
-    }
+    const decoded = decodePolicyJson(json);
+    return Result.isSuccess(decoded) ? JSON.stringify(stable(decoded.success)) : json;
   }
   return JSON.stringify(stable(json));
 };

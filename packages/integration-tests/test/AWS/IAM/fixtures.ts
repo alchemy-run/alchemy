@@ -1,3 +1,5 @@
+import * as Schema from "effect/Schema";
+
 export const testCertificateBody = `-----BEGIN CERTIFICATE-----
 MIICuDCCAaACCQDB190ctLeLgjANBgkqhkiG9w0BAQsFADAeMRwwGgYDVQQDDBNh
 bGNoZW15LWVmZmVjdC10ZXN0MB4XDTI2MDMxMjE4NTczOVoXDTI3MDMxMjE4NTcz
@@ -97,8 +99,21 @@ export const testOidcGithubHost = testOidcGithubUrl.replace(/^https?:\/\//, "");
 export const testOidcThumbprintA = "1111111111111111111111111111111111111111";
 export const testOidcThumbprintB = "2222222222222222222222222222222222222222";
 
-/** Same permission in the two policy shapes IAM can return. */
-export const equivalentPolicyJson = JSON.stringify({
+/** The scalar form of the singleton action used in the reconciliation tests. */
+export const equivalentPolicyDocument = {
   Version: "2012-10-17",
   Statement: [{ Resource: "*", Action: "s3:ListBucket", Effect: "Allow" }],
-});
+};
+
+export const equivalentPolicyJson = JSON.stringify(equivalentPolicyDocument);
+
+const iamPolicyDocumentJson = Schema.fromJsonString(
+  Schema.StructWithRest(
+    Schema.Struct({ Statement: Schema.NonEmptyArray(Schema.Record(Schema.String, Schema.Json)) }),
+    [Schema.Record(Schema.String, Schema.Json)],
+  ),
+);
+const decodeIamPolicyJson = Schema.decodeSync(iamPolicyDocumentJson);
+
+export const decodeIamPolicyDocument = (encoded: string) =>
+  decodeIamPolicyJson(decodeURIComponent(encoded));
