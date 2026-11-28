@@ -133,9 +133,9 @@ export type CommandOf<
   CommandService<A["apiName"], C["tag"]>,
   string,
   CommandArgs<C>,
-  Schema.Schema<Success<C>>,
+  Schema.Codec<Success<C>, unknown>,
   false,
-  Schema.Schema<Failure<C, Strong>>
+  Schema.Codec<Failure<C, Strong>, unknown>
 >;
 
 type IsPaged<Q extends DomainQuery.Any> =
@@ -147,18 +147,18 @@ export type QueryOf<A extends Api.Any, Q extends DomainQuery.Any> =
     ? Query.InfiniteService<
         QueryService<A["apiName"], Q["queryName"]>,
         string,
-        Schema.Schema<QueryArgs<Q>>,
-        Schema.Schema<DomainQuery.ResultOf<Q>>,
+        Schema.Codec<QueryArgs<Q>, unknown>,
+        Schema.Codec<DomainQuery.ResultOf<Q>, unknown>,
         Api.EntryOf<Q>,
-        Schema.Schema<string>,
-        Schema.Schema<QueryFailure<Q>>
+        Schema.Codec<string, unknown>,
+        Schema.Codec<QueryFailure<Q>, unknown>
       >
     : Query.Service<
         QueryService<A["apiName"], Q["queryName"]>,
         string,
-        Schema.Schema<QueryArgs<Q>>,
-        Schema.Schema<DomainQuery.ResultOf<Q>>,
-        Schema.Schema<QueryFailure<Q>>
+        Schema.Codec<QueryArgs<Q>, unknown>,
+        Schema.Codec<DomainQuery.ResultOf<Q>, unknown>,
+        Schema.Codec<QueryFailure<Q>, unknown>
       >;
 
 type ReadEntry = View.Any | DomainStream.Any;
@@ -227,9 +227,9 @@ export type ViewFailure<V extends View.Any> =
 export type ViewQueryOf<A extends Api.Any, V extends View.Any> = Query.StreamService<
   ViewService<A["apiName"], V["viewName"]>,
   string,
-  Schema.Schema<ViewArgs<V>>,
-  Schema.Schema<Snapshot<StateOf<V>>>,
-  Schema.Schema<ViewFailure<V>>
+  Schema.Codec<ViewArgs<V>, unknown>,
+  Schema.Codec<Snapshot<StateOf<V>>, unknown>,
+  Schema.Codec<ViewFailure<V>, unknown>
 >;
 
 /** Callbacks for live read state. */

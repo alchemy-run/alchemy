@@ -1251,5 +1251,17 @@ describe("Domain Effect UI", { tags: ["unit", "local"] }, () => {
       any
     > = Counter.Total.get({ key: target });
     expect(Effect.isEffect(failure)).toBe(true);
+    // A Command's and a query's failure Schemas decode with no services, so a component's
+    // Message or Model can hold them.
+    const Panel = Html.component({
+      name: "FailurePanel",
+      model: Schema.Struct({ failure: Schema.NullOr(Counter.Increment.error) }),
+      message: UiSchema.TaggedEnum({
+        FailedAdd: { failure: Counter.Increment.error },
+        FailedCount: { failure: Queries.Count.error },
+        FailedTotal: { failure: Counter.Total.error },
+      }),
+    });
+    expect(Panel).toBeDefined();
   });
 });
