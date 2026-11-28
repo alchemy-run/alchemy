@@ -195,7 +195,7 @@ The sessions need the board and the board needs the sessions. `TriageSessions` a
 ```diff lang="typescript" title="src/Sessions.ts"
 -export const TriageSessions = AICloudflare.Process(
 +const TriageSessions = AICloudflare.Process(
-  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 +
 +export const Live = BoardLive.pipe(Layer.provideMerge(TriageSessions));

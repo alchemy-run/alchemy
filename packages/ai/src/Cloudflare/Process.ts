@@ -43,12 +43,12 @@ import { layerObjects } from "../Host.ts";
  * import { EngineerLive } from "./Engineer.process.ts";
  * import { Smart, SmartLive } from "./Models.ts";
  *
- * const Agents = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
+ * const Harness = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
  *   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLive)),
  * );
  *
  * export const EngineerSessions = AICloudflare.Process(
- *   EngineerLive.pipe(Layer.provide(Agents)),
+ *   EngineerLive.pipe(Layer.provide(Harness)),
  * );
  * ```
  *
@@ -64,7 +64,7 @@ import { layerObjects } from "../Host.ts";
  * );
  *
  * const EngineerSessions = AICloudflare.Process(
- *   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
+ *   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
  * );
  *
  * export const Live = WorkshopLive.pipe(Layer.provideMerge(EngineerSessions));

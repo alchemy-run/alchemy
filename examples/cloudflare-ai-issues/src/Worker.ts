@@ -31,7 +31,7 @@ import { Triage, TriageLive } from "./Triage.process.ts";
  * `OpenCode.CodingTools` and `OpenCodeCloudflare.DurableObjectStorage`
  * instead; nothing else changes.
  */
-const Agents = Layer.mergeAll(
+const Harness = Layer.mergeAll(
   Pi.HarnessLive,
   Pi.CodingTools,
   AI.DefaultModel(Smart),
@@ -56,7 +56,7 @@ const BoardLive = Board.layer(IssueWorkLive).pipe(
  * with what a session runs on and the board it mentions.
  */
 const TriageSessions = AICloudflare.Process(
-  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 
 const Live = Layer.mergeAll(BoardLive, TriageSessions, GitHub.RepositoryEventSourceLive).pipe(

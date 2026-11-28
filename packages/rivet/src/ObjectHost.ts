@@ -168,7 +168,7 @@ export interface ObjectHostOptions<PoolReq> {
  * import * as Rivet from "@alchemy.run/rivet";
  * import * as RivetDocker from "@alchemy.run/rivet/Docker";
  * import * as Layer from "effect/Layer";
- * import { Agents } from "./Agents.ts";
+ * import { Harness } from "./Harness.ts";
  * import { Board, IssueWorkLive } from "./Board.model.ts";
  * import { TriageLive } from "./Triage.process.ts";
  *
@@ -178,7 +178,7 @@ export interface ObjectHostOptions<PoolReq> {
  * const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainRivet.layerDurableObjects()));
  *
  * const TriageSessions = AI.layerObjects(
- *   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+ *   TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
  * );
  *
  * export default BoardLive.pipe(

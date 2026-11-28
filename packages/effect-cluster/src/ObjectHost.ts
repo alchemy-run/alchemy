@@ -460,7 +460,7 @@ export class ClusterObjects extends Context.Service<
  * import * as Cluster from "@alchemy.run/effect-cluster";
  * import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
  * import * as Layer from "effect/Layer";
- * import { Agents } from "./Agents.ts";
+ * import { Harness } from "./Harness.ts";
  * import { Board, IssueWorkLive } from "./Board.model.ts";
  * import { TriageLive } from "./Triage.process.ts";
  *
@@ -470,7 +470,7 @@ export class ClusterObjects extends Context.Service<
  * const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainCluster.layerEntities()));
  *
  * const TriageSessions = AI.layerObjects(
- *   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+ *   TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
  * );
  *
  * export default BoardLive.pipe(

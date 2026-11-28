@@ -16,7 +16,7 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Layer from "effect/Layer";
 import { Smart, SmartLive } from "./Models.ts";
 
-const Agents = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
+const Harness = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLive)),
 );
 ```
@@ -35,7 +35,7 @@ import { Smart, SmartLive } from "./Models.ts";
 +import { TaskWorkLive } from "./Workshop/TaskWork.policy.ts";
 +import { Workshop } from "./Workshop/Workshop.model.ts";
 
-const Agents = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
+const Harness = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Smart)).pipe(
   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLive)),
 );
 +
@@ -63,7 +63,7 @@ const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(
 );
 +
 +const EngineerSessions = AICloudflare.Process(
-+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
++  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
 +);
 ```
 
@@ -75,7 +75,7 @@ The model needed an `Engineer`, and now there is one:
 
 ```diff lang="typescript" title="src/Workshop.ts"
 const EngineerSessions = AICloudflare.Process(
-  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
 );
 +
 +export const Live = WorkshopLive.pipe(Layer.provideMerge(EngineerSessions));
@@ -122,7 +122,7 @@ Pass props first to say where Cloudflare keeps the objects:
 ```typescript
 const EngineerSessions = AICloudflare.Process(
   { jurisdiction: "eu" },
-  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
 );
 ```
 
@@ -133,5 +133,5 @@ An object in a jurisdiction is a different object from the one with the same nam
 A process that mentions no model needs no `@alchemy.run/domain`. Give the host the process and what its sessions run on:
 
 ```typescript
-export const Live = AICloudflare.Process(EngineerLive.pipe(Layer.provide(Agents)));
+export const Live = AICloudflare.Process(EngineerLive.pipe(Layer.provide(Harness)));
 ```

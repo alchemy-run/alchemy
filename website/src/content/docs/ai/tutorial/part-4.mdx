@@ -78,7 +78,7 @@ import { Smart, SmartLlama } from "./Models.ts";
 +  Layer.provide(PiCloudflare.DurableObjectStorage),
 +);
 
-const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
+const Harness = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
 -  Layer.provide(SmartLlama),
 +  Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
 +  Layer.provide(Boat.CreateSandboxHttp),
@@ -246,8 +246,8 @@ import { Smart, SmartLlama } from "./Models.ts";
 import { SandboxLive } from "./Sandbox.ts";
 +import { SearchIssuesLive } from "./SearchIssues.tool.ts";
 
--const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
-+const Agents = Layer.mergeAll(
+-const Harness = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
++const Harness = Layer.mergeAll(
 +  HarnessLive,
 +  AI.DefaultModel(Smart),
 +  SearchIssuesLive,

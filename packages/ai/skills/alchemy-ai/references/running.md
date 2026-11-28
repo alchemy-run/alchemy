@@ -24,7 +24,7 @@ Host the model as any model is. Then give `AICloudflare.Process` the prose of ea
 
 ```typescript
 // src/Worker.ts
-const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), PostAnswerLive).pipe(
+const Harness = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart), PostAnswerLive).pipe(
   Layer.provide(Layer.mergeAll(SmartLlama, SandboxLive)),
   Layer.provide(Boat.CreateSandboxHttp),
 );
@@ -35,7 +35,7 @@ const BoardLive = Board.layer(IssueWorkLive).pipe(
 );
 
 const TriageSessions = AICloudflare.Process(
-  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 
 const Live = BoardLive.pipe(Layer.provideMerge(TriageSessions));
@@ -54,7 +54,7 @@ The process's Layer does not change. `AIRivet.Process` (`@alchemy.run/ai/Rivet`)
 export default AIRivet.Process(
   "Sessions",
   { main: import.meta.url, pool: Default },
-  TriageLive.pipe(Layer.provide(Agents)),
+  TriageLive.pipe(Layer.provide(Harness)),
 );
 ```
 
@@ -65,7 +65,7 @@ With a model, both share one host, written once below them:
 const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainRivet.layerDurableObjects()));
 
 const TriageSessions = AI.layerObjects(
-  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
+  TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive))),
 );
 
 export default BoardLive.pipe(
@@ -87,7 +87,7 @@ The same two files with `AICluster.Process` (`@alchemy.run/ai/EffectCluster`), a
 export default AICluster.Process(
   "Sessions",
   { main: import.meta.url, pool: Default },
-  TriageLive.pipe(Layer.provide(Agents)),
+  TriageLive.pipe(Layer.provide(Harness)),
 );
 ```
 

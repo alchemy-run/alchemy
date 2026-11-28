@@ -243,13 +243,13 @@ export const layerInMemory = <A, E, R>(
  * import * as Rivet from "@alchemy.run/rivet";
  * import * as RivetDocker from "@alchemy.run/rivet/Docker";
  * import * as Layer from "effect/Layer";
- * import { Agents } from "./Agents.ts";
+ * import { Harness } from "./Harness.ts";
  * import { EngineerLive } from "./Engineer.process.ts";
  *
  * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
  * const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
  *
- * export default AI.layerObjects(EngineerLive.pipe(Layer.provide(Agents))).pipe(
+ * export default AI.layerObjects(EngineerLive.pipe(Layer.provide(Harness))).pipe(
  *   Layer.provide(Rivet.layerObjectHost("Sessions", { main: import.meta.url, pool: Default })),
  * );
  * ```

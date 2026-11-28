@@ -31,7 +31,7 @@ A host is a Layer. Give it the process's Layer, with what a session runs on and 
 
 ```typescript
 const EngineerSessions = AICloudflare.Process(
-  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
 );
 ```
 

@@ -13,7 +13,7 @@ Host a process on [Effect Cluster](/cluster), and each of its sessions is an ent
 import * as AICluster from "@alchemy.run/ai/EffectCluster";
 import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
-import { Agents } from "./Agents.ts";
+import { Harness } from "./Harness.ts";
 import { EngineerLive } from "./Engineer.process.ts";
 
 export const Database = ClusterDocker.Database("Cluster");
@@ -22,7 +22,7 @@ const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database))
 export default AICluster.Process(
   "Workshop",
   { main: import.meta.url, pool: Default },
-  EngineerLive.pipe(Layer.provide(Agents)),
+  EngineerLive.pipe(Layer.provide(Harness)),
 );
 ```
 
@@ -38,7 +38,7 @@ import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
 import * as Cluster from "@alchemy.run/effect-cluster";
 import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
-import { Agents } from "./Agents.ts";
+import { Harness } from "./Harness.ts";
 import { EngineerLive } from "./Engineer.process.ts";
 import { TaskWorkLive } from "./Workshop/TaskWork.policy.ts";
 import { Workshop } from "./Workshop/Workshop.model.ts";
@@ -49,7 +49,7 @@ const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database))
 const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainCluster.layerEntities()));
 
 const EngineerSessions = AI.layerObjects(
-  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
 );
 
 export default WorkshopLive.pipe(
@@ -94,4 +94,4 @@ There the Layer deploys the entity and reaches it through the pool's gateway. Se
 
 ## Bring a harness
 
-A session needs a harness that keeps its conversation where the session runs. `PiCloudflare.DurableObjectStorage` and OpenCode's storage are for a Cloudflare Durable Object, and neither harness has a storage Layer for an Effect Cluster entity yet. On Effect Cluster, `Agents` provides a harness of your own, or the process is played by [`AI.scripted`](/ai/in-memory).
+A session needs a harness that keeps its conversation where the session runs. `PiCloudflare.DurableObjectStorage` and OpenCode's storage are for a Cloudflare Durable Object, and neither harness has a storage Layer for an Effect Cluster entity yet. On Effect Cluster, `Harness` provides a harness of your own, or the process is played by [`AI.scripted`](/ai/in-memory).

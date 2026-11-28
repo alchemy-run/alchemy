@@ -29,7 +29,7 @@ import { layerObjects } from "../Host.ts";
  * import * as AICluster from "@alchemy.run/ai/EffectCluster";
  * import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
  * import * as Layer from "effect/Layer";
- * import { Agents } from "./Agents.ts";
+ * import { Harness } from "./Harness.ts";
  * import { EngineerLive } from "./Engineer.process.ts";
  *
  * export const Database = ClusterDocker.Database("Cluster");
@@ -38,7 +38,7 @@ import { layerObjects } from "../Host.ts";
  * export default AICluster.Process(
  *   "Sessions",
  *   { main: import.meta.url, pool: Default },
- *   EngineerLive.pipe(Layer.provide(Agents)),
+ *   EngineerLive.pipe(Layer.provide(Harness)),
  * );
  * ```
  *

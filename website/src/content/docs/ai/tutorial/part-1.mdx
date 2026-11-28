@@ -79,7 +79,7 @@ import { Smart, SmartLlama } from "./Models.ts";
 
 const HarnessLive = Pi.HarnessLive.pipe(Layer.provide(PiCloudflare.DurableObjectStorage));
 
-const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
+const Harness = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
   Layer.provide(SmartLlama),
 );
 ```
@@ -99,12 +99,12 @@ import * as Layer from "effect/Layer";
 import { Smart, SmartLlama } from "./Models.ts";
 +import { TriageLive } from "./Triage.process.ts";
 
-const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
+const Harness = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
   Layer.provide(SmartLlama),
 );
 +
 +export const TriageSessions = AICloudflare.Process(
-+  TriageLive.pipe(Layer.provide(Agents)),
++  TriageLive.pipe(Layer.provide(Harness)),
 +);
 ```
 

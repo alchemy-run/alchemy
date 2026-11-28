@@ -29,7 +29,7 @@ import { layerObjects } from "../Host.ts";
  * import * as AIRivet from "@alchemy.run/ai/Rivet";
  * import * as RivetDocker from "@alchemy.run/rivet/Docker";
  * import * as Layer from "effect/Layer";
- * import { Agents } from "./Agents.ts";
+ * import { Harness } from "./Harness.ts";
  * import { EngineerLive } from "./Engineer.process.ts";
  *
  * const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
@@ -38,7 +38,7 @@ import { layerObjects } from "../Host.ts";
  * export default AIRivet.Process(
  *   "Sessions",
  *   { main: import.meta.url, pool: Default },
- *   EngineerLive.pipe(Layer.provide(Agents)),
+ *   EngineerLive.pipe(Layer.provide(Harness)),
  * );
  * ```
  *
@@ -56,7 +56,7 @@ import { layerObjects } from "../Host.ts";
  * const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainRivet.layerDurableObjects()));
  *
  * const EngineerSessions = AI.layerObjects(
- *   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
+ *   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
  * );
  *
  * export default WorkshopLive.pipe(

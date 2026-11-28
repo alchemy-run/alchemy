@@ -13,7 +13,7 @@ Host a process on [Rivet](/rivet), and each of its sessions is a Rivet actor wit
 import * as AIRivet from "@alchemy.run/ai/Rivet";
 import * as RivetDocker from "@alchemy.run/rivet/Docker";
 import * as Layer from "effect/Layer";
-import { Agents } from "./Agents.ts";
+import { Harness } from "./Harness.ts";
 import { EngineerLive } from "./Engineer.process.ts";
 
 const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
@@ -22,7 +22,7 @@ const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane
 export default AIRivet.Process(
   "Workshop",
   { main: import.meta.url, pool: Default },
-  EngineerLive.pipe(Layer.provide(Agents)),
+  EngineerLive.pipe(Layer.provide(Harness)),
 );
 ```
 
@@ -38,7 +38,7 @@ import * as DomainRivet from "@alchemy.run/domain/Rivet";
 import * as Rivet from "@alchemy.run/rivet";
 import * as RivetDocker from "@alchemy.run/rivet/Docker";
 import * as Layer from "effect/Layer";
-import { Agents } from "./Agents.ts";
+import { Harness } from "./Harness.ts";
 import { EngineerLive } from "./Engineer.process.ts";
 import { TaskWorkLive } from "./Workshop/TaskWork.policy.ts";
 import { Workshop } from "./Workshop/Workshop.model.ts";
@@ -49,7 +49,7 @@ const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane
 const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(Layer.provide(DomainRivet.layerDurableObjects()));
 
 const EngineerSessions = AI.layerObjects(
-  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Harness, WorkshopLive))),
 );
 
 export default WorkshopLive.pipe(
@@ -94,4 +94,4 @@ There the Layer deploys the Durable Object class and reaches it through the cont
 
 ## Bring a harness
 
-A session needs a harness that keeps its conversation where the session runs. `PiCloudflare.DurableObjectStorage` and OpenCode's storage are for a Cloudflare Durable Object, and neither harness has a storage Layer for a Rivet actor yet. On Rivet, `Agents` provides a harness of your own, or the process is played by [`AI.scripted`](/ai/in-memory).
+A session needs a harness that keeps its conversation where the session runs. `PiCloudflare.DurableObjectStorage` and OpenCode's storage are for a Cloudflare Durable Object, and neither harness has a storage Layer for a Rivet actor yet. On Rivet, `Harness` provides a harness of your own, or the process is played by [`AI.scripted`](/ai/in-memory).

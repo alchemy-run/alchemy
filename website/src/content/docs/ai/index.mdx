@@ -69,12 +69,12 @@ import { AccountantLive } from "./Accountant.process.ts";
 import { AddLive } from "./Add.tool.ts";
 import { Fast, FastLive } from "./models.ts";
 
-const Agents = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast), AddLive).pipe(
+const Harness = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast), AddLive).pipe(
   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLive)),
 );
 
 export const AccountantSessions = AICloudflare.Process(
-  AccountantLive.pipe(Layer.provide(Agents)),
+  AccountantLive.pipe(Layer.provide(Harness)),
 );
 ```
 

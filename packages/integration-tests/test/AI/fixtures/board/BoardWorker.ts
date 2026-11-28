@@ -26,7 +26,7 @@ import { Triage } from "./Triage.ts";
 import { TriageLive } from "./TriageProse.ts";
 
 /** What a Triage session runs with: Pi, in its object's own storage, and a model. */
-const Agents = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast)).pipe(
+const Harness = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast)).pipe(
   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLlama)),
 );
 
@@ -63,7 +63,7 @@ const Resettable = Layer.effect(
       },
     };
   }),
-).pipe(Layer.provide(TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive)))));
+).pipe(Layer.provide(TriageLive.pipe(Layer.provide(Layer.mergeAll(Harness, BoardLive)))));
 
 /** Each Triage session in a Durable Object of this Worker, with the board its prose mentions. */
 const TriageSessions = AICloudflare.Process(Resettable);
