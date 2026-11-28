@@ -239,13 +239,27 @@ describe(
       });
     });
 
-    test("an origin absent from observed is passed through unchanged", () => {
+    // UpdateDistribution requires every member CloudFront fills on create,
+    // so an origin the update adds is completed with those defaults.
+    test("an origin absent from observed is completed with CloudFront's defaults", () => {
       const withNewOrigin = mergeWithObservedConfig(
         {
           ...desired,
           Origins: {
             Quantity: 1,
-            Items: [{ Id: "brand-new", DomainName: "new.example.com" } as cloudfront.Origin],
+            Items: [
+              {
+                Id: "brand-new",
+                DomainName: "new.example.com",
+                ConnectionAttempts: 2,
+                CustomOriginConfig: {
+                  HTTPPort: 80,
+                  HTTPSPort: 443,
+                  OriginProtocolPolicy: "https-only",
+                  OriginReadTimeout: 60,
+                },
+              } as cloudfront.Origin,
+            ],
           },
         },
         observed,
@@ -253,6 +267,18 @@ describe(
       expect(withNewOrigin.Origins?.Items?.[0]).toEqual({
         Id: "brand-new",
         DomainName: "new.example.com",
+        OriginPath: "",
+        CustomHeaders: { Quantity: 0 },
+        ConnectionAttempts: 2,
+        ConnectionTimeout: 10,
+        OriginShield: { Enabled: false },
+        CustomOriginConfig: {
+          HTTPPort: 80,
+          HTTPSPort: 443,
+          OriginProtocolPolicy: "https-only",
+          OriginReadTimeout: 60,
+          OriginKeepaliveTimeout: 5,
+        },
       });
     });
 

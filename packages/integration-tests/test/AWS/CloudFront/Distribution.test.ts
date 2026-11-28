@@ -286,6 +286,57 @@ describe(
       { tags: ["provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
     );
 
+    // Regression: CloudFront fills a custom origin's timeouts on create but
+    // requires them on update, so an origin added by an update (a website
+    // gaining its server) failed with `IllegalUpdate: OriginKeepaliveTimeout
+    // is required for updates`.
+    test.provider.skipIf(!runLive)(
+      "an update adds a custom origin",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const site = (extraOrigin: boolean) =>
+            Effect.gen(function* () {
+              const bucket = yield* Bucket("AddOriginBucket", { forceDestroy: true });
+              const oac = yield* OriginAccessControl("AddOriginOac", { originType: "s3" });
+              return yield* Distribution("AddOriginDistribution", {
+                origins: [
+                  {
+                    id: "site",
+                    domainName: bucket.bucketRegionalDomainName,
+                    s3Origin: true,
+                    originAccessControlId: oac.originAccessControlId,
+                  },
+                  ...(extraOrigin ? [{ id: "api", domainName: "example.com" }] : []),
+                ],
+                defaultCacheBehavior: {
+                  targetOriginId: "site",
+                  viewerProtocolPolicy: "redirect-to-https",
+                  compress: true,
+                },
+              });
+            });
+
+          const created = yield* stack.deploy(site(false));
+          yield* stack.deploy(site(true));
+
+          const updated = yield* cloudfront.getDistributionConfig({
+            Id: created.distributionId,
+          });
+          const api = updated.DistributionConfig?.Origins.Items?.find(
+            (origin) => origin.Id === "api",
+          );
+          expect(api?.DomainName).toEqual("example.com");
+          expect(api?.CustomOriginConfig?.OriginKeepaliveTimeout).toEqual(5);
+          expect(api?.CustomOriginConfig?.OriginReadTimeout).toEqual(30);
+
+          yield* stack.destroy();
+          yield* assertDistributionDeleted(created.distributionId);
+        }),
+      { tags: ["provider:aws:s3"], timeout: DEPLOY_DELETE_TIMEOUT },
+    );
+
     // Regression for the UpdateDistribution full-config-replacement failure:
     // members the props don't express (DefaultRootObject, per-origin
     // CustomHeaders) are set on the live distribution out-of-band, then an
