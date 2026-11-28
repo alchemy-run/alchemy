@@ -20,7 +20,7 @@ import { layerObjects } from "../Host.ts";
  * to it.
  *
  * The Worker that provides it declares one Durable Object class per
- * process, `AI.<Name>Process`. Each object builds the Layer for itself, so a
+ * process, `<Name>Process`. Each object builds the Layer for itself, so a
  * harness opens on that object's storage and alarm, and a session carries
  * on after its object is evicted.
  *

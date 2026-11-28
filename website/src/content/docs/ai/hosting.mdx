@@ -87,7 +87,7 @@ const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(
 +);
 ```
 
-It gives back the same service, `Engineer`. The Worker that provides it declares one Durable Object class, `AI.EngineerProcess`, and each session is one object of it, named after the session's key. Each object builds the Layer it was given for itself, so the harness opens there, on that object's storage.
+It gives back the same service, `Engineer`. The Worker that provides it declares one Durable Object class, `EngineerProcess`, and each session is one object of it, named after the session's key. Each object builds the Layer it was given for itself, so the harness opens there, on that object's storage.
 
 ## Give the model its process
 

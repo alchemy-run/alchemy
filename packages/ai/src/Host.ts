@@ -227,7 +227,7 @@ export const layerInMemory = <A, E, R>(
 /**
  * Host a process on objects: each session in an object of its own, on
  * whatever platform provides the `ObjectHost` (`alchemy/Workers/ObjectHost`).
- * Every process the Layer provides gets one class, `AI.<Name>Process`, and
+ * Every process the Layer provides gets one class, `<Name>Process`, and
  * every session one object of it, named after the session's key. Each object
  * builds the Layer for itself, so a harness opens on that object's storage.
  *
@@ -261,7 +261,7 @@ export const layerObjects = <A, E, R>(
     Effect.gen(function* () {
       const objects = yield* ObjectHost;
       const namespace = yield* objects.declare(
-        `AI.${name}Process`.replace(/[^A-Za-z0-9_.]/g, "_"),
+        `${name}Process`.replace(/[^A-Za-z0-9_]/g, "_"),
         // Each object builds the process for itself: a harness opens on its storage.
         Effect.map(instance({ apart: true }), ({ call }) => ({ call })),
       );
