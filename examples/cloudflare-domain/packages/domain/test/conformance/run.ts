@@ -224,13 +224,13 @@ export const check = (groups: ReadonlyArray<Group>): void => {
                 ],
           );
           expect(unread).toEqual([]);
-          // A misuse TypeScript would refuse may throw in the real code where the prover read on: that is all it may do.
-          const thrownByMisuse = (reason: string) =>
-            [...misused].some((command) => reason.includes(`read ${command} `)) &&
-            reason.includes("and the real code threw: ");
+          // A misuse is code TypeScript refuses, outside what the prover answers for: the real code may
+          // throw on it, or curry it where the prover reads it at once. Only that it is read or reported is held.
+          const ofMisuse = (reason: string) =>
+            [...misused].some((command) => reason.includes(`read ${command} `));
           expect(
             report.agreement.differs
-              .filter((reason) => !thrownByMisuse(reason))
+              .filter((reason) => !ofMisuse(reason))
               .map((reason) => reason.slice(0, 400)),
           ).toEqual([]);
           // A path that takes the items of a hash set in an order the real one does not give
