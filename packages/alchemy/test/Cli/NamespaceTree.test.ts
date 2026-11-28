@@ -53,14 +53,17 @@ describe("NamespaceTree YAML properties", { tags: ["unit", "local"] }, () => {
 });
 
 describe("a runtime's terms in the plan tree", { tags: ["unit"] }, () => {
-  test("a model's own bindings are grouped under it, and a host's terms under its row", () => {
+  test("a model's own bindings are grouped under it by name, and a host's terms under its row", () => {
     const node = createNode({}, "Worker");
     const bind = (sid: string) => ({ sid, action: "create" }) as never;
     node.bindings = [
       bind("AI"),
       bind("Agents"),
       bind("Board.IssueAggregate"),
+      bind("Board.IssueAggregate.BeforeVersions"),
       bind("Board.IssueView"),
+      bind("Board.NotifyPolicy"),
+      bind("Board.NotifyPolicy.Retiring"),
     ];
     node.capabilities = [
       {
@@ -69,7 +72,21 @@ describe("a runtime's terms in the plan tree", { tags: ["unit"] }, () => {
         name: "Board",
         bindings: [],
         references: [],
-        resources: ["Board.IssueAggregate", "Board.IssueView"],
+        resources: [
+          "Board.IssueAggregate",
+          "Board.IssueAggregate.BeforeVersions",
+          "Board.IssueView",
+          "Board.NotifyPolicy",
+          "Board.NotifyPolicy.Retiring",
+        ],
+      },
+      {
+        id: "Policy:Notify",
+        kind: "Policy",
+        name: "Notify",
+        host: "Board.NotifyPolicy",
+        bindings: [],
+        references: [{ relation: "uses", to: "Process:Triage" }],
       },
       {
         id: "Process:Triage",
@@ -90,8 +107,15 @@ describe("a runtime's terms in the plan tree", { tags: ["unit"] }, () => {
       "    capability Triage",
       "  binding AI",
       "  capability Board",
+      // A part of a piece is under the piece, by its last name.
       "    binding IssueAggregate",
+      "      binding BeforeVersions",
       "    binding IssueView",
+      // What a piece's object runs is under it too.
+      "    binding NotifyPolicy",
+      "      capability Notify",
+      "        capability Process Triage",
+      "      binding Retiring",
     ]);
   });
 });
