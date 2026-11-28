@@ -762,6 +762,7 @@ const base: ReadonlyArray<Group> = [
       `["ab".match(/(x)?b/), "ab".match(/z/), "ab".search(/z/)]`,
       `["ab".replace(/a/), "aba".replaceAll(/a/g)]`,
       `[text.slice(undefined, 2), text.substring(undefined, 1), text.charCodeAt(), text.slice(-1)]`,
+      `[text.slice(undefined, text.indexOf("a")), text.substring(undefined, text.indexOf("a"))]`,
     ],
     unread: [
       [`text.startsWith("a", 1)`, /calls startsWith on a string an input holds/],
@@ -4227,6 +4228,10 @@ const rest: ReadonlyArray<Group> = [
       `Effect.succeed([Result.isFailure(Exit.filterSuccess(Exit.fail(a))), Result.isFailure(Exit.filterValue(Exit.fail(a))), Result.isSuccess(Exit.filterFailure(Exit.fail(b))), b])`,
       `Effect.map(Effect.exit(Effect.failCause(Cause.die(a))), Exit.hasDies)`,
       `Effect.onInterrupt(Effect.interrupt, () => Effect.die(a)).pipe(Effect.exit, Effect.map((exit) => exit.cause.reasons.map((reason) => reason._tag)))`,
+    ],
+    misuse: [
+      `Effect.flip(Effect.failCause({ reasons: [{ _tag: "Fail" }] }))`,
+      `Effect.succeed(Exit.asVoidAll([{ _tag: "Failure", cause: {} }]))`,
     ],
     unread: [[`Exit.mapError()(Exit.fail(a))`, /is called in a way the prover has no model for/]],
   },

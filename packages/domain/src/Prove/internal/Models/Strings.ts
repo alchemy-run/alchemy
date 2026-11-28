@@ -138,9 +138,9 @@ export const make = (kit: Kit) => {
       );
     };
 
-  const part = (self: V, from: number, to: number | undefined, name: string, site: Site) => {
-    const text = Compare.textual(self);
-    if (!text || from < 0 || (to !== undefined && to < 0)) return unread(site, name);
+  // Called on text, at places its callers have checked are not before its start.
+  const part = (self: V, from: number, to: number | undefined) => {
+    const text = Compare.textual(self)!;
     const length =
       to === undefined ? `(- (str.len ${text.text}) ${from})` : `${Math.max(0, to - from)}`;
     return Effect.succeed(Value.term("String", `(str.substr ${text.text} ${from} ${length})`));
@@ -339,7 +339,7 @@ export const make = (kit: Kit) => {
       const b = absent(to) ? undefined : index(to);
       if (a !== undefined && (absent(to) || b !== undefined)) {
         if (text !== undefined) return Effect.succeed(Value.str(text.slice(a, b)));
-        if (a >= 0 && (b === undefined || b >= 0)) return part(self, a, b, "slice", site);
+        if (a >= 0 && (b === undefined || b >= 0)) return part(self, a, b);
       }
       // A place an input decides: where a separator is, or a number the command holds.
       const start = absent(from) ? 0 : wholeOf(from);
@@ -356,7 +356,7 @@ export const make = (kit: Kit) => {
       if (a !== undefined && (absent(to) || b !== undefined)) {
         if (text !== undefined) return Effect.succeed(Value.str(text.substring(a, b)));
         // `substring` swaps its bounds when the first is the larger.
-        if (a >= 0 && (b === undefined || b >= a)) return part(self, a, b, "substring", site);
+        if (a >= 0 && (b === undefined || b >= a)) return part(self, a, b);
       }
       const start = absent(from) ? 0 : wholeOf(from);
       const end = absent(to) ? undefined : wholeOf(to);

@@ -5,6 +5,7 @@ import { expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as HashMap from "effect/HashMap";
 import * as HashSet from "effect/HashSet";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -64,4 +65,31 @@ it("a name looked up past a value that is not a module's is not there", () => {
   expect(Known.hostOf("effect/Number", ["sum", "length", "toFixed", "x"])).toBeUndefined();
   expect(Known.schemaOf("effect/Number", [])).toBeUndefined();
   expect(Known.schemaOf("effect/Schema", ["Number", "nothing", "here"])).toBeUndefined();
+});
+
+it("a value the prover knows all of is the real one", () => {
+  const fn = Known.known((n: number) => n + 1, "next")!;
+  expect(typeof Known.real(fn)?.value).toBe("function");
+  expect(Known.real(Value.some(Value.num(1)))).toEqual({ value: Option.some(1) });
+  expect(Known.real(Brands.success(Value.num(1)))).toEqual({ value: Result.succeed(1) });
+  const redacted = { kind: "Redacted" } as unknown as Value.Brand;
+  expect(
+    Redacted.value(
+      Known.real(Value.obj({ value: Value.num(1) }, redacted))!.value as Redacted.Redacted<number>,
+    ),
+  ).toBe(1);
+  expect(Known.real(Value.obj({ value: held }, redacted))).toBeUndefined();
+  expect(
+    HashSet.size(
+      Known.real(Brands.hashSet({ _tag: "Arr", items: [Value.num(1)] }))!
+        .value as HashSet.HashSet<number>,
+    ),
+  ).toBe(1);
+  const entries: Value.V = {
+    _tag: "Arr",
+    items: [{ _tag: "Arr", items: [Value.str("k"), Value.num(2)] }],
+  };
+  expect(
+    HashMap.get(Known.real(Brands.hashMap(entries))!.value as HashMap.HashMap<string, number>, "k"),
+  ).toEqual(Option.some(2));
 });
