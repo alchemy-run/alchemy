@@ -17,7 +17,20 @@ export default defineConfig({
         "**/packages/domain/src/Prove/internal/Value.ts",
       ],
       reporter: ["text-summary"],
-      thresholds: { functions: 100 },
+      // Every function, and every branch of the files whose every branch a test takes.
+      thresholds: {
+        functions: 100,
+        ...Object.fromEntries(
+          [
+            "Models/Decimals",
+            "Models/Rationals",
+            "Models/Hashes",
+            "Models/Numbers",
+            "Timeline",
+            "Value",
+          ].map((file) => [`**/packages/domain/src/Prove/internal/${file}.ts`, { branches: 100 }]),
+        ),
+      },
     },
   },
 });
