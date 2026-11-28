@@ -76,7 +76,7 @@ catalog:
   "@effect/sql-sqlite-do": "^4.1.4"
   "@effect/tsgo": "^0.73.2"
   # Not on npm yet: a pkg.pr.new snapshot of Effect-TS/ui main, pinned by commit.
-  "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@e0b7cec"
+  "@effect/ui": "https://pkg.pr.new/Effect-TS/ui/@effect/ui@9d672ab"
   "@effect/vitest": "^4.1.4"
   "@foldkit/ui": "^0.170.0"
   "@foldkit/vite-plugin": "^0.29.0"
