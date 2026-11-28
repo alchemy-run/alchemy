@@ -1705,6 +1705,7 @@ const base: ReadonlyArray<Group> = [
       `Stream.make(a, 2).pipe(Stream.mapEffect((n) => Effect.succeed(n + 1), { concurrency: 1 }), Stream.runCollect)`,
       `Stream.run(Stream.make(a, 2), Sink.count.pipe(Sink.map((n) => n * 10)))`,
       `Stream.run(stream, Sink.map((n) => n * 10)(Sink.count))`,
+      `Effect.succeed(Schema.decodeUnknownSync(Schema.Array(Small))(items))`,
     ],
     unread: [
       [
@@ -3748,8 +3749,24 @@ const rest: ReadonlyArray<Group> = [
       `Result.match(Schema.decodeUnknownResult(Ticket)({ n: a }), { onSuccess: () => false, onFailure: Schema.isSchemaError })`,
       `Exit.hasDies(Effect.runSyncExit(Effect.sync(() => Schema.decodeUnknownSync(Ticket)({ n: a + 20 }))))`,
       `Exit.hasDies(Effect.runSyncExit(Effect.sync(() => Schema.asserts(Names, [a]))))`,
+      `Schema.decodeUnknownSync(Kind)(a > 0 ? { kind: "text", s: "x" } : { kind: "count", n: a })`,
+      `Schema.decodeUnknownSync(Schema.Tuple([Schema.Number]))([a])`,
+      `[Schema.is(Ticket)(), a]`,
+      `(() => { try { Schema.asserts(Names); return "fine"; } catch (error) { return "thrown"; } })()`,
     ],
     unread: [
+      [
+        `Schema.is(Ticket)({ n: a }, { errors: "all" })`,
+        /is called in a way the prover has no model for/,
+      ],
+      [`[Schema.is(Schema.Number)(new Uint8Array([1])), a]`, /on a value the prover cannot see/],
+      [`Optic.fromChecks()`, /is called in a way the prover has no model for/],
+      [`Optic.fromChecks(Schema.Number)`, /is called in a way the prover has no model for/],
+      [`Optic.fromChecks(undefined)`, /with a check of values the prover cannot see/],
+      [
+        `Optic.fromChecks(Schema.isGreaterThan(0)).getResult(a > 0)`,
+        /that the prover reads no checks of/,
+      ],
       [
         `Schema.decodeUnknownOption(Schema.NumberFromString)("1")`,
         /calls Schema\.decodeUnknownOption with a schema that changes the value it reads/,
@@ -4635,6 +4652,7 @@ const shapes: ReadonlyArray<Group> = [
       body(
         `switch (shape.kind._tag) { case "Good": return shape.kind.grams; case "Service": return shape.kind.minutes; default: return 0; }`,
       ),
+      `Schema.decodeUnknownSync(Schema.Struct({ label: Schema.optionalKey(Schema.String), n: Small }))(shape)`,
     ],
     unread: [
       [`shape.label ?? missingName`, /missingName/],
