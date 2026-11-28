@@ -55,7 +55,7 @@ const BoardLive = Board.layer(IssueWorkLive).pipe(
  * Triage on Durable Objects: one object per session, which builds the prose
  * with what a session runs on and the board it mentions.
  */
-const TriageSessions = AICloudflare.layerDurableObjects(
+const TriageSessions = AICloudflare.Process(
   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
 );
 

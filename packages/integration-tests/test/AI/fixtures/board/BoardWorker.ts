@@ -66,7 +66,7 @@ const Resettable = Layer.effect(
 ).pipe(Layer.provide(TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive)))));
 
 /** Each Triage session in a Durable Object of this Worker, with the board its prose mentions. */
-const TriageSessions = AICloudflare.layerDurableObjects(Resettable);
+const TriageSessions = AICloudflare.Process(Resettable);
 
 const Live = BoardLive.pipe(Layer.provideMerge(TriageSessions));
 

@@ -24,10 +24,10 @@ import { layerObjects } from "../Host.ts";
  * harness opens on that object's storage and alarm, and a session carries
  * on after its object is evicted.
  *
- * The options are `Cloudflare.layerObjectHost`'s: where the objects are
- * kept (`jurisdiction`, `locationHint`). To move the sessions to another
- * platform, give the same Layer to `AI.layerObjects` and provide that
- * platform's object host.
+ * The Worker is the entrypoint, so there is no name and no `main` to give.
+ * Props, when you pass them first, say where Cloudflare keeps the objects
+ * (`jurisdiction`, `locationHint`). To move the sessions to another
+ * platform, give the same Layer to `AIRivet.Process` or `AICluster.Process`.
  *
  * The Layer may need the process it provides, as a Domain model whose
  * policy holds it does: this provides it, inside each object and out.
@@ -47,7 +47,7 @@ import { layerObjects } from "../Host.ts";
  *   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, SmartLive)),
  * );
  *
- * export const EngineerSessions = AICloudflare.layerDurableObjects(
+ * export const EngineerSessions = AICloudflare.Process(
  *   EngineerLive.pipe(Layer.provide(Agents)),
  * );
  * ```
@@ -63,7 +63,7 @@ import { layerObjects } from "../Host.ts";
  *   Layer.provide(DomainCloudflare.layerDurableObjects()),
  * );
  *
- * const EngineerSessions = AICloudflare.layerDurableObjects(
+ * const EngineerSessions = AICloudflare.Process(
  *   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
  * );
  *
@@ -87,8 +87,15 @@ import { layerObjects } from "../Host.ts";
  *
  * @layer
  */
-export const layerDurableObjects = <A, E, R>(
-  layer: Layer.Layer<A, E, R>,
-  options?: ObjectHostOptions,
-): Layer.Layer<A, E, Exclude<R, A> | Worker> =>
-  layerObjects(layer).pipe(Layer.provide(layerObjectHost(options)));
+export const Process: {
+  <A, E, R>(layer: Layer.Layer<A, E, R>): Layer.Layer<A, E, Exclude<R, A> | Worker>;
+  <A, E, R>(
+    props: ObjectHostOptions,
+    layer: Layer.Layer<A, E, R>,
+  ): Layer.Layer<A, E, Exclude<R, A> | Worker>;
+} = <A, E, R>(
+  ...args: [Layer.Layer<A, E, R>] | [ObjectHostOptions, Layer.Layer<A, E, R>]
+): Layer.Layer<A, E, Exclude<R, A> | Worker> => {
+  const [props, layer] = args.length === 1 ? [undefined, args[0]] : args;
+  return layerObjects(layer).pipe(Layer.provide(layerObjectHost(props)));
+};

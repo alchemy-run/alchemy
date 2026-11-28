@@ -46,7 +46,7 @@ const Agents = Layer.mergeAll(Pi.HarnessLive, Pi.CodingTools, AI.DefaultModel(Sm
 
 ## Host the process
 
-`AICloudflare.layerDurableObjects` takes the process's Layer, with what a session runs on and the models its prose mentions:
+`AICloudflare.Process` takes the process's Layer, with what a session runs on and the models its prose mentions:
 
 ```diff lang="typescript" title="src/Workshop.ts"
 import * as AI from "@alchemy.run/ai";
@@ -62,7 +62,7 @@ const WorkshopLive = Workshop.layer(TaskWorkLive).pipe(
   Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 +
-+const EngineerSessions = AICloudflare.layerDurableObjects(
++const EngineerSessions = AICloudflare.Process(
 +  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
 +);
 ```
@@ -74,7 +74,7 @@ It gives back the same service, `Engineer`. The Worker that provides it declares
 The model needed an `Engineer`, and now there is one:
 
 ```diff lang="typescript" title="src/Workshop.ts"
-const EngineerSessions = AICloudflare.layerDurableObjects(
+const EngineerSessions = AICloudflare.Process(
   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
 );
 +
@@ -117,12 +117,12 @@ See [Reach a session](/ai/hosting#reach-a-session) for what the client does.
 
 ## Keep sessions in a jurisdiction
 
-The host takes where Cloudflare keeps the objects:
+Pass props first to say where Cloudflare keeps the objects:
 
 ```typescript
-const EngineerSessions = AICloudflare.layerDurableObjects(
-  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
+const EngineerSessions = AICloudflare.Process(
   { jurisdiction: "eu" },
+  EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
 );
 ```
 
@@ -133,5 +133,5 @@ An object in a jurisdiction is a different object from the one with the same nam
 A process that mentions no model needs no `@alchemy.run/domain`. Give the host the process and what its sessions run on:
 
 ```typescript
-export const Live = AICloudflare.layerDurableObjects(EngineerLive.pipe(Layer.provide(Agents)));
+export const Live = AICloudflare.Process(EngineerLive.pipe(Layer.provide(Agents)));
 ```

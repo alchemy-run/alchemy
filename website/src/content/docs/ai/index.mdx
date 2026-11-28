@@ -73,7 +73,7 @@ const Agents = Layer.mergeAll(Pi.HarnessLive, AI.DefaultModel(Fast), AddLive).pi
   Layer.provide(Layer.mergeAll(PiCloudflare.DurableObjectStorage, FastLive)),
 );
 
-export const AccountantSessions = AICloudflare.layerDurableObjects(
+export const AccountantSessions = AICloudflare.Process(
   AccountantLive.pipe(Layer.provide(Agents)),
 );
 ```

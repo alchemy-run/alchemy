@@ -88,7 +88,7 @@ const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
 
 ## Host the sessions
 
-`AICloudflare.layerDurableObjects` takes the prose with what a session runs on, and gives back `Triage` with each session in a Durable Object of its own:
+`AICloudflare.Process` takes the prose with what a session runs on, and gives back `Triage` with each session in a Durable Object of its own:
 
 ```diff lang="typescript" title="src/Sessions.ts"
 import * as AI from "@alchemy.run/ai";
@@ -103,7 +103,7 @@ const Agents = Layer.mergeAll(HarnessLive, AI.DefaultModel(Smart)).pipe(
   Layer.provide(SmartLlama),
 );
 +
-+export const TriageSessions = AICloudflare.layerDurableObjects(
++export const TriageSessions = AICloudflare.Process(
 +  TriageLive.pipe(Layer.provide(Agents)),
 +);
 ```

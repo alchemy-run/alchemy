@@ -200,7 +200,7 @@ export const BoardLive = Board.layer(Layer.empty).pipe(
   Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
-export const TriageSessions = AICloudflare.layerDurableObjects(
+export const TriageSessions = AICloudflare.Process(
 -  TriageLive.pipe(Layer.provide(Agents)),
 +  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
 );

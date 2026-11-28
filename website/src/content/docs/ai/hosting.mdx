@@ -30,7 +30,7 @@ The process belongs to no model. Its prose mentions the [Domain models](/domain)
 A host is a Layer. Give it the process's Layer, with what a session runs on and the models its prose mentions, and it gives back the same process:
 
 ```typescript
-const EngineerSessions = AICloudflare.layerDurableObjects(
+const EngineerSessions = AICloudflare.Process(
   EngineerLive.pipe(Layer.provide(Layer.mergeAll(Agents, WorkshopLive))),
 );
 ```

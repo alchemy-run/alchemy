@@ -262,7 +262,7 @@ interface Remote {
 
 /**
  * How a host runs a process with each session in an instance of its own
- * (`AI.layerInMemory`, `AICloudflare.layerDurableObjects`). `serve` is one
+ * (`AI.layerInMemory`, `AICloudflare.Process`). `serve` is one
  * session's methods inside its instance, and `client` what everything else
  * holds.
  *
@@ -1063,7 +1063,7 @@ const hostedAs = (name: string): Hosted => {
  *
  * Yielded like this, a session lives wherever the process's Layer was
  * built. To give each session an instance of its own, hand the Layer to a
- * host: `AI.layerInMemory`, or `AICloudflare.layerDurableObjects` for a
+ * host: `AI.layerInMemory`, or `AICloudflare.Process` for a
  * Durable Object per session.
  */
 export const Process = (() =>

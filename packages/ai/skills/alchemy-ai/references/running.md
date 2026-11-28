@@ -20,7 +20,7 @@ More: [Run processes on Pi](https://alchemy.run/ai/harnesses#run-processes-on-pi
 
 ## Host the model, then the process
 
-Host the model as any model is. Then give `AICloudflare.layerDurableObjects` the prose of each process, provided with what a session runs on and the models it mentions. It gives back the same process, with one Durable Object for each session, named after its key. Do not write the object.
+Host the model as any model is. Then give `AICloudflare.Process` the prose of each process, provided with what a session runs on and the models it mentions. It gives back the same process, with one Durable Object for each session, named after its key. Do not write the object.
 
 ```typescript
 // src/Worker.ts
@@ -34,7 +34,7 @@ const BoardLive = Board.layer(IssueWorkLive).pipe(
   Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
-const TriageSessions = AICloudflare.layerDurableObjects(
+const TriageSessions = AICloudflare.Process(
   TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
 );
 
@@ -47,7 +47,18 @@ More: [Cloudflare](https://alchemy.run/ai/cloudflare#host-the-process), [One obj
 
 ## Host it on Rivet
 
-The process's Layer does not change. `AI.layerObjects` hosts it on `Rivet.layerObjectHost`, which the model shares. The host is the file's entrypoint: it names the class, holds the one `import.meta.url`, and is provided once, to the default export.
+The process's Layer does not change. `AIRivet.Process` (`@alchemy.run/ai/Rivet`) takes the class that holds the sessions, this file and the pool. Export it as default: the pool's nodes load it, and a caller imports it and provides it.
+
+```typescript
+// src/Sessions.ts
+export default AIRivet.Process(
+  "Sessions",
+  { main: import.meta.url, pool: Default },
+  TriageLive.pipe(Layer.provide(Agents)),
+);
+```
+
+With a model, both share one host, written once below them:
 
 ```typescript
 // src/Live.ts
@@ -63,25 +74,20 @@ export default BoardLive.pipe(
 );
 ```
 
-The pool's nodes load the default export; a caller imports it and provides it. Pi and OpenCode have no storage Layer for a Rivet actor: provide a harness of your own.
+Pi and OpenCode have no storage Layer for a Rivet actor: provide a harness of your own.
 
 More: [Rivet](https://alchemy.run/ai/rivet).
 
 ## Host it on Effect Cluster
 
-The same file, on `Cluster.layerObjectHost` from `@alchemy.run/effect-cluster`, with the model on `DomainCluster.layerObjects()`.
+The same two files with `AICluster.Process` (`@alchemy.run/ai/EffectCluster`), and with a model, `DomainCluster.layerObjects()` on `Cluster.layerObjectHost`.
 
 ```typescript
-// src/Live.ts
-const BoardLive = Board.layer(IssueWorkLive).pipe(Layer.provide(DomainCluster.layerObjects()));
-
-const TriageSessions = AI.layerObjects(
-  TriageLive.pipe(Layer.provide(Layer.mergeAll(Agents, BoardLive))),
-);
-
-export default BoardLive.pipe(
-  Layer.provideMerge(TriageSessions),
-  Layer.provide(Cluster.layerObjectHost("App", { main: import.meta.url, pool: Default })),
+// src/Sessions.ts
+export default AICluster.Process(
+  "Sessions",
+  { main: import.meta.url, pool: Default },
+  TriageLive.pipe(Layer.provide(Agents)),
 );
 ```
 

@@ -7,11 +7,10 @@ Host a process on [Effect Cluster](/cluster), and each of its sessions is an ent
 
 ## Host the process
 
-`AI.layerObjects` hosts the process's Layer on an object host. `Cluster.layerObjectHost` is that host: it names the entity that holds the sessions, points `main` at this file, and takes the pool that runs it. Provide it once, to the Layer the file exports as its default.
+`AICluster.Process` takes the name of the entity that holds the sessions, this file as `main`, the pool that runs it, and the process's Layer with what a session runs on. Export it as the file's default.
 
-```typescript title="src/Live.ts"
-import * as AI from "@alchemy.run/ai";
-import * as Cluster from "@alchemy.run/effect-cluster";
+```typescript title="src/Sessions.ts"
+import * as AICluster from "@alchemy.run/ai/EffectCluster";
 import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
 import * as Layer from "effect/Layer";
 import { Agents } from "./Agents.ts";
@@ -20,8 +19,10 @@ import { EngineerLive } from "./Engineer.process.ts";
 export const Database = ClusterDocker.Database("Cluster");
 const Default = ClusterDocker.SwarmPool("Default").pipe(Layer.provide(Database));
 
-export default AI.layerObjects(EngineerLive.pipe(Layer.provide(Agents))).pipe(
-  Layer.provide(Cluster.layerObjectHost("Workshop", { main: import.meta.url, pool: Default })),
+export default AICluster.Process(
+  "Workshop",
+  { main: import.meta.url, pool: Default },
+  EngineerLive.pipe(Layer.provide(Agents)),
 );
 ```
 
@@ -29,7 +30,7 @@ The pool's nodes load this file's default export and run the sessions. Each sess
 
 ## Host a model beside it
 
-A [Domain model](/domain/effect-cluster) goes on the same host. Its policy holds `Engineer`, so its Layer still needs one, and the hosted process is what it gets:
+A [Domain model](/domain/effect-cluster) goes on the same host as the sessions. `AICluster.Process` is `AI.layerObjects` on `Cluster.layerObjectHost`: write those two out, so the model and the sessions are given one host. The model's policy holds `Engineer`, so its Layer still needs one, and the hosted process is what it gets:
 
 ```typescript title="src/Live.ts"
 import * as AI from "@alchemy.run/ai";
@@ -69,7 +70,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Engineer } from "./Engineer.process.ts";
-import Live from "./Live.ts";
+import Sessions from "./Sessions.ts";
 
 export default class Api extends Docker.Service<Api>()(
   "Api",
@@ -85,7 +86,7 @@ export default class Api extends Docker.Service<Api>()(
         return HttpServerResponse.text(reply.text);
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(Live)),
+  }).pipe(Effect.provide(Sessions)),
 ) {}
 ```
 

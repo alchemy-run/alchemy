@@ -32,7 +32,7 @@ src/
   Worker.ts
 ```
 
-There is no file for a Durable Object: the model's platform Layer declares one class for each member, and `AICloudflare.layerDurableObjects` one for each process.
+There is no file for a Durable Object: the model's platform Layer declares one class for each member, and `AICloudflare.Process` one for each process.
 
 More: [With a Domain model](https://alchemy.run/ai/project-layout#with-a-domain-model), [Domain project layout](https://alchemy.run/domain/project-layout).
 
