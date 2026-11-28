@@ -20,16 +20,15 @@
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/domain": "workspace:*",
     "@effect/platform-browser": "catalog:",
+    "@effect/ui": "catalog:",
     "alchemy": "workspace:*",
     "better-auth": "catalog:",
-    "effect": "catalog:",
-    "foldkit": "catalog:"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
-    "@foldkit/vite-plugin": "catalog:",
     "@types/bun": "catalog:",
     "oauth2-mock-server": "catalog:",
     "typescript": "catalog:",

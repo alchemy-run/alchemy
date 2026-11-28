@@ -1,6 +1,6 @@
 # Domain + better-auth on Cloudflare
 
-Signs users in to a Domain Api with GitHub or Google through [better-auth](https://better-auth.com), with a [foldkit](https://foldkit.dev) UI. Companion to the [Sign in with better-auth](https://alchemy.run/domain/better-auth) page.
+Signs users in to a Domain Api with GitHub or Google through [better-auth](https://better-auth.com), with an [Effect UI](https://ui.effect.website) UI. Companion to the [Sign in with better-auth](https://alchemy.run/domain/better-auth) page.
 
 ## Run locally
 
@@ -19,4 +19,4 @@ bun alchemy dev
 pnpm test
 ```
 
-The tests sign users in through a local OpenID Connect provider, then call the Api over HTTP with the session cookie. foldkit stories test the app's `update`.
+The tests sign users in through a local OpenID Connect provider, then call the Api over HTTP with the session cookie. Effect UI Stories and Scenes test the app's components.

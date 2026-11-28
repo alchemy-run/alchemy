@@ -3,7 +3,7 @@ interface Fetcher {
 }
 
 /**
- * The app's Worker: the foldkit build, plus `/api` (better-auth's routes and
+ * The app's Worker: the Effect UI build, plus `/api` (better-auth's routes and
  * the NotesApi) forwarded to the Notes Worker. One origin for both, so the
  * session cookie is first-party and reaches every call and watch.
  */

@@ -1,161 +1,140 @@
-import type * as Domain from "@alchemy.run/domain";
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
+import { Command, Component, UiSchema } from "@effect/ui";
+import { Html } from "@effect/ui/html";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import { Command, Subscription, type Update } from "foldkit";
-import type { Document, HtmlBuilder } from "foldkit/html";
-import { defineMessageUnion } from "foldkit/message";
 import { NotesApi } from "../NotesApi.api.ts";
 import { UserId } from "../User.id.ts";
 import { auth } from "./auth.ts";
 
-// The services the app's commands and subscriptions use: the NotesApi client.
-type Notes = Domain.Api.ClientKey<"NotesApi">;
+/** The NotesApi as Effect UI Commands and queries: `WriteNote`, and the `Notes` View. */
+export const NotesUI = DomainEffectUI.make(NotesApi);
 
-const User = Schema.Struct({ userId: UserId, name: Schema.String });
-
-/** Who better-auth says is signed in when the page loads, or `null`. */
-export const Flags = Schema.Struct({ user: Schema.NullOr(User) });
-export type Flags = typeof Flags.Type;
-
-export const Model = Schema.Struct({
-  user: Schema.NullOr(User),
-  draft: Schema.String,
-  notes: Schema.Array(Schema.String),
-  error: Schema.NullOr(Schema.String),
-});
-export type Model = typeof Model.Type;
+export const User = Schema.Struct({ userId: UserId, name: Schema.String });
+export type User = typeof User.Type;
 
 const Provider = Schema.Literals(["github", "google"]);
 
-export const Message = defineMessageUnion({
+export const NotesMessage = UiSchema.TaggedEnum({
   ClickedSignIn: { provider: Provider },
   ClickedSignOut: {},
   ChangedDraft: { text: Schema.String },
   SubmittedNote: {},
-  Saved: {},
+  SucceededWriteNote: {},
   Failed: { reason: Schema.String },
-  GotNotes: { notes: Schema.Array(Schema.String) },
 });
-export type Message = typeof Message.Type;
 
 /** Send the browser to GitHub or Google; better-auth brings it back to `/` signed in. */
-export const SignIn = Command.define("SignIn", {
-  args: { provider: Provider },
-  messages: [Message.Failed],
-  execute: ({ provider }) =>
+export const SignIn = Command.make(
+  "notes/SignIn",
+  { args: { provider: Provider } },
+  ({ provider }) =>
     Effect.promise(() => auth.signIn.social({ provider, callbackURL: "/" })).pipe(
-      Effect.map((result) => Message.Failed({ reason: result.error?.message ?? "Redirecting" })),
+      Effect.map((result) =>
+        NotesMessage.Failed({ reason: result.error?.message ?? "Redirecting" }),
+      ),
     ),
-});
+);
 
 /** Clear better-auth's session, then start over signed out. */
-export const SignOut = Command.define("SignOut", {
-  args: {},
-  messages: [Message.Failed],
-  execute: () =>
-    Effect.promise(() => auth.signOut()).pipe(
-      Effect.flatMap(() => Effect.sync(() => location.reload())),
-      Effect.as(Message.Failed({ reason: "Signing out" })),
+export const SignOut = Command.make("notes/SignOut", { args: {} }, () =>
+  Effect.promise(() => auth.signOut()).pipe(
+    Effect.andThen(Effect.sync(() => location.reload())),
+    Effect.as(Component.noop),
+  ),
+);
+
+/**
+ * A signed-in user's notebook. The `Notes` View is a query: it shows the notes and follows
+ * them live, and a written note arrives through it.
+ */
+export const NotebookNoDeps = Html.component({
+  name: "Notebook",
+  props: Schema.Struct({ user: User }),
+  model: Schema.Struct({ draft: Schema.String, error: Schema.NullOr(Schema.String) }),
+  message: NotesMessage,
+  queries: {
+    notes: { query: NotesUI.Notes, args: ({ props }) => ({ key: props.user.userId }) },
+  },
+}).make({
+  init: () => ({ draft: "", error: null }),
+  update: {
+    ClickedSignIn: ($) => $.model,
+    ClickedSignOut: ($) => $.run(SignOut.make({})),
+    ChangedDraft: ($, { text }) => $.evolve({ draft: text }),
+    SubmittedNote: ($) =>
+      $.model.draft.trim() === ""
+        ? $.model
+        : $.evolve({ draft: "" }).run(
+            // The session cookie goes with the call. A refusal keeps its reason.
+            NotesUI.WriteNote.make({
+              input: { userId: $.props.user.userId, text: $.model.draft },
+            }).pipe(
+              Command.match({
+                onSuccess: () => NotesMessage.SucceededWriteNote(),
+                onFailure: (failure) => NotesMessage.Failed({ reason: failure._tag }),
+              }),
+            ),
+          ),
+    // The note arrives through the View; success only clears an error.
+    SucceededWriteNote: ($) => $.evolve({ error: null }),
+    Failed: ($, { reason }) => $.evolve({ error: reason }),
+  },
+  view: (h, model) =>
+    h.div(
+      h.h1("Notes"),
+      h.p(`Signed in as ${h.props.user.name}`),
+      h.form.on("submit", NotesMessage.SubmittedNote()).children(
+        h.input
+          .attrs({ placeholder: "Write a note", "aria-label": "Note" })
+          .value(model.draft)
+          .on("input", ({ value }) => NotesMessage.ChangedDraft({ text: value })),
+        h.button.attr("type", "submit").children("Save"),
+      ),
+      h.ul.attr("aria-label", "Notes").children(
+        ...Option.match(AsyncResult.value(h.queries.notes), {
+          onNone: () => [],
+          onSome: ({ state }) =>
+            Option.match(state, { onNone: () => [], onSome: ({ notes }) => notes }),
+        }).map((note) => h.li(note)),
+      ),
+      h.button.on("click", NotesMessage.ClickedSignOut()).children("Sign out"),
+      model.error !== null && h.p.attr("role", "alert").children(model.error),
     ),
 });
 
-/** Write a note in the user's notebook. The session cookie goes with the call. */
-export const WriteNote = Command.define("WriteNote", {
-  args: { userId: UserId, text: Schema.String },
-  messages: [Message.Saved, Message.Failed],
-  execute: ({ userId, text }) =>
-    Effect.gen(function* () {
-      const notes = yield* NotesApi.Client;
-      yield* notes.WriteNote({ userId, text });
-      return Message.Saved();
-    }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
-});
+/** The notebook with its Commands and queries; the entry provides the NotesApi client. */
+export const Notebook = NotebookNoDeps.pipe(Component.provide(NotesUI.layer));
 
-export const update = (model: Model, message: Message): Update.Return<Model, Message, Notes> =>
-  Message.match<Update.Return<Model, Message, Notes>>(message, {
-    ClickedSignIn: ({ provider }) => ({ model, commands: [SignIn({ provider })] }),
-    ClickedSignOut: () => ({ model, commands: [SignOut({})] }),
-    ChangedDraft: ({ text }) => ({ model: { ...model, draft: text } }),
-    SubmittedNote: () =>
-      model.user === null || model.draft.trim() === ""
-        ? { model }
-        : {
-            model: { ...model, draft: "" },
-            commands: [WriteNote({ userId: model.user.userId, text: model.draft })],
-          },
-    // The note arrives through the subscription; success only clears an error.
-    Saved: () => ({ model: { ...model, error: null } }),
-    Failed: ({ reason }) => ({ model: { ...model, error: reason } }),
-    GotNotes: ({ notes }) => ({ model: { ...model, notes } }),
-  });
-
-export const init = (flags: Flags): Update.Return<Model, Message, Notes> => ({
-  model: { user: flags.user, draft: "", notes: [], error: null },
-});
-
-export const subscriptions = Subscription.make<Model, Message, Notes>()((entry) => ({
-  notes: entry(
-    { userId: Schema.NullOr(UserId) },
-    {
-      modelToDependencies: (model) => ({ userId: model.user?.userId ?? null }),
-      dependenciesToStream: ({ userId }) =>
-        userId === null
-          ? Stream.empty
-          : Stream.unwrap(
-              Effect.gen(function* () {
-                const notes = yield* NotesApi.Client;
-                return notes.Notes.watch(userId);
-              }),
-            ).pipe(
-              Stream.map(({ state }) => Message.GotNotes({ notes: state?.notes ?? [] })),
-              Stream.catch((error) => Stream.succeed(Message.Failed({ reason: error._tag }))),
-            ),
-    },
-  ),
-}));
-
-export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: "Notes",
-  body:
-    model.user === null
+/** The app: sign-in buttons, or the signed-in user's notebook. */
+export const NotesApp = Html.component({
+  name: "NotesApp",
+  props: Schema.Struct({ user: Schema.NullOr(User) }),
+  model: Schema.Struct({ error: Schema.NullOr(Schema.String) }),
+  message: NotesMessage,
+}).make({
+  init: () => ({ error: null }),
+  update: {
+    ClickedSignIn: ($, { provider }) => $.run(SignIn.make({ provider })),
+    ClickedSignOut: ($) => $.model,
+    ChangedDraft: ($) => $.model,
+    SubmittedNote: ($) => $.model,
+    SucceededWriteNote: ($) => $.model,
+    Failed: ($, { reason }) => $.evolve({ error: reason }),
+  },
+  view: (h, model) =>
+    h.props.user === null
       ? h.div(
-          [],
-          [
-            h.h1([], ["Notes"]),
-            h.button(
-              [h.OnClick(Message.ClickedSignIn({ provider: "github" }))],
-              ["Sign in with GitHub"],
-            ),
-            h.button(
-              [h.OnClick(Message.ClickedSignIn({ provider: "google" }))],
-              ["Sign in with Google"],
-            ),
-            h.p([], [model.error ?? ""]),
-          ],
+          h.h1("Notes"),
+          h.button
+            .on("click", NotesMessage.ClickedSignIn({ provider: "github" }))
+            .children("Sign in with GitHub"),
+          h.button
+            .on("click", NotesMessage.ClickedSignIn({ provider: "google" }))
+            .children("Sign in with Google"),
+          model.error !== null && h.p.attr("role", "alert").children(model.error),
         )
-      : h.div(
-          [],
-          [
-            h.h1([], ["Notes"]),
-            h.p([], [`Signed in as ${model.user.name}`]),
-            h.form(
-              [h.OnSubmit(Message.SubmittedNote())],
-              [
-                h.input([
-                  h.Value(model.draft),
-                  h.Placeholder("Write a note"),
-                  h.OnInput((text) => Message.ChangedDraft({ text })),
-                ]),
-                h.button([h.Type("submit")], ["Save"]),
-              ],
-            ),
-            h.ul(
-              [],
-              model.notes.map((note) => h.li([], [note])),
-            ),
-            h.button([h.OnClick(Message.ClickedSignOut())], ["Sign out"]),
-            h.p([], [model.error ?? ""]),
-          ],
-        ),
+      : Notebook(h, { key: h.props.user.userId, props: { user: h.props.user } }),
 });
