@@ -15,7 +15,13 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
+import {
+  Docker,
+  dockerContextTarget,
+  sameDockerContextConnection,
+  sameDockerContextTarget,
+  dockerPhysicalName,
+} from "./Docker.ts";
 import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import { parseDockerByteSizeMagnitude } from "./internal/DockerByteSize.ts";
 import type { Providers } from "./Providers.ts";
@@ -599,7 +605,7 @@ export const inspectContainer = (
   context?: Docker.ContextRef,
 ): Effect.Effect<Container["Attributes"], PlatformError, Docker> =>
   Docker.pipe(
-    Effect.flatMap((docker) => docker.container.inspect(name, dockerContextName(context))),
+    Effect.flatMap((docker) => docker.container.inspect(name, dockerContextTarget(context))),
     Effect.map((container) => toContainerAttributes(container, container.Config.Image)),
   );
 
@@ -653,7 +659,7 @@ export const ContainerProvider = () =>
       const connectNetwork = (
         network: Container.NetworkMapping,
         container: string,
-        context: string | undefined,
+        context: Docker.Target | undefined,
       ) =>
         docker.network.connect({
           network: network.name,
@@ -672,7 +678,7 @@ export const ContainerProvider = () =>
       const validateNetworkIdentities = Effect.fn(function* (props: ContainerProps) {
         if ((props.networks?.length ?? 0) < 2) return;
         const seen = new Set<string>();
-        const context = dockerContextName(props.context);
+        const context = dockerContextTarget(props.context);
         for (const [index, network] of (props.networks ?? []).entries()) {
           const actual = yield* docker.network
             .inspect(network.name, context)
@@ -692,7 +698,7 @@ export const ContainerProvider = () =>
         live: Docker.Container,
         network: Container.NetworkMapping,
         previous: InspectedNetworkEndpoint,
-        context: string | undefined,
+        context: Docker.Target | undefined,
       ) {
         // Reconnect changes one endpoint. Keep its observed configuration so
         // a rejected IP or driver option cannot strand a working container.
@@ -723,7 +729,7 @@ export const ContainerProvider = () =>
         news: ContainerProps,
         olds: ContainerProps | undefined,
       ) {
-        const context = dockerContextName(news.context);
+        const context = dockerContextTarget(news.context);
         // Update attachments sequentially so one rejected connection does
         // not disconnect every managed network before returning an error.
         for (const network of news.networks ?? []) {
@@ -761,12 +767,12 @@ export const ContainerProvider = () =>
         }
       });
 
-      const inspect = (name: string, context?: string) =>
+      const inspect = (name: string, context?: Docker.Target) =>
         docker.container
           .inspect(name, context)
           .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
 
-      const remove = (name: string, context?: string) =>
+      const remove = (name: string, context?: Docker.Target) =>
         docker.container.stop(name, context).pipe(
           Effect.andThen(docker.container.remove(name, true, context)),
           Effect.catchReason("PlatformError", "NotFound", () => Effect.void),
@@ -794,7 +800,7 @@ export const ContainerProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-          const context = dockerContextName(olds.context);
+          const context = dockerContextTarget(olds.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const info = yield* inspect(name, context);
           if (!info) return undefined;
@@ -820,8 +826,7 @@ export const ContainerProvider = () =>
           // replacement decision, including Docker context changes.
           const newArgs = yield* makeCreateArgs(id, news, instanceId);
           yield* validateNetworkIdentities(news);
-          const contextChanged =
-            dockerContextName(olds.context) !== dockerContextName(news.context);
+          const contextChanged = !sameDockerContextTarget(olds.context, news.context);
           const oldArgs =
             olds.image !== undefined && !contextChanged
               ? yield* makeCreateArgs(id, olds, instanceId)
@@ -831,7 +836,7 @@ export const ContainerProvider = () =>
           // No-op plans still need to verify the physical container identity.
           // A foreign container can reuse the managed name after deletion.
           if (output) {
-            const live = yield* inspect(output.name, dockerContextName(olds.context));
+            const live = yield* inspect(output.name, dockerContextTarget(olds.context));
             if (live) yield* verifyIdentity(id, output.name, output.id, live);
             if (!live && !mustReplace) return { action: "update" as const };
           }
@@ -849,7 +854,7 @@ export const ContainerProvider = () =>
             return { action: "update" as const };
           }
           if (news.networks?.length) {
-            const live = yield* inspect(newArgs.name, dockerContextName(news.context));
+            const live = yield* inspect(newArgs.name, dockerContextTarget(news.context));
             if (
               live &&
               (hasImplicitDefaultBridge(live, news) ||
@@ -861,24 +866,29 @@ export const ContainerProvider = () =>
           // File-backed inputs can change without changing their paths.
           // Compare their digests against the live config hash.
           if (news.envFiles?.length || isCustomSeccompProfile(news.seccompProfile)) {
-            const live = yield* inspect(newArgs.name, dockerContextName(news.context));
+            const live = yield* inspect(newArgs.name, dockerContextTarget(news.context));
             const applied = live?.Config.Labels?.[CREATE_CONFIG_HASH_LABEL];
             if (applied !== undefined && applied !== (yield* desiredConfigHash(newArgs, news))) {
               return { action: "update" as const };
             }
           }
+          if (output && !sameDockerContextConnection(olds.context, news.context)) {
+            return { action: "update" as const };
+          }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
-          const context = dockerContextName(news.context);
+          const context = dockerContextTarget(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
           yield* validateNetworkIdentities(news);
           const configHash = yield* desiredConfigHash(args, news);
           // Adoption has output but no olds. In that case the observed
           // container already lives in the desired context.
-          const oldContext = olds ? dockerContextName(olds.context) : context;
+          const oldContext = olds ? dockerContextTarget(olds.context) : context;
+          const contextChanged =
+            olds !== undefined && !sameDockerContextTarget(olds.context, news.context);
           const desiredLive = yield* inspect(args.name, context);
           const previous =
-            output && (output.name !== args.name || oldContext !== context)
+            output && (output.name !== args.name || contextChanged)
               ? yield* inspect(output.name, oldContext)
               : undefined;
           if (output && desiredLive) {
@@ -983,7 +993,7 @@ export const ContainerProvider = () =>
             .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
         }),
         delete: Effect.fn(function* ({ id, olds, output }) {
-          const context = dockerContextName(olds.context);
+          const context = dockerContextTarget(olds.context);
           // Remove the recorded container, plus a successor under the same
           // name that carries this resource's labels. Never a foreign one.
           const live = yield* inspect(output.name, context);

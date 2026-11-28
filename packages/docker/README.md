@@ -1,6 +1,6 @@
 # @alchemy.run/docker
 
-Docker for [Alchemy](https://alchemy.run). Declare images, containers, networks, and volumes as typed resources, driven through your active Docker context. Other Alchemy providers use it to build and push the images they deploy.
+Docker for [Alchemy](https://alchemy.run). Declare images, containers, networks, and volumes as typed resources, driven through local or managed Docker endpoints. Other Alchemy providers use it to build and push the images they deploy.
 
 ```sh
 npm install alchemy @alchemy.run/docker effect
@@ -43,6 +43,29 @@ export default Alchemy.Stack(
 ```
 
 `alchemy deploy` pulls the image and starts the container. Change a prop and the next deploy replaces only what changed; `alchemy destroy` removes all of it.
+
+## Portable Docker contexts
+
+A managed `Docker.Context` persists its Docker endpoint, so a CI runner sharing the Alchemy state can plan and inspect remote resources without first creating the named context in its local Docker configuration:
+
+```typescript
+const remote = yield* Docker.Context("remote", {
+  docker: "host=ssh://deploy@example.com",
+});
+const network = yield* Docker.Network("remote-network", { context: remote });
+```
+
+The runner still needs access to the remote engine and its SSH keys or TLS certificate files. Alchemy stores endpoint metadata and certificate **paths**, not private key or certificate contents. A plain context name or `Docker.Context.lookup()` continues to use the machine-local Docker CLI context.
+
+For mTLS connections, set `docker` to a Docker endpoint spec with `host`, `ca`, `cert`, and `key` file paths accessible to each runner. For SSH, the runner's Docker CLI must be able to authenticate to the remote host. A missing or unreachable remote Engine is an error, not an absent Docker resource.
+
+### Low-level Docker service inspection
+
+`docker.service.inspect(id, target?)` on the injected `Docker.Docker` client returns the declared `CommandOutput` (`stdout`, `stderr`, `exitCode`). Its `stdout` is the JSON **array** returned by `docker service inspect`; decode it with Effect Schema when reading service fields. Earlier versions accidentally returned the first parsed object at runtime despite declaring `CommandOutput`. If you relied on `result.ID` or `result.Spec` in JavaScript, read and decode `result.stdout` instead. The declarative `Docker.Service(...)` resource is unaffected. See [Services: low-level inspection](https://alchemy.run/docker/services#inspect-services-through-the-low-level-docker-client).
+
+### Remote integration-test isolation
+
+`packages/integration-tests/test/Docker/Context.Remote.test.ts` runs opt-in tests against an Engine specified by `ALCHEMY_DOCKER_REMOTE_SPEC`. Ordinary remote context/build tests never modify Swarm membership. The Swarm tests require **all** of the following before they initialize or leave Swarm: `ALCHEMY_DOCKER_REMOTE_SWARM=1`, an exact `ALCHEMY_DOCKER_REMOTE_SWARM_ENGINE_ID` matching `docker info --format '{{.ID}}'`, the **daemon** label `alchemy.test.disposable=true`, and no existing containers, volumes or custom networks. The Engine must also be outside Swarm. These are destructive tests: use a freshly provisioned, disposable Docker daemon (such as Docker-in-Docker), never a workstation or production daemon. Set the daemon label when creating the disposable Engine, not by changing a shared daemon's configuration. Set `ALCHEMY_DOCKER_REMOTE_ROTATE_TLS=1` to select the separate mTLS rotation case. Keep `DOCKER_CONFIG` isolated, and provide credentials through SSH or certificate files rather than the endpoint string.
 
 ## Network configuration
 

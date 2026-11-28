@@ -53,6 +53,8 @@ export default Alchemy.Stack(
 
 `image` takes a reference or a [`Docker.Image`](/docker/build-images) resource. A published port listens on every node, and the swarm's **routing mesh** sends each connection to a healthy task, wherever it runs. Set `mode: "host"` on a port to publish it only on the nodes that run a task. To run your own Effect program instead of an image, see [Effectful services](/docker/effectful-services).
 
+`replicas` must be a non-negative integer (including `0` for a service that should not start tasks). Invalid values fail with `DockerServiceInvalidConfiguration` through Effect's typed error channel before Alchemy changes the service.
+
 ## Roll out a new image
 
 ```diff lang="typescript"
@@ -156,3 +158,33 @@ const app = yield* Docker.Service("app", {
 ## Volumes on a swarm
 
 `volumes` mounts a named volume or a host path into each task. A `local` volume lives on one node, so each node that runs a task gets its own, empty copy. For a database, keep its service on one node with a constraint, or use a volume driver that shares storage between nodes.
+
+## Inspect services through the low-level Docker client
+
+The `Docker.Service` resource reads and validates Docker's service metadata automatically. If you access the lower-level `Docker.Docker` client instead, `docker.service.inspect(id, target?)` returns a `CommandOutput` with `stdout`, `stderr` and `exitCode`. The `stdout` field contains the **JSON array** produced by `docker service inspect`, even when you request one service. A missing service or an unreachable engine fails through the `PlatformError` channel.
+
+Use Effect Schema when you need typed data from that output:
+
+```typescript
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+const decodeServices = Schema.NonEmptyArray(
+  Schema.Struct({
+    ID: Schema.String,
+    Spec: Schema.Struct({ Name: Schema.String }),
+  }),
+).pipe(Schema.fromJsonString, Schema.decodeEffect);
+
+const readService = Effect.gen(function* () {
+  const docker = yield* Docker.Docker;
+  const result = yield* docker.service.inspect("my-service");
+  const [service] = yield* decodeServices(result.stdout);
+  return { id: service.ID, name: service.Spec.Name };
+});
+```
+
+### Compatibility note
+
+Older versions declared the return type as `CommandOutput` but inadvertently returned the first parsed service object at runtime. This has been corrected to match the declared API and Docker CLI. If your JavaScript code read `result.ID` or `result.Spec` directly from `docker.service.inspect`, decode `result.stdout` as shown above. Code using the declarative `Docker.Service(...)` resource does not need to change. This is a correction to the low-level client, not a change to the resource's public attributes.

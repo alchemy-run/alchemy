@@ -3,7 +3,12 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { Docker, dockerContextName } from "./Docker.ts";
+import {
+  Docker,
+  dockerContextTarget,
+  sameDockerContextConnection,
+  sameDockerContextTarget,
+} from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface SwarmProps {
@@ -43,7 +48,7 @@ export interface Swarm extends Resource<
     /** This node's id in the swarm (a manager). */
     nodeId: string;
     /** Docker context the swarm was initialized on. */
-    context?: string;
+    context?: Docker.Target;
     /** Number of manager nodes. */
     managers: number;
     /** Number of nodes in the swarm. */
@@ -134,7 +139,7 @@ export const SwarmProvider = () =>
       const docker = yield* Docker;
 
       /** Active-manager info, or undefined when the engine isn't one. */
-      const observe = Effect.fn(function* (context: string | undefined) {
+      const observe = Effect.fn(function* (context: Docker.Target | undefined) {
         const info = yield* docker.swarm.info(context);
         if (info.LocalNodeState !== "active" || !info.ControlAvailable || !info.Cluster?.ID) {
           return undefined;
@@ -145,7 +150,7 @@ export const SwarmProvider = () =>
       return Swarm.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ olds, output }) {
-          const context = dockerContextName(olds?.context);
+          const context = dockerContextTarget(olds?.context);
           const info = yield* observe(context);
           if (!info) return undefined;
           const attrs = toSwarmAttributes(info, context);
@@ -157,15 +162,20 @@ export const SwarmProvider = () =>
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          if (dockerContextName(olds?.context) !== dockerContextName(news?.context)) {
+          if (!sameDockerContextTarget(olds?.context, news?.context)) {
             return { action: "replace" as const, deleteFirst: true };
+          }
+          // Refresh persisted connection metadata when certificates rotate.
+          // This does not leave or re-initialize the existing Swarm.
+          if (!sameDockerContextConnection(olds?.context, news?.context)) {
+            return { action: "update" as const };
           }
           // The remaining props only apply at `swarm init`; changing them on
           // a live swarm is a no-op rather than a destructive re-init.
           return { action: "noop" as const };
         }),
         reconcile: Effect.fn(function* ({ news }) {
-          const context = dockerContextName(news?.context);
+          const context = dockerContextTarget(news?.context);
           const existing = yield* observe(context);
           if (existing) return toSwarmAttributes(existing, context);
 
@@ -211,7 +221,7 @@ export const SwarmProvider = () =>
 
 const toSwarmAttributes = (
   info: Docker.SwarmInfo,
-  context: string | undefined,
+  context: Docker.Target | undefined,
 ): Swarm["Attributes"] => ({
   id: info.Cluster!.ID,
   nodeId: info.NodeID,

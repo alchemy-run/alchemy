@@ -6,7 +6,13 @@ import { createInternalTags, hasAlchemyTags, stripInternalTags } from "alchemy/T
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
-import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
+import {
+  Docker,
+  dockerEngineTarget,
+  sameDockerEngineConnection,
+  sameDockerEngineTarget,
+  dockerPhysicalName,
+} from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 // Docker volume names are reusable and are not physical generation IDs.
@@ -44,8 +50,8 @@ export interface VolumeProps {
    * Keys beginning with `alchemy::` are reserved for Alchemy's identity metadata.
    */
   labels?: Record<string, string>;
-  /** Docker context name or context resource. */
-  context?: Docker.ContextRef;
+  /** Docker engine destination: a context name, context resource, or Swarm resource. */
+  context?: Docker.EngineRef;
 }
 
 export interface Volume extends Resource<
@@ -151,6 +157,11 @@ export interface VolumeLookup {
  * });
  * ```
  *
+ * **Example:** Store data on the same engine as a managed Swarm
+ * ```typescript
+ * const data = yield* Docker.Volume("data", { context: swarm });
+ * ```
+ *
  * ### Looking up an existing volume
  * `Volume.lookup` references a volume Alchemy doesn't manage (created with
  * the Docker CLI, Compose or another stack). It is read during plan/deploy,
@@ -210,7 +221,7 @@ export const VolumeProvider = () =>
     Volume,
     Effect.gen(function* () {
       const docker = yield* Docker;
-      const inspect = (name: string, context?: string) =>
+      const inspect = (name: string, context?: Docker.Target) =>
         docker.volume
           .inspect(name, context)
           .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
@@ -233,7 +244,7 @@ export const VolumeProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, instanceId, olds, output, previous }) {
-          const context = dockerContextName(olds?.context);
+          const context = dockerEngineTarget(olds?.context);
           const name = output?.name ?? (yield* dockerPhysicalName(id, olds, instanceId));
           const info = yield* inspect(name, context);
           if (!info) return undefined;
@@ -261,7 +272,7 @@ export const VolumeProvider = () =>
           // been taken over since the previous deploy. Verify even with
           // unresolved new props, and before any deleteFirst replacement.
           const current = output
-            ? yield* inspect(output.name, dockerContextName(olds?.context))
+            ? yield* inspect(output.name, dockerEngineTarget(olds?.context))
             : undefined;
           if (output && current) yield* verify(id, output, current);
           // Adoption grants management of an existing volume, not permission
@@ -280,7 +291,7 @@ export const VolumeProvider = () =>
             return output && !current ? { action: "update" as const } : undefined;
           }
           const args = yield* makeVolumeArgs(id, news, instanceId);
-          if (dockerContextName(olds?.context) !== dockerContextName(news?.context)) {
+          if (!sameDockerEngineTarget(olds?.context, news?.context)) {
             if (foreignOrigin) return yield* adoptedVolumeReplacementConflict(id, output.name);
             return { action: "replace" as const, deleteFirst: true };
           }
@@ -312,9 +323,12 @@ export const VolumeProvider = () =>
           // A missing managed volume is recreated instead of retaining a
           // stale no-op state. Only NotFound means it is safe to recover.
           if (output && !current) return { action: "update" as const };
+          if (output && !sameDockerEngineConnection(olds?.context, news?.context)) {
+            return { action: "update" as const };
+          }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
-          const context = dockerContextName(news?.context);
+          const context = dockerEngineTarget(news?.context);
           const args = yield* makeVolumeArgs(id, news, instanceId);
           // Prefer the deployed name: regenerating would target a different
           // volume if the generator's output for this id ever drifts.
@@ -368,7 +382,7 @@ export const VolumeProvider = () =>
           return toVolumeAttributes(created);
         }),
         delete: Effect.fn(function* ({ id, olds, output }) {
-          const context = dockerContextName(olds?.context);
+          const context = dockerEngineTarget(olds?.context);
           const current = yield* inspect(output.name, context);
           if (!current) return;
           yield* verify(id, output, current);

@@ -5,6 +5,7 @@ import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { inMemoryState } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ensureDockerSwarm } from "./Runtime.ts";
@@ -20,6 +21,20 @@ describe(
   "Docker.Service",
   { tags: ["provider:docker", "provider:docker:service", "local"], concurrent: false },
   () => {
+    test.provider("rejects invalid replica counts through the typed error channel", (stack) =>
+      Effect.gen(function* () {
+        for (const replicas of [-1, 1.5, NaN]) {
+          const exit = yield* Effect.exit(
+            stack.deploy(Docker.Service("invalid-replicas", { image: "nginx:alpine", replicas })),
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            expect(Cause.pretty(exit.cause)).toContain("Service.replicas must be an integer >= 0");
+          }
+        }
+      }),
+    );
+
     test.provider(
       "creates a replicated service with labels",
       (stack) =>
