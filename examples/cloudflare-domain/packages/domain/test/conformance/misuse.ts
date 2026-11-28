@@ -14,7 +14,7 @@ const SHAPES: ReadonlyArray<string> = [``, `a`, `"x", a`, `a, b, a`, `{}, a`, `[
 const AFTER: ReadonlyArray<string> = [``, `"x"`, `a, b`, `{}`, `() => b`, `[a]`, `undefined`];
 
 /** A value of a module's own kind, made in a handler: `self` in the calls of its functions. */
-const SELF: Readonly<Record<string, string>> = {
+const SELF: Readonly<Record<string, string | ReadonlyArray<string>>> = {
   Combiner: `Combiner.make((x, y) => x + y)`,
   Data: `Data.struct({ x: a })`,
   Equal: `a`,
@@ -34,20 +34,20 @@ const SELF: Readonly<Record<string, string>> = {
   Resource: `yield* Resource.manual(Effect.succeed(a))`,
   ScopedRef: `yield* ScopedRef.make(() => a)`,
   SynchronizedRef: `yield* SynchronizedRef.make(a)`,
-  Array: `[a, b]`,
+  Array: [`[a, b]`, `[]`],
   BigDecimal: `BigDecimal.fromBigInt(1n)`,
   BigInt: `1n`,
   Boolean: `a > b`,
   Cache: `yield* Cache.make({ capacity: 2, lookup: (key) => Effect.succeed(key) })`,
-  Cause: `Cause.fail(a)`,
-  Channel: `Channel.succeed(a)`,
-  Chunk: `Chunk.make(a, b)`,
+  Cause: [`Cause.fail(a)`, `Cause.die(a)`],
+  Channel: [`Channel.succeed(a)`, `Channel.fail(a)`],
+  Chunk: [`Chunk.make(a, b)`, `Chunk.empty()`],
   Context: `Context.empty()`,
   DateTime: `DateTime.makeUnsafe(0)`,
   Deferred: `yield* Deferred.make()`,
   Duration: `Duration.millis(a)`,
-  Effect: `Effect.succeed(a)`,
-  Exit: `Exit.succeed(a)`,
+  Effect: [`Effect.succeed(a)`, `Effect.fail(a)`],
+  Exit: [`Exit.succeed(a)`, `Exit.fail(a)`],
   Fiber: `yield* Effect.forkChild(Effect.succeed(a))`,
   FiberHandle: `yield* FiberHandle.make()`,
   FiberMap: `yield* FiberMap.make()`,
@@ -65,7 +65,7 @@ const SELF: Readonly<Record<string, string>> = {
   MutableRef: `MutableRef.make(a)`,
   Number: `a`,
   Optic: `Optic.id()`,
-  Option: `Option.some(a)`,
+  Option: [`Option.some(a)`, `Option.none()`],
   Order: `Order.Number`,
   PartitionedSemaphore: `yield* PartitionedSemaphore.make({ permits: 1 })`,
   PubSub: `yield* PubSub.unbounded()`,
@@ -73,14 +73,14 @@ const SELF: Readonly<Record<string, string>> = {
   Rational: `Rational.fromBigInt(1n)`,
   Record: `{ x: a }`,
   Ref: `yield* Ref.make(a)`,
-  Result: `Result.succeed(a)`,
-  Schedule: `Schedule.recurs(1)`,
+  Result: [`Result.succeed(a)`, `Result.fail(a)`],
+  Schedule: [`Schedule.recurs(1)`, `Schedule.spaced("1 millis")`],
   Scope: `yield* Scope.make()`,
   ScopedCache: `yield* ScopedCache.make({ capacity: 2, lookup: (key) => Effect.succeed(key) })`,
   Semaphore: `yield* Semaphore.make(1)`,
-  Sink: `Sink.count`,
-  Stream: `Stream.make(a, b)`,
-  String: `"ab"`,
+  Sink: [`Sink.count`, `Sink.take(1)`],
+  Stream: [`Stream.make(a, b)`, `Stream.fromEffect(Effect.succeed(a))`, `Stream.fail(a)`],
+  String: [`"ab"`, `""`],
   Struct: `{ x: a }`,
   SubscriptionRef: `yield* SubscriptionRef.make(a)`,
   Tuple: `[a, b]`,
@@ -132,20 +132,19 @@ export const misuseGroups = (only?: ReadonlyArray<string>): ReadonlyArray<Group>
     .filter(([module]) => !only || only.includes(module))
     .flatMap(([module, all]): ReadonlyArray<Group> => {
       const name = module.slice("effect/".length).replace(/\W/g, "");
-      // The module is imported as `Under`: its own value is made with it.
-      const self = SELF[name]?.replaceAll(`${name}.`, "Under.");
+      // The module is imported as `Under`: its own values are made with it.
+      const own = SELF[name];
+      const selves = (own === undefined ? [] : typeof own === "string" ? [own] : own).map((self) =>
+        self.replaceAll(`${name}.`, "Under."),
+      );
       const calls = all
         .filter((path) => !paths || paths.includes(path))
         .flatMap((path) => [
           ...SHAPES.map((shape) => ran(undefined, `Under.${path}(${shape})`)),
-          ...(self
-            ? [
-                ...AFTER.map((after) =>
-                  ran(self, `Under.${path}(self${after ? `, ${after}` : ""})`),
-                ),
-                ...AFTER.map((after) => ran(self, `Under.${path}(${after})(self)`)),
-              ]
-            : []),
+          ...selves.flatMap((self) => [
+            ...AFTER.map((after) => ran(self, `Under.${path}(self${after ? `, ${after}` : ""})`)),
+            ...AFTER.map((after) => ran(self, `Under.${path}(${after})(self)`)),
+          ]),
         ]);
       // A large module is read in parts, each in the time a test is given.
       const parts = Math.ceil(calls.length / PART);
