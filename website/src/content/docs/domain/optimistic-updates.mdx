@@ -5,12 +5,39 @@ description: Show pending intent, confirm it by commandId from a View feed, and 
 
 Show a deposit when the customer clicks. Confirm it when the bank's event arrives. A successful command reply means the write committed. The line waits for the feed before it becomes confirmed.
 
-The examples use `Bank = DomainFoldkit.make(CustomerApi)` from [Integrate with Foldkit](/domain/foldkit). The bank example keeps its own queue and line Model. The adapter has no generic pending-state helper.
+The examples use `BankUI = DomainEffectUI.make(CustomerApi)` from [Integrate with Effect UI](/domain/effect-ui).
+
+## Patch a query while the command runs
+
+When the value lives in a query or a View entry, let the adapter patch it. The patch shows the write at once and drops when the command answers:
+
+```typescript
+import * as DomainEffectUI from "@alchemy.run/domain/EffectUI";
+import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import * as Option from "effect/Option";
+
+export const BankUI = DomainEffectUI.make(CustomerApi, {
+  commands: {
+    DepositMoney: {
+      optimistic: ({ input }, queries) => [
+        queries.AccountSummary.patch({ key: input.accountId }, (snapshot) => ({
+          ...snapshot,
+          state: Option.map(snapshot.state, (summary) => ({
+            ...summary,
+            balance: summary.balance + input.amount,
+          })),
+        })),
+      ],
+    },
+  },
+});
+```
+
+See [Patch a View before the command answers](/domain/effect-ui#patch-a-view-before-the-command-answers) for how the View's stream reopens without stepping back. The rest of this page keeps each pending write as its own line instead, so the app can show, queue and retry it.
 
 ## Track each intent
 
 ```typescript
-import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
 import { StatementLine } from "@bank/domain/Account/Statement.view";
 import * as Schema from "effect/Schema";
 
@@ -25,17 +52,17 @@ const Line = Schema.Struct({
 type Line = typeof Line.Type;
 ```
 
-Allocate the id with `DomainFoldkit.next(model.commandIds)`. Store the returned command id state in the Model. Add a pending line with the allocated id. Send `Bank.DepositMoney({ input, commandId })` through `Command.mapMessage`.
+Make the id when the customer clicks, from the page's `session` prop and a counter in the Model: `` `${$.props.session}:${$.model.sent}` ``. Add a pending line with that id, and send `BankUI.DepositMoney.make({ input, commandId })`. A fresh `session` per page load keeps ids unique across reloads.
 
 The command and its pending line share one id. Each event caused by the command carries that id in `entry.envelope.commandId`.
 
 ## Handle the command result
 
-Match the generated result with `Bank.Message.match`. Handle each failure through its named variant.
+Map the Command's success and its typed failure with `Command.match`, where the update issues it:
 
 | Result | Line state | What happens next |
 | --- | --- | --- |
-| `SucceededDepositMoney` | `Pending` | Wait for the feed. |
+| Success | `Pending` | Wait for the feed. |
 | `Rejected` | `Rejected` | Show the Rejection's fields. |
 | `Denied` | `Denied` | Request authentication or MFA before a retry. |
 | `Unknown` | `Queued` | Retry with the original id. |
@@ -46,19 +73,18 @@ Do not mark a confirmed line pending when a late reply arrives. The feed can arr
 
 ```typescript
 import * as Option from "effect/Option";
-import { modifyFields } from "foldkit/struct";
 
-const confirm = (model: Model, commandId: string, event: StatementLine) => {
-  const nextLine = Line.make({
+const confirm = (model: Model, commandId: string, event: StatementLine): Model => {
+  const nextLine: Line = {
     commandId,
     kind: event.kind,
     amount: event.amount,
     balance: Option.some(event.balance),
     ack: "Confirmed",
     reason: Option.none(),
-  });
+  };
   const otherLines = model.lines.filter((line) => line.commandId !== commandId);
-  return modifyFields(model, { lines: () => [nextLine, ...otherLines] });
+  return { ...model, lines: [nextLine, ...otherLines] };
 };
 ```
 
@@ -69,37 +95,32 @@ Keep your own display order. The bank example puts unconfirmed lines above confi
 ## Resume the feed
 
 ```typescript
-import { Subscription } from "foldkit";
-import { defineMessageUnion } from "foldkit/message";
+import { UiSchema } from "@effect/ui";
 
-const Message = defineMessageUnion({
+const Message = UiSchema.TaggedEnum({
   ReceivedStatementLine: { commandId: Schema.String, line: StatementLine, cursor: Schema.Number },
   CaughtUpStatement: { cursor: Schema.Number },
   FailedReadStatement: { reason: Schema.String },
 });
+type Message = typeof Message.Type;
 
-const subscriptions = Subscription.make<Model, typeof Message.Type, typeof CustomerApi.Client.Identifier>()(() => ({
-  statement: Bank.Statement.events({
-    key: (model: Model) => model.accountId,
-    cursor: (model) => model.statementCursor,
-    isEnabled: (model) => model.online,
-    onEntry: (entry): typeof Message.Type => Message.ReceivedStatementLine({
-      commandId: entry.envelope.commandId,
-      line: entry.event,
-      cursor: entry.envelope.seq,
+// In the component's definition:
+subscriptions: ({ model }) => [
+  model.online &&
+    BankUI.Statement.events<Message>(model.accountId, {
+      after: model.statementCursor,
+      onEntry: ({ event, envelope }) =>
+        Message.ReceivedStatementLine({ commandId: envelope.commandId, line: event, cursor: envelope.seq }),
+      onCaughtUp: (cursor) => Message.CaughtUpStatement({ cursor }),
+      onFailure: (error) => Message.FailedReadStatement({ reason: error._tag }),
+      onDefect: () => Message.FailedReadStatement({ reason: "Read defect" }),
     }),
-    onCaughtUp: (cursor): typeof Message.Type => Message.CaughtUpStatement({ cursor }),
-    onFailure: (error): typeof Message.Type => Message.FailedReadStatement({ reason: error._tag }),
-    onDefect: (): typeof Message.Type => Message.FailedReadStatement({ reason: "Read defect" }),
-  }),
-}));
+],
 ```
 
+The feed reads `after` when it starts. Listing it only while online starts it again from the latest cursor when the connection returns, and a new cursor alone leaves the stream alive. The adapter drops entries at or below the applied cursor. A filtered feed can skip sequence numbers, so the adapter does not count gaps.
 
-A restart reads the latest Model cursor and passes it as `after`. Cursor changes leave the stream alive. The adapter drops entries at or below the applied cursor. A filtered feed can skip sequence numbers, so the adapter does not count gaps.
-
-
-The adapter does not reduce entries into state. Use `watch` for the current View state. Use this event feed to confirm intents or build the app's display list.
+The adapter does not reduce entries into state. Read the View as a query, or follow it with `watch`, for its current state. Use this event feed to confirm intents or build the app's display list.
 
 ## Keep the offline queue
 
