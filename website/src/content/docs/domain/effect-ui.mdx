@@ -258,10 +258,9 @@ A View read fails with `Rejected` (the View's `validate`), `Denied` (its middlew
 
 ### Patch a View before the command answers
 
-The `optimistic` patch in [Update the query cache](#update-the-query-cache) shows a deposit in `AccountSummary` at once. Effect UI applies the patch over each element while the run is queued or running. When the run succeeds, it closes the stream and opens it again, and the first element of the new stream drops the patch. A Domain View applies a command's events a short time after the command answers, so a plain `watch` can send the old state first, and the value goes back for a moment. The adapter prevents this: the new stream starts with a `snapshot` that waits for the run's receipt. Two limits stay ([our comment on Effect-TS/ui#454](https://github.com/Effect-TS/ui/pull/454#issuecomment-7208510587)):
+The `optimistic` patch in [Update the query cache](#update-the-query-cache) shows a deposit in `AccountSummary` at once. Effect UI applies the patch over each element while the run is queued or running. When the run succeeds, it closes the stream and opens it again, and the first element of the new stream drops the patch. A Domain View applies a command's events a short time after the command answers, so a plain `watch` can send the old state first, and the value goes back for a moment. The adapter prevents this: the new stream starts with a `snapshot` that waits for the run's receipt.
 
-- Each optimistic run opens the stream again: one more subscription, and one more read of the key's state.
-- The open stream can send an element that already holds the write while the run is still running. The patch then applies to it again, and a patch that adds shows the deposit twice until the run ends. Where you can, write patches that set a value, not ones that add to it.
+Each optimistic run still opens the stream again, which costs one more subscription and one more read of the key's state. And while the run is still running, the open stream can send an element that already holds the write: the patch applies to it again, so a patch that adds shows the deposit twice until the run ends. Where you can, write patches that set a value, not ones that add to it ([our comment on Effect-TS/ui#454](https://github.com/Effect-TS/ui/pull/454#issuecomment-7208510587)).
 
 ## Follow a View with Subscriptions
 
