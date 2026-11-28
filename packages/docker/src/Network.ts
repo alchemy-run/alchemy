@@ -243,6 +243,17 @@ export interface NetworkLookup {
  * determines which settings take effect. Some drivers may accept options
  * without applying them; inspect the resulting network for advanced settings.
  *
+ * ### Swarm overlay allocation
+ * Docker Swarm can return an overlay network ID before its driver and IPAM
+ * are available. Alchemy waits for both before recording the network. If
+ * allocation does not finish within the inspection limit, deploy fails
+ * instead of saving incomplete attributes. Retry once the network is ready.
+ *
+ * If a previous deploy saved incomplete attributes, the next deploy refreshes
+ * them in place when the live Docker ID and settings match. The network's
+ * name stays stable for attached services. Changing immutable network
+ * settings still requires replacement.
+ *
  * @resource
  * @product Network
  */
