@@ -728,6 +728,7 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
       expect(yield* client.Totals.snapshot("c-1", { ...sam, atLeast })).toEqual({
         state: { total: 3 },
         cursor: 1,
+        position: { stream: "Counter/c-1", seq: 1 },
       });
       expect(
         (yield* client.Totals.snapshot("c-1", { ...sam, where: { total: { gt: 10 } } })).state,
